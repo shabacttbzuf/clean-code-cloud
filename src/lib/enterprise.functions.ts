@@ -453,8 +453,9 @@ export const createNotification = createServerFn({ method: "POST" })
       audience_id: data.audience_id ?? null,
       body: data.body ?? null,
       scheduled_for: data.scheduled_for ?? null,
+      payload: (data.payload ?? {}) as any,
       created_by: context.userId,
-    });
+    } as any);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
