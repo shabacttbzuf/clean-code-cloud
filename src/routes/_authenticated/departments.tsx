@@ -94,7 +94,7 @@ function DepartmentsPage() {
       <PageHeader
         title="الأقسام الإدارية"
         subtitle="أقسام غير محدودة يمكن ربطها بالفروع والشركات."
-        actions={
+        action={
           <Button
             onClick={() => {
               setEditing({});

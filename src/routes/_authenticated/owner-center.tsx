@@ -84,7 +84,7 @@ function OwnerCenterPage() {
       <PageHeader
         title="مركز تحكم المالك"
         subtitle="لوحة مالك النظام — نظرة شاملة وأدوات الإدارة العليا."
-        actions={<Badge>Super Owner</Badge>}
+        action={<Badge>Super Owner</Badge>}
       />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">

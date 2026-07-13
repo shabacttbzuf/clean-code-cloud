@@ -80,7 +80,7 @@ function CompaniesPage() {
       <PageHeader
         title="الشركات"
         subtitle="هيكلة مؤسسية للشركات (قابلة للتوسع لعدد غير محدود)."
-        actions={
+        action={
           <Button
             onClick={() => {
               setEditing({});

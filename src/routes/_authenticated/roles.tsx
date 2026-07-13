@@ -130,7 +130,7 @@ function RolesPage() {
       <PageHeader
         title="إدارة الأدوار"
         subtitle="أدوار مبنية مسبقًا + أدوار مخصصة غير محدودة. يمكنك نسخ الصلاحيات من دور آخر."
-        actions={
+        action={
           <Button onClick={() => setOpen(true)}>
             <Plus className="ml-2 h-4 w-4" /> دور مخصص جديد
           </Button>
