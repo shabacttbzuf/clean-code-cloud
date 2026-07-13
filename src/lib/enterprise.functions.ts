@@ -376,8 +376,8 @@ export const createCustomRole = createServerFn({ method: "POST" })
       await supabaseAdmin.rpc("clone_role_permissions", {
         _tenant_id: data.tenant_id,
         _dst_custom_role_id: role.id,
-        _src_builtin: data.copy_from_builtin ?? null,
-        _src_custom_role_id: data.copy_from_custom ?? null,
+        _src_builtin: (data.copy_from_builtin ?? undefined) as any,
+        _src_custom_role_id: (data.copy_from_custom ?? undefined) as any,
       });
     }
     return { ok: true, id: role.id };
