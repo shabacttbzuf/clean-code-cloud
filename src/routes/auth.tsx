@@ -43,8 +43,31 @@ function AuthPage() {
     try {
       const email = emailSchema.parse(loginEmail);
       const password = passwordSchema.parse(loginPassword);
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data: signIn, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
+      // Enterprise: block suspended/frozen/pending accounts, record login for the rest
+      if (signIn.user) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("status")
+          .eq("id", signIn.user.id)
+          .maybeSingle();
+        const status = (prof as { status?: string } | null)?.status ?? "active";
+        if (status && status !== "active" && status !== "password_expired") {
+          await supabase.auth.signOut();
+          const msg =
+            status === "suspended" ? "الحساب معلّق. تواصل مع المالك."
+            : status === "frozen" ? "الحساب مجمّد. تواصل مع المالك."
+            : status === "pending_approval" ? "الحساب بانتظار اعتماد المالك."
+            : status === "archived" ? "الحساب مؤرشف."
+            : "الحساب غير نشط.";
+          throw new Error(msg);
+        }
+        try {
+          const { recordLogin } = await import("@/lib/enterprise.functions");
+          await recordLogin({ data: { user_agent: navigator.userAgent } });
+        } catch { /* best-effort */ }
+      }
       toast.success("مرحباً بك من جديد");
       navigate({ to: "/dashboard" });
     } catch (err) {
