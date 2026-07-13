@@ -26,8 +26,15 @@ import {
   Clock,
   Gift,
   Wallet2,
+  UsersRound,
+  Building,
+  BadgeCheck,
+  History,
+  Bell,
+  Crown,
 } from "lucide-react";
 import { useSuperOwner } from "@/hooks/use-super-owner";
+import { useActiveTenant } from "@/hooks/use-active-tenant";
 import {
   Sidebar,
   SidebarContent,
@@ -105,28 +112,38 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { isSuperOwner, totalCount } = useSuperOwner();
+  const { role } = useActiveTenant();
 
-  // Admin group is visible to super owners, and also as a "bootstrap" affordance
-  // when no super owner exists yet.
+  const isAdmin = role === "owner" || role === "manager" || isSuperOwner;
+  const isOwner = role === "owner" || isSuperOwner;
+
+  const enterpriseGroup: Group | null = isAdmin
+    ? {
+        label: "المؤسسة",
+        items: [
+          { title: "إدارة المستخدمين", url: "/users-admin", icon: UsersRound },
+          { title: "الشركات", url: "/companies", icon: Building },
+          { title: "الأقسام الإدارية", url: "/departments", icon: Briefcase },
+          { title: "المسميات الوظيفية", url: "/job-titles", icon: BadgeCheck },
+          { title: "أنواع التوظيف", url: "/employment-types", icon: BadgeCheck },
+          ...(isOwner ? [{ title: "إدارة الأدوار", url: "/roles", icon: KeyRound }] : []),
+          { title: "سجل الدخول", url: "/login-history", icon: History },
+          { title: "الإشعارات", url: "/notifications", icon: Bell },
+        ],
+      }
+    : null;
+
   const showAdmin = isSuperOwner || totalCount === 0;
-  const allGroups: Group[] = showAdmin
-    ? [
-        ...groups,
-        {
-          label: "النظام",
-          items: [
-            { title: "إدارة النظام", url: "/admin", icon: ShieldCheck },
-            { title: "سجل التدقيق", url: "/audit-logs", icon: ScrollText },
-          ],
-        },
-      ]
-    : [
-        ...groups,
-        {
-          label: "النظام",
-          items: [{ title: "سجل التدقيق", url: "/audit-logs", icon: ScrollText }],
-        },
-      ];
+  const systemItems: Item[] = [];
+  if (isSuperOwner) systemItems.push({ title: "مركز تحكم المالك", url: "/owner-center", icon: Crown });
+  if (showAdmin) systemItems.push({ title: "إدارة النظام", url: "/admin", icon: ShieldCheck });
+  systemItems.push({ title: "سجل التدقيق", url: "/audit-logs", icon: ScrollText });
+
+  const allGroups: Group[] = [
+    ...groups,
+    ...(enterpriseGroup ? [enterpriseGroup] : []),
+    { label: "النظام", items: systemItems },
+  ];
 
   return (
     <Sidebar collapsible="icon" side="right">
