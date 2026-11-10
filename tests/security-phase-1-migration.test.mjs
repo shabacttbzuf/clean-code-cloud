@@ -286,3 +286,67 @@ test("complete database snapshot includes migration 14 exactly once", () => {
     1,
   );
 });
+
+
+const finalSecurityMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000015_security_stock_consistency.sql", import.meta.url),
+  "utf8",
+);
+
+test("security helper RPCs cannot probe another user's authorization state", () => {
+  assert.match(finalSecurityMigration, /SET SCHEMA private/);
+  assert.match(finalSecurityMigration, /_user_id IS DISTINCT FROM auth\\.uid\\(\\)/);
+  assert.match(finalSecurityMigration, /private\\.user_has_role_in_tenant/);
+  assert.match(finalSecurityMigration, /private\\.was_hired_by/);
+});
+
+test("stock writes enforce tenant branch ownership and prevent negative inventory", () => {
+  assert.match(finalSecurityMigration, /Branch does not belong to the requested tenant/);
+  assert.match(finalSecurityMigration, /quantity \\+ EXCLUDED\\.quantity >= 0/);
+  assert.match(finalSecurityMigration, /Insufficient stock or inventory tenant mismatch/);
+  assert.match(finalSecurityMigration, /branch_id = _branch_id/);
+  assert.match(finalSecurityMigration, /FOR UPDATE/);
+});
+
+const returnsMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000016_auditable_returns_and_refunds.sql", import.meta.url),
+  "utf8",
+);
+
+test("customer refunds are immutable auditable records and cannot exceed original sold quantities", () => {
+  assert.match(returnsMigration, /CREATE TABLE public\\.sale_refunds/);
+  assert.match(returnsMigration, /CREATE TABLE public\\.sale_refund_items/);
+  assert.match(returnsMigration, /create_sale_refund/);
+  assert.match(returnsMigration, /Refund quantity exceeds the remaining quantity/);
+  assert.match(returnsMigration, /inventory_transactions/);
+  assert.match(returnsMigration, /REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public\\.sale_refunds/);
+});
+
+test("supplier returns reverse inventory atomically and preserve purchase source records", () => {
+  assert.match(returnsMigration, /CREATE TABLE public\\.purchase_returns/);
+  assert.match(returnsMigration, /CREATE TABLE public\\.purchase_return_items/);
+  assert.match(returnsMigration, /create_purchase_return/);
+  assert.match(returnsMigration, /Return quantity exceeds the remaining purchased quantity/);
+  assert.match(returnsMigration, /'purchase_return'/);
+  assert.match(returnsMigration, /FOR UPDATE/);
+});
+
+test("cash close reconciles cash refunds and profitability subtracts returned goods", () => {
+  assert.match(returnsMigration, /cash_session_id = v_session\\.id/);
+  assert.match(returnsMigration, /refunded_net_revenue/);
+  assert.match(returnsMigration, /restocked_quantity/);
+  assert.match(returnsMigration, /security_invoker = true/);
+});
+
+test("complete database snapshot includes migrations 15 and 16 exactly once", () => {
+  const snapshot = readFileSync(
+    new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url),
+    "utf8",
+  );
+  for (const name of [
+    "20261111000015_security_stock_consistency.sql",
+    "20261111000016_auditable_returns_and_refunds.sql",
+  ]) {
+    assert.equal([...snapshot.matchAll(new RegExp("SOURCE MIGRATION: " + name, "g"))].length, 1);
+  }
+});
