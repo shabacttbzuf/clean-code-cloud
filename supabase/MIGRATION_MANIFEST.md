@@ -37,15 +37,15 @@
 
 28. `supabase/migrations/20261111000007_atomic_tenant_onboarding.sql`
 
-29. `supabase/migrations/20261111000007_atomic_tenant_onboarding.sql`
-
 29. `supabase/migrations/20261111000008_payroll_period_uniqueness.sql`
 
 30. `supabase/migrations/20261111000009_secure_custom_role_clone.sql`
 
 31. `supabase/migrations/20261111000010_minimize_client_write_privileges.sql`
 
-**الإجمالي: 31 ترحيلاً.**
+32. `supabase/migrations/20261111000011_restrict_security_definer_execution.sql`
+
+**الإجمالي: 32 ترحيلاً.**
 
 ## ترحيل Drizzle القديم
 
