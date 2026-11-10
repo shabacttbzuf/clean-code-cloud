@@ -3983,6 +3983,7 @@ COMMIT;
 
 
 
+-- SOURCE MIGRATION: 20261111000011_restrict_security_definer_execution.sql
 -- =====================================================
 -- Migration 32: restrict SECURITY DEFINER execution
 -- =====================================================
@@ -3996,6 +3997,7 @@ REVOKE EXECUTE ON FUNCTION public.was_hired_by(uuid, uuid, uuid) FROM PUBLIC, an
 GRANT EXECUTE ON FUNCTION public.was_hired_by(uuid, uuid, uuid) TO authenticated;
 
 
+-- SOURCE MIGRATION: 20261111000012_secure_super_owner_status.sql
 -- Migration 20261111000012_secure_super_owner_status.sql
 CREATE OR REPLACE FUNCTION public.get_super_owner_status()
 RETURNS jsonb
