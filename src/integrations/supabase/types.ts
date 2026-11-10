@@ -2790,14 +2790,7 @@ export type Database = {
         Args: { _branch_id: string | null; _tenant_id: string; _user_role_id: string }
         Returns: undefined
       }
-      user_has_role_in_tenant: {
-        Args: { _roles: string[]; _tenant_id: string; _user_id: string }
-        Returns: boolean
-      }
-      was_hired_by: {
-        Args: { _actor: string; _target: string; _tenant_id: string }
-        Returns: boolean
-      }
+
     }
     Enums: {
       account_status:
