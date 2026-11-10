@@ -4058,7 +4058,7 @@ RETURNS public.sales
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path TO pg_catalog, public, pg_temp
-AS $function$
+AS $
 DECLARE
   v_tax_rate numeric(5,2);
   v_subtotal numeric(12,2) := 0;
@@ -4203,7 +4203,7 @@ BEGIN
 
   RETURN v_sale;
 END;
-$function$;
+$;
 
 REVOKE ALL ON FUNCTION public.create_sale_with_items(
   uuid, uuid, uuid, uuid, numeric, public.payment_method, jsonb
