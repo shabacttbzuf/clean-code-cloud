@@ -1244,6 +1244,35 @@ export type Database = {
           },
         ]
       }
+      notification_reads: {
+        Row: {
+          id: string
+          notification_id: string
+          read_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          notification_id: string
+          read_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          notification_id?: string
+          read_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_reads_notification_id_fkey"
+            columns: ["notification_id"]
+            isOneToOne: false
+            referencedRelation: "notifications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           audience_id: string | null
@@ -2244,10 +2273,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      create_tenant_with_owner: {
-        Args: { _currency: string; _name: string; _tax_rate: number }
-        Returns: Database["public"]["Tables"]["tenants"]["Row"]
-      }
       adjust_inventory_balance: {
         Args: {
           _branch_id: string
@@ -2255,65 +2280,6 @@ export type Database = {
           _reason: string
           _target_quantity: number
           _tenant_id: string
-        }
-        Returns: undefined
-      }
-      close_cash_session: {
-        Args: { _closing_balance: number; _session_id: string }
-        Returns: Database["public"]["Tables"]["cash_sessions"]["Row"]
-      }
-      create_purchase_with_items: {
-        Args: {
-          _branch_id: string
-          _items: Json
-          _notes: string | null
-          _reference: string | null
-          _supplier_id: string | null
-          _tenant_id: string
-          _user_id: string
-        }
-        Returns: Database["public"]["Tables"]["purchases"]["Row"]
-      }
-      create_sale_with_items: {
-        Args: {
-          _branch_id: string
-          _cashier_id: string
-          _discount: number
-          _items: Json
-          _payment_method: Database["public"]["Enums"]["payment_method"]
-          _session_id: string
-          _tenant_id: string
-        }
-        Returns: Database["public"]["Tables"]["sales"]["Row"]
-      }
-      bootstrap_first_super_owner: {
-        Args: { _user_id: string }
-        Returns: undefined
-      }
-      reject_payroll_run: {
-        Args: {
-          _actor_id: string
-          _reason: string
-          _run_id: string
-          _tenant_id: string
-        }
-        Returns: undefined
-      }
-      replace_user_role_in_tenant: {
-        Args: {
-          _actor_id: string
-          _branch_id: string | null
-          _role: Database["public"]["Enums"]["app_role"]
-          _tenant_id: string
-          _user_id: string
-        }
-        Returns: undefined
-      }
-      transfer_user_role_branch: {
-        Args: {
-          _branch_id: string | null
-          _tenant_id: string
-          _user_role_id: string
         }
         Returns: undefined
       }
@@ -2326,6 +2292,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      bootstrap_first_super_owner: {
+        Args: { _user_id: string }
+        Returns: undefined
+      }
       clone_role_permissions: {
         Args: {
           _dst_custom_role_id: string
@@ -2335,13 +2305,146 @@ export type Database = {
         }
         Returns: number
       }
-      get_super_owner_status: { Args: never; Returns: Json }
+      close_cash_session: {
+        Args: { _closing_balance: number; _session_id: string }
+        Returns: {
+          branch_id: string
+          cash_difference: number | null
+          cashier_id: string
+          closed_at: string | null
+          closing_balance: number | null
+          created_at: string
+          expected_cash: number | null
+          id: string
+          notes: string | null
+          opened_at: string
+          opening_balance: number
+          status: Database["public"]["Enums"]["cash_session_status"]
+          tenant_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cash_sessions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_purchase_with_items: {
+        Args: {
+          _branch_id: string
+          _items: Json
+          _notes: string
+          _reference: string
+          _supplier_id: string
+          _tenant_id: string
+          _user_id: string
+        }
+        Returns: {
+          branch_id: string
+          created_at: string
+          id: string
+          notes: string | null
+          received_at: string
+          reference: string | null
+          status: Database["public"]["Enums"]["purchase_status"]
+          supplier_id: string | null
+          tenant_id: string
+          total: number
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "purchases"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_sale_with_items: {
+        Args: {
+          _branch_id: string
+          _cashier_id: string
+          _discount: number
+          _items: Json
+          _payment_method: Database["public"]["Enums"]["payment_method"]
+          _session_id: string
+          _tenant_id: string
+        }
+        Returns: {
+          branch_id: string
+          cashier_id: string
+          created_at: string
+          discount: number
+          id: string
+          invoice_no: number
+          notes: string | null
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          session_id: string | null
+          status: Database["public"]["Enums"]["sale_status"]
+          subtotal: number
+          tax_amount: number
+          tenant_id: string
+          total: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sales"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_tenant_with_owner: {
+        Args: { _currency: string; _name: string; _tax_rate: number }
+        Returns: {
+          created_at: string
+          currency: string
+          id: string
+          logo_url: string | null
+          name: string
+          owner_id: string
+          password_max_age_days: number | null
+          require_owner_approval: boolean
+          tax_rate: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tenants"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       has_permission: {
         Args: { _permission_key: string; _tenant_id: string; _user_id: string }
         Returns: boolean
       }
       is_super_owner: { Args: { _user_id: string }; Returns: boolean }
+      reject_payroll_run: {
+        Args: {
+          _actor_id: string
+          _reason: string
+          _run_id: string
+          _tenant_id: string
+        }
+        Returns: undefined
+      }
+      replace_user_role_in_tenant: {
+        Args: {
+          _actor_id: string
+          _branch_id: string
+          _role: Database["public"]["Enums"]["app_role"]
+          _tenant_id: string
+          _user_id: string
+        }
+        Returns: undefined
+      }
       touch_last_login: { Args: never; Returns: undefined }
+      transfer_user_role_branch: {
+        Args: { _branch_id: string; _tenant_id: string; _user_role_id: string }
+        Returns: undefined
+      }
       user_has_role_in_tenant: {
         Args: { _roles: string[]; _tenant_id: string; _user_id: string }
         Returns: boolean
