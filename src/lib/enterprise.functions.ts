@@ -38,6 +38,43 @@ async function assertOwner(supabase: any, userId: string, tenantId: string) {
   }
 }
 
+async function assertTargetUserManageable(
+  supabase: any,
+  supabaseAdmin: any,
+  actorId: string,
+  targetUserId: string,
+  tenantId: string,
+) {
+  const { data: targetRoles, error: targetError } = await supabaseAdmin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", targetUserId)
+    .eq("tenant_id", tenantId);
+  if (targetError) throw new Error(targetError.message);
+  if (!targetRoles?.length) {
+    throw new Error("المستخدم المستهدف لا ينتمي إلى المؤسسة المحددة.");
+  }
+
+  const { data: isSuperOwner, error: superOwnerError } = await supabase.rpc(
+    "is_super_owner",
+    { _user_id: actorId },
+  );
+  if (superOwnerError) throw new Error(superOwnerError.message);
+  if (isSuperOwner) return;
+
+  const { data: actorRoles, error: actorError } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", actorId)
+    .eq("tenant_id", tenantId);
+  if (actorError) throw new Error(actorError.message);
+  if ((actorRoles ?? []).some((r: any) => r.role === "owner")) return;
+
+  if ((targetRoles ?? []).some((r: any) => ["owner", "manager"].includes(r.role))) {
+    throw new Error("لا يحق للمدير إدارة حساب مالك المؤسسة أو مدير آخر.");
+  }
+}
+
 /* -------------------- Login history -------------------- */
 
 export const recordLogin = createServerFn({ method: "POST" })
@@ -45,29 +82,42 @@ export const recordLogin = createServerFn({ method: "POST" })
   .inputValidator((data) =>
     z
       .object({
-        tenant_id: uuid.nullable().optional(),
         user_agent: z.string().max(500).optional().nullable(),
       })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
     const ip = getRequestIP({ xForwardedFor: true }) ?? null;
-    const ua = data.user_agent ?? getRequestHeader("user-agent") ?? null;
+    const ua = getRequestHeader("user-agent") ?? data.user_agent ?? null;
     const device = deviceFromUA(ua);
     const browser = browserFromUA(ua);
     const os = osFromUA(ua);
-    await context.supabase.from("login_history").insert({
-      user_id: context.userId,
-      tenant_id: data.tenant_id ?? null,
-      event: "login",
-      ip,
-      user_agent: ua,
-      browser,
-      os,
-      device,
-    });
-    // Also stamp profile with last_login metadata (best-effort)
-    await context.supabase
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: profile, error: profileReadError } = await supabaseAdmin
+      .from("profiles")
+      .select("tenant_id")
+      .eq("id", context.userId)
+      .maybeSingle();
+    if (profileReadError) throw new Error(profileReadError.message);
+
+    const { data: entry, error: loginError } = await supabaseAdmin
+      .from("login_history")
+      .insert({
+        user_id: context.userId,
+        tenant_id: profile?.tenant_id ?? null,
+        event: "login",
+        ip,
+        user_agent: ua,
+        browser,
+        os,
+        device,
+      })
+      .select("id")
+      .single();
+    if (loginError) throw new Error(loginError.message);
+
+    // Server-side only: profile login metadata is not user-editable.
+    const { error: profileUpdateError } = await supabaseAdmin
       .from("profiles")
       .update({
         last_login_at: new Date().toISOString(),
@@ -76,29 +126,45 @@ export const recordLogin = createServerFn({ method: "POST" })
         last_user_agent: ua,
       })
       .eq("id", context.userId);
-    return { ok: true, ip, device, browser, os };
+    if (profileUpdateError) console.warn("Could not update last-login metadata", profileUpdateError);
+
+    return { ok: true, ip, device, browser, os, login_history_id: entry.id };
   });
 
 export const recordLogout = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const { data: last } = await context.supabase
+  .inputValidator((data) =>
+    z.object({ login_history_id: uuid.optional() }).parse(data ?? {}),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    let query = supabaseAdmin
       .from("login_history")
       .select("id, login_at")
       .eq("user_id", context.userId)
-      .is("logout_at", null)
+      .is("logout_at", null);
+    if (data.login_history_id) query = query.eq("id", data.login_history_id);
+    const { data: session, error: readError } = await query
       .order("login_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (last) {
+    if (readError) throw new Error(readError.message);
+
+    if (session) {
       const seconds = Math.max(
         0,
-        Math.floor((Date.now() - new Date(last.login_at).getTime()) / 1000),
+        Math.floor((Date.now() - new Date(session.login_at).getTime()) / 1000),
       );
-      await context.supabase
+      const { error } = await supabaseAdmin
         .from("login_history")
-        .update({ logout_at: new Date().toISOString(), session_duration_seconds: seconds })
-        .eq("id", last.id);
+        .update({
+          logout_at: new Date().toISOString(),
+          session_duration_seconds: seconds,
+        })
+        .eq("id", session.id)
+        .eq("user_id", context.userId)
+        .is("logout_at", null);
+      if (error) throw new Error(error.message);
     }
     return { ok: true };
   });
@@ -277,7 +343,12 @@ export const updateUserEnterpriseProfile = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("profiles").update(data.patch).eq("id", data.user_id);
+    await assertTargetUserManageable(context.supabase, supabaseAdmin, context.userId, data.user_id, data.tenant_id);
+    const { error } = await supabaseAdmin
+      .from("profiles")
+      .update(data.patch)
+      .eq("id", data.user_id)
+      .eq("tenant_id", data.tenant_id);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -293,15 +364,33 @@ export const setUserStatus = createServerFn({ method: "POST" })
       throw new Error("لا يمكنك تغيير حالة حسابك بنفسك.");
     }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await assertTargetUserManageable(context.supabase, supabaseAdmin, context.userId, data.user_id, data.tenant_id);
+    const { data: targetProfile, error: readError } = await supabaseAdmin
+      .from("profiles")
+      .select("is_active")
+      .eq("id", data.user_id)
+      .eq("tenant_id", data.tenant_id)
+      .maybeSingle();
+    if (readError) throw new Error(readError.message);
+    if (!targetProfile) throw new Error("ملف المستخدم غير موجود داخل المؤسسة المحددة.");
+
     const is_active = data.status === "active";
+    const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(data.user_id, {
+      ban_duration: is_active ? "none" : "876000h",
+    });
+    if (authError) throw new Error(authError.message);
+
     const { error } = await supabaseAdmin
       .from("profiles")
       .update({ status: data.status, is_active })
-      .eq("id", data.user_id);
-    if (error) throw new Error(error.message);
-    await supabaseAdmin.auth.admin.updateUserById(data.user_id, {
-      ban_duration: is_active ? "none" : "876000h",
-    });
+      .eq("id", data.user_id)
+      .eq("tenant_id", data.tenant_id);
+    if (error) {
+      await supabaseAdmin.auth.admin.updateUserById(data.user_id, {
+        ban_duration: targetProfile.is_active ? "none" : "876000h",
+      });
+      throw new Error(error.message);
+    }
     return { ok: true };
   });
 
@@ -311,6 +400,20 @@ export const approveUser = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await assertTargetUserManageable(context.supabase, supabaseAdmin, context.userId, data.user_id, data.tenant_id);
+    const { data: targetProfile, error: readError } = await supabaseAdmin
+      .from("profiles")
+      .select("is_active")
+      .eq("id", data.user_id)
+      .eq("tenant_id", data.tenant_id)
+      .maybeSingle();
+    if (readError) throw new Error(readError.message);
+    if (!targetProfile) throw new Error("ملف المستخدم غير موجود داخل المؤسسة المحددة.");
+
+    const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(data.user_id, {
+      ban_duration: "none",
+    });
+    if (authError) throw new Error(authError.message);
     const { error } = await supabaseAdmin
       .from("profiles")
       .update({
@@ -319,9 +422,14 @@ export const approveUser = createServerFn({ method: "POST" })
         approved_by: context.userId,
         approved_at: new Date().toISOString(),
       })
-      .eq("id", data.user_id);
-    if (error) throw new Error(error.message);
-    await supabaseAdmin.auth.admin.updateUserById(data.user_id, { ban_duration: "none" });
+      .eq("id", data.user_id)
+      .eq("tenant_id", data.tenant_id);
+    if (error) {
+      await supabaseAdmin.auth.admin.updateUserById(data.user_id, {
+        ban_duration: targetProfile.is_active ? "none" : "876000h",
+      });
+      throw new Error(error.message);
+    }
     return { ok: true };
   });
 
@@ -331,10 +439,12 @@ export const forcePasswordReset = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await assertTargetUserManageable(context.supabase, supabaseAdmin, context.userId, data.user_id, data.tenant_id);
     const { error } = await supabaseAdmin
       .from("profiles")
       .update({ must_change_password: true })
-      .eq("id", data.user_id);
+      .eq("id", data.user_id)
+      .eq("tenant_id", data.tenant_id);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -373,12 +483,16 @@ export const createCustomRole = createServerFn({ method: "POST" })
       .single();
     if (error) throw new Error(error.message);
     if (data.copy_from_builtin || data.copy_from_custom) {
-      await supabaseAdmin.rpc("clone_role_permissions", {
+      const { error: cloneError } = await supabaseAdmin.rpc("clone_role_permissions", {
         _tenant_id: data.tenant_id,
         _dst_custom_role_id: role.id,
         _src_builtin: (data.copy_from_builtin ?? undefined) as any,
         _src_custom_role_id: (data.copy_from_custom ?? undefined) as any,
       });
+      if (cloneError) {
+        await supabaseAdmin.from("custom_roles").delete().eq("id", role.id).eq("tenant_id", data.tenant_id);
+        throw new Error(cloneError.message);
+      }
     }
     return { ok: true, id: role.id };
   });
@@ -409,20 +523,39 @@ export const setCustomRolePermission = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertOwner(context.supabase, context.userId, data.tenant_id);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: role, error: roleError } = await supabaseAdmin
+      .from("custom_roles")
+      .select("id")
+      .eq("id", data.custom_role_id)
+      .eq("tenant_id", data.tenant_id)
+      .maybeSingle();
+    if (roleError) throw new Error(roleError.message);
+    if (!role) throw new Error("الدور المخصص لا يتبع المؤسسة المحددة.");
+
+    const { data: permission, error: permissionError } = await supabaseAdmin
+      .from("permissions")
+      .select("key")
+      .eq("key", data.permission_key)
+      .maybeSingle();
+    if (permissionError) throw new Error(permissionError.message);
+    if (!permission) throw new Error("الصلاحية المطلوبة غير موجودة.");
+
     if (data.granted) {
-      await supabaseAdmin.from("role_permissions").insert({
+      const { error } = await supabaseAdmin.from("role_permissions").insert({
         tenant_id: data.tenant_id,
         role_kind: "custom",
         custom_role_id: data.custom_role_id,
         permission_key: data.permission_key,
       });
+      if (error && error.code !== "23505") throw new Error(error.message);
     } else {
-      await supabaseAdmin
+      const { error } = await supabaseAdmin
         .from("role_permissions")
         .delete()
         .eq("tenant_id", data.tenant_id)
         .eq("custom_role_id", data.custom_role_id)
         .eq("permission_key", data.permission_key);
+      if (error) throw new Error(error.message);
     }
     return { ok: true };
   });

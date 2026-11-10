@@ -65,7 +65,10 @@ function AuthPage() {
         }
         try {
           const { recordLogin } = await import("@/lib/enterprise.functions");
-          await recordLogin({ data: { user_agent: navigator.userAgent } });
+          const loginRecord = await recordLogin({ data: { user_agent: navigator.userAgent } });
+          if (loginRecord.login_history_id) {
+            sessionStorage.setItem("clean-code-cloud-login-history-id", loginRecord.login_history_id);
+          }
         } catch { /* best-effort */ }
       }
       toast.success("مرحباً بك من جديد");

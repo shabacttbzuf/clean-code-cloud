@@ -2244,6 +2244,79 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_tenant_with_owner: {
+        Args: { _currency: string; _name: string; _tax_rate: number }
+        Returns: Database["public"]["Tables"]["tenants"]["Row"]
+      }
+      adjust_inventory_balance: {
+        Args: {
+          _branch_id: string
+          _product_id: string
+          _reason: string
+          _target_quantity: number
+          _tenant_id: string
+        }
+        Returns: undefined
+      }
+      close_cash_session: {
+        Args: { _closing_balance: number; _session_id: string }
+        Returns: Database["public"]["Tables"]["cash_sessions"]["Row"]
+      }
+      create_purchase_with_items: {
+        Args: {
+          _branch_id: string
+          _items: Json
+          _notes: string | null
+          _reference: string | null
+          _supplier_id: string | null
+          _tenant_id: string
+          _user_id: string
+        }
+        Returns: Database["public"]["Tables"]["purchases"]["Row"]
+      }
+      create_sale_with_items: {
+        Args: {
+          _branch_id: string
+          _cashier_id: string
+          _discount: number
+          _items: Json
+          _payment_method: Database["public"]["Enums"]["payment_method"]
+          _session_id: string
+          _tenant_id: string
+        }
+        Returns: Database["public"]["Tables"]["sales"]["Row"]
+      }
+      bootstrap_first_super_owner: {
+        Args: { _user_id: string }
+        Returns: undefined
+      }
+      reject_payroll_run: {
+        Args: {
+          _actor_id: string
+          _reason: string
+          _run_id: string
+          _tenant_id: string
+        }
+        Returns: undefined
+      }
+      replace_user_role_in_tenant: {
+        Args: {
+          _actor_id: string
+          _branch_id: string | null
+          _role: Database["public"]["Enums"]["app_role"]
+          _tenant_id: string
+          _user_id: string
+        }
+        Returns: undefined
+      }
+      transfer_user_role_branch: {
+        Args: {
+          _branch_id: string | null
+          _tenant_id: string
+          _user_role_id: string
+        }
+        Returns: undefined
+      }
       apply_stock_change: {
         Args: {
           _branch_id: string

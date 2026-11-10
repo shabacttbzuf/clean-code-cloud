@@ -134,11 +134,15 @@ function POSPage() {
     queryKey: ["open-session", userId, branchId],
     queryFn: async (): Promise<Session | null> => {
       if (!userId) return null;
-      const { data, error } = await supabase.from("cash_sessions").select("id, branch_id, status").eq("cashier_id", userId).eq("status", "open").maybeSingle();
+      const { data, error } = await supabase.from("cash_sessions").select("id, branch_id, status").eq("tenant_id", tenantId!)
+        .eq("branch_id", branchId!)
+        .eq("cashier_id", userId)
+        .eq("status", "open")
+        .maybeSingle();
       if (error) throw error;
       return (data as Session | null) ?? null;
     },
-    enabled: !!userId && !!tenantId,
+    enabled: !!userId && !!tenantId && !!branchId,
   });
 
   const filteredProducts = useMemo(() => {
@@ -190,7 +194,18 @@ function POSPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشل فتح الوردية"),
   });
 
-  const buildInvoice = (sale: { invoice_no: number; created_at: string }, items: CartItem[], method: PaymentUI): InvoiceData & {
+  const buildInvoice = (
+    sale: {
+      invoice_no: number;
+      created_at: string;
+      subtotal: number;
+      discount: number;
+      tax_amount: number;
+      total: number;
+    },
+    items: Array<{ name: string; unit_price: number; quantity: number }>,
+    method: PaymentUI,
+  ): InvoiceData & {
     address?: string | null; phone?: string | null; tenant_name?: string | null; logo_url?: string | null;
   } => ({
     invoice_no: sale.invoice_no,
@@ -203,10 +218,10 @@ function POSPage() {
     tenant_name: tenant?.name ?? null,
     logo_url: tenant?.logo_url ?? null,
     currency: tenant?.currency ?? "SAR",
-    subtotal,
-    discount: disc,
-    tax_amount: taxAmount,
-    total,
+    subtotal: Number(sale.subtotal),
+    discount: Number(sale.discount),
+    tax_amount: Number(sale.tax_amount),
+    total: Number(sale.total),
     payment_method: paymentToDb[method],
     items: items.map((i) => ({
       product_name: i.name,
@@ -223,54 +238,50 @@ function POSPage() {
       if (!openSession.data) throw new Error("يجب فتح وردية أولاً");
 
       const dbMethod = paymentToDb[method];
-      const { data: sale, error: saleErr } = await supabase
-        .from("sales")
-        .insert({
-          tenant_id: tenantId,
-          branch_id: branchId,
-          cashier_id: userId,
-          session_id: openSession.data.id,
-          invoice_no: 0,
-          subtotal,
-          discount: disc,
-          tax_amount: taxAmount,
-          total,
-          payment_method: dbMethod,
-        })
-        .select()
-        .single();
-      if (saleErr) throw saleErr;
-
-      const items = cart.map((c) => ({
-        tenant_id: tenantId,
-        sale_id: sale.id,
-        product_id: c.product_id,
-        product_name: c.name,
-        quantity: c.quantity,
-        unit_price: c.unit_price,
-        line_total: +(c.unit_price * c.quantity).toFixed(2),
-        tax_rate: taxRate,
-      }));
-      const { error: itemsErr } = await supabase.from("sale_items").insert(items);
-      if (itemsErr) throw itemsErr;
-
-      const { error: payErr } = await supabase.from("payments").insert({
-        tenant_id: tenantId,
-        sale_id: sale.id,
-        method: dbMethod,
-        amount: total,
+      const { data: sale, error: saleErr } = await supabase.rpc("create_sale_with_items", {
+        _tenant_id: tenantId,
+        _branch_id: branchId,
+        _cashier_id: userId,
+        _session_id: openSession.data.id,
+        _discount: disc,
+        _payment_method: dbMethod,
+        _items: cart.map((item) => ({
+          product_id: item.product_id,
+          quantity: item.quantity,
+        })),
       });
-      if (payErr) throw payErr;
+      if (saleErr) throw saleErr;
+      if (!sale) throw new Error("لم يتم إنشاء الفاتورة.");
 
-      return { sale, method };
+      // Read the committed item snapshots for printing. A read failure must
+      // not cause a retry of an already-committed sale.
+      const { data: savedItems, error: savedItemsError } = await supabase
+        .from("sale_items")
+        .select("product_name, quantity, unit_price")
+        .eq("sale_id", sale.id);
+      if (savedItemsError) console.error("Could not load committed sale items", savedItemsError);
+
+      const invoiceItems = savedItems?.map((item) => ({
+        name: item.product_name,
+        quantity: Number(item.quantity),
+        unit_price: Number(item.unit_price),
+      })) ?? cart.map((item) => ({
+        name: item.name,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+      }));
+
+      return { sale, method, items: invoiceItems };
     },
-    onSuccess: ({ sale, method }) => {
+    onSuccess: ({ sale, method, items }) => {
       toast.success(`تم إصدار فاتورة #${sale.invoice_no}`);
-      const inv = buildInvoice(sale, cart, method);
+      const inv = buildInvoice(sale, items, method);
       try { printInvoiceHTML(inv, paperSize); } catch (e) { console.error(e); }
       setCart([]);
       setDiscount("0");
       qc.invalidateQueries({ queryKey: ["sales"] });
+      qc.invalidateQueries({ queryKey: ["inventory"] });
+      qc.invalidateQueries({ queryKey: ["inventory-movements"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشل إتمام البيع"),
   });
@@ -297,7 +308,14 @@ function POSPage() {
   const printPreview = () => {
     if (cart.length === 0) return toast.info("السلة فارغة");
     const inv = buildInvoice(
-      { invoice_no: 0, created_at: new Date().toISOString() },
+      {
+        invoice_no: 0,
+        created_at: new Date().toISOString(),
+        subtotal,
+        discount: disc,
+        tax_amount: taxAmount,
+        total,
+      },
       cart,
       "cash",
     );

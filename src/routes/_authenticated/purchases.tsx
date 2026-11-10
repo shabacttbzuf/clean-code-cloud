@@ -180,7 +180,7 @@ function NewPurchaseDialog({
 
   const submit = useMutation({
     mutationFn: async () => {
-      if (!branchId) throw new Error("اختر الفرع");
+      if (!tenantId || !userId || !branchId) throw new Error("اختر الفرع وتأكد من تسجيل الدخول");
       if (lines.length === 0) throw new Error("أضف منتجات");
       const cleanLines = lines.map((l) => ({
         ...l,
@@ -189,36 +189,23 @@ function NewPurchaseDialog({
       }));
       for (const l of cleanLines) {
         if (!(l.quantity > 0)) throw new Error(`كمية غير صالحة لـ ${l.name}`);
-        if (l.cost_price < 0) throw new Error(`سعر غير صالح لـ ${l.name}`);
+        if (!Number.isFinite(l.cost_price) || l.cost_price < 0) throw new Error(`سعر غير صالح لـ ${l.name}`);
       }
-      const purchaseTotal = cleanLines.reduce((s, l) => s + l.quantity * l.cost_price, 0);
 
-      const { data: purchase, error: pErr } = await supabase
-        .from("purchases")
-        .insert({
-          tenant_id: tenantId,
-          branch_id: branchId,
-          supplier_id: supplierId === "none" ? null : supplierId,
-          user_id: userId,
-          reference: reference || null,
-          notes: notes || null,
-          total: purchaseTotal,
-          status: "received",
-        })
-        .select()
-        .single();
-      if (pErr) throw pErr;
-
-      const items = cleanLines.map((l) => ({
-        tenant_id: tenantId,
-        purchase_id: purchase.id,
-        product_id: l.product_id,
-        quantity: l.quantity,
-        cost_price: l.cost_price,
-        line_total: +(l.quantity * l.cost_price).toFixed(2),
-      }));
-      const { error: iErr } = await supabase.from("purchase_items").insert(items);
-      if (iErr) throw iErr;
+      const { error } = await supabase.rpc("create_purchase_with_items", {
+        _tenant_id: tenantId,
+        _branch_id: branchId,
+        _user_id: userId,
+        _supplier_id: supplierId === "none" ? null : supplierId,
+        _reference: reference || null,
+        _notes: notes || null,
+        _items: cleanLines.map((line) => ({
+          product_id: line.product_id,
+          quantity: line.quantity,
+          cost_price: line.cost_price,
+        })),
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
       toast.success("تم تسجيل الفاتورة");

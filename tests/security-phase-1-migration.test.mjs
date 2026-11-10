@@ -1,0 +1,242 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync, readdirSync } from "node:fs";
+
+const migration = readFileSync(
+  new URL("../supabase/migrations/20261111000000_security_phase_1_hardening.sql", import.meta.url),
+  "utf8",
+);
+
+test("tenant owner bootstrap is scoped to the tenant owner", () => {
+  assert.match(migration, /Tenant owner bootstraps own owner role/);
+  assert.match(migration, /t\.owner_id = auth\.uid\(\)/);
+  assert.match(migration, /role = 'owner'/);
+});
+
+test("authenticated users cannot update administrative profile columns", () => {
+  assert.match(migration, /REVOKE UPDATE ON TABLE public\.profiles FROM authenticated/);
+  assert.match(migration, /GRANT UPDATE \(full_name, username, phone, avatar_url\)/);
+});
+
+test("leave requester cannot change their own request status", () => {
+  assert.match(migration, /prevent_leave_self_approval/);
+  assert.match(migration, /NEW\.status IS DISTINCT FROM OLD\.status/);
+  assert.match(migration, /OLD\.created_by = auth\.uid\(\)/);
+  assert.match(migration, /e\.user_id = auth\.uid\(\)/);
+  assert.match(migration, /NEW\.approved_by IS DISTINCT FROM OLD\.approved_by/);
+});
+
+test("first super-owner bootstrap is serialized and service-role only", () => {
+  assert.match(migration, /pg_advisory_xact_lock/);
+  assert.match(migration, /REVOKE ALL ON FUNCTION public\.bootstrap_first_super_owner\(uuid\) FROM authenticated/);
+  assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.bootstrap_first_super_owner\(uuid\) TO service_role/);
+});
+
+const payrollMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000001_payroll_atomic_rejection.sql", import.meta.url),
+  "utf8",
+);
+
+test("payroll rejection is a single database transaction with state validation", () => {
+  assert.match(payrollMigration, /FOR UPDATE/);
+  assert.match(payrollMigration, /locked_run\.status NOT IN \('draft', 'approved'\)/);
+  assert.match(payrollMigration, /GRANT EXECUTE ON FUNCTION public\.reject_payroll_run[^;]+TO service_role/);
+});
+
+const userAdminSource = readFileSync(
+  new URL("../src/lib/users.functions.ts", import.meta.url),
+  "utf8",
+);
+
+test("tenant administrators cannot manage users outside their tenant", () => {
+  assert.match(userAdminSource, /assertTargetBelongsToTenant/);
+  assert.match(userAdminSource, /المستخدم المستهدف لا ينتمي إلى المؤسسة المحددة/);
+});
+
+test("manager cannot grant privileged owner or manager roles", () => {
+  assert.match(userAdminSource, /role !== "owner" && role !== "manager"/);
+  assert.match(userAdminSource, /لا يحق للمدير منح صلاحيات المالك أو المدير/);
+});
+
+test("role changes use the atomic database function", () => {
+  assert.match(userAdminSource, /replace_user_role_in_tenant/);
+  assert.match(userAdminSource, /transfer_user_role_branch/);
+});
+
+test("first super-owner bootstrap requires an explicit deployment allowlist", () => {
+  const source = readFileSync(
+    new URL("../src/lib/super-owner.functions.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /INITIAL_SUPER_OWNER_USER_ID/);
+  assert.match(source, /bootstrap_first_super_owner/);
+  assert.match(source, /initialOwnerId !== context\.userId/);
+});
+
+const roleMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000002_user_role_atomicity.sql", import.meta.url),
+  "utf8",
+);
+
+test("role replacement and branch transfer are transactional service-role RPCs", () => {
+  assert.match(roleMigration, /replace_user_role_in_tenant/);
+  assert.match(roleMigration, /transfer_user_role_branch/);
+  assert.match(roleMigration, /FOR UPDATE/);
+  assert.match(roleMigration, /GRANT EXECUTE ON FUNCTION public\.replace_user_role_in_tenant[^;]+TO service_role/);
+});
+
+const visibilityMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000003_migrate_legacy_drizzle_visibility.sql", import.meta.url),
+  "utf8",
+);
+
+test("legacy permission visibility rules are included in Supabase migrations", () => {
+  assert.match(visibilityMigration, /private\.is_tenant_member/);
+  assert.match(visibilityMigration, /View super owners/);
+  assert.match(visibilityMigration, /View role permissions/);
+  assert.match(visibilityMigration, /View permissions/);
+});
+
+const posMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000004_atomic_pos_checkout.sql", import.meta.url),
+  "utf8",
+);
+
+test("POS checkout derives totals from database values and commits payment atomically", () => {
+  assert.match(posMigration, /private\.can_access_branch/);
+  assert.match(posMigration, /cs\.status = 'open'/);
+  assert.match(posMigration, /v_product\.sale_price/);
+  assert.match(posMigration, /INSERT INTO public\.payments/);
+  assert.match(posMigration, /FOR UPDATE/);
+  assert.match(posMigration, /ORDER BY \(value->>'product_id'\)::uuid/);
+});
+
+const operationsMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000005_atomic_purchases_inventory_cash.sql", import.meta.url),
+  "utf8",
+);
+
+test("purchase receiving is atomic with stock transactions", () => {
+  assert.match(operationsMigration, /create_purchase_with_items/);
+  assert.match(operationsMigration, /INSERT INTO public\.purchase_items/);
+  assert.match(operationsMigration, /FOR UPDATE/);
+});
+
+test("inventory adjustments update balance and transaction log together", () => {
+  assert.match(operationsMigration, /adjust_inventory_balance/);
+  assert.match(operationsMigration, /INSERT INTO public\.inventory_transactions/);
+});
+
+test("cash session expected balance is calculated from persisted cash payments", () => {
+  assert.match(operationsMigration, /close_cash_session/);
+  assert.match(operationsMigration, /sum\(p\.amount\)/);
+  assert.match(operationsMigration, /p\.method = 'cash'/);
+});
+
+const auditNotificationsMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000006_audit_login_notification_security.sql", import.meta.url),
+  "utf8",
+);
+
+test("authenticated clients cannot forge audit logs or rewrite login history", () => {
+  assert.match(auditNotificationsMigration, /REVOKE INSERT ON TABLE public\.audit_logs FROM authenticated/);
+  assert.match(auditNotificationsMigration, /REVOKE INSERT, UPDATE ON TABLE public\.login_history FROM authenticated/);
+});
+
+test("notification reads are filtered by audience and use per-user receipts", () => {
+  assert.match(auditNotificationsMigration, /audience_type = 'user'/);
+  assert.match(auditNotificationsMigration, /audience_type = 'branch'/);
+  assert.match(auditNotificationsMigration, /audience_type = 'department'/);
+  assert.match(auditNotificationsMigration, /CREATE TABLE IF NOT EXISTS public\.notification_reads/);
+});
+
+const onboardingMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000007_atomic_tenant_onboarding.sql", import.meta.url),
+  "utf8",
+);
+
+test("tenant onboarding creates tenant, owner role, and profile scope atomically", () => {
+  assert.match(onboardingMigration, /auth\.uid\(\)/);
+  assert.match(onboardingMigration, /INSERT INTO public\.user_roles/);
+  assert.match(onboardingMigration, /UPDATE public\.profiles/);
+  assert.match(onboardingMigration, /GRANT EXECUTE ON FUNCTION public\.create_tenant_with_owner[^;]+TO authenticated/);
+});
+
+const enterpriseUsersSource = readFileSync(
+  new URL("../src/lib/enterprise.functions.ts", import.meta.url),
+  "utf8",
+);
+
+test("enterprise admin functions verify target tenant and protected role before admin writes", () => {
+  assert.match(enterpriseUsersSource, /assertTargetUserManageable/);
+  assert.match(enterpriseUsersSource, /المستخدم المستهدف لا ينتمي إلى المؤسسة المحددة/);
+  assert.match(enterpriseUsersSource, /لا يحق للمدير إدارة حساب مالك المؤسسة أو مدير آخر/);
+});
+
+test("login history is recorded and closed using trusted server-side credentials", () => {
+  assert.match(enterpriseUsersSource, /\.from\("login_history"\)/);
+  assert.match(enterpriseUsersSource, /login_history_id/);
+});
+
+const payrollUniqueMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000008_payroll_period_uniqueness.sql", import.meta.url),
+  "utf8",
+);
+
+test("payroll period uniqueness covers both branch and null-branch runs", () => {
+  assert.match(payrollUniqueMigration, /WHERE branch_id IS NOT NULL/);
+  assert.match(payrollUniqueMigration, /WHERE branch_id IS NULL/);
+  assert.match(payrollUniqueMigration, /UNIQUE INDEX/);
+});
+
+const customRoleMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000009_secure_custom_role_clone.sql", import.meta.url),
+  "utf8",
+);
+
+test("custom role cloning is restricted to service-role and same-tenant role ids", () => {
+  assert.match(customRoleMigration, /Destination custom role does not belong to the tenant/);
+  assert.match(customRoleMigration, /Source custom role does not belong to the tenant/);
+  assert.match(customRoleMigration, /REVOKE ALL ON FUNCTION public\.clone_role_permissions[^;]+FROM authenticated/);
+  assert.match(customRoleMigration, /GRANT EXECUTE ON FUNCTION public\.clone_role_permissions[^;]+TO service_role/);
+});
+
+const privilegeMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000010_minimize_client_write_privileges.sql", import.meta.url),
+  "utf8",
+);
+
+test("direct client writes to tenant authorization tables are revoked", () => {
+  assert.match(privilegeMigration, /REVOKE INSERT, UPDATE, DELETE ON TABLE public\.user_roles FROM authenticated/);
+  assert.match(privilegeMigration, /REVOKE INSERT, UPDATE, DELETE ON TABLE public\.custom_roles FROM authenticated/);
+  assert.match(privilegeMigration, /REVOKE INSERT, UPDATE, DELETE ON TABLE public\.role_permissions FROM authenticated/);
+  assert.match(privilegeMigration, /REVOKE INSERT ON TABLE public\.tenants FROM authenticated/);
+  assert.match(privilegeMigration, /REVOKE INSERT ON TABLE public\.profiles FROM authenticated/);
+});
+
+test("tenant owner identity cannot be changed by direct client updates", () => {
+  assert.match(privilegeMigration, /prevent_tenant_owner_id_change/);
+  assert.match(privilegeMigration, /NEW\.owner_id IS DISTINCT FROM OLD\.owner_id/);
+});
+
+test("consolidated database snapshot contains every Supabase migration exactly once and in order", () => {
+  const snapshot = readFileSync(
+    new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url),
+    "utf8",
+  );
+  const included = [...snapshot.matchAll(/SOURCE MIGRATION: ([^\n]+)/g)].map((match) => match[1].trim());
+  const migrationFiles = readdirSync(new URL("../supabase/migrations/", import.meta.url))
+    .filter((name) => name.endsWith(".sql"))
+    .sort();
+  assert.deepEqual(included, migrationFiles);
+});
+
+test("new SQL functions use valid paired dollar-quote delimiters", () => {
+  const migrationNames = readdirSync(new URL("../supabase/migrations/", import.meta.url))
+    .filter((name) => name.startsWith("20261111") && name.endsWith(".sql"));
+  for (const name of migrationNames) {
+    const sql = readFileSync(new URL("../supabase/migrations/" + name, import.meta.url), "utf8");
+    assert.doesNotMatch(sql, /AS \$(?!\$)/, name);
+    assert.equal((sql.match(/\$\$/g) ?? []).length % 2, 0, name);
+  }
+});

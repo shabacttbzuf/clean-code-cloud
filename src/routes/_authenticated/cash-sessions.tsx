@@ -85,18 +85,11 @@ function CashSessionsPage() {
     mutationFn: async () => {
       if (!closingId) throw new Error("No session");
       const cb = Number(closingCash);
-      const expected = expectedCashQuery.data ?? 0;
-      const diff = +(cb - expected).toFixed(2);
-      const { error } = await supabase
-        .from("cash_sessions")
-        .update({
-          status: "closed",
-          closing_balance: cb,
-          expected_cash: expected,
-          cash_difference: diff,
-          closed_at: new Date().toISOString(),
-        })
-        .eq("id", closingId.id);
+      if (!Number.isFinite(cb) || cb < 0) throw new Error("رصيد الإغلاق غير صالح");
+      const { error } = await supabase.rpc("close_cash_session", {
+        _session_id: closingId.id,
+        _closing_balance: cb,
+      });
       if (error) throw error;
     },
     onSuccess: () => {

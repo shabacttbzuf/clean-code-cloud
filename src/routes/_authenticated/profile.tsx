@@ -73,7 +73,7 @@ function ProfilePage() {
     mutationFn: () => {
       if (!user) throw new Error("لا يوجد مستخدم");
       if (pwd.next !== pwd.confirm) throw new Error("كلمتا المرور غير متطابقتين");
-      if (pwd.next.length < 6) throw new Error("كلمة المرور قصيرة (6+ أحرف)");
+      if (pwd.next.length < 8) throw new Error("كلمة المرور يجب أن تكون 8 أحرف على الأقل");
       return pwdFn({ data: { user_id: user.id, new_password: pwd.next } });
     },
     onSuccess: () => {

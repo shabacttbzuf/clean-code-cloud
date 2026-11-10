@@ -45,23 +45,13 @@ function OnboardingPage() {
       const nm = nameSchema.parse(name);
       const tr = taxSchema.parse(taxRate);
 
-      const { data: tenant, error: te } = await supabase
-        .from("tenants")
-        .insert({ name: nm, currency, tax_rate: tr, owner_id: userId })
-        .select()
-        .single();
-      if (te) throw te;
-
-      const { error: re } = await supabase
-        .from("user_roles")
-        .insert({ user_id: userId, tenant_id: tenant.id, role: "owner" });
-      if (re) throw re;
-
-      const { error: pe } = await supabase
-        .from("profiles")
-        .update({ tenant_id: tenant.id })
-        .eq("id", userId);
-      if (pe) throw pe;
+      const { data: tenant, error: tenantError } = await supabase.rpc("create_tenant_with_owner", {
+        _name: nm,
+        _currency: currency.trim().toUpperCase(),
+        _tax_rate: tr,
+      });
+      if (tenantError) throw tenantError;
+      if (!tenant) throw new Error("لم يتم إنشاء المؤسسة.");
 
       // Seed default categories
       const defaults = [
