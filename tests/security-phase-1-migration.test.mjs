@@ -240,3 +240,17 @@ test("new SQL functions use valid paired dollar-quote delimiters", () => {
     assert.equal((sql.match(/\$\$/g) ?? []).length % 2, 0, name);
   }
 });
+
+
+const financialLedgerMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000013_protect_financial_ledger_writes.sql", import.meta.url),
+  "utf8",
+);
+
+test("financial ledgers reject direct client DML and preserve transactional RPC paths", () => {
+  assert.match(financialLedgerMigration, /REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE[\s\S]*public\.sales[\s\S]*FROM authenticated/);
+  assert.match(financialLedgerMigration, /public\.payments FROM authenticated/);
+  assert.match(financialLedgerMigration, /public\.inventory_transactions FROM authenticated/);
+  assert.match(financialLedgerMigration, /REVOKE UPDATE, DELETE, TRUNCATE ON TABLE public\.cash_sessions FROM authenticated/);
+  assert.match(financialLedgerMigration, /REVOKE INSERT, DELETE, TRUNCATE ON TABLE public\.tenants FROM authenticated/);
+});
