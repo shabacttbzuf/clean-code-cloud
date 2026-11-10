@@ -254,3 +254,35 @@ test("financial ledgers reject direct client DML and preserve transactional RPC 
   assert.match(financialLedgerMigration, /REVOKE UPDATE, DELETE, TRUNCATE ON TABLE public\.cash_sessions FROM authenticated/);
   assert.match(financialLedgerMigration, /REVOKE INSERT, DELETE, TRUNCATE ON TABLE public\.tenants FROM authenticated/);
 });
+
+
+const profitabilityMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000014_sale_cost_snapshots_profitability.sql", import.meta.url),
+  "utf8",
+);
+
+test("checkout snapshots trusted product cost without trusting client input", () => {
+  assert.match(profitabilityMigration, /cost_price_snapshot numeric\(12,2\)/);
+  assert.match(profitabilityMigration, /v_product\.cost_price/);
+  assert.match(profitabilityMigration, /cost_price_snapshot\s*\n\s*\)/);
+  assert.match(profitabilityMigration, /SET search_path TO pg_catalog, public, pg_temp/);
+});
+
+test("historical unknown costs are not fabricated and profitability is RLS-invoker safe", () => {
+  assert.match(profitabilityMigration, /NULL means historical cost is unknown/);
+  assert.match(profitabilityMigration, /WITH \(security_invoker = true\)/);
+  assert.match(profitabilityMigration, /items_with_unknown_cost/);
+  assert.match(profitabilityMigration, /THEN NULL/);
+  assert.match(profitabilityMigration, /WHERE s\.status = 'completed'/);
+});
+
+test("complete database snapshot includes migration 14 exactly once", () => {
+  const snapshot = readFileSync(
+    new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url),
+    "utf8",
+  );
+  assert.equal(
+    [...snapshot.matchAll(/SOURCE MIGRATION: 20261111000014_sale_cost_snapshots_profitability\.sql/g)].length,
+    1,
+  );
+});
