@@ -47,7 +47,6 @@
 33. `supabase/migrations/20261111000012_secure_super_owner_status.sql`
 34. `supabase/migrations/20261111000013_protect_financial_ledger_writes.sql`
 35. `supabase/migrations/20261111000014_sale_cost_snapshots_profitability.sql`
-
 **الإجمالي: 37 ترحيلاً.**
 
 ## ترحيل Drizzle القديم
