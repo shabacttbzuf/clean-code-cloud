@@ -144,8 +144,8 @@ DECLARE
   v_sum_tax numeric(12,2);
 BEGIN
   IF auth.uid() IS NULL THEN RAISE EXCEPTION 'Authentication required' USING ERRCODE = '42501'; END IF;
-  IF _tenant_id IS NULL OR _sale_id IS NULL OR length(btrim(COALESCE(_reason,''))) NOT BETWEEN 2 AND 500
-     OR _refund_method NOT IN ('cash','card','transfer') THEN
+  IF _tenant_id IS NULL OR _sale_id IS NULL OR _reason IS NULL OR length(btrim(_reason)) NOT BETWEEN 2 AND 500
+     OR _refund_method IS NULL OR _refund_method NOT IN ('cash','card','transfer') THEN
     RAISE EXCEPTION 'Invalid refund details or payment method' USING ERRCODE = '22023';
   END IF;
 
@@ -214,8 +214,8 @@ BEGIN
     WHERE si.sale_id = _sale_id
       AND COALESCE((SELECT sum(ri.quantity) FROM public.sale_refund_items ri
         JOIN public.sale_refunds r ON r.id=ri.refund_id WHERE ri.sale_item_id=si.id AND r.sale_id=_sale_id),0)
-      + COALESCE((SELECT sum((j->>'quantity')::numeric) FROM jsonb_array_elements(_items) j
-        WHERE j->>'sale_item_id'=si.id::text),0) < si.quantity
+      + COALESCE((SELECT sum((req.value->>'quantity')::numeric) FROM jsonb_array_elements(_items) AS req(value)
+        WHERE req.value->>'sale_item_id'=si.id::text),0) < si.quantity
   ) THEN v_is_full := false; END IF;
 
   INSERT INTO public.sale_refunds (
@@ -344,7 +344,7 @@ DECLARE
   v_last_product_id uuid;
 BEGIN
   IF auth.uid() IS NULL THEN RAISE EXCEPTION 'Authentication required' USING ERRCODE = '42501'; END IF;
-  IF _tenant_id IS NULL OR _purchase_id IS NULL OR length(btrim(COALESCE(_reason,''))) NOT BETWEEN 2 AND 500 THEN
+  IF _tenant_id IS NULL OR _purchase_id IS NULL OR _reason IS NULL OR length(btrim(_reason)) NOT BETWEEN 2 AND 500 THEN
     RAISE EXCEPTION 'Invalid supplier return details' USING ERRCODE = '22023';
   END IF;
   SELECT * INTO v_purchase FROM public.purchases WHERE id = _purchase_id AND tenant_id = _tenant_id FOR UPDATE;
