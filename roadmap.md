@@ -1,6 +1,6 @@
 # Roadmap
 
 - [x] Dashboard search/social title and description using existing app wording; visible page unchanged.
-- [ ] Move project to user GitHub account (user connects in Project settings → Git)
-- [ ] Security findings: permissions tables visibility
-- [ ] Package security update
+- [ ] Connect GitHub: waiting for user to complete Project settings → Git → Connect GitHub.
+- [x] Security findings: tenant-scoped permission visibility and super-owner-only owner list.
+- [x] Package security update.
