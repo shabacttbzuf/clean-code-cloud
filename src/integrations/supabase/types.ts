@@ -2334,9 +2334,9 @@ export type Database = {
         Args: {
           _branch_id: string
           _items: Json
-          _notes: string
-          _reference: string
-          _supplier_id: string
+          _notes: string | null
+          _reference: string | null
+          _supplier_id: string | null
           _tenant_id: string
           _user_id: string
         }
@@ -2420,6 +2420,7 @@ export type Database = {
         Args: { _permission_key: string; _tenant_id: string; _user_id: string }
         Returns: boolean
       }
+      get_super_owner_status: { Args: never; Returns: Json }
       is_super_owner: { Args: { _user_id: string }; Returns: boolean }
       reject_payroll_run: {
         Args: {
@@ -2433,7 +2434,7 @@ export type Database = {
       replace_user_role_in_tenant: {
         Args: {
           _actor_id: string
-          _branch_id: string
+          _branch_id: string | null
           _role: Database["public"]["Enums"]["app_role"]
           _tenant_id: string
           _user_id: string
@@ -2442,7 +2443,7 @@ export type Database = {
       }
       touch_last_login: { Args: never; Returns: undefined }
       transfer_user_role_branch: {
-        Args: { _branch_id: string; _tenant_id: string; _user_role_id: string }
+        Args: { _branch_id: string | null; _tenant_id: string; _user_role_id: string }
         Returns: undefined
       }
       user_has_role_in_tenant: {
