@@ -30,7 +30,9 @@ type CartLine = { product_id: string; name: string; unit: string; quantity: stri
 function PurchasesPage() {
   const { tenantId, userId, isAdmin, role, membership } = useActiveTenant();
   const qc = useQueryClient();
-  const [creating, setCreating] = useState(false);\n  const [returningPurchaseId, setReturningPurchaseId] = useState<string | null>(null);\n  const canReturn = isAdmin || role === "warehouse";
+  const [creating, setCreating] = useState(false);
+  const [returningPurchaseId, setReturningPurchaseId] = useState<string | null>(null);
+  const canReturn = isAdmin || role === "warehouse";
 
   const purchases = useQuery({
     queryKey: ["purchases", tenantId],
@@ -86,7 +88,8 @@ function PurchasesPage() {
                     <th className="p-3 font-medium">المورد</th>
                     <th className="p-3 font-medium">الفرع</th>
                     <th className="p-3 font-medium">الإجمالي</th>
-                    <th className="p-3 font-medium">التاريخ</th>\n                    {canReturn && <th className="p-3 font-medium">الإجراء</th>}
+                    <th className="p-3 font-medium">التاريخ</th>
+                    {canReturn && <th className="p-3 font-medium">الإجراء</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -96,7 +99,8 @@ function PurchasesPage() {
                       <td className="p-3">{p.supplier_id ? (purchases.data?.supMap.get(p.supplier_id) ?? "—") : "—"}</td>
                       <td className="p-3 text-muted-foreground">{purchases.data?.brMap.get(p.branch_id) ?? "—"}</td>
                       <td className="p-3 num font-bold text-primary">{formatMoney(p.total)}</td>
-                      <td className="p-3 text-xs text-muted-foreground">{formatDateTime(p.created_at)}</td>\n                      {canReturn && <td className="p-3"><Button size="sm" variant="outline" onClick={() => setReturningPurchaseId(p.id)}><RotateCcw className="ml-1 h-3 w-3" />إرجاع للمورد</Button></td>}
+                      <td className="p-3 text-xs text-muted-foreground">{formatDateTime(p.created_at)}</td>
+                      {canReturn && <td className="p-3"><Button size="sm" variant="outline" onClick={() => setReturningPurchaseId(p.id)}><RotateCcw className="ml-1 h-3 w-3" />إرجاع للمورد</Button></td>}
                     </tr>
                   ))}
                 </tbody>
