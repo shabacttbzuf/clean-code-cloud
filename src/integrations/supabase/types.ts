@@ -1822,6 +1822,129 @@ export type Database = {
           },
         ]
       }
+      purchase_returns: {
+        Row: {
+          branch_id: string
+          created_at: string
+          id: string
+          processed_by: string
+          purchase_id: string
+          reason: string
+          tenant_id: string
+          total: number
+        }
+        Insert: {
+          branch_id: string
+          created_at?: string
+          id?: string
+          processed_by: string
+          purchase_id: string
+          reason: string
+          tenant_id: string
+          total?: number
+        }
+        Update: {
+          branch_id?: string
+          created_at?: string
+          id?: string
+          processed_by?: string
+          purchase_id?: string
+          reason?: string
+          tenant_id?: string
+          total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_returns_purchase_id_fkey"
+            columns: ["purchase_id"]
+            isOneToOne: false
+            referencedRelation: "purchases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_returns_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_returns_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      purchase_return_items: {
+        Row: {
+          cost_price: number
+          created_at: string
+          id: string
+          line_total: number
+          product_id: string
+          product_name: string
+          purchase_item_id: string
+          purchase_return_id: string
+          quantity: number
+          tenant_id: string
+        }
+        Insert: {
+          cost_price: number
+          created_at?: string
+          id?: string
+          line_total: number
+          product_id: string
+          product_name: string
+          purchase_item_id: string
+          purchase_return_id: string
+          quantity: number
+          tenant_id: string
+        }
+        Update: {
+          cost_price?: number
+          created_at?: string
+          id?: string
+          line_total?: number
+          product_id?: string
+          product_name?: string
+          purchase_item_id?: string
+          purchase_return_id?: string
+          quantity?: number
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_return_items_purchase_return_id_fkey"
+            columns: ["purchase_return_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_returns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_return_items_purchase_item_id_fkey"
+            columns: ["purchase_item_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_return_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_return_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       purchases: {
         Row: {
           branch_id: string
@@ -2001,6 +2124,166 @@ export type Database = {
           },
           {
             foreignKeyName: "sale_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sale_refunds: {
+        Row: {
+          branch_id: string
+          cash_session_id: string | null
+          created_at: string
+          discount: number
+          id: string
+          processed_by: string
+          reason: string
+          refund_method: Database["public"]["Enums"]["payment_method"]
+          sale_id: string
+          subtotal: number
+          tax_amount: number
+          tenant_id: string
+          total: number
+        }
+        Insert: {
+          branch_id: string
+          cash_session_id?: string | null
+          created_at?: string
+          discount?: number
+          id?: string
+          processed_by: string
+          reason: string
+          refund_method: Database["public"]["Enums"]["payment_method"]
+          sale_id: string
+          subtotal?: number
+          tax_amount?: number
+          tenant_id: string
+          total?: number
+        }
+        Update: {
+          branch_id?: string
+          cash_session_id?: string | null
+          created_at?: string
+          discount?: number
+          id?: string
+          processed_by?: string
+          reason?: string
+          refund_method?: Database["public"]["Enums"]["payment_method"]
+          sale_id?: string
+          subtotal?: number
+          tax_amount?: number
+          tenant_id?: string
+          total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sale_refunds_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_refunds_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_refunds_cash_session_id_fkey"
+            columns: ["cash_session_id"]
+            isOneToOne: false
+            referencedRelation: "cash_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_refunds_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sale_refund_items: {
+        Row: {
+          cost_price_snapshot: number | null
+          created_at: string
+          discount_amount: number
+          id: string
+          product_id: string | null
+          product_name: string
+          quantity: number
+          refund_id: string
+          restocked: boolean
+          sale_item_id: string
+          subtotal_amount: number
+          tax_amount: number
+          tenant_id: string
+          total_amount: number
+          unit_price: number
+        }
+        Insert: {
+          cost_price_snapshot?: number | null
+          created_at?: string
+          discount_amount: number
+          id?: string
+          product_id?: string | null
+          product_name: string
+          quantity: number
+          refund_id: string
+          restocked?: boolean
+          sale_item_id: string
+          subtotal_amount: number
+          tax_amount: number
+          tenant_id: string
+          total_amount: number
+          unit_price: number
+        }
+        Update: {
+          cost_price_snapshot?: number | null
+          created_at?: string
+          discount_amount?: number
+          id?: string
+          product_id?: string | null
+          product_name?: string
+          quantity?: number
+          refund_id?: string
+          restocked?: boolean
+          sale_item_id?: string
+          subtotal_amount?: number
+          tax_amount?: number
+          tenant_id?: string
+          total_amount?: number
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sale_refund_items_refund_id_fkey"
+            columns: ["refund_id"]
+            isOneToOne: false
+            referencedRelation: "sale_refunds"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_refund_items_sale_item_id_fkey"
+            columns: ["sale_item_id"]
+            isOneToOne: false
+            referencedRelation: "sale_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_refund_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_refund_items_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -2412,6 +2695,48 @@ export type Database = {
           to: "sales"
           isOneToOne: true
           isSetofReturn: false
+        }
+      }
+      create_sale_refund: {
+        Args: {
+          _items: Json
+          _reason: string
+          _refund_method: Database["public"]["Enums"]["payment_method"]
+          _sale_id: string
+          _tenant_id: string
+        }
+        Returns: {
+          branch_id: string
+          cash_session_id: string | null
+          created_at: string
+          discount: number
+          id: string
+          processed_by: string
+          reason: string
+          refund_method: Database["public"]["Enums"]["payment_method"]
+          sale_id: string
+          subtotal: number
+          tax_amount: number
+          tenant_id: string
+          total: number
+        }
+      }
+      create_purchase_return: {
+        Args: {
+          _items: Json
+          _purchase_id: string
+          _reason: string
+          _tenant_id: string
+        }
+        Returns: {
+          branch_id: string
+          created_at: string
+          id: string
+          processed_by: string
+          purchase_id: string
+          reason: string
+          tenant_id: string
+          total: number
         }
       }
       create_tenant_with_owner: {
