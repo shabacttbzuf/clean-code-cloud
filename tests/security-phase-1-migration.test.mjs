@@ -249,8 +249,8 @@ const financialLedgerMigration = readFileSync(
 
 test("financial ledgers reject direct client DML and preserve transactional RPC paths", () => {
   assert.match(financialLedgerMigration, /REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE[\s\S]*public\.sales[\s\S]*FROM authenticated/);
-  assert.match(financialLedgerMigration, /public\\.payments[\\s\\S]*FROM authenticated/);
-  assert.match(financialLedgerMigration, /public\\.inventory_transactions[\\s\\S]*FROM authenticated/);
+  assert.match(financialLedgerMigration, /public\.payments[\s\S]*FROM authenticated/);
+  assert.match(financialLedgerMigration, /public\.inventory_transactions[\s\S]*FROM authenticated/);
   assert.match(financialLedgerMigration, /REVOKE UPDATE, DELETE, TRUNCATE ON TABLE public\.cash_sessions FROM authenticated/);
   assert.match(financialLedgerMigration, /REVOKE INSERT, DELETE, TRUNCATE ON TABLE public\.tenants FROM authenticated/);
 });
