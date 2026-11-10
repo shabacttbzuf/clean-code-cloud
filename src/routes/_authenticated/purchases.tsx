@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Loader2, Plus, FileText, Trash2, ShoppingBag } from "lucide-react";
+import { Loader2, Plus, FileText, Trash2, ShoppingBag, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { formatMoney, formatDateTime } from "@/lib/format";
@@ -30,7 +30,7 @@ type CartLine = { product_id: string; name: string; unit: string; quantity: stri
 function PurchasesPage() {
   const { tenantId, userId, isAdmin, role, membership } = useActiveTenant();
   const qc = useQueryClient();
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(false);\n  const [returningPurchaseId, setReturningPurchaseId] = useState<string | null>(null);\n  const canReturn = isAdmin || role === "warehouse";
 
   const purchases = useQuery({
     queryKey: ["purchases", tenantId],
@@ -86,7 +86,7 @@ function PurchasesPage() {
                     <th className="p-3 font-medium">المورد</th>
                     <th className="p-3 font-medium">الفرع</th>
                     <th className="p-3 font-medium">الإجمالي</th>
-                    <th className="p-3 font-medium">التاريخ</th>
+                    <th className="p-3 font-medium">التاريخ</th>\n                    {canReturn && <th className="p-3 font-medium">الإجراء</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -96,7 +96,7 @@ function PurchasesPage() {
                       <td className="p-3">{p.supplier_id ? (purchases.data?.supMap.get(p.supplier_id) ?? "—") : "—"}</td>
                       <td className="p-3 text-muted-foreground">{purchases.data?.brMap.get(p.branch_id) ?? "—"}</td>
                       <td className="p-3 num font-bold text-primary">{formatMoney(p.total)}</td>
-                      <td className="p-3 text-xs text-muted-foreground">{formatDateTime(p.created_at)}</td>
+                      <td className="p-3 text-xs text-muted-foreground">{formatDateTime(p.created_at)}</td>\n                      {canReturn && <td className="p-3"><Button size="sm" variant="outline" onClick={() => setReturningPurchaseId(p.id)}><RotateCcw className="ml-1 h-3 w-3" />إرجاع للمورد</Button></td>}
                     </tr>
                   ))}
                 </tbody>
@@ -118,7 +118,113 @@ function PurchasesPage() {
           defaultBranchId={membership?.branch_id ?? null}
         />
       </Dialog>
+      <Dialog open={!!returningPurchaseId} onOpenChange={(open) => { if (!open) setReturningPurchaseId(null); }}>
+        {returningPurchaseId && (
+          <PurchaseReturnDialog
+            purchaseId={returningPurchaseId}
+            tenantId={tenantId!}
+            onDone={() => {
+              setReturningPurchaseId(null);
+              qc.invalidateQueries({ queryKey: ["purchases"] });
+              qc.invalidateQueries({ queryKey: ["inventory"] });
+              qc.invalidateQueries({ queryKey: ["inventory-movements"] });
+            }}
+            onCancel={() => setReturningPurchaseId(null)}
+          />
+        )}
+      </Dialog>
     </div>
+  );
+}
+
+function PurchaseReturnDialog({
+  purchaseId, tenantId, onDone, onCancel,
+}: { purchaseId: string; tenantId: string; onDone: () => void; onCancel: () => void }) {
+  const [reason, setReason] = useState("");
+  const [quantities, setQuantities] = useState<Record<string, string>>({});
+
+  const purchaseLines = useQuery({
+    queryKey: ["purchase-return-lines", purchaseId],
+    queryFn: async () => {
+      const { data: lines, error } = await supabase.from("purchase_items")
+        .select("id, product_id, quantity, cost_price").eq("purchase_id", purchaseId);
+      if (error) throw error;
+      const { data: returns, error: returnsError } = await supabase.from("purchase_returns")
+        .select("id").eq("purchase_id", purchaseId);
+      if (returnsError) throw returnsError;
+      const returnIds = (returns ?? []).map((r) => r.id);
+      const { data: returnItems, error: returnItemsError } = returnIds.length
+        ? await supabase.from("purchase_return_items").select("purchase_item_id, quantity").in("purchase_return_id", returnIds)
+        : { data: [], error: null };
+      if (returnItemsError) throw returnItemsError;
+      const returned = new Map<string, number>();
+      for (const item of returnItems ?? []) returned.set(item.purchase_item_id, (returned.get(item.purchase_item_id) ?? 0) + Number(item.quantity));
+      const productIds = Array.from(new Set((lines ?? []).map((line) => line.product_id)));
+      const { data: products, error: productsError } = productIds.length
+        ? await supabase.from("products").select("id, name").in("id", productIds)
+        : { data: [], error: null };
+      if (productsError) throw productsError;
+      const names = new Map((products ?? []).map((p) => [p.id, p.name]));
+      return (lines ?? []).map((line) => ({
+        id: line.id, product_id: line.product_id, name: names.get(line.product_id) ?? "منتج",
+        quantity: Number(line.quantity), cost_price: Number(line.cost_price), returned: returned.get(line.id) ?? 0,
+      }));
+    },
+  });
+
+  const submit = useMutation({
+    mutationFn: async () => {
+      const items = (purchaseLines.data ?? []).map((line) => ({
+        purchase_item_id: line.id, quantity: Number(quantities[line.id] ?? 0),
+      })).filter((line) => line.quantity > 0);
+      if (items.length === 0) throw new Error("حدد كمية صنف واحد على الأقل");
+      if (reason.trim().length < 2) throw new Error("اكتب سبب الإرجاع");
+      const { error } = await supabase.rpc("create_purchase_return", {
+        _tenant_id: tenantId, _purchase_id: purchaseId, _reason: reason.trim(), _items: items,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success("تم تسجيل إرجاع المورد وتحديث المخزون"); onDone(); },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر تسجيل الإرجاع"),
+  });
+
+  return (
+    <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+      <DialogHeader><DialogTitle>إرجاع أصناف إلى المورد</DialogTitle></DialogHeader>
+      {purchaseLines.isLoading ? (
+        <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
+      ) : purchaseLines.isError ? (
+        <p className="text-sm text-destructive">تعذر تحميل بنود فاتورة الشراء.</p>
+      ) : (
+        <div className="space-y-4">
+          <div className="space-y-2"><Label>سبب الإرجاع</Label>
+            <Textarea value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} placeholder="اكتب سبب الإرجاع..." />
+          </div>
+          <div className="space-y-2"><Label>الأصناف والكميات</Label>
+            {(purchaseLines.data ?? []).map((line) => {
+              const remaining = Math.max(0, line.quantity - line.returned);
+              return (
+                <div key={line.id} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-[1fr_110px] sm:items-center">
+                  <div><div className="font-medium">{line.name}</div>
+                    <div className="text-xs text-muted-foreground">المشتَرى: {line.quantity} • المرتجع: {line.returned} • المتبقي: {remaining}</div>
+                    <div className="text-xs text-muted-foreground">{formatMoney(line.cost_price)} للوحدة</div>
+                  </div>
+                  <Input type="number" min="0" max={remaining} step="0.001" value={quantities[line.id] ?? "0"}
+                    onChange={(e) => setQuantities((prev) => ({ ...prev, [line.id]: e.target.value }))} disabled={remaining <= 0} />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      <DialogFooter>
+        <Button variant="outline" onClick={onCancel}>إلغاء</Button>
+        <Button variant="destructive" disabled={submit.isPending || purchaseLines.isLoading || !purchaseLines.data}
+          onClick={() => submit.mutate()}>
+          {submit.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}تأكيد إرجاع المورد
+        </Button>
+      </DialogFooter>
+    </DialogContent>
   );
 }
 
