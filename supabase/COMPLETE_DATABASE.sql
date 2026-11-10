@@ -4020,3 +4020,12 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.get_super_owner_status() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.get_super_owner_status() TO authenticated;
+
+
+-- SOURCE MIGRATION: 20261111000013_protect_financial_ledger_writes.sql
+-- Protect financial and stock ledgers from direct authenticated/anonymous DML.
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE public.sales, public.sale_items, public.payments, public.cash_sessions, public.purchases, public.purchase_items, public.inventory_transactions, public.tenants, public.profiles, public.super_owners FROM anon;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE public.sales, public.sale_items, public.payments FROM authenticated;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE public.purchases, public.purchase_items, public.inventory_transactions FROM authenticated;
+REVOKE UPDATE, DELETE, TRUNCATE ON TABLE public.cash_sessions FROM authenticated;
+REVOKE INSERT, DELETE, TRUNCATE ON TABLE public.tenants FROM authenticated;
