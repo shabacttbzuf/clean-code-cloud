@@ -1943,6 +1943,7 @@ export type Database = {
       }
       sale_items: {
         Row: {
+          cost_price_snapshot: number | null
           created_at: string
           discount: number
           id: string
@@ -1956,6 +1957,7 @@ export type Database = {
           unit_price: number
         }
         Insert: {
+          cost_price_snapshot?: number | null
           created_at?: string
           discount?: number
           id?: string
@@ -1969,6 +1971,7 @@ export type Database = {
           unit_price: number
         }
         Update: {
+          cost_price_snapshot?: number | null
           created_at?: string
           discount?: number
           id?: string
@@ -2270,7 +2273,23 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      sales_profitability: {
+        Row: {
+          branch_id: string
+          cost_of_goods_sold: number | null
+          created_at: string
+          discount: number
+          gross_profit: number | null
+          invoice_no: number
+          items_with_unknown_cost: number
+          net_revenue_before_tax: number
+          sale_id: string
+          status: Database["public"]["Enums"]["sale_status"]
+          subtotal: number
+          tenant_id: string
+        }
+        Relationships: []
+      }
     }
     Functions: {
       adjust_inventory_balance: {
