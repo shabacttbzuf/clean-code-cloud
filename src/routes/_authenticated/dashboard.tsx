@@ -9,7 +9,19 @@ import { Loader2, TrendingUp, TrendingDown, Receipt, Wallet, Package, Crown, Bui
 import { formatMoney } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 
-export const Route = createFileRoute("/_authenticated/dashboard")({ component: Dashboard });
+export const Route = createFileRoute("/_authenticated/dashboard")({
+  component: Dashboard,
+  head: () => ({
+    meta: [
+      { title: "لوحة التحكم — نظام محاسبة المطاعم" },
+      { name: "description", content: "تابع مبيعات المطعم والمصروفات وصافي الربح والمخزون والورديات من لوحة التحكم." },
+      { property: "og:title", content: "لوحة التحكم — نظام محاسبة المطاعم" },
+      { property: "og:description", content: "تابع مبيعات المطعم والمصروفات وصافي الربح والمخزون والورديات من لوحة التحكم." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
+});
 
 function Dashboard() {
   const { tenantId, tenant, user } = useActiveTenant();

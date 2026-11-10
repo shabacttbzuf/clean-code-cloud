@@ -2262,6 +2262,7 @@ export type Database = {
         }
         Returns: number
       }
+      get_super_owner_status: { Args: never; Returns: Json }
       has_permission: {
         Args: { _permission_key: string; _tenant_id: string; _user_id: string }
         Returns: boolean

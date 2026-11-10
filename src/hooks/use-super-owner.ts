@@ -13,15 +13,14 @@ export function useSuperOwner() {
   const query = useQuery({
     queryKey: ["super-owner-status", user?.id],
     queryFn: async () => {
-      const { data, error, count } = await supabase
-        .from("super_owners")
-        .select("user_id", { count: "exact" });
+      const { data, error } = await supabase.rpc("get_super_owner_status");
       if (error) throw error;
-      const list = data ?? [];
+      if (!data || typeof data !== "object" || Array.isArray(data)) {
+        throw new Error("Invalid super owner status");
+      }
       return {
-        totalCount: count ?? list.length,
-        isSuperOwner: !!user?.id && list.some((r) => r.user_id === user.id),
-        allOwners: list.map((r) => r.user_id),
+        totalCount: typeof data.totalCount === "number" ? data.totalCount : 0,
+        isSuperOwner: data.isSuperOwner === true,
       };
     },
     enabled: !!user?.id,
