@@ -44,8 +44,9 @@
 31. `supabase/migrations/20261111000010_minimize_client_write_privileges.sql`
 
 32. `supabase/migrations/20261111000011_restrict_security_definer_execution.sql`
+33. `supabase/migrations/20261111000012_secure_super_owner_status.sql`
 
-**الإجمالي: 32 ترحيلاً.**
+**الإجمالي: 33 ترحيلاً.**
 
 ## ترحيل Drizzle القديم
 
@@ -56,6 +57,6 @@
 
 ## ملف SQL الشامل
 
-`supabase/COMPLETE_DATABASE.sql` يجمع محتويات الترحيلات الاثنتين والثلاثين بالترتيب، وهو Snapshot كامل لإعادة البناء من قاعدة فارغة.
+`supabase/COMPLETE_DATABASE.sql` يجمع محتويات الترحيلات الثلاث والثلاثين بالترتيب، وهو Snapshot كامل لإعادة البناء من قاعدة فارغة.
 
 **المسار الموصى به:** `supabase db push` لأنه يحافظ على سجل الترحيلات. لا تشغّل Snapshot يدوياً ثم تشغّل `db push` على القاعدة نفسها؛ اختر طريقة واحدة فقط.
