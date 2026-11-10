@@ -3994,3 +3994,27 @@ REVOKE EXECUTE ON FUNCTION public.user_has_role_in_tenant(uuid, uuid, text[]) FR
 GRANT EXECUTE ON FUNCTION public.user_has_role_in_tenant(uuid, uuid, text[]) TO authenticated;
 REVOKE EXECUTE ON FUNCTION public.was_hired_by(uuid, uuid, uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.was_hired_by(uuid, uuid, uuid) TO authenticated;
+
+
+-- Migration 20261111000012_secure_super_owner_status.sql
+CREATE OR REPLACE FUNCTION public.get_super_owner_status()
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public, pg_temp
+AS $$
+DECLARE
+  v_user_id uuid := auth.uid();
+BEGIN
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'Authentication required' USING ERRCODE = '42501';
+  END IF;
+  RETURN jsonb_build_object(
+    'totalCount', (SELECT count(*)::integer FROM public.super_owners),
+    'isSuperOwner', EXISTS (SELECT 1 FROM public.super_owners WHERE user_id = v_user_id)
+  );
+END;
+$$;
+REVOKE ALL ON FUNCTION public.get_super_owner_status() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_super_owner_status() TO authenticated;
