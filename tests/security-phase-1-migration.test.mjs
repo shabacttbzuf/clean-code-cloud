@@ -332,7 +332,7 @@ test("supplier returns reverse inventory atomically and preserve purchase source
 });
 
 test("cash close reconciles cash refunds and profitability subtracts returned goods", () => {
-  assert.match(returnsMigration, /cash_session_id = v_session\\.id/);
+  assert.match(returnsMigration, /cash_session_id\\s*=\\s*v_session\\.id/);
   assert.match(returnsMigration, /refunded_net_revenue/);
   assert.match(returnsMigration, /restocked_quantity/);
   assert.match(returnsMigration, /security_invoker = true/);
