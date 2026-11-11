@@ -171,7 +171,8 @@ export function AppSidebar() {
   const allGroups: Group[] = [
     ...groups,
     enterpriseGroup,
-    { label: "النظام", items: systemItems },\n    ...(isSuperOwner && customItems.length ? [customGroup] : []),
+    { label: "النظام", items: systemItems },
+    ...(isSuperOwner && customItems.length ? [customGroup] : []),
   ].map((group) => ({ ...group, items: group.items.filter(allowed) })).filter((group) => group.items.length > 0);
 
   return (
