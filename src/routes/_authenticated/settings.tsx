@@ -11,6 +11,9 @@ import { toast } from "sonner";
 import { Loader2, Upload, ImagePlus } from "lucide-react";
 import { z } from "zod";
 import { PageHeader } from "@/components/page-header";
+import { useTheme, DEFAULT_DESIGN, type DesignSettings } from "@/lib/theme";
+import { useSuperOwner } from "@/hooks/use-super-owner";
+import { Palette, RotateCcw, Plus, Trash2, MonitorCog } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   component: SettingsPage,
@@ -25,12 +28,19 @@ const schema = z.object({
 
 function SettingsPage() {
   const { tenant, tenantId, isAdmin, role } = useActiveTenant();
+  const { isSuperOwner } = useSuperOwner();
+  const { design, saveDesign, resetDesign } = useTheme();
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [currency, setCurrency] = useState("SAR");
   const [tax, setTax] = useState("15");
   const [logoUrl, setLogoUrl] = useState("");
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [designDraft, setDesignDraft] = useState<DesignSettings>(design);
+  const [uploadingBackground, setUploadingBackground] = useState(false);
+  const [customTabs, setCustomTabs] = useState<Array<{ title: string; url: string }>>([]);
+  const [newTabTitle, setNewTabTitle] = useState("");
+  const [newTabUrl, setNewTabUrl] = useState("/dashboard");
 
   useEffect(() => {
     if (tenant) {
@@ -58,6 +68,55 @@ function SettingsPage() {
   });
 
   const canEdit = role === "owner";
+
+  async function uploadBackground(file?: File) {
+    if (!file || !tenantId || !isSuperOwner) return;
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/avif"];
+    if (!allowed.includes(file.type)) { toast.error("صيغة الصورة غير مدعومة"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("الحجم الأقصى للخلفية 5MB"); return; }
+    setUploadingBackground(true);
+    try {
+      const ext = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif" } as Record<string, string>)[file.type];
+      const path = `${tenantId}/branding/background-${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage.from("restaurant-assets").upload(path, file, { upsert: false, contentType: file.type, cacheControl: "31536000" });
+      if (error) throw error;
+      const { data } = supabase.storage.from("restaurant-assets").getPublicUrl(path);
+      setDesignDraft((current) => ({ ...current, backgroundImage: data.publicUrl }));
+      toast.success("تم رفع الخلفية. اضغط تطبيق التصميم لمعاينتها.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "تعذر رفع الخلفية");
+    } finally { setUploadingBackground(false); }
+  }
+
+  function applyDesign() {
+    saveDesign(designDraft);
+    toast.success("تم تطبيق التصميم على هذا الجهاز");
+  }
+
+  function resetWorkspaceDesign() {
+    resetDesign();
+    setDesignDraft(DEFAULT_DESIGN);
+    toast.success("تمت استعادة التصميم الافتراضي");
+  }
+
+  function persistCustomTabs(next: Array<{ title: string; url: string }>) {
+    setCustomTabs(next);
+    try {
+      window.localStorage.setItem("ras-custom-sidebar-items-v1", JSON.stringify(next));
+      window.dispatchEvent(new Event("ras-custom-tabs-updated"));
+      toast.success("تم تحديث الاختصارات");
+    } catch { toast.error("تعذر حفظ الاختصارات على هذا الجهاز"); }
+  }
+
+  function addCustomTab() {
+    const title = newTabTitle.trim();
+    const allowedRoutes = ["/dashboard", "/pos", "/sales", "/products", "/inventory", "/purchases", "/reports", "/customers", "/branches", "/users", "/settings"];
+    if (!title || title.length > 28 || !allowedRoutes.includes(newTabUrl)) { toast.error("أدخل اسماً صالحاً واختر صفحة موجودة"); return; }
+    if (customTabs.some((item) => item.url === newTabUrl)) { toast.error("هذا الاختصار مضاف بالفعل"); return; }
+    if (customTabs.length >= 12) { toast.error("الحد الأقصى 12 اختصاراً"); return; }
+    persistCustomTabs([...customTabs, { title, url: newTabUrl }]);
+    setNewTabTitle("");
+  }
 
   async function uploadRestaurantLogo(file?: File) {
     if (!file || !tenantId || !canEdit) return;
@@ -134,6 +193,83 @@ function SettingsPage() {
           </form>
         </CardContent>
       </Card>
+
+      {isSuperOwner && (
+        <Card className="border-primary/30">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><MonitorCog className="h-5 w-5 text-primary" /> استوديو تطوير وتخصيص النظام</CardTitle>
+            <CardDescription>تحكم آمن في ألوان الواجهة والخلفية والاختصارات. التغييرات المرئية تحفظ محلياً على هذا الجهاز ولا تغير منطق المبيعات أو المحاسبة أو الصلاحيات.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <section className="space-y-3">
+              <h3 className="flex items-center gap-2 font-semibold"><Palette className="h-4 w-4" /> ألوان النظام</h3>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {([
+                  ["background", "خلفية مساحة العمل"],
+                  ["primary", "اللون الرئيسي والأزرار"],
+                  ["accent", "لون التمييز"],
+                  ["sidebar", "خلفية القائمة الجانبية"],
+                  ["card", "خلفية البطاقات"],
+                ] as const).map(([key, label]) => (
+                  <label key={key} className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
+                    <span>{label}</span>
+                    <input type="color" value={designDraft[key]} onChange={(e) => setDesignDraft((current) => ({ ...current, [key]: e.target.value }))} className="h-9 w-12 cursor-pointer rounded border bg-transparent p-1" />
+                  </label>
+                ))}
+              </div>
+            </section>
+            <section className="space-y-3">
+              <h3 className="font-semibold">خلفية مخصصة</h3>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="h-24 w-36 overflow-hidden rounded-lg border bg-muted">
+                  {designDraft.backgroundImage ? <img src={designDraft.backgroundImage} alt="معاينة خلفية النظام" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-xs text-muted-foreground">بدون صورة</div>}
+                </div>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-muted">
+                  {uploadingBackground ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  {uploadingBackground ? "جارٍ رفع الخلفية..." : "رفع صورة خلفية"}
+                  <input className="hidden" type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={uploadingBackground} onChange={(e) => { void uploadBackground(e.target.files?.[0]); e.currentTarget.value = ""; }} />
+                </label>
+                <Button type="button" variant="outline" onClick={() => setDesignDraft((current) => ({ ...current, backgroundImage: "" }))}>إزالة الصورة</Button>
+              </div>
+              <p className="text-xs text-muted-foreground">تظهر الخلفية خلف مساحة العمل مع طبقة شفافة لسهولة قراءة المحتوى.</p>
+            </section>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" onClick={applyDesign}>تطبيق التصميم</Button>
+              <Button type="button" variant="outline" onClick={resetWorkspaceDesign}><RotateCcw className="ml-2 h-4 w-4" /> استعادة الافتراضي</Button>
+            </div>
+            <section className="space-y-3 border-t pt-5">
+              <h3 className="font-semibold">إدارة الاختصارات والتبويبات الجانبية</h3>
+              <p className="text-xs text-muted-foreground">أضف تبويباً باسم تختاره يفتح صفحة موجودة. لا ينشئ هذا محرراً لصفحات أو وظائف جديدة؛ إضافة وحدات تشغيلية جديدة تحتاج تطويراً وبرمجة وصلاحيات مستقلة.</p>
+              <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                <Input value={newTabTitle} onChange={(e) => setNewTabTitle(e.target.value)} placeholder="اسم التبويب" maxLength={28} />
+                <select value={newTabUrl} onChange={(e) => setNewTabUrl(e.target.value)} className="h-10 rounded-md border bg-background px-3 text-sm">
+                  <option value="/dashboard">لوحة التحكم</option>
+                  <option value="/pos">نقطة البيع</option>
+                  <option value="/sales">الفواتير</option>
+                  <option value="/products">المنتجات</option>
+                  <option value="/inventory">المخزون</option>
+                  <option value="/purchases">المشتريات</option>
+                  <option value="/reports">التقارير</option>
+                  <option value="/customers">العملاء</option>
+                  <option value="/branches">الفروع</option>
+                  <option value="/users">الموظفون</option>
+                  <option value="/settings">الإعدادات</option>
+                </select>
+                <Button type="button" onClick={addCustomTab} disabled={!newTabTitle.trim() || customTabs.length >= 12}><Plus className="ml-1 h-4 w-4" /> إضافة</Button>
+              </div>
+              <div className="space-y-2">
+                {customTabs.map((item) => (
+                  <div key={item.url} className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
+                    <div className="min-w-0"><div className="font-medium">{item.title}</div><div className="text-xs text-muted-foreground" dir="ltr">{item.url}</div></div>
+                    <Button type="button" size="icon" variant="ghost" aria-label={`حذف اختصار ${item.title}`} onClick={() => persistCustomTabs(customTabs.filter((entry) => entry.url !== item.url))}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                  </div>
+                ))}
+                {customTabs.length === 0 && <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">لم تضف اختصارات مخصصة بعد.</p>}
+              </div>
+            </section>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
