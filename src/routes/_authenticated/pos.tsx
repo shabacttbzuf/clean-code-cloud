@@ -429,7 +429,7 @@ function POSPage() {
               </div>
               <div className="grid min-h-0 flex-1 content-start grid-cols-4 gap-1.5 overflow-y-auto p-0.5 sm:grid-cols-5 md:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8">
                 {filteredProducts.map((product) => (
-                  <button key={product.id} type="button" onClick={() => addToCart(product)}
+                  <button key={product.id} type="button" onClick={() => addToCart(product)} disabled={checkoutMut.isPending}
                     className="flex min-h-[54px] flex-col items-center justify-center rounded-lg border bg-card p-1.5 text-center text-[11px] font-semibold leading-tight shadow-sm transition hover:border-primary hover:bg-primary/5 active:scale-95 sm:min-h-[62px] sm:text-xs">
                     <span className="line-clamp-2">{product.name}</span>
                     <span className="mt-1 text-[10px] font-bold text-primary num">{formatMoney(Number(product.sale_price))}</span>
@@ -471,19 +471,19 @@ function POSPage() {
                     <tr key={item.product_id} className="border-t">
                       <td className="p-1.5 text-right"><div className="font-medium leading-tight">{item.name}</div><div className="text-[10px] text-muted-foreground num">{formatMoney(item.unit_price)}</div></td>
                       <td className="p-1.5 text-center"><div className="inline-flex items-center gap-0.5">
-                        <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => dec(item.product_id)}><Minus className="h-3 w-3" /></Button>
+                        <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => dec(item.product_id)} disabled={checkoutMut.isPending}><Minus className="h-3 w-3" /></Button>
                         <span className="min-w-6 text-center font-semibold num">{item.quantity}</span>
-                        <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => inc(item.product_id)}><Plus className="h-3 w-3" /></Button>
+                        <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => inc(item.product_id)} disabled={checkoutMut.isPending}><Plus className="h-3 w-3" /></Button>
                       </div></td>
                       <td className="p-1.5 text-center font-bold num">{formatMoney(item.unit_price * item.quantity)}</td>
-                      <td className="p-1.5 text-center"><Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" aria-label="حذف الصنف" onClick={() => remove(item.product_id)}><Trash2 className="h-3.5 w-3.5" /></Button></td>
+                      <td className="p-1.5 text-center"><Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" aria-label="حذف الصنف" onClick={() => remove(item.product_id)} disabled={checkoutMut.isPending}><Trash2 className="h-3.5 w-3.5" /></Button></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
             <div className="mt-1.5 rounded-md border bg-muted/30 p-2 text-xs">
-              <div className="mb-1.5 flex items-center gap-2"><Label className="shrink-0 text-[10px] text-muted-foreground">الخصم</Label><Input type="number" min="0" max={subtotal} step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} className="h-7 text-xs" /></div>
+              <div className="mb-1.5 flex items-center gap-2"><Label className="shrink-0 text-[10px] text-muted-foreground">الخصم</Label><Input type="number" min="0" max={subtotal} step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} className="h-7 text-xs" disabled={checkoutMut.isPending} /></div>
               <div className="flex justify-between text-muted-foreground"><span>المجموع الفرعي</span><span className="num">{formatMoney(subtotal)}</span></div>
               {disc > 0 && <div className="flex justify-between text-destructive"><span>الخصم</span><span className="num">-{formatMoney(disc)}</span></div>}
               {taxRate > 0 && <div className="flex justify-between text-muted-foreground"><span>الضريبة ({taxRate}%)</span><span className="num">{formatMoney(taxAmount)}</span></div>}
@@ -518,7 +518,7 @@ function POSPage() {
         </Card>
       </div>
 
-      <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
+      <Dialog open={reviewOpen} onOpenChange={(open) => { if (!checkoutMut.isPending) setReviewOpen(open); }}>
         <DialogContent className="max-h-[92dvh] max-w-2xl overflow-y-auto" dir="rtl">
           <DialogHeader>
             <DialogTitle>مراجعة الفاتورة قبل الإصدار</DialogTitle>
@@ -533,13 +533,13 @@ function POSPage() {
                     <tr key={item.product_id} className="border-t">
                       <td className="p-2 font-medium">{item.name}</td>
                       <td className="p-2"><div className="flex items-center justify-center gap-1">
-                        <Button size="icon" variant="outline" className="h-7 w-7" aria-label="تقليل الكمية" onClick={() => dec(item.product_id)}><Minus className="h-3 w-3" /></Button>
+                        <Button size="icon" variant="outline" className="h-7 w-7" aria-label="تقليل الكمية" onClick={() => dec(item.product_id)} disabled={checkoutMut.isPending}><Minus className="h-3 w-3" /></Button>
                         <span className="min-w-6 text-center font-bold num">{item.quantity}</span>
-                        <Button size="icon" variant="outline" className="h-7 w-7" aria-label="زيادة الكمية" onClick={() => inc(item.product_id)}><Plus className="h-3 w-3" /></Button>
+                        <Button size="icon" variant="outline" className="h-7 w-7" aria-label="زيادة الكمية" onClick={() => inc(item.product_id)} disabled={checkoutMut.isPending}><Plus className="h-3 w-3" /></Button>
                       </div></td>
                       <td className="p-2 text-center num">{formatMoney(item.unit_price)}</td>
                       <td className="p-2 text-center font-bold num">{formatMoney(item.unit_price * item.quantity)}</td>
-                      <td className="p-2 text-center"><Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" aria-label="حذف الصنف" onClick={() => remove(item.product_id)}><Trash2 className="h-4 w-4" /></Button></td>
+                      <td className="p-2 text-center"><Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" aria-label="حذف الصنف" onClick={() => remove(item.product_id)} disabled={checkoutMut.isPending}><Trash2 className="h-4 w-4" /></Button></td>
                     </tr>
                   ))}
                   {cart.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">أصبحت الفاتورة فارغة؛ أغلق المراجعة وأضف المنتجات من جديد.</td></tr>}
@@ -547,8 +547,8 @@ function POSPage() {
               </table>
             </div>
             <div className="grid gap-2 rounded-lg border bg-muted/30 p-3 sm:grid-cols-2">
-              <div className="space-y-1"><Label className="text-xs">الخصم</Label><Input type="number" min="0" max={subtotal} step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} /></div>
-              <div className="space-y-1"><Label className="text-xs">طريقة الدفع</Label><Select value={reviewMethod} onValueChange={(value) => setReviewMethod(value as PaymentUI)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">نقداً</SelectItem><SelectItem value="wallet">محفظة / تحويل</SelectItem><SelectItem value="card">بطاقة</SelectItem></SelectContent></Select></div>
+              <div className="space-y-1"><Label className="text-xs">الخصم</Label><Input type="number" min="0" max={subtotal} step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} disabled={checkoutMut.isPending} /></div>
+              <div className="space-y-1"><Label className="text-xs">طريقة الدفع</Label><Select value={reviewMethod} onValueChange={(value) => setReviewMethod(value as PaymentUI)} disabled={checkoutMut.isPending}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">نقداً</SelectItem><SelectItem value="wallet">محفظة / تحويل</SelectItem><SelectItem value="card">بطاقة</SelectItem></SelectContent></Select></div>
               <div className="flex justify-between text-sm text-muted-foreground"><span>المجموع الفرعي</span><span className="num">{formatMoney(subtotal)}</span></div>
               <div className="flex justify-between text-sm text-muted-foreground"><span>الخصم</span><span className="num">-{formatMoney(disc)}</span></div>
               <div className="flex justify-between text-sm text-muted-foreground"><span>الضريبة ({taxRate}%)</span><span className="num">{formatMoney(taxAmount)}</span></div>
@@ -556,7 +556,7 @@ function POSPage() {
             </div>
           </div>
           <DialogFooter className="gap-2 sm:justify-between">
-            <Button variant="outline" onClick={() => setReviewOpen(false)}>العودة للتعديل</Button>
+            <Button variant="outline" onClick={() => setReviewOpen(false)} disabled={checkoutMut.isPending}>العودة للتعديل</Button>
             <Button className="bg-success font-bold text-success-foreground hover:bg-success/90" disabled={checkoutMut.isPending || cart.length === 0 || disc > subtotal}
               onClick={() => checkoutMut.mutate(reviewMethod)}>
               {checkoutMut.isPending ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="ml-2 h-4 w-4" />}
