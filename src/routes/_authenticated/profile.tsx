@@ -4,12 +4,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthSession } from "@/hooks/use-auth-session";
+import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Save, KeyRound } from "lucide-react";
+import { Loader2, Save, KeyRound, Upload, ImagePlus } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { updateMyProfile, updateUserPassword } from "@/lib/users.functions";
@@ -20,6 +21,7 @@ export const Route = createFileRoute("/_authenticated/profile")({
 
 function ProfilePage() {
   const { user } = useAuthSession();
+  const { tenantId } = useActiveTenant();
   const qc = useQueryClient();
   const updateFn = useServerFn(updateMyProfile);
   const pwdFn = useServerFn(updateUserPassword);
@@ -40,6 +42,26 @@ function ProfilePage() {
 
   const [form, setForm] = useState({ full_name: "", username: "", phone: "", avatar_url: "" });
   const [pwd, setPwd] = useState({ next: "", confirm: "" });
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  async function uploadAvatar(file?: File) {
+    if (!file || !user?.id || !tenantId) return;
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/avif"];
+    if (!allowed.includes(file.type)) { toast.error("صيغة الصورة غير مدعومة"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("الحجم الأقصى للصورة 5MB"); return; }
+    setUploadingAvatar(true);
+    try {
+      const ext = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif" } as Record<string, string>)[file.type];
+      const path = `${tenantId}/profiles/${user.id}/${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage.from("restaurant-assets").upload(path, file, { upsert: false, contentType: file.type, cacheControl: "31536000" });
+      if (error) throw error;
+      const { data } = supabase.storage.from("restaurant-assets").getPublicUrl(path);
+      setForm((current) => ({ ...current, avatar_url: data.publicUrl }));
+      toast.success("تم رفع الصورة. احفظ التغييرات لتثبيتها في ملفك.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "تعذر رفع الصورة");
+    } finally { setUploadingAvatar(false); }
+  }
 
   useEffect(() => {
     if (profile) {
@@ -102,22 +124,20 @@ function ProfilePage() {
           <CardTitle>البيانات الشخصية</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4">
             <Avatar className="h-20 w-20">
               {form.avatar_url && <AvatarImage src={form.avatar_url} alt={form.full_name} />}
               <AvatarFallback className="text-2xl">{initial}</AvatarFallback>
             </Avatar>
-            <div className="flex-1">
-              <Label>رابط الصورة الشخصية</Label>
-              <Input
-                dir="ltr"
-                placeholder="https://..."
-                value={form.avatar_url}
-                onChange={(e) => setForm({ ...form, avatar_url: e.target.value })}
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                يمكنك لصق رابط صورة من أي مصدر (رفع مباشر سيُتاح في المرحلة التالية).
-              </p>
+            <div className="min-w-0 flex-1 space-y-2">
+              <Label>الصورة الشخصية</Label>
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-muted">
+                {uploadingAvatar ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                {uploadingAvatar ? "جارٍ رفع الصورة..." : "رفع صورة من الجهاز"}
+                <input className="hidden" type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={uploadingAvatar || !tenantId} onChange={(e) => { void uploadAvatar(e.target.files?.[0]); e.currentTarget.value = ""; }} />
+              </label>
+              <Input dir="ltr" placeholder="أو الصق رابط الصورة https://..." value={form.avatar_url} onChange={(e) => setForm({ ...form, avatar_url: e.target.value })} />
+              <p className="text-xs text-muted-foreground">JPG أو PNG أو WEBP أو AVIF — بحد أقصى 5MB.</p>
             </div>
           </div>
 
