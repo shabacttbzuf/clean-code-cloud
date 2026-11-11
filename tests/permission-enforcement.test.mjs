@@ -29,6 +29,17 @@ test("critical transactional RPCs verify the acting user's exact permission", ()
   }
 });
 
+test("sidebar resolves permissions from the database instead of role-name guesses", () => {
+  const sidebar = readFileSync(
+    new URL("../src/components/app-sidebar.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(sidebar, /get_my_permissions/);
+  assert.match(sidebar, /group\.items\.filter\(allowed\)/);
+  assert.match(sidebar, /permission: "pos\.view"/);
+  assert.match(sidebar, /permission: "reports\.view"/);
+});
+
 test("leave decisions allow either explicit approval or rejection permission", () => {
   assert.match(migration, /permission_gate_leave_requests_update_decision[\s\S]*hr\.leaves\.approve[\s\S]*hr\.leaves\.reject/);
 });
