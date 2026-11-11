@@ -438,3 +438,30 @@ test("complete database snapshot includes migration 20 exactly once", () => {
   );
   assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000020_super_owner_return_visibility.sql").length - 1, 1);
 });
+
+
+const tenantFkMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000021_enforce_tenant_scoped_foreign_keys.sql", import.meta.url),
+  "utf8",
+);
+const tenantFkGrantMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000022_grant_private_tenant_trigger_execute.sql", import.meta.url),
+  "utf8",
+);
+
+test("tenant-scoped foreign keys are protected by database-level same-tenant triggers", () => {
+  assert.ok(tenantFkMigration.includes("private.enforce_same_tenant_foreign_key"));
+  assert.ok(tenantFkMigration.includes("parent_table"));
+  assert.ok(tenantFkMigration.includes("Tenant mismatch"));
+  assert.ok(tenantFkMigration.includes("BEFORE INSERT OR UPDATE OF"));
+  assert.ok(tenantFkGrantMigration.includes("TO authenticated, service_role"));
+});
+
+test("complete database snapshot includes tenant integrity migrations exactly once", () => {
+  const snapshot = readFileSync(
+    new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url),
+    "utf8",
+  );
+  assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000021_enforce_tenant_scoped_foreign_keys.sql").length - 1, 1);
+  assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000022_grant_private_tenant_trigger_execute.sql").length - 1, 1);
+});
