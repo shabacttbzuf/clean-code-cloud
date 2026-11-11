@@ -588,3 +588,30 @@ test("complete database snapshot includes cash refund guard migration once", () 
   );
   assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000030_prevent_cash_refund_overdraw.sql").length - 1, 1);
 });
+
+
+const purchaseReturnedStatusMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000031_add_purchase_returned_status.sql", import.meta.url),
+  "utf8",
+);
+const markPurchaseReturnedMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000032_mark_fully_returned_purchases.sql", import.meta.url),
+  "utf8",
+);
+
+test("fully returned purchases receive an explicit terminal status without deleting purchase records", () => {
+  assert.ok(purchaseReturnedStatusMigration.includes("ADD VALUE IF NOT EXISTS 'returned'"));
+  assert.ok(markPurchaseReturnedMigration.includes("mark_fully_returned_purchase"));
+  assert.ok(markPurchaseReturnedMigration.includes("v_returned_quantity >= v_purchased_quantity"));
+  assert.ok(markPurchaseReturnedMigration.includes("status='returned'"));
+  assert.ok(markPurchaseReturnedMigration.includes("AFTER INSERT ON public.purchase_return_items"));
+});
+
+test("complete database snapshot includes purchase returned status migrations once", () => {
+  const snapshot = readFileSync(
+    new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url),
+    "utf8",
+  );
+  assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000031_add_purchase_returned_status.sql").length - 1, 1);
+  assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000032_mark_fully_returned_purchases.sql").length - 1, 1);
+});
