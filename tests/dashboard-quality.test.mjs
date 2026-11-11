@@ -114,3 +114,41 @@ test("inventory alerts can be filtered by negative, missing, and below-minimum s
   assert.match(inventory, /أقل من الحد الأدنى/);
   assert.match(inventory, /r\.quantity >= 0 && r\.quantity < r\.min_stock/);
 });
+
+const settings = readFileSync(new URL("../src/routes/_authenticated/settings.tsx", import.meta.url), "utf8");
+const theme = readFileSync(new URL("../src/lib/theme.tsx", import.meta.url), "utf8");
+const appSidebar = readFileSync(new URL("../src/components/app-sidebar.tsx", import.meta.url), "utf8");
+const campaignMigration = readFileSync(new URL("../supabase/migrations/20261112020000_marketing_campaigns_management.sql", import.meta.url), "utf8");
+
+test("owner design studio customizes workspace colors and background with a safe reset", () => {
+  assert.match(settings, /استوديو تطوير وتخصيص النظام/);
+  assert.match(settings, /تطبيق التصميم/);
+  assert.match(settings, /استعادة الافتراضي/);
+  assert.match(settings, /isSuperOwner &&/);
+  assert.match(theme, /DESIGN_STORAGE_KEY/);
+  assert.match(theme, /--background/);
+  assert.match(theme, /backgroundImage/);
+  assert.match(theme, /resetDesign/);
+});
+
+test("custom sidebar tabs are owner-only shortcuts to an allowlisted existing route", () => {
+  assert.match(settings, /ras-custom-sidebar-items-v1/);
+  assert.match(settings, /allowedRoutes/);
+  assert.match(settings, /الحد الأقصى 12 اختصاراً/);
+  assert.match(appSidebar, /اختصارات مخصصة/);
+  assert.match(appSidebar, /isSuperOwner && customItems.length/);
+  assert.match(appSidebar, /ras-custom-tabs-updated/);
+});
+
+test("marketing campaigns have tenant isolation and owner-managed lifecycle controls", () => {
+  assert.match(settings, /إدارة العروض والإعلانات/);
+  assert.match(settings, /campaignCreate/);
+  assert.match(settings, /campaignUpdate/);
+  assert.match(settings, /campaignDelete/);
+  assert.match(settings, /uploadCampaignImage/);
+  assert.match(dashboard, /dashboard-marketing-campaigns/);
+  assert.match(dashboard, /campaignsQuery\.data\.map/);
+  assert.match(campaignMigration, /enable row level security/);
+  assert.match(campaignMigration, /private\.is_tenant_member/);
+  assert.match(campaignMigration, /private\.is_tenant_admin/);
+});
