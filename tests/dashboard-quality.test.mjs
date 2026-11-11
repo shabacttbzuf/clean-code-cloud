@@ -25,3 +25,20 @@ test("authenticated workspace prevents horizontal overflow and motion respects a
   assert.match(styles, /prefers-reduced-motion: reduce/);
   assert.match(styles, /focus-visible/);
 });
+
+const inventory = readFileSync(new URL("../src/routes/_authenticated/inventory.index.tsx", import.meta.url), "utf8");
+
+test("inventory reads every page instead of silently stopping at the Supabase row cap", () => {
+  assert.match(inventory, /async function fetchAllRows<T>/);
+  assert.match(inventory, /pageSize = 500/);
+  assert.match(inventory, /query\.range\(from, from \+ pageSize - 1\)/);
+  assert.match(inventory, /if \(page\.length < pageSize\) return rows/);
+  assert.match(inventory, /\.order\("id"\)/);
+});
+
+test("inventory distinguishes query failures from a genuinely empty stock list", () => {
+  assert.match(inventory, /branches\.isError/);
+  assert.match(inventory, /inventory\.isError/);
+  assert.match(inventory, /لم نعرض أرقاماً جزئية/);
+  assert.match(inventory, /inventory\.refetch\(\)/);
+});
