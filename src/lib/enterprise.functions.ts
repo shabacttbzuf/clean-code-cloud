@@ -1,6 +1,6 @@
 /**
  * Release 1.2 — Enterprise User Management server functions.
- * All functions are protected by requireSupabaseAuth + tenant/role checks.
+ * All actions are protected by requireSupabaseAuth and server-verified tenant permissions.
  * This module is additive; existing users.functions.ts remains untouched.
  */
 import { createServerFn } from "@tanstack/react-start";
