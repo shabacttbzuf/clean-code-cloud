@@ -74,7 +74,7 @@ function AuthShell() {
       <div className="flex min-h-screen w-full">
         <SidebarRouteSync />
         <AppSidebar />
-        <SidebarInset>
+        <SidebarInset className="workspace-surface">
           <TopBar />
           <main className="min-w-0 flex-1 p-4 md:p-6">
             <Outlet />
