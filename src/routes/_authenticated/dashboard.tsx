@@ -27,6 +27,24 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 function Dashboard() {
   const { tenantId, tenant, user } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
+  const profileQuery = useQuery({
+    queryKey: ["dashboard-profile-name", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null;
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("full_name, username")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id,
+    staleTime: 60_000,
+  });
+  const displayName = user?.email?.toLowerCase() === "shafiqalwatiry@gmail.com"
+    ? "شفيق الوتيري"
+    : profileQuery.data?.full_name?.trim() || user?.user_metadata?.full_name?.trim() || profileQuery.data?.username?.trim() || "مستخدم";
 
   const superStats = useQuery({
     queryKey: ["super-owner-stats"],
@@ -170,7 +188,7 @@ function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={`أهلاً، ${user?.email ?? ""}`} subtitle={tenant?.name} />
+      <PageHeader title={`مرحبا ${displayName}`} subtitle={tenant?.name} />
 
       {isSuperOwner && superStats.data && (
         <Card className="border-primary/40 bg-primary/5">
