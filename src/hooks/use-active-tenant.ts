@@ -22,7 +22,8 @@ export type Tenant = {
 
 /**
  * Central hook: resolves current user, their memberships, and the active tenant.
- * Used by every protected page.
+ * Super-owner status is resolved independently from tenant membership because
+ * the platform owner must not need a cashier/owner role to manage platform data.
  */
 export function useActiveTenant() {
   const { user, loading: sessionLoading } = useAuthSession();
@@ -38,6 +39,19 @@ export function useActiveTenant() {
       return (data ?? []) as Membership[];
     },
     enabled: !!user?.id,
+  });
+
+  const superOwnerQuery = useQuery({
+    queryKey: ["is-super-owner", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("is_super_owner", {
+        _user_id: user!.id,
+      });
+      if (error) throw error;
+      return data === true;
+    },
+    enabled: !!user?.id,
+    staleTime: 60_000,
   });
 
   const [activeId, setActiveId] = useState<string | null>(() => {
@@ -74,17 +88,19 @@ export function useActiveTenant() {
 
   const role = membership?.role ?? null;
   const isAdmin = role === "owner" || role === "manager";
+  const isSuperOwner = superOwnerQuery.data === true;
 
   return {
     user,
     userId: user?.id ?? null,
-    loading: sessionLoading || memQuery.isLoading || tenantQuery.isLoading,
+    loading: sessionLoading || memQuery.isLoading || tenantQuery.isLoading || superOwnerQuery.isLoading,
     tenantId: activeId,
     tenant: tenantQuery.data ?? null,
     memberships: memQuery.data ?? [],
     membership,
     role,
     isAdmin,
+    isSuperOwner,
     switchTenant: (id: string) => {
       setActiveId(id);
       if (typeof window !== "undefined") window.localStorage.setItem(ACTIVE_TENANT_KEY, id);
