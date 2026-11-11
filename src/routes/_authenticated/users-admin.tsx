@@ -474,7 +474,7 @@ function EditUserDialog(props: {
 
   return (
     <Dialog open onOpenChange={(o) => !o && props.onClose()}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[85dvh] overflow-y-auto overscroll-contain">
         <DialogHeader>
           <DialogTitle>تعديل بيانات المستخدم</DialogTitle>
           <DialogDescription dir="ltr" className="text-xs">
