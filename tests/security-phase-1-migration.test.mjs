@@ -653,6 +653,15 @@ const cashSessionsSource = readFileSync(
   new URL("../src/routes/_authenticated/cash-sessions.tsx", import.meta.url),
   "utf8",
 );
+const inventoryPageSource = readFileSync(
+  new URL("../src/routes/_authenticated/inventory.index.tsx", import.meta.url),
+  "utf8",
+);
+const invoicePrintSource = readFileSync(
+  new URL("../src/lib/invoice-pdf.ts", import.meta.url),
+  "utf8",
+);
+
 
 test("POS requires an editable invoice review before atomic checkout", () => {
   assert.match(posSource, /const beginCheckout = \(method: PaymentUI\)/);
@@ -687,4 +696,17 @@ test("database rejects negative stock when a product has no inventory row", () =
   assert.match(inventoryGuardMigration, /NOT VALID/);
   assert.match(inventoryGuardMigration, /IF _delta < 0/);
   assert.match(inventoryGuardMigration, /IF NOT FOUND OR v_current_quantity \+ _delta < 0/);
+});
+test("inventory page exposes negative and missing stock instead of hiding it", () => {
+  assert.match(inventoryPageSource, /has_inventory_record/);
+  assert.match(inventoryPageSource, /r\.quantity < 0/);
+  assert.match(inventoryPageSource, /رصيد سالب/);
+  assert.match(inventoryPageSource, /غير مسجل/);
+});
+
+test("POS receipt printing uses the user gesture and includes cashier identity", () => {
+  assert.match(posSource, /printWindowRef\.current = window\.open/);
+  assert.match(posSource, /cashier_name: cashierProfile\.data/);
+  assert.match(invoicePrintSource, /targetWindow === undefined/);
+  assert.match(invoicePrintSource, /if \(!w \|\| w\.closed\) return false/);
 });
