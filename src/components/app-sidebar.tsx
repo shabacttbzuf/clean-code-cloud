@@ -1,4 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import {
   LayoutDashboard,
   Building2,
@@ -48,61 +50,61 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-type Item = { title: string; url: string; icon: typeof LayoutDashboard };
+type Item = { title: string; url: string; icon: typeof LayoutDashboard; permission?: string };
 type Group = { label: string; items: Item[] };
 
 const groups: Group[] = [
   {
     label: "الرئيسية",
     items: [
-      { title: "لوحة التحكم", url: "/dashboard", icon: LayoutDashboard },
-      { title: "التقارير", url: "/reports", icon: BarChart3 },
+      { title: "لوحة التحكم", url: "/dashboard", icon: LayoutDashboard, permission: "dashboard.view" },
+      { title: "التقارير", url: "/reports", icon: BarChart3, permission: "reports.view" },
     ],
   },
   {
     label: "البيع",
     items: [
-      { title: "نقطة البيع", url: "/pos", icon: ShoppingCart },
-      { title: "الفواتير", url: "/sales", icon: Receipt },
-      { title: "الورديات", url: "/cash-sessions", icon: Wallet },
-      { title: "العملاء", url: "/customers", icon: UserSquare2 },
+      { title: "نقطة البيع", url: "/pos", icon: ShoppingCart, permission: "pos.view" },
+      { title: "الفواتير", url: "/sales", icon: Receipt, permission: "sales.view" },
+      { title: "الورديات", url: "/cash-sessions", icon: Wallet, permission: "cash.view" },
+      { title: "العملاء", url: "/customers", icon: UserSquare2, permission: "customers.view" },
     ],
   },
   {
     label: "المخزون",
     items: [
-      { title: "الرصيد", url: "/inventory", icon: Warehouse },
-      { title: "الحركات", url: "/inventory/movements", icon: ArrowLeftRight },
-      { title: "الموردون", url: "/suppliers", icon: Truck },
-      { title: "المشتريات", url: "/purchases", icon: FileText },
+      { title: "الرصيد", url: "/inventory", icon: Warehouse, permission: "inventory.view" },
+      { title: "الحركات", url: "/inventory/movements", icon: ArrowLeftRight, permission: "inventory.movements.view" },
+      { title: "الموردون", url: "/suppliers", icon: Truck, permission: "suppliers.view" },
+      { title: "المشتريات", url: "/purchases", icon: FileText, permission: "purchases.view" },
     ],
   },
   {
     label: "المالية",
     items: [
-      { title: "المصروفات", url: "/expenses", icon: DollarSign },
-      { title: "تصنيفات المصروفات", url: "/expense-categories", icon: Layers },
+      { title: "المصروفات", url: "/expenses", icon: DollarSign, permission: "expenses.view" },
+      { title: "تصنيفات المصروفات", url: "/expense-categories", icon: Layers, permission: "expense_categories.manage" },
     ],
   },
   {
     label: "الموارد البشرية",
     items: [
-      { title: "الموظفون", url: "/hr/employees", icon: Briefcase },
-      { title: "الحضور", url: "/hr/attendance", icon: Clock },
-      { title: "الإجازات", url: "/hr/leaves", icon: CalendarDays },
-      { title: "المكافآت والحسميات", url: "/hr/compensation", icon: Gift },
-      { title: "الرواتب", url: "/hr/payroll", icon: Wallet2 },
+      { title: "الموظفون", url: "/hr/employees", icon: Briefcase, permission: "hr.employees.view" },
+      { title: "الحضور", url: "/hr/attendance", icon: Clock, permission: "hr.attendance.view" },
+      { title: "الإجازات", url: "/hr/leaves", icon: CalendarDays, permission: "hr.leaves.view" },
+      { title: "المكافآت والحسميات", url: "/hr/compensation", icon: Gift, permission: "hr.compensation.view" },
+      { title: "الرواتب", url: "/hr/payroll", icon: Wallet2, permission: "hr.payroll.view" },
     ],
   },
   {
     label: "الإعداد",
     items: [
-      { title: "الفروع", url: "/branches", icon: Building2 },
-      { title: "المنتجات", url: "/products", icon: Package },
-      { title: "الأقسام", url: "/categories", icon: Tags },
-      { title: "الموظفون", url: "/users", icon: Users },
-      { title: "صلاحيات الفريق", url: "/team-permissions", icon: KeyRound },
-      { title: "الإعدادات", url: "/settings", icon: Settings },
+      { title: "الفروع", url: "/branches", icon: Building2, permission: "branches.view" },
+      { title: "المنتجات", url: "/products", icon: Package, permission: "products.view" },
+      { title: "الأقسام", url: "/categories", icon: Tags, permission: "categories.view" },
+      { title: "الموظفون", url: "/users", icon: Users, permission: "users.view" },
+      { title: "صلاحيات الفريق", url: "/team-permissions", icon: KeyRound, permission: "permissions.view" },
+      { title: "الإعدادات", url: "/settings", icon: Settings, permission: "settings.view" },
     ],
   },
 ];
@@ -112,7 +114,21 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { isSuperOwner, totalCount } = useSuperOwner();
-  const { role } = useActiveTenant();
+  const { role, tenantId, userId } = useActiveTenant();
+
+  const permissionsQuery = useQuery({
+    queryKey: ["sidebar-effective-permissions", tenantId, userId],
+    queryFn: async () => {
+      if (!tenantId) return new Set<string>();
+      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId });
+      if (error) throw error;
+      return new Set<string>((data ?? []) as string[]);
+    },
+    enabled: !!tenantId && !!userId && !isSuperOwner,
+    staleTime: 30_000,
+  });
+  const allowed = (item: Item) =>
+    isSuperOwner || (!!permissionsQuery.data && (!item.permission || permissionsQuery.data.has(item.permission)));
 
   const isAdmin = role === "owner" || role === "manager" || isSuperOwner;
   const isOwner = role === "owner" || isSuperOwner;
@@ -121,14 +137,14 @@ export function AppSidebar() {
     ? {
         label: "المؤسسة",
         items: [
-          { title: "إدارة المستخدمين", url: "/users-admin", icon: UsersRound },
-          { title: "الشركات", url: "/companies", icon: Building },
-          { title: "الأقسام الإدارية", url: "/departments", icon: Briefcase },
-          { title: "المسميات الوظيفية", url: "/job-titles", icon: BadgeCheck },
-          { title: "أنواع التوظيف", url: "/employment-types", icon: BadgeCheck },
-          ...(isOwner ? [{ title: "إدارة الأدوار", url: "/roles", icon: KeyRound }] : []),
-          { title: "سجل الدخول", url: "/login-history", icon: History },
-          { title: "الإشعارات", url: "/notifications", icon: Bell },
+          { title: "إدارة المستخدمين", url: "/users-admin", icon: UsersRound, permission: "users.manage" },
+          { title: "الشركات", url: "/companies", icon: Building, permission: "companies.view" },
+          { title: "الأقسام الإدارية", url: "/departments", icon: Briefcase, permission: "departments.view" },
+          { title: "المسميات الوظيفية", url: "/job-titles", icon: BadgeCheck, permission: "job_titles.view" },
+          { title: "أنواع التوظيف", url: "/employment-types", icon: BadgeCheck, permission: "employment_types.view" },
+          ...(isOwner ? [{ title: "إدارة الأدوار", url: "/roles", icon: KeyRound, permission: "roles.view" }] : []),
+          { title: "سجل الدخول", url: "/login-history", icon: History, permission: "login_history.view" },
+          { title: "الإشعارات", url: "/notifications", icon: Bell, permission: "notifications.view" },
         ],
       }
     : null;
@@ -137,13 +153,13 @@ export function AppSidebar() {
   const systemItems: Item[] = [];
   if (isSuperOwner) systemItems.push({ title: "مركز تحكم المالك", url: "/owner-center", icon: Crown });
   if (showAdmin) systemItems.push({ title: "إدارة النظام", url: "/admin", icon: ShieldCheck });
-  systemItems.push({ title: "سجل التدقيق", url: "/audit-logs", icon: ScrollText });
+  systemItems.push({ title: "سجل التدقيق", url: "/audit-logs", icon: ScrollText, permission: "audit.view" });
 
   const allGroups: Group[] = [
     ...groups,
     ...(enterpriseGroup ? [enterpriseGroup] : []),
     { label: "النظام", items: systemItems },
-  ];
+  ].map((group) => ({ ...group, items: group.items.filter(allowed) })).filter((group) => group.items.length > 0);
 
   return (
     <Sidebar collapsible="icon" side="right">
