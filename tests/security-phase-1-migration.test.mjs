@@ -675,6 +675,7 @@ test("POS catalog displays images and blocks products without branch stock", () 
   assert.match(posSource, /product\.image_url/);
   assert.match(posSource, /stockUnavailable/);
   assert.match(posSource, /لا يوجد رصيد مخزون مسجل/);
+  assert.match(posSource, /سجّل الكميات الافتتاحية من شاشة المخزون/);
 });
 const inventoryGuardMigration = readFileSync(
   new URL("../supabase/migrations/20261111030810_prevent_negative_inventory_bootstrap.sql", import.meta.url),
