@@ -16,6 +16,13 @@ test("permission catalogue is enforced with restrictive RLS gates", () => {
   assert.match(migration, /role_permissions' THEN[\s\S]*tenant_id IS NULL OR public\.has_permission/);
 });
 
+test("transactional permissions remain branch-scoped without hard-coded role denial", () => {
+  assert.match(migration, /private\.can_access_branch\(auth\.uid\(\), _tenant_id, _branch_id\)/);
+  assert.match(migration, /private\.can_access_branch\(auth\.uid\(\), _tenant_id, v_purchase\.branch_id\)/);
+  assert.match(migration, /private\.can_access_branch\(auth\.uid\(\), _tenant_id, v_sale\.branch_id\)/);
+  assert.doesNotMatch(migration, /Only tenant owners or managers can approve sale refunds/);
+});
+
 test("critical transactional RPCs verify the acting user's exact permission", () => {
   for (const key of [
     "pos.create_sale",
