@@ -64,7 +64,7 @@ const groups: Group[] = [
   {
     label: "البيع",
     items: [
-      { title: "نقطة البيع", url: "/pos", icon: ShoppingCart, permission: "pos.view" },
+      { title: "نقطة البيع", url: "/pos", icon: ShoppingCart, permission: "pos.use" },
       { title: "الفواتير", url: "/sales", icon: Receipt, permission: "sales.view" },
       { title: "الورديات", url: "/cash-sessions", icon: Wallet, permission: "cash.view" },
       { title: "العملاء", url: "/customers", icon: UserSquare2, permission: "customers.view" },
