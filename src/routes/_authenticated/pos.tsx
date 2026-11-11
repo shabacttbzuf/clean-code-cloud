@@ -107,11 +107,15 @@ function POSPage() {
   const branches = useQuery({
     queryKey: ["branches-active", tenantId],
     queryFn: async (): Promise<Branch[]> => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("branches")
         .select("id, name, tax_number, address, phone")
         .eq("tenant_id", tenantId!)
         .eq("is_active", true);
+      // Branch-scoped staff must never see or select another branch in POS.
+      if (membership?.branch_id && !isAdmin && !isSuperOwner) {
+        query = query.eq("id", membership.branch_id);
+      }
       if (error) throw error;
       return (data ?? []) as Branch[];
     },
@@ -439,7 +443,7 @@ function POSPage() {
           <CardContent className="space-y-4 pt-6">
             <div className="space-y-2">
               <Label>الفرع</Label>
-              <Select value={branchId ?? ""} onValueChange={setBranchId} disabled={!isAdmin && !isSuperOwner && !!membership?.branch_id}>
+              <Select value={branchId ?? ""} onValueChange={setBranchId} disabled={!isAdmin && !isSuperOwner}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {branches.data.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
