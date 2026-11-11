@@ -43,6 +43,11 @@ test("sidebar resolves permissions from the database instead of role-name guesse
 test("leave decisions allow either explicit approval or rejection permission", () => {
   assert.match(migration, /permission_gate_leave_requests_update_decision[\s\S]*hr\.leaves\.approve[\s\S]*hr\.leaves\.reject/);
 });
+test("managers receive team-permission management while custom-role editing remains owner-only", () => {
+  assert.match(migration, /manager'::public\.app_role, 'permissions\.manage'/);
+  assert.match(migration, /roles\.manage/);
+});
+
 test("cashier and waiter defaults match the POS responsibility boundary", () => {
   assert.match(migration, /cashier'::public\.app_role, 'categories\.view'/);
   assert.match(migration, /cashier'::public\.app_role, 'inventory\.view'/);
