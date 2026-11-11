@@ -465,3 +465,30 @@ test("complete database snapshot includes tenant integrity migrations exactly on
   assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000021_enforce_tenant_scoped_foreign_keys.sql").length - 1, 1);
   assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000022_grant_private_tenant_trigger_execute.sql").length - 1, 1);
 });
+
+
+const leastPrivilegeMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000023_least_privilege_return_api_and_defaults.sql", import.meta.url),
+  "utf8",
+);
+const readOnlyViewMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000024_read_only_profitability_view.sql", import.meta.url),
+  "utf8",
+);
+
+test("new return tables expose authenticated read access only and revoke anonymous access", () => {
+  assert.ok(leastPrivilegeMigration.includes("REVOKE ALL ON TABLE"));
+  assert.ok(leastPrivilegeMigration.includes("FROM anon, authenticated"));
+  assert.ok(leastPrivilegeMigration.includes("GRANT SELECT"));
+  assert.ok(leastPrivilegeMigration.includes("ALTER DEFAULT PRIVILEGES"));
+  assert.ok(readOnlyViewMigration.includes("REVOKE ALL ON TABLE public.sales_profitability"));
+});
+
+test("complete database snapshot includes least-privilege migrations exactly once", () => {
+  const snapshot = readFileSync(
+    new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url),
+    "utf8",
+  );
+  assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000023_least_privilege_return_api_and_defaults.sql").length - 1, 1);
+  assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000024_read_only_profitability_view.sql").length - 1, 1);
+});
