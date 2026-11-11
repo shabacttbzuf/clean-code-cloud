@@ -48,6 +48,7 @@ function InventoryPage() {
   const qc = useQueryClient();
   const [branchId, setBranchId] = useState<string>(membership?.branch_id ?? "all");
   const [search, setSearch] = useState("");
+  const [stockFilter, setStockFilter] = useState<"all" | "critical" | "below-min" | "missing">("all");
   const [adjustFor, setAdjustFor] = useState<InvRow | null>(null);
   const [adjustQty, setAdjustQty] = useState("0");
   const [adjustReason, setAdjustReason] = useState("");
@@ -113,6 +114,16 @@ function InventoryPage() {
   const missingStock = filtered.filter((r) => !r.has_inventory_record).length;
   const belowMinStock = filtered.filter((r) => r.has_inventory_record && r.min_stock > 0 && r.quantity < r.min_stock).length;
   const lowStock = negativeStock + missingStock + belowMinStock;
+  const visibleRows = useMemo(() => {
+    const byPriority = [...filtered].sort((a, b) => {
+      const score = (r: InvRow) => r.quantity < 0 ? 0 : !r.has_inventory_record ? 1 : r.min_stock > 0 && r.quantity < r.min_stock ? 2 : 3;
+      return score(a) - score(b) || a.product_name.localeCompare(b.product_name, "ar");
+    });
+    if (stockFilter === "critical") return byPriority.filter((r) => r.quantity < 0);
+    if (stockFilter === "missing") return byPriority.filter((r) => !r.has_inventory_record);
+    if (stockFilter === "below-min") return byPriority.filter((r) => r.has_inventory_record && r.min_stock > 0 && r.quantity >= 0 && r.quantity < r.min_stock);
+    return byPriority;
+  }, [filtered, stockFilter]);
 
   const branchMap = useMemo(() => new Map((branches.data ?? []).map((b) => [b.id, b.name])), [branches.data]);
 
@@ -169,6 +180,21 @@ function InventoryPage() {
         </Select>
       </div>
 
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Button type="button" variant={stockFilter === "all" ? "default" : "outline"} className="h-auto min-h-16 flex-col items-start gap-1 px-3 py-2" onClick={() => setStockFilter("all")}>
+          <span className="text-xs opacity-80">كل الأصناف</span><span className="text-lg font-bold num">{filtered.length}</span>
+        </Button>
+        <Button type="button" variant={stockFilter === "critical" ? "destructive" : "outline"} className="h-auto min-h-16 flex-col items-start gap-1 px-3 py-2" onClick={() => setStockFilter("critical")}>
+          <span className="text-xs opacity-80">رصيد سالب</span><span className="text-lg font-bold num">{negativeStock}</span>
+        </Button>
+        <Button type="button" variant={stockFilter === "missing" ? "destructive" : "outline"} className="h-auto min-h-16 flex-col items-start gap-1 px-3 py-2" onClick={() => setStockFilter("missing")}>
+          <span className="text-xs opacity-80">رصيد غير مسجل</span><span className="text-lg font-bold num">{missingStock}</span>
+        </Button>
+        <Button type="button" variant={stockFilter === "below-min" ? "secondary" : "outline"} className="h-auto min-h-16 flex-col items-start gap-1 px-3 py-2" onClick={() => setStockFilter("below-min")}>
+          <span className="text-xs opacity-80">أقل من الحد الأدنى</span><span className="text-lg font-bold num">{belowMinStock}</span>
+        </Button>
+      </div>
+
       {branches.isError ? (
         <Card><CardContent className="flex flex-col items-center gap-3 py-12 text-center">
           <AlertTriangle className="h-8 w-8 text-destructive" />
@@ -183,7 +209,7 @@ function InventoryPage() {
           <p className="text-sm text-destructive">تعذر تحميل أرصدة المخزون. لم نعرض أرقاماً جزئية.</p>
           <Button variant="outline" onClick={() => inventory.refetch()}>إعادة المحاولة</Button>
         </CardContent></Card>
-      ) : filtered.length === 0 ? (
+      ) : visibleRows.length === 0 ? (
         <Card><CardContent className="flex flex-col items-center gap-3 py-16 text-center">
           <Warehouse className="h-10 w-10 text-muted-foreground/50" />
           <p className="text-muted-foreground">لا توجد بيانات</p>
@@ -204,7 +230,7 @@ function InventoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((r) => {
+                  {visibleRows.map((r) => {
                     const low = !r.has_inventory_record || r.quantity < 0 || (r.min_stock > 0 && r.quantity < r.min_stock);
                     const statusLabel = !r.has_inventory_record ? "غير مسجل" : r.quantity < 0 ? "رصيد سالب" : low ? "نقص" : "جيد";
                     return (
