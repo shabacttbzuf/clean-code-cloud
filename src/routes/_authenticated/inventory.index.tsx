@@ -26,6 +26,7 @@ type InvRow = {
   product_name: string;
   product_unit: string;
   min_stock: number;
+  has_inventory_record: boolean;
 };
 
 function InventoryPage() {
@@ -81,6 +82,7 @@ function InventoryPage() {
             product_name: p.name,
             product_unit: p.unit,
             min_stock: Number(p.min_stock),
+            has_inventory_record: !!inv,
           });
         }
       }
@@ -95,7 +97,10 @@ function InventoryPage() {
     return list.filter((r) => !s || r.product_name.toLowerCase().includes(s));
   }, [inventory.data, search]);
 
-  const lowStock = filtered.filter((r) => r.min_stock > 0 && r.quantity < r.min_stock).length;
+  const negativeStock = filtered.filter((r) => r.quantity < 0).length;
+  const missingStock = filtered.filter((r) => !r.has_inventory_record).length;
+  const belowMinStock = filtered.filter((r) => r.has_inventory_record && r.min_stock > 0 && r.quantity < r.min_stock).length;
+  const lowStock = negativeStock + missingStock + belowMinStock;
 
   const branchMap = useMemo(() => new Map((branches.data ?? []).map((b) => [b.id, b.name])), [branches.data]);
 
@@ -130,7 +135,7 @@ function InventoryPage() {
     <div className="space-y-6">
       <PageHeader
         title="رصيد المخزون"
-        subtitle={lowStock > 0 ? `${lowStock} منتج تحت الحد الأدنى` : "الرصيد الحالي لكل منتج/فرع"}
+        subtitle={lowStock > 0 ? `${negativeStock} رصيد سالب • ${missingStock} غير مسجل • ${belowMinStock} دون الحد الأدنى` : "الرصيد الحالي لكل منتج/فرع"}
         action={
           <Button variant="outline" asChild>
             <Link to="/inventory/movements"><ArrowLeftRight className="ml-2 h-4 w-4" />الحركات</Link>
@@ -176,7 +181,8 @@ function InventoryPage() {
                 </thead>
                 <tbody>
                   {filtered.map((r) => {
-                    const low = r.min_stock > 0 && r.quantity < r.min_stock;
+                    const low = !r.has_inventory_record || r.quantity < 0 || (r.min_stock > 0 && r.quantity < r.min_stock);
+                    const statusLabel = !r.has_inventory_record ? "غير مسجل" : r.quantity < 0 ? "رصيد سالب" : low ? "نقص" : "جيد";
                     return (
                       <tr key={r.id} className="border-t hover:bg-muted/30">
                         <td className="p-3 font-medium">{r.product_name}</td>
@@ -185,8 +191,8 @@ function InventoryPage() {
                         <td className="p-3 num text-muted-foreground">{formatMoney(r.min_stock, 2)}</td>
                         <td className="p-3">
                           {low ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-medium text-warning">
-                              <AlertTriangle className="h-3 w-3" />نقص
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${r.quantity < 0 || !r.has_inventory_record ? "bg-destructive/15 text-destructive" : "bg-warning/15 text-warning"}`}>
+                              <AlertTriangle className="h-3 w-3" />{statusLabel}
                             </span>
                           ) : (
                             <span className="inline-flex rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-medium text-success">جيد</span>
