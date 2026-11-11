@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as BootstrapOwnerRouteImport } from './routes/bootstrap-owner'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedAuditLogsRouteImport } from './routes/_authenticated/audit-logs'
 import { Route as AuthenticatedBranchesRouteImport } from './routes/_authenticated/branches'
@@ -67,6 +68,11 @@ const AuthRoute = AuthRouteImport.update({
 const OnboardingRoute = OnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BootstrapOwnerRoute = BootstrapOwnerRouteImport.update({
+  id: '/bootstrap-owner',
+  path: '/bootstrap-owner',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
@@ -267,7 +273,8 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/onboarding': typeof OnboardingRoute
-  '/admin': typeof AuthenticatedAdminRoute
+
+  '/bootstrap-owner': typeof BootstrapOwnerRoute  '/admin': typeof AuthenticatedAdminRoute
   '/audit-logs': typeof AuthenticatedAuditLogsRoute
   '/branches': typeof AuthenticatedBranchesRoute
   '/cash-sessions': typeof AuthenticatedCashSessionsRoute
@@ -308,7 +315,8 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/onboarding': typeof OnboardingRoute
-  '/admin': typeof AuthenticatedAdminRoute
+
+  '/bootstrap-owner': typeof BootstrapOwnerRoute  '/admin': typeof AuthenticatedAdminRoute
   '/audit-logs': typeof AuthenticatedAuditLogsRoute
   '/branches': typeof AuthenticatedBranchesRoute
   '/cash-sessions': typeof AuthenticatedCashSessionsRoute
@@ -351,7 +359,8 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/onboarding': typeof OnboardingRoute
-  '/_authenticated/admin': typeof AuthenticatedAdminRoute
+
+  '/bootstrap-owner': typeof BootstrapOwnerRoute  '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/audit-logs': typeof AuthenticatedAuditLogsRoute
   '/_authenticated/branches': typeof AuthenticatedBranchesRoute
   '/_authenticated/cash-sessions': typeof AuthenticatedCashSessionsRoute
@@ -394,7 +403,9 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/onboarding'
-    | '/admin'
+
+    | '/bootstrap-owner'
+    | '/bootstrap-owner'    | '/admin'
     | '/audit-logs'
     | '/branches'
     | '/cash-sessions'
@@ -435,7 +446,8 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/onboarding'
-    | '/admin'
+
+    | '/bootstrap-owner'    | '/admin'
     | '/audit-logs'
     | '/branches'
     | '/cash-sessions'
@@ -520,6 +532,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   OnboardingRoute: typeof OnboardingRoute
+  BootstrapOwnerRoute: typeof BootstrapOwnerRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -550,6 +563,13 @@ declare module '@tanstack/react-router' {
       path: '/onboarding'
       fullPath: '/onboarding'
       preLoaderRoute: typeof OnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bootstrap-owner': {
+      id: '/bootstrap-owner'
+      path: '/bootstrap-owner'
+      fullPath: '/bootstrap-owner'
+      preLoaderRoute: typeof BootstrapOwnerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/admin': {
@@ -893,6 +913,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   OnboardingRoute: OnboardingRoute,
+  BootstrapOwnerRoute: BootstrapOwnerRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
