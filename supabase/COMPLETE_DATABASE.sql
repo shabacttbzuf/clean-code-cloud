@@ -7104,7 +7104,10 @@ VALUES
   (NULL, 'builtin', 'waiter'::public.app_role, 'categories.view'),
   (NULL, 'builtin', 'waiter'::public.app_role, 'inventory.view'),
   (NULL, 'builtin', 'warehouse'::public.app_role, 'categories.view'),
-  (NULL, 'builtin', 'manager'::public.app_role, 'permissions.manage')
+  (NULL, 'builtin', 'manager'::public.app_role, 'permissions.manage'),
+  (NULL, 'builtin', 'accountant'::public.app_role, 'hr.employees.view'),
+  (NULL, 'builtin', 'accountant'::public.app_role, 'hr.compensation.view'),
+  (NULL, 'builtin', 'accountant'::public.app_role, 'hr.attendance.view')
 ON CONFLICT DO NOTHING;
 
 -- Waiters create table orders; they do not own cash sessions or finalize payments.
