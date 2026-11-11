@@ -36,6 +36,8 @@ import {
   Bell,
   Crown,
   Bookmark,
+  Palette,
+  Megaphone,
 } from "lucide-react";
 import { useSuperOwner } from "@/hooks/use-super-owner";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
@@ -199,11 +201,12 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 {group.items.map((item) => {
+                  const itemPath = item.url.split("#")[0];
                   const active =
-                    pathname === item.url ||
-                    (item.url !== "/dashboard" && pathname.startsWith(item.url + "/")) ||
-                    (item.url === "/inventory" && pathname === "/inventory") ||
-                    (item.url === "/inventory/movements" && pathname.startsWith("/inventory/movements"));
+                    pathname === itemPath ||
+                    (itemPath !== "/dashboard" && pathname.startsWith(itemPath + "/")) ||
+                    (itemPath === "/inventory" && pathname === "/inventory") ||
+                    (itemPath === "/inventory/movements" && pathname.startsWith("/inventory/movements"));
                   return (
                     <SidebarMenuItem key={item.url}>
                       <SidebarMenuButton asChild isActive={active} tooltip={item.title}>
