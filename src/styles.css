@@ -218,3 +218,19 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* Keep action toasts centered at the top, clear of the RTL sidebar trigger. */
+[data-sonner-toaster][data-x-position="center"] {
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%) !important;
+  width: min( calc(100vw - 2rem), 28rem ) !important;
+}
+[data-sonner-toaster][data-y-position="top"] {
+  top: max(1rem, env(safe-area-inset-top)) !important;
+}
+[data-sonner-toaster][data-x-position="center"] [data-sonner-toast] {
+  width: 100%;
+  text-align: center;
+}
