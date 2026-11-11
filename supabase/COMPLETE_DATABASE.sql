@@ -5565,3 +5565,52 @@ COMMIT;
 -- because trigger functions can only run in trigger context.
 GRANT EXECUTE ON FUNCTION private.enforce_same_tenant_foreign_key() TO authenticated, service_role;
 
+
+
+-- =====================================================================
+-- SOURCE MIGRATION: 20261111000023_least_privilege_return_api_and_defaults.sql
+-- =====================================================================
+
+-- Explicit least-privilege grants for return ledgers and safe defaults for future API objects.
+BEGIN;
+
+REVOKE ALL ON TABLE
+  public.sale_refunds,
+  public.sale_refund_items,
+  public.purchase_returns,
+  public.purchase_return_items
+FROM anon, authenticated;
+
+GRANT SELECT ON TABLE
+  public.sale_refunds,
+  public.sale_refund_items,
+  public.purchase_returns,
+  public.purchase_return_items
+TO authenticated, service_role;
+
+REVOKE ALL ON TABLE public.sales_profitability FROM anon;
+GRANT SELECT ON TABLE public.sales_profitability TO authenticated, service_role;
+
+-- Prevent future public objects from becoming Data API reachable by default.
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE ALL ON TABLES FROM anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE ALL ON SEQUENCES FROM anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE ALL ON FUNCTIONS FROM anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres
+  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+
+COMMIT;
+
+
+-- =====================================================================
+-- SOURCE MIGRATION: 20261111000024_read_only_profitability_view.sql
+-- =====================================================================
+
+-- The profitability view is read-only by design; expose SELECT only.
+BEGIN;
+REVOKE ALL ON TABLE public.sales_profitability FROM anon, authenticated, service_role;
+GRANT SELECT ON TABLE public.sales_profitability TO authenticated, service_role;
+COMMIT;
+
