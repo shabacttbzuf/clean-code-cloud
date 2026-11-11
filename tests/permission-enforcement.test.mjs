@@ -29,6 +29,28 @@ test("critical transactional RPCs verify the acting user's exact permission", ()
   }
 });
 
+test("enterprise server actions validate permission keys instead of broad role names", () => {
+  const source = readFileSync(
+    new URL("../src/lib/enterprise.functions.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /async function assertPermission/);
+  for (const key of [
+    "companies.manage",
+    "departments.manage",
+    "job_titles.manage",
+    "employment_types.manage",
+    "users.edit",
+    "users.approve",
+    "users.force_password_reset",
+    "roles.manage",
+    "notifications.manage",
+  ]) {
+    assert.ok(source.includes(`"${key}"`), `missing server permission check for ${key}`);
+  }
+  assert.doesNotMatch(source, /assertTenantAdmin\(|assertOwner\(/);
+});
+
 test("sidebar resolves permissions from the database instead of role-name guesses", () => {
   const sidebar = readFileSync(
     new URL("../src/components/app-sidebar.tsx", import.meta.url),
