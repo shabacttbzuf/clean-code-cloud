@@ -615,3 +615,24 @@ test("complete database snapshot includes purchase returned status migrations on
   assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000031_add_purchase_returned_status.sql").length - 1, 1);
   assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000032_mark_fully_returned_purchases.sql").length - 1, 1);
 });
+
+
+const activeBranchMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000033_require_active_branch_for_sales_and_sessions.sql", import.meta.url),
+  "utf8",
+);
+
+test("new sales and cash sessions require an active branch owned by the same tenant", () => {
+  assert.ok(activeBranchMigration.includes("enforce_active_branch_for_operation"));
+  assert.ok(activeBranchMigration.includes("is_active=true"));
+  assert.ok(activeBranchMigration.includes("BEFORE INSERT ON public.sales"));
+  assert.ok(activeBranchMigration.includes("BEFORE INSERT ON public.cash_sessions"));
+});
+
+test("complete database snapshot includes active branch migration once", () => {
+  const snapshot = readFileSync(
+    new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url),
+    "utf8",
+  );
+  assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000033_require_active_branch_for_sales_and_sessions.sql").length - 1, 1);
+});
