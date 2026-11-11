@@ -540,3 +540,24 @@ test("complete database snapshot includes tenant-scope migrations exactly once",
     assert.equal(snapshot.split("SOURCE MIGRATION: " + name).length - 1, 1);
   }
 });
+
+
+const roleAudienceMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000029_validate_role_notification_audiences.sql", import.meta.url),
+  "utf8",
+);
+
+test("owner and manager notification audiences validate against tenant role membership", () => {
+  assert.ok(roleAudienceMigration.includes("WHEN 'owner' THEN"));
+  assert.ok(roleAudienceMigration.includes("WHEN 'manager' THEN"));
+  assert.ok(roleAudienceMigration.includes("role='owner'"));
+  assert.ok(roleAudienceMigration.includes("role='manager'"));
+});
+
+test("complete database snapshot includes role notification audience migration once", () => {
+  const snapshot = readFileSync(
+    new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url),
+    "utf8",
+  );
+  assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000029_validate_role_notification_audiences.sql").length - 1, 1);
+});
