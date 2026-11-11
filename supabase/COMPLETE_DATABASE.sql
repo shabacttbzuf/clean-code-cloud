@@ -6418,6 +6418,14 @@ BEGIN
       IF v_cmd='select' THEN
         IF r.table_name='role_permissions' THEN
           EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (tenant_id IS NULL OR public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, v_key);
+        ELSIF r.table_name='employees' THEN
+          EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (user_id = (select auth.uid()) OR public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, v_key);
+        ELSIF r.table_name IN ('attendance','bonuses','deductions','leave_requests','payroll_items') THEN
+          EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM public.employees e WHERE e.id = %I.employee_id AND e.tenant_id = %I.tenant_id AND e.user_id = (select auth.uid())) OR public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, r.table_name, r.table_name, v_key);
+        ELSIF r.table_name='login_history' THEN
+          EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (user_id = (select auth.uid()) OR public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, v_key);
+        ELSIF r.table_name='user_permission_overrides' THEN
+          EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (user_id = (select auth.uid()) OR public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, v_key);
         ELSE
           EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, v_key);
         END IF;
@@ -6432,6 +6440,77 @@ BEGIN
   END LOOP;
 END
 $permission_gates$;
+
+
+-- Broaden only tenant/branch-scoped permissive access; restrictive permission gates above remain authoritative.
+DO $permission_scopes$
+DECLARE
+  r record;
+  v_cmd text;
+  v_expr text;
+  v_policy text;
+BEGIN
+  FOR r IN SELECT * FROM (VALUES
+    ('audit_logs', 'private.is_tenant_member((select auth.uid()), tenant_id)', NULL, NULL, NULL),
+    ('branches', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)'),
+    ('categories', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)'),
+    ('companies', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)'),
+    ('customers', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)'),
+    ('custom_roles', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)'),
+    ('departments', 'private.is_tenant_member((select auth.uid()), tenant_id) AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))', 'private.is_tenant_member((select auth.uid()), tenant_id) AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))', 'private.is_tenant_member((select auth.uid()), tenant_id) AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))', 'private.is_tenant_member((select auth.uid()), tenant_id) AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))'),
+    ('employment_types', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)'),
+    ('expense_categories', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)'),
+    ('expenses', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'user_id = (select auth.uid()) AND private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)'),
+    ('inventory', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)'),
+    ('inventory_transactions', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', NULL, NULL),
+    ('job_titles', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)'),
+    ('login_history', 'private.is_tenant_member((select auth.uid()), tenant_id)', NULL, NULL, NULL),
+    ('employees', 'private.is_tenant_member((select auth.uid()), tenant_id) AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))', 'private.is_tenant_member((select auth.uid()), tenant_id) AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))', 'private.is_tenant_member((select auth.uid()), tenant_id) AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))', 'private.is_tenant_member((select auth.uid()), tenant_id) AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))'),
+    ('attendance', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = attendance.employee_id AND e.tenant_id = attendance.tenant_id AND (e.user_id = (select auth.uid()) OR e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = attendance.employee_id AND e.tenant_id = attendance.tenant_id AND (e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = attendance.employee_id AND e.tenant_id = attendance.tenant_id AND (e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = attendance.employee_id AND e.tenant_id = attendance.tenant_id AND (e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))'),
+    ('bonuses', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = bonuses.employee_id AND e.tenant_id = bonuses.tenant_id AND (e.user_id = (select auth.uid()) OR e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = bonuses.employee_id AND e.tenant_id = bonuses.tenant_id AND (e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = bonuses.employee_id AND e.tenant_id = bonuses.tenant_id AND (e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = bonuses.employee_id AND e.tenant_id = bonuses.tenant_id AND (e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))'),
+    ('deductions', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = deductions.employee_id AND e.tenant_id = deductions.tenant_id AND (e.user_id = (select auth.uid()) OR e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = deductions.employee_id AND e.tenant_id = deductions.tenant_id AND (e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = deductions.employee_id AND e.tenant_id = deductions.tenant_id AND (e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = deductions.employee_id AND e.tenant_id = deductions.tenant_id AND (e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))'),
+    ('leave_types', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)'),
+    ('leave_requests', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = leave_requests.employee_id AND e.tenant_id = leave_requests.tenant_id AND (e.user_id = (select auth.uid()) OR e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = leave_requests.employee_id AND e.tenant_id = leave_requests.tenant_id AND e.user_id = (select auth.uid()))', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = leave_requests.employee_id AND e.tenant_id = leave_requests.tenant_id AND (e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))', NULL),
+    ('payroll_runs', 'branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id)'),
+    ('payroll_items', 'EXISTS (SELECT 1 FROM public.payroll_runs r WHERE r.id = payroll_items.payroll_run_id AND r.tenant_id = payroll_items.tenant_id AND (r.branch_id IS NULL OR private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id))) OR EXISTS (SELECT 1 FROM public.employees e WHERE e.id = payroll_items.employee_id AND e.user_id = (select auth.uid()))', 'EXISTS (SELECT 1 FROM public.payroll_runs r WHERE r.id = payroll_items.payroll_run_id AND r.tenant_id = payroll_items.tenant_id AND (r.branch_id IS NULL OR private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id)))', 'EXISTS (SELECT 1 FROM public.payroll_runs r WHERE r.id = payroll_items.payroll_run_id AND r.tenant_id = payroll_items.tenant_id AND (r.branch_id IS NULL OR private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id)))', 'EXISTS (SELECT 1 FROM public.payroll_runs r WHERE r.id = payroll_items.payroll_run_id AND r.tenant_id = payroll_items.tenant_id AND (r.branch_id IS NULL OR private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id)))'),
+    ('products', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)'),
+    ('purchases', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'user_id = (select auth.uid()) AND private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)'),
+    ('purchase_items', 'EXISTS (SELECT 1 FROM public.purchases p WHERE p.id = purchase_items.purchase_id AND p.tenant_id = purchase_items.tenant_id AND private.can_access_branch((select auth.uid()), p.tenant_id, p.branch_id))', 'EXISTS (SELECT 1 FROM public.purchases p WHERE p.id = purchase_items.purchase_id AND p.tenant_id = purchase_items.tenant_id AND p.user_id = (select auth.uid()) AND private.can_access_branch((select auth.uid()), p.tenant_id, p.branch_id))', 'EXISTS (SELECT 1 FROM public.purchases p WHERE p.id = purchase_items.purchase_id AND p.tenant_id = purchase_items.tenant_id AND private.can_access_branch((select auth.uid()), p.tenant_id, p.branch_id))', 'EXISTS (SELECT 1 FROM public.purchases p WHERE p.id = purchase_items.purchase_id AND p.tenant_id = purchase_items.tenant_id AND private.can_access_branch((select auth.uid()), p.tenant_id, p.branch_id))'),
+    ('purchase_returns', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)'),
+    ('purchase_return_items', 'EXISTS (SELECT 1 FROM public.purchase_returns r WHERE r.id = purchase_return_items.purchase_return_id AND r.tenant_id = purchase_return_items.tenant_id AND private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id))', 'EXISTS (SELECT 1 FROM public.purchase_returns r WHERE r.id = purchase_return_items.purchase_return_id AND r.tenant_id = purchase_return_items.tenant_id AND private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id))', 'EXISTS (SELECT 1 FROM public.purchase_returns r WHERE r.id = purchase_return_items.purchase_return_id AND r.tenant_id = purchase_return_items.tenant_id AND private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id))', 'EXISTS (SELECT 1 FROM public.purchase_returns r WHERE r.id = purchase_return_items.purchase_return_id AND r.tenant_id = purchase_return_items.tenant_id AND private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id))'),
+    ('sales', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'cashier_id = (select auth.uid()) AND private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)'),
+    ('sale_items', 'EXISTS (SELECT 1 FROM public.sales s WHERE s.id = sale_items.sale_id AND s.tenant_id = sale_items.tenant_id AND private.can_access_branch((select auth.uid()), s.tenant_id, s.branch_id))', 'EXISTS (SELECT 1 FROM public.sales s WHERE s.id = sale_items.sale_id AND s.tenant_id = sale_items.tenant_id AND s.cashier_id = (select auth.uid()) AND private.can_access_branch((select auth.uid()), s.tenant_id, s.branch_id))', 'EXISTS (SELECT 1 FROM public.sales s WHERE s.id = sale_items.sale_id AND s.tenant_id = sale_items.tenant_id AND private.can_access_branch((select auth.uid()), s.tenant_id, s.branch_id))', 'EXISTS (SELECT 1 FROM public.sales s WHERE s.id = sale_items.sale_id AND s.tenant_id = sale_items.tenant_id AND private.can_access_branch((select auth.uid()), s.tenant_id, s.branch_id))'),
+    ('payments', 'EXISTS (SELECT 1 FROM public.sales s WHERE s.id = payments.sale_id AND s.tenant_id = payments.tenant_id AND private.can_access_branch((select auth.uid()), s.tenant_id, s.branch_id))', 'EXISTS (SELECT 1 FROM public.sales s WHERE s.id = payments.sale_id AND s.tenant_id = payments.tenant_id AND s.cashier_id = (select auth.uid()) AND private.can_access_branch((select auth.uid()), s.tenant_id, s.branch_id))', 'EXISTS (SELECT 1 FROM public.sales s WHERE s.id = payments.sale_id AND s.tenant_id = payments.tenant_id AND private.can_access_branch((select auth.uid()), s.tenant_id, s.branch_id))', 'EXISTS (SELECT 1 FROM public.sales s WHERE s.id = payments.sale_id AND s.tenant_id = payments.tenant_id AND private.can_access_branch((select auth.uid()), s.tenant_id, s.branch_id))'),
+    ('sale_refunds', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)'),
+    ('sale_refund_items', 'EXISTS (SELECT 1 FROM public.sale_refunds r WHERE r.id = sale_refund_items.refund_id AND r.tenant_id = sale_refund_items.tenant_id AND private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id))', 'EXISTS (SELECT 1 FROM public.sale_refunds r WHERE r.id = sale_refund_items.refund_id AND r.tenant_id = sale_refund_items.tenant_id AND private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id))', 'EXISTS (SELECT 1 FROM public.sale_refunds r WHERE r.id = sale_refund_items.refund_id AND r.tenant_id = sale_refund_items.tenant_id AND private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id))', 'EXISTS (SELECT 1 FROM public.sale_refunds r WHERE r.id = sale_refund_items.refund_id AND r.tenant_id = sale_refund_items.tenant_id AND private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id))'),
+    ('suppliers', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)')
+  ) AS m(table_name, select_scope, insert_scope, update_scope, delete_scope)
+  LOOP
+    IF to_regclass(format('public.%I', r.table_name)) IS NULL THEN CONTINUE; END IF;
+    FOREACH v_cmd IN ARRAY ARRAY['select','insert','update','delete'] LOOP
+      v_expr := CASE v_cmd
+        WHEN 'select' THEN r.select_scope
+        WHEN 'insert' THEN r.insert_scope
+        WHEN 'update' THEN r.update_scope
+        ELSE r.delete_scope
+      END;
+      IF v_expr IS NULL THEN CONTINUE; END IF;
+      v_policy := 'permission_scope_' || r.table_name || '_' || v_cmd;
+      EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', v_policy, r.table_name);
+      IF v_cmd='select' THEN
+        EXECUTE format('CREATE POLICY %I ON public.%I AS PERMISSIVE FOR SELECT TO authenticated USING (%s)', v_policy, r.table_name, v_expr);
+      ELSIF v_cmd='insert' THEN
+        EXECUTE format('CREATE POLICY %I ON public.%I AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (%s)', v_policy, r.table_name, v_expr);
+      ELSIF v_cmd='update' THEN
+        EXECUTE format('CREATE POLICY %I ON public.%I AS PERMISSIVE FOR UPDATE TO authenticated USING (%s) WITH CHECK (%s)', v_policy, r.table_name, v_expr, v_expr);
+      ELSE
+        EXECUTE format('CREATE POLICY %I ON public.%I AS PERMISSIVE FOR DELETE TO authenticated USING (%s)', v_policy, r.table_name, v_expr);
+      END IF;
+    END LOOP;
+  END LOOP;
+END
+$permission_scopes$;
+
 
 
 CREATE OR REPLACE FUNCTION public.adjust_inventory_balance(_tenant_id uuid, _product_id uuid, _branch_id uuid, _target_quantity numeric, _reason text)
@@ -6956,10 +7035,24 @@ ON public.leave_requests AS RESTRICTIVE FOR UPDATE TO authenticated
 USING (
   public.has_permission((select auth.uid()), tenant_id, 'hr.leaves.approve')
   OR public.has_permission((select auth.uid()), tenant_id, 'hr.leaves.reject')
+  OR (
+    status = 'pending'
+    AND EXISTS (SELECT 1 FROM public.employees e
+      WHERE e.id = leave_requests.employee_id
+        AND e.tenant_id = leave_requests.tenant_id
+        AND e.user_id = (select auth.uid()))
+  )
 )
 WITH CHECK (
   public.has_permission((select auth.uid()), tenant_id, 'hr.leaves.approve')
   OR public.has_permission((select auth.uid()), tenant_id, 'hr.leaves.reject')
+  OR (
+    status = 'pending'
+    AND EXISTS (SELECT 1 FROM public.employees e
+      WHERE e.id = leave_requests.employee_id
+        AND e.tenant_id = leave_requests.tenant_id
+        AND e.user_id = (select auth.uid()))
+  )
 );
 
 
