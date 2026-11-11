@@ -363,7 +363,11 @@ function POSPage() {
     onError: (e) => {
       printWindowRef.current?.close();
       printWindowRef.current = null;
-      toast.error(e instanceof Error ? e.message : "فشل إتمام البيع");
+      const rawMessage = e instanceof Error ? e.message : "";
+      const message = /insufficient stock|inventory record missing/i.test(rawMessage)
+        ? "المخزون غير كافٍ أو لم يتم تسجيل الرصيد الافتتاحي لهذا المنتج في الفرع."
+        : rawMessage || "فشل إتمام البيع";
+      toast.error(message);
     },
   });
 
