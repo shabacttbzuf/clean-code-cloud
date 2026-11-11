@@ -151,6 +151,8 @@ function POSPage() {
       return data ?? [];
     },
     enabled: !!tenantId && !!branchId,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   });
 
   const stockByProduct = useMemo(
@@ -207,7 +209,7 @@ function POSPage() {
   const inc = (id: string) => {
     const item = cart.find((entry) => entry.product_id === id);
     const available = stockByProduct.get(id);
-    if (!item || available === undefined || item.quantity >= available) {
+    if (inventory.isLoading || inventory.isError || !item || available === undefined || item.quantity >= available) {
       toast.error("لا يمكن زيادة الكمية؛ تحقق من رصيد المخزون");
       return;
     }
@@ -538,7 +540,7 @@ function POSPage() {
                       <td className="p-1.5 text-center"><div className="inline-flex items-center gap-0.5">
                         <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => dec(item.product_id)} disabled={checkoutMut.isPending}><Minus className="h-3 w-3" /></Button>
                         <span className="min-w-6 text-center font-semibold num">{item.quantity}</span>
-                        <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => inc(item.product_id)} disabled={checkoutMut.isPending}><Plus className="h-3 w-3" /></Button>
+                        <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => inc(item.product_id)} disabled={checkoutMut.isPending || inventory.isLoading || inventory.isError || (stockByProduct.get(item.product_id) ?? 0) <= item.quantity}><Plus className="h-3 w-3" /></Button>
                       </div></td>
                       <td className="p-1.5 text-center font-bold num">{formatMoney(item.unit_price * item.quantity)}</td>
                       <td className="p-1.5 text-center"><Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" aria-label="حذف الصنف" onClick={() => remove(item.product_id)} disabled={checkoutMut.isPending}><Trash2 className="h-3.5 w-3.5" /></Button></td>
@@ -601,7 +603,7 @@ function POSPage() {
                       <td className="p-2"><div className="flex items-center justify-center gap-1">
                         <Button size="icon" variant="outline" className="h-7 w-7" aria-label="تقليل الكمية" onClick={() => dec(item.product_id)} disabled={checkoutMut.isPending}><Minus className="h-3 w-3" /></Button>
                         <span className="min-w-6 text-center font-bold num">{item.quantity}</span>
-                        <Button size="icon" variant="outline" className="h-7 w-7" aria-label="زيادة الكمية" onClick={() => inc(item.product_id)} disabled={checkoutMut.isPending}><Plus className="h-3 w-3" /></Button>
+                        <Button size="icon" variant="outline" className="h-7 w-7" aria-label="زيادة الكمية" onClick={() => inc(item.product_id)} disabled={checkoutMut.isPending || inventory.isLoading || inventory.isError || (stockByProduct.get(item.product_id) ?? 0) <= item.quantity}><Plus className="h-3 w-3" /></Button>
                       </div></td>
                       <td className="p-2 text-center num">{formatMoney(item.unit_price)}</td>
                       <td className="p-2 text-center font-bold num">{formatMoney(item.unit_price * item.quantity)}</td>
