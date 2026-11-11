@@ -69,7 +69,7 @@ function saveDrafts(list: Draft[]) {
 }
 
 function POSPage() {
-  const { tenantId, tenant, userId, membership, isAdmin } = useActiveTenant();
+  const { tenantId, tenant, userId, membership, isAdmin, isSuperOwner } = useActiveTenant();
   const qc = useQueryClient();
 
   const cashierProfile = useQuery({
@@ -439,7 +439,7 @@ function POSPage() {
           <CardContent className="space-y-4 pt-6">
             <div className="space-y-2">
               <Label>الفرع</Label>
-              <Select value={branchId ?? ""} onValueChange={setBranchId} disabled={!isAdmin && !!membership?.branch_id}>
+              <Select value={branchId ?? ""} onValueChange={setBranchId} disabled={!isAdmin && !isSuperOwner && !!membership?.branch_id}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {branches.data.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
