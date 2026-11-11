@@ -536,7 +536,12 @@ test("complete database snapshot includes tenant-scope migrations exactly once",
     new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url),
     "utf8",
   );
-  for (const [name] of files) {
+  for (const name of [
+    "20261111000025_immutable_tenant_scope_and_branch_memberships.sql",
+    "20261111000026_strict_tenant_immutability.sql",
+    "20261111000027_validate_unconstrained_tenant_references.sql",
+    "20261111000028_validate_notification_receipts.sql",
+  ]) {
     assert.equal(snapshot.split("SOURCE MIGRATION: " + name).length - 1, 1);
   }
 });
