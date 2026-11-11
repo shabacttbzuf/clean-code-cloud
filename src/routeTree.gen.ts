@@ -274,7 +274,8 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/onboarding': typeof OnboardingRoute
 
-  '/bootstrap-owner': typeof BootstrapOwnerRoute  '/admin': typeof AuthenticatedAdminRoute
+  '/bootstrap-owner': typeof BootstrapOwnerRoute
+  '/admin': typeof AuthenticatedAdminRoute
   '/audit-logs': typeof AuthenticatedAuditLogsRoute
   '/branches': typeof AuthenticatedBranchesRoute
   '/cash-sessions': typeof AuthenticatedCashSessionsRoute
@@ -316,7 +317,8 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/onboarding': typeof OnboardingRoute
 
-  '/bootstrap-owner': typeof BootstrapOwnerRoute  '/admin': typeof AuthenticatedAdminRoute
+  '/bootstrap-owner': typeof BootstrapOwnerRoute
+  '/admin': typeof AuthenticatedAdminRoute
   '/audit-logs': typeof AuthenticatedAuditLogsRoute
   '/branches': typeof AuthenticatedBranchesRoute
   '/cash-sessions': typeof AuthenticatedCashSessionsRoute
@@ -403,9 +405,8 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/onboarding'
-
     | '/bootstrap-owner'
-    | '/bootstrap-owner'    | '/admin'
+    | '/admin'
     | '/audit-logs'
     | '/branches'
     | '/cash-sessions'
@@ -446,8 +447,8 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/onboarding'
-
-    | '/bootstrap-owner'    | '/admin'
+    | '/bootstrap-owner'
+    | '/admin'
     | '/audit-logs'
     | '/branches'
     | '/cash-sessions'
@@ -489,6 +490,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/onboarding'
+    | '/bootstrap-owner'
     | '/_authenticated/admin'
     | '/_authenticated/audit-logs'
     | '/_authenticated/branches'
