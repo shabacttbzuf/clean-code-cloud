@@ -18,6 +18,20 @@ export const Route = createFileRoute("/_authenticated/inventory/")({
   component: InventoryPage,
 });
 
+// Supabase REST applies a per-request row cap. Page through inventory and products so
+// high-volume tenants never receive silently truncated stock balances.
+async function fetchAllRows<T>(query: any): Promise<T[]> {
+  const pageSize = 500;
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await query.range(from, from + pageSize - 1);
+    if (error) throw error;
+    const page = (data ?? []) as T[];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+}
+
 type InvRow = {
   id: string;
   product_id: string;
@@ -52,20 +66,18 @@ function InventoryPage() {
     queryKey: ["inventory", tenantId, branchId],
     queryFn: async (): Promise<InvRow[]> => {
       // Base query: all products for tenant + optional filter by branch
-      const productsRes = await supabase
-        .from("products")
-        .select("id, name, unit, min_stock")
-        .eq("tenant_id", tenantId!)
-        .eq("is_active", true);
-      if (productsRes.error) throw productsRes.error;
-      const products = productsRes.data ?? [];
+      const products = await fetchAllRows<{ id: string; name: string; unit: string; min_stock: number }>(
+        supabase.from("products").select("id, name, unit, min_stock")
+          .eq("tenant_id", tenantId!).eq("is_active", true).order("id"),
+      );
 
       let invQ = supabase.from("inventory").select("id, product_id, branch_id, quantity").eq("tenant_id", tenantId!);
       if (branchId !== "all") invQ = invQ.eq("branch_id", branchId);
-      const invRes = await invQ;
-      if (invRes.error) throw invRes.error;
+      const inventoryRows = await fetchAllRows<{ id: string; product_id: string; branch_id: string; quantity: number }>(
+        invQ.order("id"),
+      );
       const invMap = new Map<string, { id: string; quantity: number; branch_id: string }>();
-      for (const r of invRes.data ?? []) {
+      for (const r of inventoryRows) {
         invMap.set(`${(r as { product_id: string }).product_id}::${(r as { branch_id: string }).branch_id}`, r as { id: string; quantity: number; branch_id: string; product_id: string });
       }
 
@@ -157,9 +169,9 @@ function InventoryPage() {
         </Select>
       </div>
 
-      {inventory.isLoading ? (
+      {branches.isError ? (\n        <Card><CardContent className="flex flex-col items-center gap-3 py-12 text-center">\n          <AlertTriangle className="h-8 w-8 text-destructive" />\n          <p className="text-sm text-destructive">تعذر تحميل قائمة الفروع.</p>\n          <Button variant="outline" onClick={() => branches.refetch()}>إعادة المحاولة</Button>\n        </CardContent></Card>\n      ) : inventory.isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
-      ) : filtered.length === 0 ? (
+      ) : inventory.isError ? (\n        <Card><CardContent className="flex flex-col items-center gap-3 py-12 text-center">\n          <AlertTriangle className="h-8 w-8 text-destructive" />\n          <p className="text-sm text-destructive">تعذر تحميل أرصدة المخزون. لم نعرض أرقاماً جزئية.</p>\n          <Button variant="outline" onClick={() => inventory.refetch()}>إعادة المحاولة</Button>\n        </CardContent></Card>\n      ) : filtered.length === 0 ? (
         <Card><CardContent className="flex flex-col items-center gap-3 py-16 text-center">
           <Warehouse className="h-10 w-10 text-muted-foreground/50" />
           <p className="text-muted-foreground">لا توجد بيانات</p>
