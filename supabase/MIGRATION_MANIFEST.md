@@ -67,7 +67,7 @@
 53. `supabase/migrations/20261111000032_mark_fully_returned_purchases.sql`
 54. `supabase/migrations/20261111000033_require_active_branch_for_sales_and_sessions.sql`
 
-**الإجمالي: 54 ترحيلاً.**
+
 
 ## ترحيل Drizzle القديم
 
@@ -82,3 +82,10 @@
 
 **المسار الموصى به:** `supabase db push` لأنه يحافظ على سجل الترحيلات. لا تشغّل Snapshot يدوياً ثم تشغّل `db push` على القاعدة نفسها؛ اختر طريقة واحدة فقط.
 
+55. `supabase/migrations/20261111000034_allow_super_owners_tenant_admin_rls.sql`
+56. `supabase/migrations/20261111030810_prevent_negative_inventory_bootstrap.sql`
+57. `supabase/migrations/20261111033000_enforce_role_permissions.sql`
+58. `supabase/migrations/20261111035000_get_my_permissions_invoker.sql`
+59. `supabase/migrations/20261111040000_fix_cashier_pos_checkout_permissions.sql`
+
+**الإجمالي: 59 ترحيلاً.**
