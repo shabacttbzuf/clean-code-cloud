@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
@@ -83,6 +83,7 @@ function POSPage() {
   const [paperSize, setPaperSize] = useState<"58mm" | "80mm" | "A4">("80mm");
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewMethod, setReviewMethod] = useState<PaymentUI>("cash");
+  const printWindowRef = useRef<Window | null>(null);
   const beginCheckout = (method: PaymentUI) => {
     if (cart.length === 0) return toast.info("الفاتورة فارغة");
     setReviewMethod(method);
@@ -329,7 +330,15 @@ function POSPage() {
       setReviewOpen(false);
       toast.success(`تم إصدار فاتورة #${sale.invoice_no}`);
       const inv = buildInvoice(sale, items, method);
-      try { printInvoiceHTML(inv, paperSize); } catch (e) { console.error(e); }
+      try {
+        const printed = printInvoiceHTML(inv, paperSize, printWindowRef.current);
+        if (!printed) toast.warning("تم إصدار الفاتورة، لكن نافذة الطباعة لم تفتح. استخدم زر معاينة الفاتورة.");
+      } catch (e) {
+        console.error(e);
+        toast.warning("تم إصدار الفاتورة، وتعذرت الطباعة التلقائية. يمكنك معاينتها وإعادة طباعتها.");
+      } finally {
+        printWindowRef.current = null;
+      }
       setCart([]);
       setDiscount("0");
       qc.invalidateQueries({ queryKey: ["sales"] });
@@ -337,8 +346,19 @@ function POSPage() {
       qc.invalidateQueries({ queryKey: ["pos-inventory", tenantId, branchId] });
       qc.invalidateQueries({ queryKey: ["inventory-movements"] });
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "فشل إتمام البيع"),
+    onError: (e) => {
+      printWindowRef.current?.close();
+      printWindowRef.current = null;
+      toast.error(e instanceof Error ? e.message : "فشل إتمام البيع");
+    },
   });
+
+  const confirmCheckout = () => {
+    if (checkoutMut.isPending || cart.length === 0) return;
+    printWindowRef.current?.close();
+    printWindowRef.current = window.open("", "_blank", "width=420,height=720");
+    checkoutMut.mutate(reviewMethod);
+  };
 
   const holdOrDraft = (label: string) => {
     if (cart.length === 0) return toast.info("السلة فارغة");
@@ -635,7 +655,7 @@ function POSPage() {
           <DialogFooter className="gap-2 sm:justify-between">
             <Button variant="outline" onClick={() => setReviewOpen(false)} disabled={checkoutMut.isPending}>العودة للتعديل</Button>
             <Button className="bg-success font-bold text-success-foreground hover:bg-success/90" disabled={checkoutMut.isPending || cart.length === 0 || disc > subtotal}
-              onClick={() => checkoutMut.mutate(reviewMethod)}>
+              onClick={confirmCheckout}>
               {checkoutMut.isPending ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="ml-2 h-4 w-4" />}
               تأكيد وإصدار الفاتورة
             </Button>
