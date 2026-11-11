@@ -76,6 +76,10 @@ function PurchasesPage() {
         }
       />
 
+      <p className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground">
+        قيمة مرتجع المورد تُحفظ وتُخصم من صافي قيمة المشتريات والمخزون. تسوية المبلغ أو رصيد المورد تتم خارج التطبيق حالياً؛ لا يسجل النظام دفعة نقدية للمورد.
+      </p>
+
       {purchases.isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
       ) : !purchases.data || purchases.data.list.length === 0 ? (
