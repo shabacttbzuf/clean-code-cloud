@@ -43,3 +43,8 @@ test("sidebar resolves permissions from the database instead of role-name guesse
 test("leave decisions allow either explicit approval or rejection permission", () => {
   assert.match(migration, /permission_gate_leave_requests_update_decision[\s\S]*hr\.leaves\.approve[\s\S]*hr\.leaves\.reject/);
 });
+test("cashier and waiter defaults match the POS responsibility boundary", () => {
+  assert.match(migration, /cashier'::public\.app_role, 'categories\.view'/);
+  assert.match(migration, /cashier'::public\.app_role, 'inventory\.view'/);
+  assert.match(migration, /DELETE FROM public\.role_permissions[\s\S]*builtin_role = 'waiter'[\s\S]*pos\.create_sale/);
+});
