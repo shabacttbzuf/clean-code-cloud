@@ -172,6 +172,11 @@ export function AppSidebar() {
   if (showAdmin) systemItems.push({ title: "إدارة النظام", url: "/admin", icon: ShieldCheck });
   systemItems.push({ title: "سجل التدقيق", url: "/audit-logs", icon: ScrollText, permission: "audit.view" });
 
+  const customGroup: Group = {
+    label: "اختصارات مخصصة",
+    items: customItems.map((item) => ({ title: item.title, url: item.url, icon: Bookmark })),
+  };
+
   const allGroups: Group[] = [
     ...groups,
     enterpriseGroup,
