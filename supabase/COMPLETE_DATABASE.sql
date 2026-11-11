@@ -7007,4 +7007,23 @@ REVOKE ALL ON FUNCTION public.get_my_permissions(uuid) FROM anon;
 GRANT EXECUTE ON FUNCTION public.get_my_permissions(uuid) TO authenticated;
 
 
+
+-- POS staff need to see the catalog and available stock to prevent overselling.
+INSERT INTO public.role_permissions (tenant_id, role_kind, builtin_role, permission_key)
+VALUES
+  (NULL, 'builtin', 'cashier'::public.app_role, 'categories.view'),
+  (NULL, 'builtin', 'cashier'::public.app_role, 'inventory.view'),
+  (NULL, 'builtin', 'waiter'::public.app_role, 'categories.view'),
+  (NULL, 'builtin', 'waiter'::public.app_role, 'inventory.view'),
+  (NULL, 'builtin', 'warehouse'::public.app_role, 'categories.view')
+ON CONFLICT DO NOTHING;
+
+-- Waiters create table orders; they do not own cash sessions or finalize payments.
+DELETE FROM public.role_permissions
+WHERE tenant_id IS NULL
+  AND role_kind = 'builtin'
+  AND builtin_role = 'waiter'::public.app_role
+  AND permission_key = 'pos.create_sale';
+
+
 COMMIT;
