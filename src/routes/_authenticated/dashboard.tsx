@@ -64,7 +64,7 @@ function Dashboard() {
       const last30 = new Date(now.getTime() - 29 * 86400000);
       const last30ISO = new Date(last30.getFullYear(), last30.getMonth(), last30.getDate()).toISOString();
 
-      const [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions] = await Promise.all([
+      const [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, profitabilityMonth] = await Promise.all([
         supabase.from("sales").select("total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfDay),
         supabase.from("sales").select("total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfMonth),
         supabase.from("sales").select("total, created_at").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", last30ISO),
@@ -75,6 +75,7 @@ function Dashboard() {
         supabase.from("expenses").select("amount, category_id").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10)),
         supabase.from("inventory").select("quantity, product_id").eq("tenant_id", tenantId),
         supabase.from("cash_sessions").select("id").eq("tenant_id", tenantId).eq("status", "open"),
+        supabase.from("sales_profitability").select("gross_profit, items_with_unknown_cost").eq("tenant_id", tenantId).gte("created_at", startOfMonth),
       ]);
 
       const catsRes = await supabase.from("expense_categories").select("id, name, color").eq("tenant_id", tenantId);
@@ -85,6 +86,13 @@ function Dashboard() {
       const totalMonth = (salesMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0)
         - (refundsMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
       const totalExpMonth = (expensesMonth.data ?? []).reduce((s, r) => s + Number((r as { amount: number }).amount), 0);
+      const unknownCostItems = (profitabilityMonth.data ?? []).reduce(
+        (sum, row) => sum + Number((row as { items_with_unknown_cost: number }).items_with_unknown_cost ?? 0), 0,
+      );
+      const grossProfit = unknownCostItems > 0 ? null : (profitabilityMonth.data ?? []).reduce(
+        (sum, row) => sum + Number((row as { gross_profit: number | null }).gross_profit ?? 0), 0,
+      );
+      const profit = grossProfit === null ? null : grossProfit - totalExpMonth;
 
       // Trend: group by day
       const dayMap = new Map<string, number>();
@@ -120,7 +128,7 @@ function Dashboard() {
 
       return {
         totalToday, totalMonth, totalExpMonth,
-        profit: totalMonth - totalExpMonth,
+        profit, unknownCostItems,
         salesTodayCount: (salesToday.data ?? []).length,
         openSessions: (sessions.data ?? []).length,
         lowStockCount,
@@ -161,7 +169,7 @@ function Dashboard() {
             <Kpi label="مبيعات اليوم" value={`${formatMoney(stats.data.totalToday)} ${currency}`} sub={`${stats.data.salesTodayCount} فاتورة`} icon={<Receipt className="h-5 w-5" />} tone="primary" />
             <Kpi label="مبيعات الشهر" value={`${formatMoney(stats.data.totalMonth)} ${currency}`} icon={<TrendingUp className="h-5 w-5" />} tone="success" />
             <Kpi label="مصروفات الشهر" value={`${formatMoney(stats.data.totalExpMonth)} ${currency}`} icon={<TrendingDown className="h-5 w-5" />} tone="destructive" />
-            <Kpi label="صافي الربح" value={`${formatMoney(stats.data.profit)} ${currency}`} icon={<Wallet className="h-5 w-5" />} tone={stats.data.profit >= 0 ? "success" : "destructive"} />
+            <Kpi label="صافي الربح" value={stats.data.profit === null ? "غير مكتمل" : `${formatMoney(stats.data.profit)} ${currency}`} sub={stats.data.unknownCostItems > 0 ? `${stats.data.unknownCostItems} صنفاً بلا تكلفة محفوظة` : "بعد تكلفة البضاعة والمصروفات"} icon={<Wallet className="h-5 w-5" />} tone={stats.data.profit !== null && stats.data.profit >= 0 ? "success" : "destructive"} />
           </div>
 
           <div className="grid gap-4 lg:grid-cols-3">
