@@ -53,7 +53,9 @@ function PurchasesPage() {
         brIds.length > 0 ? supabase.from("branches").select("id, name").in("id", brIds) : Promise.resolve({ data: [] }),
         purchaseIds.length > 0 ? supabase.from("purchase_returns").select("purchase_id, total").in("purchase_id", purchaseIds) : Promise.resolve({ data: [] }),
       ]);
-      for (const result of [supRes, brRes, returnRes]) {\n        if ("error" in result && result.error) throw result.error;\n      }
+      for (const result of [supRes, brRes, returnRes]) {
+        if ("error" in result && result.error) throw result.error;
+      }
       const returnedTotals = new Map<string, number>();
       for (const ret of returnRes.data ?? []) returnedTotals.set(ret.purchase_id, (returnedTotals.get(ret.purchase_id) ?? 0) + Number(ret.total));
       const list = baseList.map((purchase) => ({ ...purchase, returned_total: returnedTotals.get(purchase.id) ?? 0 }));
@@ -82,7 +84,13 @@ function PurchasesPage() {
 
       {purchases.isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
-      ) : purchases.isError ? (\n        <Card><CardContent className="flex flex-col items-center gap-3 py-12 text-center">\n          <ShoppingBag className="h-8 w-8 text-destructive" />\n          <p className="text-sm text-destructive">تعذر تحميل فواتير الشراء أو بيانات الموردين والفروع.</p>\n          <Button variant="outline" onClick={() => purchases.refetch()}>إعادة المحاولة</Button>\n        </CardContent></Card>\n      ) : !purchases.data || purchases.data.list.length === 0 ? (
+      ) : purchases.isError ? (
+        <Card><CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+          <ShoppingBag className="h-8 w-8 text-destructive" />
+          <p className="text-sm text-destructive">تعذر تحميل فواتير الشراء أو بيانات الموردين والفروع.</p>
+          <Button variant="outline" onClick={() => purchases.refetch()}>إعادة المحاولة</Button>
+        </CardContent></Card>
+      ) : !purchases.data || purchases.data.list.length === 0 ? (
         <Card><CardContent className="flex flex-col items-center gap-3 py-16 text-center">
           <ShoppingBag className="h-10 w-10 text-muted-foreground/50" />
           <p className="text-muted-foreground">لا توجد فواتير شراء</p>
