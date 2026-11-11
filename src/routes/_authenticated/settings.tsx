@@ -19,6 +19,38 @@ export const Route = createFileRoute("/_authenticated/settings")({
   component: SettingsPage,
 });
 
+type NavOverride = { title?: string; hidden?: boolean };
+
+const MANAGEABLE_NAV_ITEMS = [
+  { title: "لوحة التحكم", url: "/dashboard", protected: true },
+  { title: "التقارير", url: "/reports" },
+  { title: "نقطة البيع", url: "/pos", protected: true },
+  { title: "الفواتير", url: "/sales" },
+  { title: "الورديات", url: "/cash-sessions" },
+  { title: "العملاء", url: "/customers" },
+  { title: "المخزون", url: "/inventory" },
+  { title: "حركات المخزون", url: "/inventory/movements" },
+  { title: "الموردون", url: "/suppliers" },
+  { title: "المشتريات", url: "/purchases" },
+  { title: "المصروفات", url: "/expenses" },
+  { title: "الفروع", url: "/branches" },
+  { title: "المنتجات", url: "/products" },
+  { title: "الأقسام", url: "/categories" },
+  { title: "الموظفون", url: "/users" },
+  { title: "إدارة المستخدمين", url: "/users-admin" },
+  { title: "الشركات", url: "/companies" },
+  { title: "الأقسام الإدارية", url: "/departments" },
+  { title: "المسميات الوظيفية", url: "/job-titles" },
+  { title: "أنواع التوظيف", url: "/employment-types" },
+  { title: "إدارة الأدوار", url: "/roles" },
+  { title: "صلاحيات الفريق", url: "/team-permissions" },
+  { title: "الإشعارات", url: "/notifications" },
+  { title: "الإعدادات", url: "/settings", protected: true },
+  { title: "مركز تحكم المالك", url: "/owner-center", protected: true },
+  { title: "إدارة النظام", url: "/admin", protected: true },
+  { title: "سجل التدقيق", url: "/audit-logs", protected: true },
+] as const;
+
 type MarketingCampaign = { id: string; title: string; description: string; image_url: string | null; target_url: string | null; placement: string; status: string; starts_at: string | null; ends_at: string | null; sort_order: number };
 
 const schema = z.object({
@@ -41,6 +73,7 @@ function SettingsPage() {
   const [designDraft, setDesignDraft] = useState<DesignSettings>(design);
   const [uploadingBackground, setUploadingBackground] = useState(false);
   const [customTabs, setCustomTabs] = useState<Array<{ title: string; url: string }>>([]);
+  const [navOverrides, setNavOverrides] = useState<Record<string, NavOverride>>({});
   const [newTabTitle, setNewTabTitle] = useState("");
   const [newTabUrl, setNewTabUrl] = useState("/dashboard");
   const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
@@ -61,6 +94,24 @@ function SettingsPage() {
       setLogoUrl(tenant.logo_url ?? "");
     }
   }, [tenant]);
+
+  useEffect(() => {
+    setDesignDraft(design);
+  }, [design]);
+
+  useEffect(() => {
+    try {
+      const rawTabs = window.localStorage.getItem("ras-custom-sidebar-items-v1");
+      const parsedTabs = rawTabs ? JSON.parse(rawTabs) : [];
+      setCustomTabs(Array.isArray(parsedTabs) ? parsedTabs.filter((item) => item && typeof item.title === "string" && typeof item.url === "string").slice(0, 12) : []);
+      const rawOverrides = window.localStorage.getItem("ras-sidebar-overrides-v1");
+      const parsedOverrides = rawOverrides ? JSON.parse(rawOverrides) : {};
+      setNavOverrides(parsedOverrides && typeof parsedOverrides === "object" && !Array.isArray(parsedOverrides) ? parsedOverrides : {});
+    } catch {
+      setCustomTabs([]);
+      setNavOverrides({});
+    }
+  }, []);
 
   const canManageMarketing = role === "owner" || role === "manager" || isSuperOwner;
   const campaignsQuery = useQuery({
@@ -194,6 +245,28 @@ function SettingsPage() {
       window.dispatchEvent(new Event("ras-custom-tabs-updated"));
       toast.success("تم تحديث الاختصارات");
     } catch { toast.error("تعذر حفظ الاختصارات على هذا الجهاز"); }
+  }
+
+  function updateNavOverride(url: string, patch: Partial<NavOverride>) {
+    const next = { ...navOverrides, [url]: { ...navOverrides[url], ...patch } };
+    setNavOverrides(next);
+    try {
+      window.localStorage.setItem("ras-sidebar-overrides-v1", JSON.stringify(next));
+      window.dispatchEvent(new Event("ras-sidebar-overrides-updated"));
+    } catch {
+      toast.error("تعذر حفظ إعدادات القائمة");
+    }
+  }
+
+  function resetNavOverrides() {
+    setNavOverrides({});
+    try {
+      window.localStorage.removeItem("ras-sidebar-overrides-v1");
+      window.dispatchEvent(new Event("ras-sidebar-overrides-updated"));
+      toast.success("تمت استعادة أسماء وظهور التبويبات الافتراضية");
+    } catch {
+      toast.error("تعذر استعادة القائمة");
+    }
   }
 
   function addCustomTab() {
@@ -380,6 +453,24 @@ function SettingsPage() {
               <Button type="button" onClick={applyDesign}>تطبيق التصميم</Button>
               <Button type="button" variant="outline" onClick={resetWorkspaceDesign}><RotateCcw className="ml-2 h-4 w-4" /> استعادة الافتراضي</Button>
             </div>
+            <section className="space-y-3 border-t pt-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-semibold">تعديل أسماء التبويبات وإظهارها</h3>
+                <Button type="button" size="sm" variant="outline" onClick={resetNavOverrides}><RotateCcw className="ml-1 h-3 w-3" />إعادة ضبط القائمة</Button>
+              </div>
+              <p className="text-xs text-muted-foreground">يمكنك إعادة تسمية صفحات القائمة أو إخفاء الصفحات غير الأساسية. الإخفاء لا يحذف الصفحة أو بياناتها ولا يغير صلاحيات الوصول إليها. الصفحات الأساسية محمية.</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {MANAGEABLE_NAV_ITEMS.map((item) => (
+                  <div key={item.url} className="flex items-center gap-2 rounded-md border p-2">
+                    <Input aria-label={`اسم تبويب ${item.title}`} value={navOverrides[item.url]?.title ?? item.title} onChange={(e) => updateNavOverride(item.url, { title: e.target.value.slice(0, 32) })} maxLength={32} className="h-9 min-w-0" />
+                    <label className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                      <input type="checkbox" checked={navOverrides[item.url]?.hidden === true} disabled={"protected" in item && item.protected} onChange={(e) => updateNavOverride(item.url, { hidden: e.target.checked })} />
+                      إخفاء
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </section>
             <section className="space-y-3 border-t pt-5">
               <h3 className="font-semibold">إدارة الاختصارات والتبويبات الجانبية</h3>
               <p className="text-xs text-muted-foreground">أضف تبويباً باسم تختاره يفتح صفحة موجودة. لا ينشئ هذا محرراً لصفحات أو وظائف جديدة؛ إضافة وحدات تشغيلية جديدة تحتاج تطويراً وبرمجة وصلاحيات مستقلة.</p>
