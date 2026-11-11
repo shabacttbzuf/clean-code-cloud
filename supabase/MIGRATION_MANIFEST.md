@@ -90,4 +90,6 @@
 
 60. `supabase/migrations/20261112010000_restaurant_image_storage_foundation.sql`
 
-**الإجمالي: 60 ترحيلاً.**
+61. `supabase/migrations/20261112020000_marketing_campaigns_management.sql`
+
+**الإجمالي: 61 ترحيلاً.**
