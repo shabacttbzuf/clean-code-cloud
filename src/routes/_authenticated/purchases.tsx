@@ -93,7 +93,9 @@ function PurchasesPage() {
                     <th className="p-3 font-medium">المرجع</th>
                     <th className="p-3 font-medium">المورد</th>
                     <th className="p-3 font-medium">الفرع</th>
-                    <th className="p-3 font-medium">الإجمالي</th>\n                    <th className="p-3 font-medium">المرتجع</th>\n                    <th className="p-3 font-medium">الصافي</th>
+                    <th className="p-3 font-medium">الإجمالي</th>
+                    <th className="p-3 font-medium">المرتجع</th>
+                    <th className="p-3 font-medium">الصافي</th>
                     <th className="p-3 font-medium">التاريخ</th>
                     {canReturn && <th className="p-3 font-medium">الإجراء</th>}
                   </tr>
@@ -104,7 +106,9 @@ function PurchasesPage() {
                       <td className="p-3 font-mono">{p.reference ?? p.id.slice(0, 6)}</td>
                       <td className="p-3">{p.supplier_id ? (purchases.data?.supMap.get(p.supplier_id) ?? "—") : "—"}</td>
                       <td className="p-3 text-muted-foreground">{purchases.data?.brMap.get(p.branch_id) ?? "—"}</td>
-                      <td className="p-3 num">{formatMoney(p.total)}</td>\n                      <td className="p-3 num text-destructive">{p.returned_total > 0 ? `-${formatMoney(p.returned_total)}` : "—"}</td>\n                      <td className="p-3 num font-bold text-primary">{formatMoney(Number(p.total) - p.returned_total)}</td>
+                      <td className="p-3 num">{formatMoney(p.total)}</td>
+                      <td className="p-3 num text-destructive">{p.returned_total > 0 ? `-${formatMoney(p.returned_total)}` : "—"}</td>
+                      <td className="p-3 num font-bold text-primary">{formatMoney(Number(p.total) - p.returned_total)}</td>
                       <td className="p-3 text-xs text-muted-foreground">{formatDateTime(p.created_at)}</td>
                       {canReturn && <td className="p-3"><Button size="sm" variant="outline" onClick={() => setReturningPurchaseId(p.id)}><RotateCcw className="ml-1 h-3 w-3" />إرجاع للمورد</Button></td>}
                     </tr>
