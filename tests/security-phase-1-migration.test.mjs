@@ -418,3 +418,23 @@ test("complete database snapshot includes migration 19 exactly once", () => {
   );
   assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000019_harden_definer_paths_and_inventory_branch_scope.sql").length - 1, 1);
 });
+
+
+const superOwnerReturnsMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000020_super_owner_return_visibility.sql", import.meta.url),
+  "utf8",
+);
+
+test("super owners retain cross-tenant read visibility for audited returns", () => {
+  assert.ok(superOwnerReturnsMigration.includes('ALTER POLICY "Members view refunds in accessible branches"'));
+  assert.ok(superOwnerReturnsMigration.includes('ALTER POLICY "Members view supplier returns in accessible branches"'));
+  assert.ok(superOwnerReturnsMigration.includes("public.is_super_owner((select auth.uid()))"));
+});
+
+test("complete database snapshot includes migration 20 exactly once", () => {
+  const snapshot = readFileSync(
+    new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url),
+    "utf8",
+  );
+  assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000020_super_owner_return_visibility.sql").length - 1, 1);
+});
