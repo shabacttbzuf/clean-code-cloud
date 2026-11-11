@@ -472,6 +472,15 @@ function POSPage() {
                 </div>
                 <span className="text-[10px] text-muted-foreground">{filteredProducts.length} منتج</span>
               </div>
+              {inventory.isError ? (
+                <div className="mb-1 rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-[10px] text-destructive" role="alert">
+                  تعذر تحميل رصيد المخزون؛ البيع متوقف حتى يتم التحقق من اتصال قاعدة البيانات.
+                </div>
+              ) : !inventory.isLoading && filteredProducts.length > 0 && filteredProducts.every((product) => (stockByProduct.get(product.id) ?? 0) <= 0) ? (
+                <div className="mb-1 rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-[10px] text-destructive" role="status">
+                  لا يوجد رصيد متاح في هذا الفرع. سجّل الكميات الافتتاحية من شاشة المخزون قبل البيع.
+                </div>
+              ) : null}
               <div className="grid min-h-0 flex-1 content-start grid-cols-4 gap-1.5 overflow-y-auto p-0.5 sm:grid-cols-5 md:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8">
                 {filteredProducts.map((product) => {
                   const available = stockByProduct.get(product.id);
