@@ -53,7 +53,7 @@ function Dashboard() {
         .select("id,title,description,image_url,target_url,starts_at,ends_at,sort_order")
         .eq("tenant_id", tenantId!)
         .eq("status", "active")
-        .eq("placement", "dashboard_banner")
+        .in("placement", ["dashboard_banner", "dashboard_card"])
         .order("sort_order")
         .limit(6);
       if (error) throw error;
