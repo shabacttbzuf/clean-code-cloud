@@ -39,6 +39,7 @@ function ReportsPage() {
           .from("sales")
           .select("id, created_at, total, subtotal, discount, tax_amount, payment_method, cashier_id, branch_id, status")
           .eq("tenant_id", tenantId)
+          .neq("status", "void")
           .gte("created_at", fromDate)
           .lte("created_at", toDate)
           .order("created_at", { ascending: false })
@@ -72,7 +73,7 @@ function ReportsPage() {
           .limit(10000),
         supabase
           .from("sale_refunds")
-          .select("id, sale_id, subtotal, discount, tax_amount, total, created_at")
+          .select("id, sale_id, subtotal, discount, tax_amount, total, refund_method, created_at")
           .eq("tenant_id", tenantId)
           .gte("created_at", fromDate)
           .lte("created_at", toDate)
@@ -99,7 +100,7 @@ function ReportsPage() {
       const inventory = (inventoryRes.data ?? []) as Array<{ quantity: number; product_id: string; branch_id: string }>;
       const refunds = (refundsRes.data ?? []) as Array<{
         id: string; sale_id: string; subtotal: number; discount: number;
-        tax_amount: number; total: number; created_at: string;
+        tax_amount: number; total: number; refund_method: string; created_at: string;
       }>;
       const refundIds = refunds.map((refund) => refund.id);
       const refundItemsRes = refundIds.length
@@ -191,19 +192,27 @@ function ReportsPage() {
       map.set(returned.product_name, cur);
     }
     return Array.from(map.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
-  }, [safe.items]);
+  }, [safe.items, safe.refundItems]);
 
   const cashierStats = useMemo(() => {
+    const refundsBySale = new Map<string, { total: number; cash: number }>();
+    for (const refund of safe.refunds) {
+      const current = refundsBySale.get(refund.sale_id) ?? { total: 0, cash: 0 };
+      current.total += Number(refund.total);
+      if (refund.refund_method === "cash") current.cash += Number(refund.total);
+      refundsBySale.set(refund.sale_id, current);
+    }
     const map = new Map<string, { id: string; sales: number; count: number; cash: number }>();
     for (const s of safe.sales) {
+      const refunded = refundsBySale.get(s.id) ?? { total: 0, cash: 0 };
       const cur = map.get(s.cashier_id) ?? { id: s.cashier_id, sales: 0, count: 0, cash: 0 };
-      cur.sales += Number(s.total);
+      cur.sales += Number(s.total) - refunded.total;
       cur.count += 1;
-      if (s.payment_method === "cash") cur.cash += Number(s.total);
+      if (s.payment_method === "cash") cur.cash += Number(s.total) - refunded.cash;
       map.set(s.cashier_id, cur);
     }
     return Array.from(map.values()).sort((a, b) => b.sales - a.sales);
-  }, [safe.sales]);
+  }, [safe.sales, safe.refunds]);
 
   if (!data) {
     return (
@@ -272,7 +281,7 @@ function ReportsPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi icon={<TrendingUp className="h-5 w-5" />} label="إجمالي المبيعات" value={`${formatMoney(totals.salesTotal)} ${tenant?.currency ?? ""}`} tone="primary" />
         <Kpi icon={<Wallet className="h-5 w-5" />} label="إجمالي المصروفات" value={`${formatMoney(totals.expensesTotal)} ${tenant?.currency ?? ""}`} tone="destructive" />
-        <Kpi icon={<FileText className="h-5 w-5" />} label="صافي الربح" value={`${formatMoney(totals.net)} ${tenant?.currency ?? ""}`} tone={totals.net >= 0 ? "success" : "destructive"} />
+        <Kpi icon={<FileText className="h-5 w-5" />} label="الفائض قبل تكلفة البضاعة" value={`${formatMoney(totals.net)} ${tenant?.currency ?? ""}`} tone={totals.net >= 0 ? "success" : "destructive"} />
         <Kpi icon={<Package className="h-5 w-5" />} label="عدد الفواتير" value={String(safe.sales.length)} tone="primary" />
       </div>
 
@@ -296,7 +305,7 @@ function ReportsPage() {
                     المبيعات: g.sales,
                     "عدد الفواتير": g.count,
                     المصروفات: g.expenses,
-                    الصافي: g.sales - g.expenses,
+                    "الفائض قبل تكلفة البضاعة": g.sales - g.expenses,
                   })),
                   `sales-report-${from}-${to}.csv`,
                 )
