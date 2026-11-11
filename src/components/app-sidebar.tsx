@@ -130,24 +130,19 @@ export function AppSidebar() {
   const allowed = (item: Item) =>
     isSuperOwner || (!!permissionsQuery.data && (!item.permission || permissionsQuery.data.has(item.permission)));
 
-  const isAdmin = role === "owner" || role === "manager" || isSuperOwner;
-  const isOwner = role === "owner" || isSuperOwner;
-
-  const enterpriseGroup: Group | null = isAdmin
-    ? {
-        label: "المؤسسة",
-        items: [
-          { title: "إدارة المستخدمين", url: "/users-admin", icon: UsersRound, permission: "users.manage" },
-          { title: "الشركات", url: "/companies", icon: Building, permission: "companies.view" },
-          { title: "الأقسام الإدارية", url: "/departments", icon: Briefcase, permission: "departments.view" },
-          { title: "المسميات الوظيفية", url: "/job-titles", icon: BadgeCheck, permission: "job_titles.view" },
-          { title: "أنواع التوظيف", url: "/employment-types", icon: BadgeCheck, permission: "employment_types.view" },
-          ...(isOwner ? [{ title: "إدارة الأدوار", url: "/roles", icon: KeyRound, permission: "roles.view" }] : []),
-          { title: "سجل الدخول", url: "/login-history", icon: History, permission: "login_history.view" },
-          { title: "الإشعارات", url: "/notifications", icon: Bell, permission: "notifications.view" },
-        ],
-      }
-    : null;
+  const enterpriseGroup: Group = {
+    label: "المؤسسة",
+    items: [
+      { title: "إدارة المستخدمين", url: "/users-admin", icon: UsersRound, permission: "users.manage" },
+      { title: "الشركات", url: "/companies", icon: Building, permission: "companies.view" },
+      { title: "الأقسام الإدارية", url: "/departments", icon: Briefcase, permission: "departments.view" },
+      { title: "المسميات الوظيفية", url: "/job-titles", icon: BadgeCheck, permission: "job_titles.view" },
+      { title: "أنواع التوظيف", url: "/employment-types", icon: BadgeCheck, permission: "employment_types.view" },
+      { title: "إدارة الأدوار", url: "/roles", icon: KeyRound, permission: "roles.view" },
+      { title: "سجل الدخول", url: "/login-history", icon: History, permission: "login_history.view" },
+      { title: "الإشعارات", url: "/notifications", icon: Bell, permission: "notifications.view" },
+    ],
+  };
 
   const showAdmin = isSuperOwner || totalCount === 0;
   const systemItems: Item[] = [];
@@ -157,7 +152,7 @@ export function AppSidebar() {
 
   const allGroups: Group[] = [
     ...groups,
-    ...(enterpriseGroup ? [enterpriseGroup] : []),
+    enterpriseGroup,
     { label: "النظام", items: systemItems },
   ].map((group) => ({ ...group, items: group.items.filter(allowed) })).filter((group) => group.items.length > 0);
 
