@@ -22,7 +22,7 @@ export const Route = createFileRoute("/_authenticated/purchases")({
 type PurchaseRow = {
   id: string; reference: string | null; supplier_id: string | null;
   branch_id: string; user_id: string;
-  total: number; status: string; created_at: string;
+  total: number; status: string; created_at: string; returned_total: number;
 };
 type Product = { id: string; name: string; unit: string; cost_price: number };
 type CartLine = { product_id: string; name: string; unit: string; quantity: string; cost_price: string };
@@ -44,13 +44,19 @@ function PurchasesPage() {
         .order("created_at", { ascending: false })
         .limit(100);
       if (error) throw error;
-      const list = (data ?? []) as PurchaseRow[];
-      const supIds = Array.from(new Set(list.map((p) => p.supplier_id).filter(Boolean) as string[]));
-      const brIds = Array.from(new Set(list.map((p) => p.branch_id)));
-      const [supRes, brRes] = await Promise.all([
+      const baseList = (data ?? []) as Omit<PurchaseRow, "returned_total">[];
+      const supIds = Array.from(new Set(baseList.map((p) => p.supplier_id).filter(Boolean) as string[]));
+      const brIds = Array.from(new Set(baseList.map((p) => p.branch_id)));
+      const purchaseIds = baseList.map((p) => p.id);
+      const [supRes, brRes, returnRes] = await Promise.all([
         supIds.length > 0 ? supabase.from("suppliers").select("id, name").in("id", supIds) : Promise.resolve({ data: [] }),
         brIds.length > 0 ? supabase.from("branches").select("id, name").in("id", brIds) : Promise.resolve({ data: [] }),
+        purchaseIds.length > 0 ? supabase.from("purchase_returns").select("purchase_id, total").in("purchase_id", purchaseIds) : Promise.resolve({ data: [] }),
       ]);
+      if ("error" in returnRes && returnRes.error) throw returnRes.error;
+      const returnedTotals = new Map<string, number>();
+      for (const ret of returnRes.data ?? []) returnedTotals.set(ret.purchase_id, (returnedTotals.get(ret.purchase_id) ?? 0) + Number(ret.total));
+      const list = baseList.map((purchase) => ({ ...purchase, returned_total: returnedTotals.get(purchase.id) ?? 0 }));
       const supMap = new Map((supRes.data ?? []).map((s) => [(s as { id: string }).id, (s as { name: string }).name]));
       const brMap = new Map((brRes.data ?? []).map((b) => [(b as { id: string }).id, (b as { name: string }).name]));
       return { list, supMap, brMap };
@@ -64,7 +70,7 @@ function PurchasesPage() {
     <div className="space-y-6">
       <PageHeader
         title="فواتير الشراء"
-        subtitle="أدخل فاتورة شراء وسيتم تحديث المخزون تلقائياً"
+        subtitle="تسجل فواتير الشراء والمرتجعات مع تحديث المخزون وحفظ قيمة المرتجع"
         action={
           canCreate && <Button onClick={() => setCreating(true)}><Plus className="ml-2 h-4 w-4" />فاتورة جديدة</Button>
         }
@@ -87,7 +93,7 @@ function PurchasesPage() {
                     <th className="p-3 font-medium">المرجع</th>
                     <th className="p-3 font-medium">المورد</th>
                     <th className="p-3 font-medium">الفرع</th>
-                    <th className="p-3 font-medium">الإجمالي</th>
+                    <th className="p-3 font-medium">الإجمالي</th>\n                    <th className="p-3 font-medium">المرتجع</th>\n                    <th className="p-3 font-medium">الصافي</th>
                     <th className="p-3 font-medium">التاريخ</th>
                     {canReturn && <th className="p-3 font-medium">الإجراء</th>}
                   </tr>
@@ -98,7 +104,7 @@ function PurchasesPage() {
                       <td className="p-3 font-mono">{p.reference ?? p.id.slice(0, 6)}</td>
                       <td className="p-3">{p.supplier_id ? (purchases.data?.supMap.get(p.supplier_id) ?? "—") : "—"}</td>
                       <td className="p-3 text-muted-foreground">{purchases.data?.brMap.get(p.branch_id) ?? "—"}</td>
-                      <td className="p-3 num font-bold text-primary">{formatMoney(p.total)}</td>
+                      <td className="p-3 num">{formatMoney(p.total)}</td>\n                      <td className="p-3 num text-destructive">{p.returned_total > 0 ? `-${formatMoney(p.returned_total)}` : "—"}</td>\n                      <td className="p-3 num font-bold text-primary">{formatMoney(Number(p.total) - p.returned_total)}</td>
                       <td className="p-3 text-xs text-muted-foreground">{formatDateTime(p.created_at)}</td>
                       {canReturn && <td className="p-3"><Button size="sm" variant="outline" onClick={() => setReturningPurchaseId(p.id)}><RotateCcw className="ml-1 h-3 w-3" />إرجاع للمورد</Button></td>}
                     </tr>
