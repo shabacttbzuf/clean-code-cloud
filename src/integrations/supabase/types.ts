@@ -72,8 +72,7 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-
+      },
       attendance: {
         Row: {
           biometric_ref: string | null
