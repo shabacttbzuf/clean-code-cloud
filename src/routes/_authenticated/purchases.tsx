@@ -289,7 +289,7 @@ function NewPurchaseDialog({
   });
 
   // Auto-pick first branch when none preselected
-  useMemo(() => {
+  useEffect(() => {
     if (!branchId && branches.data && branches.data.length > 0) setBranchId(branches.data[0].id);
   }, [branches.data, branchId]);
 
