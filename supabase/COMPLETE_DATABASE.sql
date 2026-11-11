@@ -6968,4 +6968,43 @@ WITH CHECK (
 );
 
 
+
+-- Return the effective permission set for the signed-in member in one round trip.
+CREATE OR REPLACE FUNCTION public.get_my_permissions(_tenant_id uuid)
+RETURNS text[]
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'pg_catalog', 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_permissions text[];
+BEGIN
+  IF auth.uid() IS NULL OR _tenant_id IS NULL THEN
+    RAISE EXCEPTION 'Authentication and tenant are required' USING ERRCODE = '42501';
+  END IF;
+  IF NOT (
+    public.is_super_owner(auth.uid())
+    OR EXISTS (
+      SELECT 1 FROM public.user_roles
+      WHERE user_id = auth.uid() AND tenant_id = _tenant_id
+    )
+  ) THEN
+    RAISE EXCEPTION 'You are not a member of this tenant' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT COALESCE(array_agg(p.key ORDER BY p.key), ARRAY[]::text[])
+    INTO v_permissions
+  FROM public.permissions p
+  WHERE public.has_permission(auth.uid(), _tenant_id, p.key);
+
+  RETURN v_permissions;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.get_my_permissions(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.get_my_permissions(uuid) FROM anon;
+GRANT EXECUTE ON FUNCTION public.get_my_permissions(uuid) TO authenticated;
+
+
 COMMIT;
