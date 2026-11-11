@@ -36,6 +36,18 @@ test("critical transactional RPCs verify the acting user's exact permission", ()
   }
 });
 
+test("payroll and user-management server actions use granular permission checks", () => {
+  const hr = readFileSync(new URL("../src/lib/hr.functions.ts", import.meta.url), "utf8");
+  const users = readFileSync(new URL("../src/lib/users.functions.ts", import.meta.url), "utf8");
+  assert.match(hr, /"payroll\.run"/);
+  assert.match(hr, /"payroll\.approve"/);
+  assert.doesNotMatch(hr, /assertHRAccess\(/);
+  for (const key of ["users.create", "users.change_password", "users.suspend", "users.change_branch", "users.change_role"]) {
+    assert.ok(users.includes(`"${key}"`) || users.includes(`? "${key}"`), `missing user permission ${key}`);
+  }
+  assert.doesNotMatch(users, /assertTenantAdmin\(/);
+});
+
 test("enterprise server actions validate permission keys instead of broad role names", () => {
   const source = readFileSync(
     new URL("../src/lib/enterprise.functions.ts", import.meta.url),
