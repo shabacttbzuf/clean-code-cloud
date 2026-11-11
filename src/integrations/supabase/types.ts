@@ -2765,6 +2765,7 @@ export type Database = {
         Returns: boolean
       }
       get_super_owner_status: { Args: never; Returns: Json }
+      get_my_permissions: { Args: { _tenant_id: string }; Returns: string[] }
       is_super_owner: { Args: { _user_id: string }; Returns: boolean }
       reject_payroll_run: {
         Args: {
