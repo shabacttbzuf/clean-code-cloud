@@ -6969,6 +6969,99 @@ WITH CHECK (
 
 
 
+
+-- Identity and membership records remain self-readable while staff access is permission-gated.
+DROP POLICY IF EXISTS permission_gate_profiles_select ON public.profiles;
+CREATE POLICY permission_gate_profiles_select ON public.profiles
+AS RESTRICTIVE FOR SELECT TO authenticated
+USING (
+  id = (select auth.uid())
+  OR public.has_permission((select auth.uid()), tenant_id, 'users.view')
+);
+
+DROP POLICY IF EXISTS permission_gate_profiles_update ON public.profiles;
+CREATE POLICY permission_gate_profiles_update ON public.profiles
+AS RESTRICTIVE FOR UPDATE TO authenticated
+USING (
+  id = (select auth.uid())
+  OR public.has_permission((select auth.uid()), tenant_id, 'users.edit')
+)
+WITH CHECK (
+  id = (select auth.uid())
+  OR public.has_permission((select auth.uid()), tenant_id, 'users.edit')
+);
+
+DROP POLICY IF EXISTS permission_gate_user_roles_select ON public.user_roles;
+CREATE POLICY permission_gate_user_roles_select ON public.user_roles
+AS RESTRICTIVE FOR SELECT TO authenticated
+USING (
+  user_id = (select auth.uid())
+  OR public.has_permission((select auth.uid()), tenant_id, 'users.view')
+);
+
+DROP POLICY IF EXISTS permission_gate_user_roles_insert ON public.user_roles;
+CREATE POLICY permission_gate_user_roles_insert ON public.user_roles
+AS RESTRICTIVE FOR INSERT TO authenticated
+WITH CHECK (
+  public.has_permission((select auth.uid()), tenant_id, 'users.create')
+  OR public.has_permission((select auth.uid()), tenant_id, 'users.change_role')
+);
+
+DROP POLICY IF EXISTS permission_gate_user_roles_update ON public.user_roles;
+CREATE POLICY permission_gate_user_roles_update ON public.user_roles
+AS RESTRICTIVE FOR UPDATE TO authenticated
+USING (public.has_permission((select auth.uid()), tenant_id, 'users.change_role'))
+WITH CHECK (public.has_permission((select auth.uid()), tenant_id, 'users.change_role'));
+
+DROP POLICY IF EXISTS permission_gate_user_roles_delete ON public.user_roles;
+CREATE POLICY permission_gate_user_roles_delete ON public.user_roles
+AS RESTRICTIVE FOR DELETE TO authenticated
+USING (public.has_permission((select auth.uid()), tenant_id, 'users.delete'));
+
+DROP POLICY IF EXISTS permission_gate_tenants_select ON public.tenants;
+CREATE POLICY permission_gate_tenants_select ON public.tenants
+AS RESTRICTIVE FOR SELECT TO authenticated
+USING (
+  public.has_permission((select auth.uid()), id, 'dashboard.view')
+  OR public.is_super_owner((select auth.uid()))
+);
+
+DROP POLICY IF EXISTS permission_gate_tenants_update ON public.tenants;
+CREATE POLICY permission_gate_tenants_update ON public.tenants
+AS RESTRICTIVE FOR UPDATE TO authenticated
+USING (public.has_permission((select auth.uid()), id, 'settings.manage'))
+WITH CHECK (public.has_permission((select auth.uid()), id, 'settings.manage'));
+
+DROP POLICY IF EXISTS permission_gate_login_history_select ON public.login_history;
+CREATE POLICY permission_gate_login_history_select ON public.login_history
+AS RESTRICTIVE FOR SELECT TO authenticated
+USING (
+  user_id = (select auth.uid())
+  OR public.has_permission((select auth.uid()), tenant_id, 'login_history.view')
+);
+
+DROP POLICY IF EXISTS permission_gate_notification_reads_select ON public.notification_reads;
+CREATE POLICY permission_gate_notification_reads_select ON public.notification_reads
+AS RESTRICTIVE FOR SELECT TO authenticated
+USING (user_id = (select auth.uid()));
+
+DROP POLICY IF EXISTS permission_gate_notification_reads_insert ON public.notification_reads;
+CREATE POLICY permission_gate_notification_reads_insert ON public.notification_reads
+AS RESTRICTIVE FOR INSERT TO authenticated
+WITH CHECK (user_id = (select auth.uid()));
+
+DROP POLICY IF EXISTS permission_gate_notification_reads_update ON public.notification_reads;
+CREATE POLICY permission_gate_notification_reads_update ON public.notification_reads
+AS RESTRICTIVE FOR UPDATE TO authenticated
+USING (user_id = (select auth.uid()))
+WITH CHECK (user_id = (select auth.uid()));
+
+DROP POLICY IF EXISTS permission_gate_notification_reads_delete ON public.notification_reads;
+CREATE POLICY permission_gate_notification_reads_delete ON public.notification_reads
+AS RESTRICTIVE FOR DELETE TO authenticated
+USING (user_id = (select auth.uid()));
+
+
 -- Return the effective permission set for the signed-in member in one round trip.
 CREATE OR REPLACE FUNCTION public.get_my_permissions(_tenant_id uuid)
 RETURNS text[]
@@ -7015,7 +7108,8 @@ VALUES
   (NULL, 'builtin', 'cashier'::public.app_role, 'inventory.view'),
   (NULL, 'builtin', 'waiter'::public.app_role, 'categories.view'),
   (NULL, 'builtin', 'waiter'::public.app_role, 'inventory.view'),
-  (NULL, 'builtin', 'warehouse'::public.app_role, 'categories.view')
+  (NULL, 'builtin', 'warehouse'::public.app_role, 'categories.view'),
+  (NULL, 'builtin', 'manager'::public.app_role, 'permissions.manage')
 ON CONFLICT DO NOTHING;
 
 -- Waiters create table orders; they do not own cash sessions or finalize payments.
