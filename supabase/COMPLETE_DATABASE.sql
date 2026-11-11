@@ -6465,14 +6465,8 @@ BEGIN
   END IF;
 
   IF NOT (
-    private.is_tenant_admin(auth.uid(), _tenant_id)
-    OR EXISTS (
-      SELECT 1 FROM public.user_roles
-      WHERE user_id = auth.uid()
-        AND tenant_id = _tenant_id
-        AND role = 'warehouse'
-        AND branch_id = _branch_id
-    )
+    public.is_super_owner(auth.uid())
+    OR private.can_access_branch(auth.uid(), _tenant_id, _branch_id)
   ) THEN
     RAISE EXCEPTION 'You cannot adjust inventory in this branch'
       USING ERRCODE = '42501';
@@ -6572,10 +6566,8 @@ BEGIN
   IF NOT FOUND THEN RAISE EXCEPTION 'Purchase not found in this tenant' USING ERRCODE = 'P0002'; END IF;
   IF v_purchase.status <> 'received' THEN RAISE EXCEPTION 'Only received purchases can be returned' USING ERRCODE = '55000'; END IF;
   IF NOT (
-    private.is_tenant_admin(auth.uid(), _tenant_id)
-    OR EXISTS (SELECT 1 FROM public.user_roles
-      WHERE user_id = auth.uid() AND tenant_id = _tenant_id
-        AND role = 'warehouse' AND branch_id = v_purchase.branch_id)
+    public.is_super_owner(auth.uid())
+    OR private.can_access_branch(auth.uid(), _tenant_id, v_purchase.branch_id)
   ) THEN RAISE EXCEPTION 'You cannot return purchases from this branch' USING ERRCODE = '42501'; END IF;
   IF _items IS NULL OR jsonb_typeof(_items) <> 'array' OR jsonb_array_length(_items) = 0 OR jsonb_array_length(_items) > 300 THEN
     RAISE EXCEPTION 'Return must contain between 1 and 300 items' USING ERRCODE = '22023';
@@ -6651,10 +6643,10 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.branches WHERE id = _branch_id AND tenant_id = _tenant_id AND is_active = true) THEN
     RAISE EXCEPTION 'Branch does not belong to the requested tenant or is inactive' USING ERRCODE = '23503';
   END IF;
-  IF NOT (private.is_tenant_admin(auth.uid(), _tenant_id) OR EXISTS (
-    SELECT 1 FROM public.user_roles WHERE user_id = auth.uid() AND tenant_id = _tenant_id
-      AND role = 'warehouse' AND branch_id = _branch_id
-  )) THEN RAISE EXCEPTION 'You cannot receive purchases in this branch' USING ERRCODE = '42501'; END IF;
+  IF NOT (
+    public.is_super_owner(auth.uid())
+    OR private.can_access_branch(auth.uid(), _tenant_id, _branch_id)
+  ) THEN RAISE EXCEPTION 'You cannot receive purchases in this branch' USING ERRCODE = '42501'; END IF;
   IF _supplier_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.suppliers WHERE id = _supplier_id AND tenant_id = _tenant_id) THEN
     RAISE EXCEPTION 'Supplier does not belong to the requested tenant' USING ERRCODE = '23503';
   END IF;
@@ -6730,8 +6722,11 @@ BEGIN
   FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Sale not found in this tenant' USING ERRCODE = 'P0002'; END IF;
   IF v_sale.status <> 'completed' THEN RAISE EXCEPTION 'Only completed sales can be refunded' USING ERRCODE = '55000'; END IF;
-  IF NOT private.is_tenant_admin(auth.uid(), _tenant_id) THEN
-    RAISE EXCEPTION 'Only tenant owners or managers can approve sale refunds' USING ERRCODE = '42501';
+  IF NOT (
+    public.is_super_owner(auth.uid())
+    OR private.can_access_branch(auth.uid(), _tenant_id, v_sale.branch_id)
+  ) THEN
+    RAISE EXCEPTION 'You cannot refund sales in this branch' USING ERRCODE = '42501';
   END IF;
   IF _items IS NULL OR jsonb_typeof(_items) <> 'array'
      OR jsonb_array_length(_items) = 0 OR jsonb_array_length(_items) > 300 THEN
