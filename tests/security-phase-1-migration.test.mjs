@@ -492,3 +492,51 @@ test("complete database snapshot includes least-privilege migrations exactly onc
   assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000023_least_privilege_return_api_and_defaults.sql").length - 1, 1);
   assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000024_read_only_profitability_view.sql").length - 1, 1);
 });
+
+
+const tenantScopeMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000025_immutable_tenant_scope_and_branch_memberships.sql", import.meta.url),
+  "utf8",
+);
+const strictTenantMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000026_strict_tenant_immutability.sql", import.meta.url),
+  "utf8",
+);
+const unconstrainedTenantMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000027_validate_unconstrained_tenant_references.sql", import.meta.url),
+  "utf8",
+);
+const notificationReceiptMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000028_validate_notification_receipts.sql", import.meta.url),
+  "utf8",
+);
+
+test("tenant scope cannot be reassigned and optional branch memberships are tenant-validated", () => {
+  assert.ok(tenantScopeMigration.includes("prevent_tenant_scope_reassignment"));
+  assert.ok(tenantScopeMigration.includes("trg_tenant_fk_user_roles_branch_id"));
+  assert.ok(tenantScopeMigration.includes("trg_tenant_fk_profiles_branch_id"));
+  assert.ok(strictTenantMigration.includes("NEW.tenant_id IS DISTINCT FROM OLD.tenant_id"));
+});
+
+test("non-FK organization, actor, notification and inventory references are tenant-validated", () => {
+  assert.ok(unconstrainedTenantMigration.includes("enforce_tenant_user_membership"));
+  assert.ok(unconstrainedTenantMigration.includes("enforce_notification_audience_tenant"));
+  assert.ok(unconstrainedTenantMigration.includes("enforce_inventory_reference_tenant"));
+  assert.ok(unconstrainedTenantMigration.includes("user_roles"));
+  assert.ok(unconstrainedTenantMigration.includes("sale_refunds"));
+});
+
+test("notification receipts cannot be forged for users outside the notification tenant", () => {
+  assert.ok(notificationReceiptMigration.includes("enforce_notification_read_tenant"));
+  assert.ok(notificationReceiptMigration.includes("Notification reader must belong to the notification tenant"));
+});
+
+test("complete database snapshot includes tenant-scope migrations exactly once", () => {
+  const snapshot = readFileSync(
+    new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url),
+    "utf8",
+  );
+  for (const [name] of files) {
+    assert.equal(snapshot.split("SOURCE MIGRATION: " + name).length - 1, 1);
+  }
+});
