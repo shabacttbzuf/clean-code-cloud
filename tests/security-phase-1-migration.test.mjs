@@ -669,3 +669,10 @@ test("cash session preview matches the database cash-payment and refund calculat
   assert.match(cashSessionsSource, /\.eq\("refund_method", "cash"\)/);
   assert.match(cashSessionsSource, /opening_balance\) \+ salesCash - cashRefunds/);
 });
+test("POS catalog displays images and blocks products without branch stock", () => {
+  assert.match(posSource, /pos-inventory/);
+  assert.match(posSource, /refetchInterval: 30_000/);
+  assert.match(posSource, /product\.image_url/);
+  assert.match(posSource, /stockUnavailable/);
+  assert.match(posSource, /لا يوجد رصيد مخزون مسجل/);
+});
