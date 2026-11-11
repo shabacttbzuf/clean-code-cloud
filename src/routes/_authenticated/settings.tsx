@@ -43,6 +43,7 @@ function SettingsPage() {
   const [customTabs, setCustomTabs] = useState<Array<{ title: string; url: string }>>([]);
   const [newTabTitle, setNewTabTitle] = useState("");
   const [newTabUrl, setNewTabUrl] = useState("/dashboard");
+  const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
   const [campaignTitle, setCampaignTitle] = useState("");
   const [campaignDescription, setCampaignDescription] = useState("");
   const [campaignImage, setCampaignImage] = useState("");
@@ -79,18 +80,19 @@ function SettingsPage() {
       if (campaignDescription.length > 500) throw new Error("الوصف أطول من الحد المسموح");
       if (campaignTarget && !/^https?:\/\//i.test(campaignTarget)) throw new Error("رابط الوجهة يجب أن يبدأ بـ https:// أو http://");
       if (campaignStart && campaignEnd && new Date(campaignEnd) <= new Date(campaignStart)) throw new Error("تاريخ النهاية يجب أن يكون بعد البداية");
-      const { error } = await supabase.from("marketing_campaigns").insert({
-        tenant_id: tenantId!,
+      const payload = {
         title,
         description: campaignDescription.trim(),
         image_url: campaignImage || null,
         target_url: campaignTarget.trim() || null,
         placement: campaignPlacement,
-        status: "draft",
         starts_at: campaignStart ? new Date(campaignStart).toISOString() : null,
         ends_at: campaignEnd ? new Date(campaignEnd).toISOString() : null,
-      });
-      if (error) throw error;
+      };
+      const result = editingCampaignId
+        ? await supabase.from("marketing_campaigns").update(payload).eq("id", editingCampaignId).eq("tenant_id", tenantId!)
+        : await supabase.from("marketing_campaigns").insert({ ...payload, tenant_id: tenantId!, status: "draft" });
+      if (result.error) throw result.error;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["marketing-campaigns", tenantId] });
@@ -302,13 +304,28 @@ function SettingsPage() {
               <div className="space-y-2"><Label>بداية العرض (اختياري)</Label><Input type="datetime-local" value={campaignStart} onChange={(e) => setCampaignStart(e.target.value)} /></div>
               <div className="space-y-2"><Label>نهاية العرض (اختياري)</Label><Input type="datetime-local" value={campaignEnd} onChange={(e) => setCampaignEnd(e.target.value)} /></div>
             </div>
-            <Button type="button" onClick={() => campaignCreate.mutate()} disabled={campaignCreate.isPending || !campaignTitle.trim()}>{campaignCreate.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}حفظ كمسودة</Button>
+            <Button type="button" onClick={() => campaignCreate.mutate()} disabled={campaignCreate.isPending || !campaignTitle.trim()}>{campaignCreate.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}{editingCampaignId ? "حفظ التعديلات" : "حفظ كمسودة"}</Button>
             <div className="space-y-2 border-t pt-4">
               <h3 className="font-semibold">الحملات المحفوظة</h3>
               {campaignsQuery.isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : campaignsQuery.isError ? <div className="text-sm text-destructive">تعذر تحميل الحملات. <Button type="button" variant="link" onClick={() => campaignsQuery.refetch()}>إعادة المحاولة</Button></div> : campaignsQuery.data?.length ? campaignsQuery.data.map((campaign) => (
                 <div key={campaign.id} className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
                   {campaign.image_url && <img src={campaign.image_url} alt="" className="h-14 w-20 rounded object-cover" />}
                   <div className="min-w-0 flex-1"><div className="font-medium">{campaign.title}</div><div className="text-xs text-muted-foreground">{campaign.placement === "dashboard_banner" ? "شريط لوحة التحكم" : campaign.placement === "dashboard_card" ? "بطاقة لوحة التحكم" : "نقطة البيع"} · {campaign.status === "active" ? "نشط" : campaign.status === "paused" ? "متوقف" : campaign.status === "archived" ? "مؤرشف" : "مسودة"}</div></div>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => {
+                    setEditingCampaignId(campaign.id);
+                    setCampaignTitle(campaign.title);
+                    setCampaignDescription(campaign.description);
+                    setCampaignImage(campaign.image_url ?? "");
+                    setCampaignTarget(campaign.target_url ?? "");
+                    setCampaignPlacement(campaign.placement);
+                    const toLocalInput = (value: string | null) => {
+                      if (!value) return "";
+                      const date = new Date(value);
+                      return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+                    };
+                    setCampaignStart(toLocalInput(campaign.starts_at));
+                    setCampaignEnd(toLocalInput(campaign.ends_at));
+                  }}>تعديل</Button>
                   <Button type="button" size="sm" variant="outline" disabled={campaignUpdate.isPending} onClick={() => campaignUpdate.mutate({ id: campaign.id, status: campaign.status === "active" ? "paused" : "active" })}>{campaign.status === "active" ? "إيقاف" : "تفعيل"}</Button>
                   <Button type="button" size="icon" variant="ghost" aria-label={`حذف ${campaign.title}`} disabled={campaignDelete.isPending} onClick={() => { if (window.confirm("هل تريد حذف هذا العرض؟")) campaignDelete.mutate(campaign.id); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                 </div>
