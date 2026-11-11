@@ -362,7 +362,8 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/onboarding': typeof OnboardingRoute
 
-  '/bootstrap-owner': typeof BootstrapOwnerRoute  '/_authenticated/admin': typeof AuthenticatedAdminRoute
+  '/bootstrap-owner': typeof BootstrapOwnerRoute
+  '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/audit-logs': typeof AuthenticatedAuditLogsRoute
   '/_authenticated/branches': typeof AuthenticatedBranchesRoute
   '/_authenticated/cash-sessions': typeof AuthenticatedCashSessionsRoute
