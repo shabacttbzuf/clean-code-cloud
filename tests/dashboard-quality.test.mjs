@@ -42,3 +42,13 @@ test("inventory distinguishes query failures from a genuinely empty stock list",
   assert.match(inventory, /لم نعرض أرقاماً جزئية/);
   assert.match(inventory, /inventory\.refetch\(\)/);
 });
+
+const sales = readFileSync(new URL("../src/routes/_authenticated/sales.index.tsx", import.meta.url), "utf8");
+
+test("sales history is fully paginated and refund totals are fetched in bounded batches", () => {
+  assert.match(sales, /async function fetchAllRows<T>/);
+  assert.match(sales, /\.range\(from, from \+ pageSize - 1\)/);
+  assert.match(sales, /\.order\("created_at", \{ ascending: false \}\)/);
+  assert.match(sales, /i \+= 200/);
+  assert.match(sales, /لم نعرض نتائج جزئية/);
+});
