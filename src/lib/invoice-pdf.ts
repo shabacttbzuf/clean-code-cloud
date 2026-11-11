@@ -162,7 +162,8 @@ export function printInvoiceHTML(
     logo_url?: string | null;
   },
   paper: "58mm" | "80mm" | "A4" = "80mm",
-) {
+  targetWindow?: Window | null,
+): boolean {
   const pageCss =
     paper === "A4"
       ? "@page { size: A4; margin: 12mm; }"
@@ -254,11 +255,15 @@ export function printInvoiceHTML(
 <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 150); };</script>
 </body>
 </html>`;
-  const w = window.open("", "_blank", "width=420,height=720");
-  if (!w) return;
+  const w = targetWindow === undefined
+    ? window.open("", "_blank", "width=420,height=720")
+    : targetWindow;
+  if (!w || w.closed) return false;
+  w.focus();
   w.document.open();
   w.document.write(html);
   w.document.close();
+  return true;
 }
 
 function escapeHtml(s: string): string {
