@@ -153,6 +153,9 @@ export const createUser = createServerFn({ method: "POST" })
 
     await assertPermission(context.supabase, context.userId, data.tenant_id, "users.create");
     await assertCanAssignRole(context.supabase, context.userId, data.tenant_id, data.role);
+    if (["cashier", "warehouse", "waiter", "kitchen"].includes(data.role) && !data.branch_id) {
+      throw new Error("يجب إسناد الموظف إلى فرع محدد قبل إنشاء حسابه.");
+    }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     if (actorIsSuperOwner) {
