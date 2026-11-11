@@ -70,13 +70,24 @@ function CashSessionsPage() {
     queryKey: ["session-expected-cash", closingId?.id],
     queryFn: async (): Promise<number> => {
       if (!closingId) return 0;
-      const { data } = await supabase
-        .from("sales")
-        .select("total")
-        .eq("session_id", closingId.id)
-        .eq("payment_method", "cash");
-      const salesCash = (data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
-      return Number(closingId.opening_balance) + salesCash;
+      const [salesResult, refundsResult] = await Promise.all([
+        supabase
+          .from("sales")
+          .select("total")
+          .eq("session_id", closingId.id)
+          .eq("payment_method", "cash")
+          .in("status", ["completed", "refunded"]),
+        supabase
+          .from("sale_refunds")
+          .select("total")
+          .eq("cash_session_id", closingId.id)
+          .eq("refund_method", "cash"),
+      ]);
+      if (salesResult.error) throw salesResult.error;
+      if (refundsResult.error) throw refundsResult.error;
+      const salesCash = (salesResult.data ?? []).reduce((sum, row) => sum + Number(row.total), 0);
+      const cashRefunds = (refundsResult.data ?? []).reduce((sum, row) => sum + Number(row.total), 0);
+      return Number(closingId.opening_balance) + salesCash - cashRefunds;
     },
     enabled: !!closingId,
   });
