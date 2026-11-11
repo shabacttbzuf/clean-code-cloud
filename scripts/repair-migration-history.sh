@@ -8,7 +8,9 @@ if ! command -v supabase >/dev/null 2>&1; then
 fi
 
 if [[ ! -f "supabase/migrations/20261111000034_allow_super_owners_tenant_admin_rls.sql" ||
-      ! -f "supabase/migrations/20261111030810_prevent_negative_inventory_bootstrap.sql" ]]; then
+      ! -f "supabase/migrations/20261111030810_prevent_negative_inventory_bootstrap.sql" ||
+      ! -f "supabase/migrations/20261111033000_enforce_role_permissions.sql" ||
+      ! -f "supabase/migrations/20261111035000_get_my_permissions_invoker.sql" ]]; then
   echo "خطأ: ملفات الهجرة الحديثة غير موجودة. اسحب فرع feature/production-pos-responsive أولاً."
   exit 1
 fi
