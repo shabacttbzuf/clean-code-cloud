@@ -46,6 +46,27 @@ function Dashboard() {
     ? "شفيق الوتيري"
     : profileQuery.data?.full_name?.trim() || user?.user_metadata?.full_name?.trim() || profileQuery.data?.username?.trim() || "مستخدم";
 
+  const campaignsQuery = useQuery({
+    queryKey: ["dashboard-marketing-campaigns", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("marketing_campaigns")
+        .select("id,title,description,image_url,target_url,starts_at,ends_at,sort_order")
+        .eq("tenant_id", tenantId!)
+        .eq("status", "active")
+        .eq("placement", "dashboard_banner")
+        .order("sort_order")
+        .limit(6);
+      if (error) throw error;
+      const now = Date.now();
+      return (data ?? []).filter((campaign) =>
+        (!campaign.starts_at || new Date(campaign.starts_at).getTime() <= now) &&
+        (!campaign.ends_at || new Date(campaign.ends_at).getTime() > now)
+      );
+    },
+    enabled: !!tenantId,
+    staleTime: 60_000,
+  });
+
   const superStats = useQuery({
     queryKey: ["super-owner-stats"],
     queryFn: async () => {
@@ -189,6 +210,24 @@ function Dashboard() {
   return (
     <div className="space-y-6">
       <PageHeader title={`مرحبا ${displayName}`} subtitle={tenant?.name} />
+
+      {campaignsQuery.data && campaignsQuery.data.length > 0 && (
+        <div className="grid gap-3">
+          {campaignsQuery.data.map((campaign) => {
+            const content = (
+              <div className="relative flex min-h-28 overflow-hidden rounded-xl border bg-card shadow-sm">
+                {campaign.image_url && <img src={campaign.image_url} alt="" className="absolute inset-0 h-full w-full object-cover opacity-20" />}
+                <div className="relative z-[1] flex w-full flex-col justify-center gap-1 bg-gradient-to-l from-background/95 via-background/85 to-background/40 p-4">
+                  <div className="text-base font-bold">{campaign.title}</div>
+                  {campaign.description && <p className="max-w-2xl text-sm text-muted-foreground">{campaign.description}</p>}
+                  {campaign.target_url && <span className="mt-1 text-xs font-semibold text-primary">عرض التفاصيل ←</span>}
+                </div>
+              </div>
+            );
+            return campaign.target_url ? <a key={campaign.id} href={campaign.target_url} target="_blank" rel="noopener noreferrer" className="block">{content}</a> : <div key={campaign.id}>{content}</div>;
+          })}
+        </div>
+      )}
 
       {isSuperOwner && superStats.data && (
         <Card className="border-primary/40 bg-primary/5">
