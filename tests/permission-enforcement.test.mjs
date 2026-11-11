@@ -16,6 +16,19 @@ test("permission catalogue is enforced with restrictive RLS gates", () => {
   assert.match(migration, /role_permissions' THEN[\s\S]*tenant_id IS NULL OR public\.has_permission/);
 });
 
+test("permission overrides broaden only within tenant and branch scopes", () => {
+  assert.match(migration, /permission_scope_/);
+  assert.match(migration, /AS PERMISSIVE FOR UPDATE TO authenticated/);
+  assert.match(migration, /private\.can_access_branch\(\(select auth\.uid\(\)\), tenant_id, branch_id\)/);
+  assert.match(migration, /p\.user_id = \(select auth\.uid\(\)\)/);
+  assert.match(migration, /s\.cashier_id = \(select auth\.uid\(\)\)/);
+});
+
+test("employees can still read their own HR records without elevated staff permissions", () => {
+  assert.match(migration, /e\.user_id = \(select auth\.uid\(\)\)/);
+  assert.match(migration, /permission_gate_leave_requests_update_decision/);
+});
+
 test("transactional permissions remain branch-scoped without hard-coded role denial", () => {
   assert.match(migration, /private\.can_access_branch\(auth\.uid\(\), _tenant_id, _branch_id\)/);
   assert.match(migration, /private\.can_access_branch\(auth\.uid\(\), _tenant_id, v_purchase\.branch_id\)/);
