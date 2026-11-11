@@ -40,12 +40,10 @@ function applyDesign(design: DesignSettings) {
   root.style.setProperty("--accent", design.accent);
   root.style.setProperty("--sidebar", design.sidebar);
   root.style.setProperty("--card", design.card);
-  document.body.style.backgroundImage = design.backgroundImage
-    ? `linear-gradient(to bottom, color-mix(in srgb, var(--background) 86%, transparent), color-mix(in srgb, var(--background) 92%, transparent)), url("${design.backgroundImage.replace(/["\\\\]/g, "")}")`
-    : "none";
-  document.body.style.backgroundSize = "cover";
-  document.body.style.backgroundPosition = "center";
-  document.body.style.backgroundAttachment = "fixed";
+  root.style.setProperty(
+    "--workspace-background-image",
+    design.backgroundImage ? `url("${design.backgroundImage.replace(/["\\\\]/g, "")}")` : "none",
+  );
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
