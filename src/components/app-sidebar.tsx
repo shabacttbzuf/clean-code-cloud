@@ -210,10 +210,17 @@ export function AppSidebar() {
                   return (
                     <SidebarMenuItem key={item.url}>
                       <SidebarMenuButton asChild isActive={active} tooltip={item.title}>
-                        <Link to={item.url} className="flex items-center gap-2">
-                          <item.icon className="h-4 w-4 shrink-0" />
-                          <span>{item.title}</span>
-                        </Link>
+                        {item.url.includes("#") ? (
+                          <a href={item.url} className="flex items-center gap-2">
+                            <item.icon className="h-4 w-4 shrink-0" />
+                            <span>{item.title}</span>
+                          </a>
+                        ) : (
+                          <Link to={item.url} className="flex items-center gap-2">
+                            <item.icon className="h-4 w-4 shrink-0" />
+                            <span>{item.title}</span>
+                          </Link>
+                        )}
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );
