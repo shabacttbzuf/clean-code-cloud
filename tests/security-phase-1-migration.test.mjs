@@ -566,3 +566,25 @@ test("complete database snapshot includes role notification audience migration o
   );
   assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000029_validate_role_notification_audiences.sql").length - 1, 1);
 });
+
+
+const cashRefundGuardMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000030_prevent_cash_refund_overdraw.sql", import.meta.url),
+  "utf8",
+);
+
+test("cash refunds cannot exceed the open drawer balance and are reconciled to the session", () => {
+  assert.ok(cashRefundGuardMigration.includes("prevent_cash_refund_overdraw"));
+  assert.ok(cashRefundGuardMigration.includes("opening_balance"));
+  assert.ok(cashRefundGuardMigration.includes("available drawer balance"));
+  assert.ok(cashRefundGuardMigration.includes("FOR UPDATE"));
+  assert.ok(cashRefundGuardMigration.includes("BEFORE INSERT OR UPDATE"));
+});
+
+test("complete database snapshot includes cash refund guard migration once", () => {
+  const snapshot = readFileSync(
+    new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url),
+    "utf8",
+  );
+  assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000030_prevent_cash_refund_overdraw.sql").length - 1, 1);
+});
