@@ -68,6 +68,14 @@ BEGIN
       IF v_cmd='select' THEN
         IF r.table_name='role_permissions' THEN
           EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (tenant_id IS NULL OR public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, v_key);
+        ELSIF r.table_name='employees' THEN
+          EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (user_id = (select auth.uid()) OR public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, v_key);
+        ELSIF r.table_name IN ('attendance','bonuses','deductions','leave_requests','payroll_items') THEN
+          EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM public.employees e WHERE e.id = %I.employee_id AND e.tenant_id = %I.tenant_id AND e.user_id = (select auth.uid())) OR public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, r.table_name, r.table_name, v_key);
+        ELSIF r.table_name='login_history' THEN
+          EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (user_id = (select auth.uid()) OR public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, v_key);
+        ELSIF r.table_name='user_permission_overrides' THEN
+          EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (user_id = (select auth.uid()) OR public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, v_key);
         ELSE
           EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, v_key);
         END IF;
@@ -677,10 +685,24 @@ ON public.leave_requests AS RESTRICTIVE FOR UPDATE TO authenticated
 USING (
   public.has_permission((select auth.uid()), tenant_id, 'hr.leaves.approve')
   OR public.has_permission((select auth.uid()), tenant_id, 'hr.leaves.reject')
+  OR (
+    status = 'pending'
+    AND EXISTS (SELECT 1 FROM public.employees e
+      WHERE e.id = leave_requests.employee_id
+        AND e.tenant_id = leave_requests.tenant_id
+        AND e.user_id = (select auth.uid()))
+  )
 )
 WITH CHECK (
   public.has_permission((select auth.uid()), tenant_id, 'hr.leaves.approve')
   OR public.has_permission((select auth.uid()), tenant_id, 'hr.leaves.reject')
+  OR (
+    status = 'pending'
+    AND EXISTS (SELECT 1 FROM public.employees e
+      WHERE e.id = leave_requests.employee_id
+        AND e.tenant_id = leave_requests.tenant_id
+        AND e.user_id = (select auth.uid()))
+  )
 );
 
 
