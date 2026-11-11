@@ -62,8 +62,9 @@
 48. `supabase/migrations/20261111000027_validate_unconstrained_tenant_references.sql`
 49. `supabase/migrations/20261111000028_validate_notification_receipts.sql`
 50. `supabase/migrations/20261111000029_validate_role_notification_audiences.sql`
+51. `supabase/migrations/20261111000030_prevent_cash_refund_overdraw.sql`
 
-**الإجمالي: 50 ترحيلاً.**
+**الإجمالي: 51 ترحيلاً.**
 
 ## ترحيل Drizzle القديم
 
@@ -74,7 +75,7 @@
 
 ## ملف SQL الشامل
 
-`supabase/COMPLETE_DATABASE.sql` يجمع محتويات الترحيلات الخمسين بالترتيب، وهو Snapshot كامل لإعادة البناء من قاعدة فارغة.
+`supabase/COMPLETE_DATABASE.sql` يجمع محتويات الترحيلات الإحدى والخمسين بالترتيب، وهو Snapshot كامل لإعادة البناء من قاعدة فارغة.
 
 **المسار الموصى به:** `supabase db push` لأنه يحافظ على سجل الترحيلات. لا تشغّل Snapshot يدوياً ثم تشغّل `db push` على القاعدة نفسها؛ اختر طريقة واحدة فقط.
 
