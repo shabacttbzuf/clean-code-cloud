@@ -152,3 +152,28 @@ test("marketing campaigns have tenant isolation and owner-managed lifecycle cont
   assert.match(campaignMigration, /private\.is_tenant_member/);
   assert.match(campaignMigration, /private\.is_tenant_admin/);
 });
+
+const imageUploader = readFileSync(new URL("../src/components/image-uploader.tsx", import.meta.url), "utf8");
+const branches = readFileSync(new URL("../src/routes/_authenticated/branches.tsx", import.meta.url), "utf8");
+const categories = readFileSync(new URL("../src/routes/_authenticated/categories.tsx", import.meta.url), "utf8");
+const posPage = readFileSync(new URL("../src/routes/_authenticated/pos.tsx", import.meta.url), "utf8");
+
+test("shared image uploader validates formats and stores permanent public URLs", () => {
+  assert.match(imageUploader, /ALLOWED_TYPES/);
+  assert.match(imageUploader, /image\/webp/);
+  assert.match(imageUploader, /image\/avif/);
+  assert.match(imageUploader, /upsert: false/);
+  assert.match(imageUploader, /getPublicUrl\(path\)/);
+  assert.doesNotMatch(imageUploader, /createSignedUrl/);
+});
+
+test("branch and category image fields use the shared uploader", () => {
+  assert.match(branches, /<ImageUploader tenantId={tenantId} folder="branches"/);
+  assert.match(categories, /<ImageUploader tenantId={tenantId} folder="categories"/);
+});
+
+test("POS supports scheduled promotional placements without changing checkout logic", () => {
+  assert.match(posPage, /pos-marketing-campaigns/);
+  assert.match(posPage, /eq\("placement", "pos_promo"\)/);
+  assert.match(posPage, /posPromos\.data\.map/);
+});
