@@ -33,6 +33,19 @@ export const Route = createFileRoute("/_authenticated/pos")({
   component: POSPage,
 });
 
+// POS must see the complete product and stock catalogue, even for large branches.
+async function fetchAllRows<T>(query: any): Promise<T[]> {
+  const pageSize = 500;
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await query.range(from, from + pageSize - 1);
+    if (error) throw error;
+    const page = (data ?? []) as T[];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+}
+
 type Product = {
   id: string;
   name: string;
@@ -147,14 +160,14 @@ function POSPage() {
   const products = useQuery({
     queryKey: ["products-pos", tenantId],
     queryFn: async (): Promise<Product[]> => {
-      const { data, error } = await supabase
-        .from("products")
-        .select("id, name, sale_price, category_id, is_active, image_url")
-        .eq("tenant_id", tenantId!)
-        .eq("is_active", true)
-        .order("name");
-      if (error) throw error;
-      return (data ?? []) as Product[];
+      return fetchAllRows<Product>(
+        supabase.from("products")
+          .select("id, name, sale_price, category_id, is_active, image_url")
+          .eq("tenant_id", tenantId!)
+          .eq("is_active", true)
+          .order("name")
+          .order("id"),
+      );
     },
     enabled: !!tenantId,
   });
@@ -162,13 +175,13 @@ function POSPage() {
   const inventory = useQuery({
     queryKey: ["pos-inventory", tenantId, branchId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("inventory")
-        .select("product_id, quantity")
-        .eq("tenant_id", tenantId!)
-        .eq("branch_id", branchId!);
-      if (error) throw error;
-      return data ?? [];
+      return fetchAllRows<{ product_id: string; quantity: number }>(
+        supabase.from("inventory")
+          .select("product_id, quantity")
+          .eq("tenant_id", tenantId!)
+          .eq("branch_id", branchId!)
+          .order("product_id"),
+      );
     },
     enabled: !!tenantId && !!branchId,
     refetchInterval: 30_000,
