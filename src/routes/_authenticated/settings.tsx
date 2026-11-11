@@ -19,7 +19,9 @@ export const Route = createFileRoute("/_authenticated/settings")({
   component: SettingsPage,
 });
 
-type MarketingCampaign = { id: string; title: string; description: string; image_url: string | null; target_url: string | null; placement: string; status: string; starts_at: string | null; ends_at: string | null; sort_order: number };\n\nconst schema = z.object({
+type MarketingCampaign = { id: string; title: string; description: string; image_url: string | null; target_url: string | null; placement: string; status: string; starts_at: string | null; ends_at: string | null; sort_order: number };
+
+const schema = z.object({
   name: z.string().trim().min(2, "الاسم قصير").max(100),
   currency: z.string().trim().min(1).max(5),
   tax_rate: z.coerce.number().min(0).max(100),
@@ -40,7 +42,15 @@ function SettingsPage() {
   const [uploadingBackground, setUploadingBackground] = useState(false);
   const [customTabs, setCustomTabs] = useState<Array<{ title: string; url: string }>>([]);
   const [newTabTitle, setNewTabTitle] = useState("");
-  const [newTabUrl, setNewTabUrl] = useState("/dashboard");\n  const [campaignTitle, setCampaignTitle] = useState("");\n  const [campaignDescription, setCampaignDescription] = useState("");\n  const [campaignImage, setCampaignImage] = useState("");\n  const [campaignTarget, setCampaignTarget] = useState("");\n  const [campaignPlacement, setCampaignPlacement] = useState("dashboard_banner");\n  const [campaignStart, setCampaignStart] = useState("");\n  const [campaignEnd, setCampaignEnd] = useState("");\n  const [uploadingCampaignImage, setUploadingCampaignImage] = useState(false);
+  const [newTabUrl, setNewTabUrl] = useState("/dashboard");
+  const [campaignTitle, setCampaignTitle] = useState("");
+  const [campaignDescription, setCampaignDescription] = useState("");
+  const [campaignImage, setCampaignImage] = useState("");
+  const [campaignTarget, setCampaignTarget] = useState("");
+  const [campaignPlacement, setCampaignPlacement] = useState("dashboard_banner");
+  const [campaignStart, setCampaignStart] = useState("");
+  const [campaignEnd, setCampaignEnd] = useState("");
+  const [uploadingCampaignImage, setUploadingCampaignImage] = useState(false);
 
   useEffect(() => {
     if (tenant) {
@@ -67,7 +77,7 @@ function SettingsPage() {
       const title = campaignTitle.trim();
       if (title.length < 2 || title.length > 120) throw new Error("اسم العرض يجب أن يكون بين حرفين و120 حرفاً");
       if (campaignDescription.length > 500) throw new Error("الوصف أطول من الحد المسموح");
-      if (campaignTarget && !/^https?:\\/\\//i.test(campaignTarget)) throw new Error("رابط الوجهة يجب أن يبدأ بـ https:// أو http://");
+      if (campaignTarget && !/^https?:\/\//i.test(campaignTarget)) throw new Error("رابط الوجهة يجب أن يبدأ بـ https:// أو http://");
       if (campaignStart && campaignEnd && new Date(campaignEnd) <= new Date(campaignStart)) throw new Error("تاريخ النهاية يجب أن يكون بعد البداية");
       const { error } = await supabase.from("marketing_campaigns").insert({
         tenant_id: tenantId!,
