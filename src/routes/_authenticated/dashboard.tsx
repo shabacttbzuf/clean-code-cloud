@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { useSuperOwner } from "@/hooks/use-super-owner";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
 import { Loader2, TrendingUp, TrendingDown, Receipt, Wallet, Package, Crown, Building2, Users as UsersIcon } from "lucide-react";
 import { formatMoney } from "@/lib/format";
@@ -39,6 +40,9 @@ function Dashboard() {
         supabase.from("sale_refunds").select("total").gte("created_at", startOfMonth),
         supabase.from("expenses").select("amount").gte("paid_at", startOfMonth.slice(0, 10)),
       ]);
+      for (const result of [tenants, branches, users, sales, refunds, expenses]) {
+        if (result.error) throw result.error;
+      }
       const salesGross = (sales.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
       const refundsTotal = (refunds.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
       const salesTotal = salesGross - refundsTotal;
@@ -76,6 +80,9 @@ function Dashboard() {
         supabase.from("inventory").select("quantity, product_id").eq("tenant_id", tenantId),
         supabase.from("cash_sessions").select("id").eq("tenant_id", tenantId).eq("status", "open"),
       ]);
+      for (const result of [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions]) {
+        if (result.error) throw result.error;
+      }
 
       const saleIdsMonth = (salesMonth.data ?? []).map((sale) => sale.id);
       const refundIdsMonth = (refundsMonth.data ?? []).map((refund) => refund.id);
@@ -90,6 +97,7 @@ function Dashboard() {
       if (saleCostRows.error) throw saleCostRows.error;
       if (refundCostRows.error) throw refundCostRows.error;
       const catsRes = await supabase.from("expense_categories").select("id, name, color").eq("tenant_id", tenantId);
+      if (catsRes.error) throw catsRes.error;
       const catMap = new Map((catsRes.data ?? []).map((c) => [(c as { id: string }).id, c as { name: string; color: string | null }]));
 
       const totalToday = (salesToday.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0)
@@ -181,8 +189,23 @@ function Dashboard() {
         </Card>
       )}
 
-      {stats.isLoading || !stats.data ? (
-        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+      {stats.isLoading ? (
+        <div className="flex justify-center py-12" role="status" aria-live="polite"><Loader2 className="h-6 w-6 animate-spin text-primary" /><span className="sr-only">جارٍ تحميل مؤشرات لوحة التحكم</span></div>
+      ) : stats.error ? (
+        <Card role="alert" className="border-destructive/40">
+          <CardContent className="flex flex-col items-start gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold text-destructive">تعذر تحميل بيانات لوحة التحكم</p>
+              <p className="mt-1 text-sm text-muted-foreground">تحقق من الاتصال والصلاحيات، ثم أعد المحاولة. لم يتم عرض أرقام جزئية أو مضللة.</p>
+            </div>
+            <Button onClick={() => void stats.refetch()} disabled={stats.isFetching}>
+              {stats.isFetching && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
+              إعادة المحاولة
+            </Button>
+          </CardContent>
+        </Card>
+      ) : !stats.data ? (
+        <Card><CardContent className="p-6 text-center text-sm text-muted-foreground">لا توجد مؤسسة نشطة مرتبطة بهذا الحساب لعرض المؤشرات.</CardContent></Card>
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
