@@ -30,7 +30,7 @@ type InvRow = {
 };
 
 function InventoryPage() {
-  const { tenantId, isAdmin, role, membership } = useActiveTenant();
+  const { tenantId, isAdmin, isSuperOwner, role, membership } = useActiveTenant();
   const qc = useQueryClient();
   const [branchId, setBranchId] = useState<string>(membership?.branch_id ?? "all");
   const [search, setSearch] = useState("");
@@ -104,7 +104,7 @@ function InventoryPage() {
 
   const branchMap = useMemo(() => new Map((branches.data ?? []).map((b) => [b.id, b.name])), [branches.data]);
 
-  const canAdjust = isAdmin || role === "warehouse";
+  const canAdjust = isAdmin || isSuperOwner || role === "warehouse";
 
   const adjustMut = useMutation({
     mutationFn: async () => {
