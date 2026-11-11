@@ -172,6 +172,27 @@ function POSPage() {
     enabled: !!tenantId,
   });
 
+  const posPromos = useQuery({
+    queryKey: ["pos-marketing-campaigns", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("marketing_campaigns")
+        .select("id,title,description,image_url,target_url,starts_at,ends_at")
+        .eq("tenant_id", tenantId!)
+        .eq("status", "active")
+        .eq("placement", "pos_promo")
+        .order("sort_order")
+        .limit(3);
+      if (error) throw error;
+      const now = Date.now();
+      return (data ?? []).filter((campaign) =>
+        (!campaign.starts_at || new Date(campaign.starts_at).getTime() <= now) &&
+        (!campaign.ends_at || new Date(campaign.ends_at).getTime() > now)
+      );
+    },
+    enabled: !!tenantId,
+    staleTime: 60_000,
+  });
+
   const inventory = useQuery({
     queryKey: ["pos-inventory", tenantId, branchId],
     queryFn: async () => {
@@ -499,6 +520,20 @@ function POSPage() {
           </div>
         }
       />
+
+      {posPromos.data && posPromos.data.length > 0 && (
+        <div className="flex shrink-0 gap-2 overflow-x-auto">
+          {posPromos.data.map((promo) => {
+            const card = (
+              <div className="relative flex h-14 min-w-[220px] flex-1 items-center overflow-hidden rounded-lg border bg-card px-3">
+                {promo.image_url && <img src={promo.image_url} alt="" className="absolute inset-0 h-full w-full object-cover opacity-25" />}
+                <div className="relative z-[1] min-w-0"><div className="truncate text-xs font-bold">{promo.title}</div>{promo.description && <div className="truncate text-[10px] text-muted-foreground">{promo.description}</div>}</div>
+              </div>
+            );
+            return promo.target_url ? <a key={promo.id} href={promo.target_url} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1">{card}</a> : <div key={promo.id} className="min-w-0 flex-1">{card}</div>;
+          })}
+        </div>
+      )}
 
       {/* Responsive POS: category chips, dense product grid and a reviewable invoice. */}
       <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-2 lg:grid-cols-[minmax(0,1fr)_360px] lg:grid-rows-1">
