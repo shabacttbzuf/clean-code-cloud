@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -79,6 +80,13 @@ function POSPage() {
   const [openingBalance, setOpeningBalance] = useState("0");
   const [drafts, setDrafts] = useState<Draft[]>(() => (typeof window !== "undefined" ? loadDrafts() : []));
   const [paperSize, setPaperSize] = useState<"58mm" | "80mm" | "A4">("80mm");
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewMethod, setReviewMethod] = useState<PaymentUI>("cash");
+  const beginCheckout = (method: PaymentUI) => {
+    if (cart.length === 0) return toast.info("الفاتورة فارغة");
+    setReviewMethod(method);
+    setReviewOpen(true);
+  };
 
   const branches = useQuery({
     queryKey: ["branches-active", tenantId],
@@ -274,6 +282,7 @@ function POSPage() {
       return { sale, method, items: invoiceItems };
     },
     onSuccess: ({ sale, method, items }) => {
+      setReviewOpen(false);
       toast.success(`تم إصدار فاتورة #${sale.invoice_no}`);
       const inv = buildInvoice(sale, items, method);
       try { printInvoiceHTML(inv, paperSize); } catch (e) { console.error(e); }
@@ -390,192 +399,172 @@ function POSPage() {
         }
       />
 
-      {/* Three-column layout — fits in one screen */}
-      <div className="grid min-h-0 flex-1 gap-2 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px]">
-        {/* Left area: categories + products */}
-        <div className="grid min-h-0 gap-2 md:grid-cols-[140px_minmax(0,1fr)] lg:grid-cols-[160px_minmax(0,1fr)]">
-          {/* Categories */}
-          <Card className="min-h-0 overflow-hidden">
-            <CardContent className="flex h-full flex-col p-2">
-              <div className="mb-1.5 flex items-center justify-between border-b pb-1">
+      {/* Responsive POS: category chips, dense product grid and a reviewable invoice. */}
+      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-2 lg:grid-cols-[minmax(0,1fr)_360px] lg:grid-rows-1">
+        <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2">
+          <Card className="overflow-hidden">
+            <CardContent className="p-2">
+              <div className="mb-1 flex items-center justify-between border-b pb-1">
                 <h2 className="text-xs font-bold">الأقسام</h2>
-                <span className="text-[10px] text-muted-foreground">{(categories.data?.length ?? 0) + 1}</span>
+                <span className="text-[10px] text-muted-foreground">{(categories.data?.length ?? 0) + 1} قسم</span>
               </div>
-              <div className="grid min-h-0 flex-1 grid-cols-1 gap-1.5 overflow-y-auto pr-0.5">
+              <div className="flex flex-wrap gap-1.5">
                 <CategoryTile label="الكل" active={catFilter === "all"} onClick={() => setCatFilter("all")} />
-                {(categories.data ?? []).map((c) => (
-                  <CategoryTile key={c.id} label={c.name} active={catFilter === c.id} onClick={() => setCatFilter(c.id)} />
+                {(categories.data ?? []).map((category) => (
+                  <CategoryTile key={category.id} label={category.name} active={catFilter === category.id} onClick={() => setCatFilter(category.id)} />
                 ))}
               </div>
             </CardContent>
           </Card>
 
-          {/* Products */}
           <Card className="min-h-0 overflow-hidden">
             <CardContent className="flex h-full flex-col p-2">
               <div className="mb-1.5 flex items-center gap-2 border-b pb-1">
                 <h2 className="text-xs font-bold">المنتجات</h2>
                 <div className="relative mr-auto w-56 max-w-full">
                   <Search className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="بحث..."
-                    className="h-7 pr-7 text-xs"
-                    autoFocus
-                  />
+                  <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ابحث عن منتج..." className="h-8 pr-7 text-xs" />
                 </div>
-                <span className="text-[10px] text-muted-foreground">{filteredProducts.length}</span>
+                <span className="text-[10px] text-muted-foreground">{filteredProducts.length} منتج</span>
               </div>
-              <div className="grid min-h-0 flex-1 grid-cols-3 gap-1.5 overflow-y-auto pr-0.5 sm:grid-cols-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7">
-                {filteredProducts.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => addToCart(p)}
-                    className="flex min-h-[62px] flex-col items-center justify-center rounded-md border bg-card p-1.5 text-center text-xs font-semibold leading-tight transition hover:border-primary hover:bg-primary/5 active:scale-95"
-                  >
-                    <span className="line-clamp-2">{p.name}</span>
-                    <span className="mt-1 text-[10px] font-normal text-muted-foreground num">{formatMoney(Number(p.sale_price))}</span>
+              <div className="grid min-h-0 flex-1 content-start grid-cols-4 gap-1.5 overflow-y-auto p-0.5 sm:grid-cols-5 md:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8">
+                {filteredProducts.map((product) => (
+                  <button key={product.id} type="button" onClick={() => addToCart(product)}
+                    className="flex min-h-[54px] flex-col items-center justify-center rounded-lg border bg-card p-1.5 text-center text-[11px] font-semibold leading-tight shadow-sm transition hover:border-primary hover:bg-primary/5 active:scale-95 sm:min-h-[62px] sm:text-xs">
+                    <span className="line-clamp-2">{product.name}</span>
+                    <span className="mt-1 text-[10px] font-bold text-primary num">{formatMoney(Number(product.sale_price))}</span>
                   </button>
                 ))}
                 {filteredProducts.length === 0 && (
-                  <div className="col-span-full grid place-items-center rounded-md border bg-muted/30 p-6 text-center text-xs text-muted-foreground">
-                    لا توجد منتجات
-                  </div>
+                  <div className="col-span-full grid place-items-center rounded-md border bg-muted/30 p-6 text-center text-xs text-muted-foreground">لا توجد منتجات مطابقة</div>
                 )}
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Right column: invoice */}
-        <Card className="min-h-0 overflow-hidden">
+        <Card className="hidden min-h-0 overflow-hidden lg:block">
           <CardContent className="flex h-full flex-col p-2">
             <div className="mb-1.5 flex flex-wrap items-center gap-2 border-b pb-1">
-              <h2 className="text-xs font-bold">الفاتورة</h2>
-            <span className="text-xs text-muted-foreground">
-              {cart.length} صنف • كمية {totalQty}
-            </span>
-            {drafts.length > 0 && (
-              <div className="mr-auto flex flex-wrap items-center gap-1">
-                <span className="text-[10px] text-muted-foreground">مسودات:</span>
-                {drafts.slice(0, 3).map((d, idx) => (
-                  <Button key={d.id} size="sm" variant="outline" className="h-6 px-1.5 text-[10px]" onClick={() => restoreDraft(d)}>
-                    #{idx + 1} ({d.cart.length})
-                  </Button>
-                ))}
-              </div>
-            )}
+              <h2 className="text-xs font-bold">الفاتورة الحالية</h2>
+              <span className="text-xs text-muted-foreground">{cart.length} صنف • {totalQty} قطعة</span>
+              {drafts.length > 0 && (
+                <div className="mr-auto flex flex-wrap items-center gap-1">
+                  <span className="text-[10px] text-muted-foreground">مسودات:</span>
+                  {drafts.slice(0, 3).map((draft, index) => (
+                    <Button key={draft.id} size="sm" variant="outline" className="h-6 px-1.5 text-[10px]" onClick={() => restoreDraft(draft)}>
+                      #{index + 1} ({draft.cart.length})
+                    </Button>
+                  ))}
+                </div>
+              )}
             </div>
-
-            {/* Items list */}
             <div className="min-h-0 flex-1 overflow-y-auto rounded-md border">
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-muted/70 text-[10px]">
-                  <tr>
-                    <th className="p-1.5 text-right">المنتج</th>
-                    <th className="p-1.5 text-center">الكمية</th>
-                    <th className="p-1.5 text-center">الإجمالي</th>
-                    <th className="p-1.5 text-center"></th>
-                  </tr>
+                  <tr><th className="p-1.5 text-right">المنتج</th><th className="p-1.5 text-center">الكمية</th><th className="p-1.5 text-center">الإجمالي</th><th className="p-1.5 text-center"></th></tr>
                 </thead>
                 <tbody>
                   {cart.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="p-6 text-center text-[11px] text-muted-foreground">
-                        اضغط على أي منتج لإضافته
-                      </td>
+                    <tr><td colSpan={4} className="p-6 text-center text-[11px] text-muted-foreground">أضف المنتجات لتكوين الفاتورة</td></tr>
+                  ) : cart.map((item) => (
+                    <tr key={item.product_id} className="border-t">
+                      <td className="p-1.5 text-right"><div className="font-medium leading-tight">{item.name}</div><div className="text-[10px] text-muted-foreground num">{formatMoney(item.unit_price)}</div></td>
+                      <td className="p-1.5 text-center"><div className="inline-flex items-center gap-0.5">
+                        <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => dec(item.product_id)}><Minus className="h-3 w-3" /></Button>
+                        <span className="min-w-6 text-center font-semibold num">{item.quantity}</span>
+                        <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => inc(item.product_id)}><Plus className="h-3 w-3" /></Button>
+                      </div></td>
+                      <td className="p-1.5 text-center font-bold num">{formatMoney(item.unit_price * item.quantity)}</td>
+                      <td className="p-1.5 text-center"><Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" aria-label="حذف الصنف" onClick={() => remove(item.product_id)}><Trash2 className="h-3.5 w-3.5" /></Button></td>
                     </tr>
-                  ) : (
-                    cart.map((i) => (
-                      <tr key={i.product_id} className="border-t">
-                        <td className="p-1.5 text-right">
-                          <div className="font-medium leading-tight">{i.name}</div>
-                          <div className="text-[10px] text-muted-foreground num">{formatMoney(i.unit_price)}</div>
-                        </td>
-                        <td className="p-1.5 text-center">
-                          <div className="inline-flex items-center gap-0.5">
-                            <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => dec(i.product_id)}>
-                              <Minus className="h-3 w-3" />
-                            </Button>
-                            <span className="min-w-6 text-center text-xs font-semibold num">{i.quantity}</span>
-                            <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => inc(i.product_id)}>
-                              <Plus className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </td>
-                        <td className="p-1.5 text-center font-bold num">{formatMoney(i.unit_price * i.quantity)}</td>
-                        <td className="p-1.5 text-center">
-                          <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => remove(i.product_id)}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
-
-            {/* Totals */}
             <div className="mt-1.5 rounded-md border bg-muted/30 p-2 text-xs">
-              <div className="mb-1.5 flex items-center gap-2">
-                <Label className="shrink-0 text-[10px] text-muted-foreground">خصم</Label>
-                <Input type="number" min="0" step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} className="h-7 text-xs" />
-              </div>
-              <div className="flex justify-between text-muted-foreground">
-                <span>الفرعي</span>
-                <span className="num">{formatMoney(subtotal)}</span>
-              </div>
-              {disc > 0 && (
-                <div className="flex justify-between text-destructive">
-                  <span>الخصم</span>
-                  <span className="num">-{formatMoney(disc)}</span>
-                </div>
-              )}
-              {taxRate > 0 && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>ضريبة ({taxRate}%)</span>
-                  <span className="num">{formatMoney(taxAmount)}</span>
-                </div>
-              )}
-              <div className="mt-1 flex items-baseline justify-between border-t pt-1 text-lg font-black">
-                <span>الإجمالي</span>
-                <span className="num text-primary">
-                  {formatMoney(total)} <span className="text-[10px] font-normal text-muted-foreground">{currency}</span>
-                </span>
-              </div>
+              <div className="mb-1.5 flex items-center gap-2"><Label className="shrink-0 text-[10px] text-muted-foreground">الخصم</Label><Input type="number" min="0" max={subtotal} step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} className="h-7 text-xs" /></div>
+              <div className="flex justify-between text-muted-foreground"><span>المجموع الفرعي</span><span className="num">{formatMoney(subtotal)}</span></div>
+              {disc > 0 && <div className="flex justify-between text-destructive"><span>الخصم</span><span className="num">-{formatMoney(disc)}</span></div>}
+              {taxRate > 0 && <div className="flex justify-between text-muted-foreground"><span>الضريبة ({taxRate}%)</span><span className="num">{formatMoney(taxAmount)}</span></div>}
+              <div className="mt-1 flex items-baseline justify-between border-t pt-1 text-lg font-black"><span>الإجمالي</span><span className="num text-primary">{formatMoney(total)} <span className="text-[10px] font-normal text-muted-foreground">{currency}</span></span></div>
             </div>
-
-            {/* Payment buttons */}
             <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-              <PayBtn icon={Banknote} label="نقدي" onClick={() => checkoutMut.mutate("cash")} disabled={checkoutMut.isPending || cart.length === 0} />
-              <PayBtn icon={Wallet} label="محفظة" onClick={() => checkoutMut.mutate("wallet")} disabled={checkoutMut.isPending || cart.length === 0} />
-              <PayBtn icon={CreditCard} label="بطاقة" onClick={() => checkoutMut.mutate("card")} disabled={checkoutMut.isPending || cart.length === 0} />
+              <PayBtn icon={Banknote} label="نقدي" onClick={() => beginCheckout("cash")} disabled={checkoutMut.isPending || cart.length === 0} />
+              <PayBtn icon={Wallet} label="محفظة" onClick={() => beginCheckout("wallet")} disabled={checkoutMut.isPending || cart.length === 0} />
+              <PayBtn icon={CreditCard} label="بطاقة" onClick={() => beginCheckout("card")} disabled={checkoutMut.isPending || cart.length === 0} />
             </div>
-
-            {/* Action row */}
             <div className="mt-1.5 grid grid-cols-4 gap-1">
-              <Button variant="outline" size="sm" className="h-8 px-1 text-[10px]" onClick={() => holdOrDraft("تم التعليق")}> <Pause className="ml-0.5 h-3 w-3" />تعليق</Button>
-              <Button variant="outline" size="sm" className="h-8 px-1 text-[10px]" onClick={() => holdOrDraft("تم الحفظ")}> <Save className="ml-0.5 h-3 w-3" />مسودة</Button>
-              <Button variant="outline" size="sm" className="h-8 px-1 text-[10px]" onClick={printPreview}> <Printer className="ml-0.5 h-3 w-3" />طباعة</Button>
-              <Button variant="outline" size="sm" className="h-8 px-1 text-[10px] text-destructive" onClick={() => { setCart([]); setDiscount("0"); }} disabled={cart.length === 0}>
-                <X className="ml-0.5 h-3 w-3" />إلغاء
-              </Button>
+              <Button variant="outline" size="sm" className="h-8 px-1 text-[10px]" onClick={() => holdOrDraft("تم تعليق الفاتورة")}><Pause className="ml-0.5 h-3 w-3" />تعليق</Button>
+              <Button variant="outline" size="sm" className="h-8 px-1 text-[10px]" onClick={() => holdOrDraft("تم حفظ المسودة")}><Save className="ml-0.5 h-3 w-3" />مسودة</Button>
+              <Button variant="outline" size="sm" className="h-8 px-1 text-[10px]" onClick={printPreview}><Printer className="ml-0.5 h-3 w-3" />معاينة</Button>
+              <Button variant="outline" size="sm" className="h-8 px-1 text-[10px] text-destructive" onClick={() => { setCart([]); setDiscount("0"); }} disabled={cart.length === 0}><X className="ml-0.5 h-3 w-3" />إلغاء</Button>
             </div>
-            <Button
-              size="sm"
-              className="mt-1.5 h-10 bg-success text-sm font-bold text-success-foreground hover:bg-success/90"
-              onClick={() => checkoutMut.mutate("cash")}
-              disabled={checkoutMut.isPending || cart.length === 0}
-            >
-              {checkoutMut.isPending ? <Loader2 className="ml-1 h-4 w-4 animate-spin" /> : <CheckCircle2 className="ml-1 h-4 w-4" />}
-              إتمام البيع
+            <Button size="sm" className="mt-1.5 h-10 bg-success text-sm font-bold text-success-foreground hover:bg-success/90" onClick={() => beginCheckout("cash")} disabled={checkoutMut.isPending || cart.length === 0}>
+              <CheckCircle2 className="ml-1 h-4 w-4" />مراجعة وإتمام البيع
             </Button>
           </CardContent>
         </Card>
+
+        <Card className="lg:hidden">
+          <CardContent className="flex items-center gap-2 p-2">
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] text-muted-foreground">الفاتورة • {cart.length} أصناف / {totalQty} قطع</div>
+              <div className="text-lg font-black text-primary num">{formatMoney(total)} <span className="text-xs font-normal text-muted-foreground">{currency}</span></div>
+            </div>
+            <Button size="sm" className="h-10 shrink-0 font-bold" onClick={() => beginCheckout("cash")} disabled={checkoutMut.isPending || cart.length === 0}>مراجعة الفاتورة</Button>
+            <Button size="icon" variant="outline" className="h-10 w-10 shrink-0" aria-label="حفظ مسودة" onClick={() => holdOrDraft("تم حفظ المسودة")} disabled={cart.length === 0}><Save className="h-4 w-4" /></Button>
+          </CardContent>
+        </Card>
       </div>
+
+      <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
+        <DialogContent className="max-h-[92dvh] max-w-2xl overflow-y-auto" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>مراجعة الفاتورة قبل الإصدار</DialogTitle>
+            <DialogDescription>راجع الأصناف والكميات والأسعار، ويمكنك الزيادة أو التخفيض أو حذف أي صنف قبل اعتماد البيع.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="overflow-x-auto rounded-lg border">
+              <table className="w-full min-w-[320px] text-xs">
+                <thead className="bg-muted/60"><tr><th className="p-2 text-right">الصنف</th><th className="p-2 text-center">الكمية</th><th className="p-2 text-center">السعر</th><th className="p-2 text-center">الإجمالي</th><th className="p-2"></th></tr></thead>
+                <tbody>
+                  {cart.map((item) => (
+                    <tr key={item.product_id} className="border-t">
+                      <td className="p-2 font-medium">{item.name}</td>
+                      <td className="p-2"><div className="flex items-center justify-center gap-1">
+                        <Button size="icon" variant="outline" className="h-7 w-7" aria-label="تقليل الكمية" onClick={() => dec(item.product_id)}><Minus className="h-3 w-3" /></Button>
+                        <span className="min-w-6 text-center font-bold num">{item.quantity}</span>
+                        <Button size="icon" variant="outline" className="h-7 w-7" aria-label="زيادة الكمية" onClick={() => inc(item.product_id)}><Plus className="h-3 w-3" /></Button>
+                      </div></td>
+                      <td className="p-2 text-center num">{formatMoney(item.unit_price)}</td>
+                      <td className="p-2 text-center font-bold num">{formatMoney(item.unit_price * item.quantity)}</td>
+                      <td className="p-2 text-center"><Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" aria-label="حذف الصنف" onClick={() => remove(item.product_id)}><Trash2 className="h-4 w-4" /></Button></td>
+                    </tr>
+                  ))}
+                  {cart.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">أصبحت الفاتورة فارغة؛ أغلق المراجعة وأضف المنتجات من جديد.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+            <div className="grid gap-2 rounded-lg border bg-muted/30 p-3 sm:grid-cols-2">
+              <div className="space-y-1"><Label className="text-xs">الخصم</Label><Input type="number" min="0" max={subtotal} step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} /></div>
+              <div className="space-y-1"><Label className="text-xs">طريقة الدفع</Label><Select value={reviewMethod} onValueChange={(value) => setReviewMethod(value as PaymentUI)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">نقداً</SelectItem><SelectItem value="wallet">محفظة / تحويل</SelectItem><SelectItem value="card">بطاقة</SelectItem></SelectContent></Select></div>
+              <div className="flex justify-between text-sm text-muted-foreground"><span>المجموع الفرعي</span><span className="num">{formatMoney(subtotal)}</span></div>
+              <div className="flex justify-between text-sm text-muted-foreground"><span>الخصم</span><span className="num">-{formatMoney(disc)}</span></div>
+              <div className="flex justify-between text-sm text-muted-foreground"><span>الضريبة ({taxRate}%)</span><span className="num">{formatMoney(taxAmount)}</span></div>
+              <div className="flex justify-between border-t pt-2 text-base font-black"><span>الإجمالي</span><span className="text-primary num">{formatMoney(total)} {currency}</span></div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:justify-between">
+            <Button variant="outline" onClick={() => setReviewOpen(false)}>العودة للتعديل</Button>
+            <Button className="bg-success font-bold text-success-foreground hover:bg-success/90" disabled={checkoutMut.isPending || cart.length === 0 || disc > subtotal}
+              onClick={() => checkoutMut.mutate(reviewMethod)}>
+              {checkoutMut.isPending ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="ml-2 h-4 w-4" />}
+              تأكيد وإصدار الفاتورة
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
