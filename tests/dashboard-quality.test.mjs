@@ -96,3 +96,12 @@ test("action toasts are centered at the top in RTL layout", () => {
   assert.match(styles, /data-x-position="center"/);
   assert.match(styles, /data-y-position="top"/);
 });
+
+
+test("inventory alerts can be filtered by negative, missing, and below-minimum stock and prioritize critical rows", () => {
+  assert.match(inventory, /stockFilter === "critical"/);
+  assert.match(inventory, /stockFilter === "missing"/);
+  assert.match(inventory, /stockFilter === "below-min"/);
+  assert.match(inventory, /const visibleRows = useMemo/);
+  assert.match(inventory, /أقل من الحد الأدنى/);
+});
