@@ -28,7 +28,7 @@ BEGIN
     ('inventory', 'inventory.view', 'inventory.adjust', 'inventory.adjust', 'inventory.adjust'),
     ('inventory_transactions', 'inventory.movements.view', 'inventory.adjust', NULL, NULL),
     ('job_titles', 'job_titles.view', 'job_titles.manage', 'job_titles.manage', 'job_titles.manage'),
-    ('leave_requests', 'hr.leaves.view', 'hr.leaves.approve', 'hr.leaves.approve', 'hr.leaves.reject'),
+    ('leave_requests', 'hr.leaves.view', NULL, NULL, NULL),
     ('leave_types', 'hr.leaves.view', 'hr.manage', 'hr.manage', 'hr.manage'),
     ('login_history', 'login_history.view', NULL, NULL, NULL),
     ('notifications', 'notifications.view', 'notifications.manage', 'notifications.manage', 'notifications.manage'),
@@ -66,7 +66,11 @@ BEGIN
       v_policy := 'permission_gate_' || r.table_name || '_' || v_cmd;
       EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', v_policy, r.table_name);
       IF v_cmd='select' THEN
-        EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, v_key);
+        IF r.table_name='role_permissions' THEN
+          EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (tenant_id IS NULL OR public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, v_key);
+        ELSE
+          EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, v_key);
+        END IF;
       ELSIF v_cmd='insert' THEN
         EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR INSERT TO authenticated WITH CHECK (public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, v_key);
       ELSIF v_cmd='update' THEN
@@ -600,7 +604,7 @@ $function$;
 
 
 
--- Leave approvals may be approved or rejected only with the matching permission.
+-- Leave decisions accept either the approval or rejection permission.
 DROP POLICY IF EXISTS permission_gate_leave_requests_update_decision ON public.leave_requests;
 CREATE POLICY permission_gate_leave_requests_update_decision
 ON public.leave_requests AS RESTRICTIVE FOR UPDATE TO authenticated
