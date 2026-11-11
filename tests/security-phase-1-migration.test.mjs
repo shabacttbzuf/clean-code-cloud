@@ -676,3 +676,14 @@ test("POS catalog displays images and blocks products without branch stock", () 
   assert.match(posSource, /stockUnavailable/);
   assert.match(posSource, /لا يوجد رصيد مخزون مسجل/);
 });
+const inventoryGuardMigration = readFileSync(
+  new URL("../supabase/migrations/20261111030810_prevent_negative_inventory_bootstrap.sql", import.meta.url),
+  "utf8",
+);
+
+test("database rejects negative stock when a product has no inventory row", () => {
+  assert.match(inventoryGuardMigration, /inventory_quantity_nonnegative/);
+  assert.match(inventoryGuardMigration, /NOT VALID/);
+  assert.match(inventoryGuardMigration, /IF _delta < 0/);
+  assert.match(inventoryGuardMigration, /IF NOT FOUND OR v_current_quantity \+ _delta < 0/);
+});
