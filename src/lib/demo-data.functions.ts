@@ -20,7 +20,6 @@ export const seedDemoData = createServerFn({ method: "POST" })
       if (!roles.includes("owner")) throw new Error("غير مصرح: للمالك فقط.");
     }
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const tenantId = data.tenant_id;
     const stats = { branches: 0, categories: 0, products: 0, customers: 0, suppliers: 0, sales: 0 };
 
@@ -34,10 +33,10 @@ export const seedDemoData = createServerFn({ method: "POST" })
         image_url: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800" },
     ];
     for (const b of demoBranches) {
-      const { data: existing } = await supabaseAdmin
+      const { data: existing } = await context.supabase
         .from("branches").select("id").eq("tenant_id", tenantId).eq("name", b.name).maybeSingle();
       if (existing) continue;
-      const { error } = await supabaseAdmin.from("branches").insert({ tenant_id: tenantId, ...b, is_active: true });
+      const { error } = await context.supabase.from("branches").insert({ tenant_id: tenantId, ...b, is_active: true });
       if (!error) stats.branches++;
     }
 
@@ -54,10 +53,10 @@ export const seedDemoData = createServerFn({ method: "POST" })
     ];
     const catIds: Record<string, string> = {};
     for (const c of demoCategories) {
-      const { data: existing } = await supabaseAdmin
+      const { data: existing } = await context.supabase
         .from("categories").select("id").eq("tenant_id", tenantId).eq("name", c.name).maybeSingle();
       if (existing) { catIds[c.name] = existing.id; continue; }
-      const { data: inserted, error } = await supabaseAdmin
+      const { data: inserted, error } = await context.supabase
         .from("categories").insert({ tenant_id: tenantId, ...c, is_active: true }).select("id").single();
       if (!error && inserted) { catIds[c.name] = inserted.id; stats.categories++; }
     }
@@ -92,10 +91,10 @@ export const seedDemoData = createServerFn({ method: "POST" })
     for (const p of demoProducts) {
       const catId = catIds[p.category];
       if (!catId) continue;
-      const { data: existing } = await supabaseAdmin
+      const { data: existing } = await context.supabase
         .from("products").select("id").eq("tenant_id", tenantId).eq("name", p.name).maybeSingle();
       if (existing) { productIds.push(existing.id); continue; }
-      const { data: ins, error } = await supabaseAdmin.from("products").insert({
+      const { data: ins, error } = await context.supabase.from("products").insert({
         tenant_id: tenantId, category_id: catId,
         name: p.name, sale_price: p.price, cost_price: p.cost_price,
         image_url: p.image_url, is_active: true,
@@ -117,10 +116,10 @@ export const seedDemoData = createServerFn({ method: "POST" })
       { name: "زياد محمود", phone: "0100000010" },
     ];
     for (const c of demoCustomers) {
-      const { data: existing } = await supabaseAdmin
+      const { data: existing } = await context.supabase
         .from("customers").select("id").eq("tenant_id", tenantId).eq("phone", c.phone).maybeSingle();
       if (existing) continue;
-      const { error } = await supabaseAdmin.from("customers").insert({ tenant_id: tenantId, ...c });
+      const { error } = await context.supabase.from("customers").insert({ tenant_id: tenantId, ...c });
       if (!error) stats.customers++;
     }
 
@@ -133,10 +132,10 @@ export const seedDemoData = createServerFn({ method: "POST" })
       { name: "مورد الخضروات", phone: "0111111115" },
     ];
     for (const s of demoSuppliers) {
-      const { data: existing } = await supabaseAdmin
+      const { data: existing } = await context.supabase
         .from("suppliers").select("id").eq("tenant_id", tenantId).eq("name", s.name).maybeSingle();
       if (existing) continue;
-      const { error } = await supabaseAdmin.from("suppliers").insert({ tenant_id: tenantId, ...s });
+      const { error } = await context.supabase.from("suppliers").insert({ tenant_id: tenantId, ...s });
       if (!error) stats.suppliers++;
     }
 
