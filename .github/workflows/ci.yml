@@ -2,9 +2,13 @@ name: CI
 
 on:
   push:
-    branches: ["main", "fix/**"]
+    branches: ["main"]
   pull_request:
     branches: ["main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -53,7 +57,7 @@ jobs:
 
       - name: Start local Supabase
         id: start-supabase
-        run: supabase start --exclude studio,edge-runtime,logflare,vector
+        run: supabase start --exclude studio,edge-runtime,logflare,vector,inbucket
 
       - name: Apply all migrations to a clean local database
         run: supabase db reset --local
