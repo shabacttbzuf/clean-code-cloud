@@ -88,4 +88,6 @@
 58. `supabase/migrations/20261111035000_get_my_permissions_invoker.sql`
 59. `supabase/migrations/20261111040000_fix_cashier_pos_checkout_permissions.sql`
 
-**الإجمالي: 59 ترحيلاً.**
+60. `supabase/migrations/20261112010000_restaurant_image_storage_foundation.sql`
+
+**الإجمالي: 60 ترحيلاً.**
