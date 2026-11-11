@@ -63,14 +63,20 @@ test("role changes use the atomic database function", () => {
   assert.match(userAdminSource, /transfer_user_role_branch/);
 });
 
-test("first super-owner bootstrap requires an explicit deployment allowlist", () => {
+test("first super-owner bootstrap validates the caller in the protected Edge Function", () => {
   const source = readFileSync(
     new URL("../src/lib/super-owner.functions.ts", import.meta.url),
     "utf8",
   );
-  assert.match(source, /INITIAL_SUPER_OWNER_USER_ID/);
-  assert.match(source, /bootstrap_first_super_owner/);
-  assert.match(source, /initialOwnerId !== context\.userId/);
+  const edgeFunction = readFileSync(
+    new URL("../supabase/functions/bootstrap-first-super-owner/index.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /bootstrap-first-super-owner/);
+  assert.match(edgeFunction, /ALLOWED_INITIAL_OWNER_ID/);
+  assert.match(edgeFunction, /auth\.getUser\(token\)/);
+  assert.match(edgeFunction, /userData\.user\.id !== ALLOWED_INITIAL_OWNER_ID/);
+  assert.match(edgeFunction, /admin\.rpc\("bootstrap_first_super_owner"/);
 });
 
 const roleMigration = readFileSync(
@@ -236,8 +242,10 @@ test("new SQL functions use valid paired dollar-quote delimiters", () => {
     .filter((name) => name.startsWith("20261111") && name.endsWith(".sql"));
   for (const name of migrationNames) {
     const sql = readFileSync(new URL("../supabase/migrations/" + name, import.meta.url), "utf8");
-    assert.doesNotMatch(sql, /AS \$(?!\$)/, name);
-    assert.equal((sql.match(/\$\$/g) ?? []).length % 2, 0, name);
+    const delimiters = [...sql.matchAll(/\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$/g)].map((match) => match[0]);
+    for (const delimiter of new Set(delimiters)) {
+      assert.equal(delimiters.filter((value) => value === delimiter).length % 2, 0, `${name}: ${delimiter}`);
+    }
   }
 });
 
