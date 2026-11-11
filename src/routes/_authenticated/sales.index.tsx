@@ -117,7 +117,13 @@ function SalesListPage() {
 
       {sales.isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
-      ) : sales.isError ? (\n        <Card><CardContent className="flex flex-col items-center gap-3 py-12 text-center">\n          <Receipt className="h-8 w-8 text-destructive" />\n          <p className="text-sm text-destructive">تعذر تحميل سجل الفواتير. لم نعرض نتائج جزئية.</p>\n          <button type="button" onClick={() => sales.refetch()} className="text-sm text-primary underline">إعادة المحاولة</button>\n        </CardContent></Card>\n      ) : filtered.length === 0 ? (
+      ) : sales.isError ? (
+        <Card><CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+          <Receipt className="h-8 w-8 text-destructive" />
+          <p className="text-sm text-destructive">تعذر تحميل سجل الفواتير. لم نعرض نتائج جزئية.</p>
+          <button type="button" onClick={() => sales.refetch()} className="text-sm text-primary underline">إعادة المحاولة</button>
+        </CardContent></Card>
+      ) : filtered.length === 0 ? (
         <Card><CardContent className="flex flex-col items-center gap-3 py-16 text-center">
           <Receipt className="h-10 w-10 text-muted-foreground/50" />
           <p className="text-muted-foreground">لا توجد فواتير</p>
