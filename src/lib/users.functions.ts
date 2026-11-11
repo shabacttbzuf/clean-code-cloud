@@ -136,9 +136,37 @@ export const createUser = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
+    const { data: actorIsSuperOwner, error: actorRoleError } = await context.supabase.rpc(
+      "is_super_owner",
+      { _user_id: context.userId },
+    );
+    if (actorRoleError) throw new Error(actorRoleError.message);
+
+    // Platform Super Owner provisions ONLY the institution owner account.
+    // All operational staff accounts must be created by that institution's owner.
+    if (actorIsSuperOwner && data.role !== "owner") {
+      throw new Error("المالك الأعلى ينشئ حساب مالك المؤسسة فقط. يجب على مالك المؤسسة إنشاء حسابات الموظفين.");
+    }
+    if (!actorIsSuperOwner && data.role === "owner") {
+      throw new Error("إنشاء حساب مالك المؤسسة مخصص للمالك الأعلى للمنصة.");
+    }
+
     await assertPermission(context.supabase, context.userId, data.tenant_id, "users.create");
     await assertCanAssignRole(context.supabase, context.userId, data.tenant_id, data.role);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    if (actorIsSuperOwner) {
+      const { data: tenantRecord, error: tenantReadError } = await supabaseAdmin
+        .from("tenants")
+        .select("id, owner_id")
+        .eq("id", data.tenant_id)
+        .maybeSingle();
+      if (tenantReadError) throw new Error(tenantReadError.message);
+      if (!tenantRecord) throw new Error("المؤسسة المحددة غير موجودة.");
+      if (tenantRecord.owner_id && tenantRecord.owner_id !== context.userId) {
+        throw new Error("هذه المؤسسة مرتبطة بمالك آخر بالفعل.");
+      }
+    }
     await assertBranchBelongsToTenant(supabaseAdmin, data.branch_id, data.tenant_id);
 
     // Create auth user (auto-confirm so they can sign in immediately)
