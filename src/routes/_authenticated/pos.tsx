@@ -514,6 +514,7 @@ function POSPage() {
             </div>
             <Button size="sm" className="h-10 shrink-0 font-bold" onClick={() => beginCheckout("cash")} disabled={checkoutMut.isPending || cart.length === 0}>مراجعة الفاتورة</Button>
             <Button size="icon" variant="outline" className="h-10 w-10 shrink-0" aria-label="حفظ مسودة" onClick={() => holdOrDraft("تم حفظ المسودة")} disabled={cart.length === 0}><Save className="h-4 w-4" /></Button>
+            <Button size="icon" variant="outline" className="h-10 w-10 shrink-0" aria-label="معاينة وطباعة الفاتورة" onClick={printPreview} disabled={cart.length === 0}><Printer className="h-4 w-4" /></Button>
           </CardContent>
         </Card>
       </div>
