@@ -107,6 +107,7 @@ const groups: Group[] = [
       { title: "الموظفون", url: "/users", icon: Users, permission: "users.view" },
       { title: "صلاحيات الفريق", url: "/team-permissions", icon: KeyRound, permission: "permissions.view" },
       { title: "الإعدادات", url: "/settings", icon: Settings, permission: "settings.view" },
+      { title: "العروض والإعلانات", url: "/settings#marketing-campaigns", icon: Megaphone, permission: "settings.view" },
     ],
   },
 ];
@@ -165,6 +166,7 @@ export function AppSidebar() {
   const showAdmin = isSuperOwner || totalCount === 0;
   const systemItems: Item[] = [];
   if (isSuperOwner) systemItems.push({ title: "مركز تحكم المالك", url: "/owner-center", icon: Crown });
+  if (isSuperOwner) systemItems.push({ title: "استوديو تطوير النظام", url: "/settings#developer-studio", icon: Palette });
   if (showAdmin) systemItems.push({ title: "إدارة النظام", url: "/admin", icon: ShieldCheck });
   systemItems.push({ title: "سجل التدقيق", url: "/audit-logs", icon: ScrollText, permission: "audit.view" });
 
