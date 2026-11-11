@@ -12,25 +12,15 @@ const ROLE_ENUM = z.enum([
   "kitchen",
 ]);
 
-async function assertTenantAdmin(
-  supabase: any,
-  userId: string,
-  tenantId: string,
-) {
-  const { data: isSO } = await supabase.rpc("is_super_owner", { _user_id: userId });
-  if (isSO) return;
-  const { data, error } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("tenant_id", tenantId);
+async function assertPermission(supabase: any, userId: string, tenantId: string, permissionKey: string) {
+  const { data, error } = await supabase.rpc("has_permission", {
+    _user_id: userId,
+    _tenant_id: tenantId,
+    _permission_key: permissionKey,
+  });
   if (error) throw new Error(error.message);
-  const roles = (data ?? []).map((r: any) => r.role);
-  if (!roles.includes("owner") && !roles.includes("manager")) {
-    throw new Error("غير مصرح: هذا الإجراء للمالك أو المدير فقط.");
-  }
+  if (data !== true) throw new Error(`غير مصرح: الصلاحية المطلوبة ${permissionKey}.`);
 }
-
 async function assertTargetBelongsToTenant(
   supabaseAdmin: any,
   targetUserId: string,
@@ -146,7 +136,7 @@ export const createUser = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "users.create");
     await assertCanAssignRole(context.supabase, context.userId, data.tenant_id, data.role);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await assertBranchBelongsToTenant(supabaseAdmin, data.branch_id, data.tenant_id);
@@ -223,7 +213,7 @@ export const updateUserPassword = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     if (data.user_id !== context.userId) {
       if (!data.tenant_id) throw new Error("tenant_id مطلوب لتغيير كلمة مرور مستخدم آخر.");
-      await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
+      await assertPermission(context.supabase, context.userId, data.tenant_id, "users.change_password");
     }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     if (data.user_id !== context.userId) {
@@ -252,7 +242,7 @@ export const toggleUserStatus = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, data.is_active ? "users.approve" : "users.suspend");
     if (data.user_id === context.userId && !data.is_active) {
       throw new Error("لا يمكنك إيقاف حسابك بنفسك.");
     }
@@ -303,7 +293,7 @@ export const transferUserToBranch = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "users.change_branch");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: roleTarget, error: roleTargetError } = await supabaseAdmin
       .from("user_roles")
@@ -339,7 +329,7 @@ export const changeUserRole = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "users.change_role");
     await assertCanAssignRole(context.supabase, context.userId, data.tenant_id, data.role);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await assertTargetBelongsToTenant(supabaseAdmin, data.user_id, data.tenant_id);
