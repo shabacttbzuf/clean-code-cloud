@@ -14,6 +14,66 @@ export type Database = {
   }
   public: {
     Tables: {
+      marketing_campaigns: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string
+          ends_at: string | null
+          id: string
+          image_url: string | null
+          placement: string
+          sort_order: number
+          starts_at: string | null
+          status: string
+          target_url: string | null
+          tenant_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          ends_at?: string | null
+          id?: string
+          image_url?: string | null
+          placement?: string
+          sort_order?: number
+          starts_at?: string | null
+          status?: string
+          target_url?: string | null
+          tenant_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          ends_at?: string | null
+          id?: string
+          image_url?: string | null
+          placement?: string
+          sort_order?: number
+          starts_at?: string | null
+          status?: string
+          target_url?: string | null
+          tenant_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_campaigns_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+
       attendance: {
         Row: {
           biometric_ref: string | null
