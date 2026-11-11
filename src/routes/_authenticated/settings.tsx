@@ -280,9 +280,7 @@ function SettingsPage() {
       </Card>
 
       {canManageMarketing && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Megaphone className="h-5 w-5 text-primary" /> إدارة العروض والإعلانات</CardTitle>
+        <Card id="marketing-campaigns"><CardHeader><CardTitle className="flex items-center gap-2"><Megaphone className="h-5 w-5 text-primary" /> إدارة العروض والإعلانات</CardTitle>
             <CardDescription>أنشئ حملات ترويجية بصور وروابط، وحدد مكان ظهورها وفترة تشغيلها. تحفظ الحملات كمسودات حتى تقوم بتفعيلها.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -321,9 +319,7 @@ function SettingsPage() {
       )}
 
       {isSuperOwner && (
-        <Card className="border-primary/30">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><MonitorCog className="h-5 w-5 text-primary" /> استوديو تطوير وتخصيص النظام</CardTitle>
+        <Card id="developer-studio" className="border-primary/30"><CardHeader><CardTitle className="flex items-center gap-2"><MonitorCog className="h-5 w-5 text-primary" /> استوديو تطوير وتخصيص النظام</CardTitle>
             <CardDescription>تحكم آمن في ألوان الواجهة والخلفية والاختصارات. التغييرات المرئية تحفظ محلياً على هذا الجهاز ولا تغير منطق المبيعات أو المحاسبة أو الصلاحيات.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
