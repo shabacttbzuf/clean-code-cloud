@@ -294,18 +294,18 @@ const finalSecurityMigration = readFileSync(
 );
 
 test("security helper RPCs cannot probe another user's authorization state", () => {
-  assert.match(finalSecurityMigration, /SET SCHEMA private/);
-  assert.match(finalSecurityMigration, /_user_id IS DISTINCT FROM auth\\.uid\\(\\)/);
-  assert.match(finalSecurityMigration, /private\\.user_has_role_in_tenant/);
-  assert.match(finalSecurityMigration, /private\\.was_hired_by/);
+  assert.ok(finalSecurityMigration.includes("SET SCHEMA private"));
+  assert.ok(finalSecurityMigration.includes("_user_id IS DISTINCT FROM auth.uid()"));
+  assert.ok(finalSecurityMigration.includes("private.user_has_role_in_tenant"));
+  assert.ok(finalSecurityMigration.includes("private.was_hired_by"));
 });
 
 test("stock writes enforce tenant branch ownership and prevent negative inventory", () => {
-  assert.match(finalSecurityMigration, /Branch does not belong to the requested tenant/);
-  assert.match(finalSecurityMigration, /quantity \\+ EXCLUDED\\.quantity >= 0/);
-  assert.match(finalSecurityMigration, /Insufficient stock or inventory tenant mismatch/);
-  assert.match(finalSecurityMigration, /branch_id = _branch_id/);
-  assert.match(finalSecurityMigration, /FOR UPDATE/);
+  assert.ok(finalSecurityMigration.includes("Branch does not belong to the requested tenant"));
+  assert.ok(finalSecurityMigration.includes("public.inventory.quantity + EXCLUDED.quantity >= 0"));
+  assert.ok(finalSecurityMigration.includes("Insufficient stock or inventory tenant mismatch"));
+  assert.ok(finalSecurityMigration.includes("branch_id = _branch_id"));
+  assert.ok(finalSecurityMigration.includes("FOR UPDATE"));
 });
 
 const returnsMigration = readFileSync(
@@ -314,28 +314,28 @@ const returnsMigration = readFileSync(
 );
 
 test("customer refunds are immutable auditable records and cannot exceed original sold quantities", () => {
-  assert.match(returnsMigration, /CREATE TABLE public\\.sale_refunds/);
-  assert.match(returnsMigration, /CREATE TABLE public\\.sale_refund_items/);
-  assert.match(returnsMigration, /create_sale_refund/);
-  assert.match(returnsMigration, /Refund quantity exceeds the remaining quantity/);
-  assert.match(returnsMigration, /inventory_transactions/);
-  assert.match(returnsMigration, /REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public\\.sale_refunds/);
+  assert.ok(returnsMigration.includes("CREATE TABLE public.sale_refunds"));
+  assert.ok(returnsMigration.includes("CREATE TABLE public.sale_refund_items"));
+  assert.ok(returnsMigration.includes("create_sale_refund"));
+  assert.ok(returnsMigration.includes("Refund quantity exceeds the remaining quantity"));
+  assert.ok(returnsMigration.includes("inventory_transactions"));
+  assert.ok(returnsMigration.includes("REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.sale_refunds"));
 });
 
 test("supplier returns reverse inventory atomically and preserve purchase source records", () => {
-  assert.match(returnsMigration, /CREATE TABLE public\\.purchase_returns/);
-  assert.match(returnsMigration, /CREATE TABLE public\\.purchase_return_items/);
-  assert.match(returnsMigration, /create_purchase_return/);
-  assert.match(returnsMigration, /Return quantity exceeds the remaining purchased quantity/);
-  assert.match(returnsMigration, /'purchase_return'/);
-  assert.match(returnsMigration, /FOR UPDATE/);
+  assert.ok(returnsMigration.includes("CREATE TABLE public.purchase_returns"));
+  assert.ok(returnsMigration.includes("CREATE TABLE public.purchase_return_items"));
+  assert.ok(returnsMigration.includes("create_purchase_return"));
+  assert.ok(returnsMigration.includes("Return quantity exceeds the remaining purchased quantity"));
+  assert.ok(returnsMigration.includes("'purchase_return'"));
+  assert.ok(returnsMigration.includes("FOR UPDATE"));
 });
 
 test("cash close reconciles cash refunds and profitability subtracts returned goods", () => {
-  assert.match(returnsMigration, /cash_session_id\\s*=\\s*v_session\\.id/);
-  assert.match(returnsMigration, /refunded_net_revenue/);
-  assert.match(returnsMigration, /restocked_quantity/);
-  assert.match(returnsMigration, /security_invoker = true/);
+  assert.ok(returnsMigration.includes("r.cash_session_id=v_session.id"));
+  assert.ok(returnsMigration.includes("refunded_net_revenue"));
+  assert.ok(returnsMigration.includes("restocked_quantity"));
+  assert.ok(returnsMigration.includes("security_invoker = true"));
 });
 
 test("complete database snapshot includes migrations 15 and 16 exactly once", () => {
@@ -347,10 +347,9 @@ test("complete database snapshot includes migrations 15 and 16 exactly once", ()
     "20261111000015_security_stock_consistency.sql",
     "20261111000016_auditable_returns_and_refunds.sql",
   ]) {
-    assert.equal([...snapshot.matchAll(new RegExp("SOURCE MIGRATION: " + name, "g"))].length, 1);
+    assert.equal(snapshot.split("SOURCE MIGRATION: " + name).length - 1, 1);
   }
 });
-
 
 const indexesMigration = readFileSync(
   new URL("../supabase/migrations/20261111000017_index_uncovered_foreign_keys.sql", import.meta.url),
@@ -358,11 +357,11 @@ const indexesMigration = readFileSync(
 );
 
 test("all previously uncovered foreign-key columns receive leading-key indexes", () => {
-  assert.match(indexesMigration, /idx_attendance_tenant_id_fk/);
-  assert.match(indexesMigration, /idx_role_permissions_permission_key_fk/);
-  assert.match(indexesMigration, /idx_purchase_return_items_product_id_fk/);
-  assert.match(indexesMigration, /idx_sale_refunds_cash_session_id_fk/);
-  assert.match(indexesMigration, /CREATE INDEX IF NOT EXISTS/);
+  assert.ok(indexesMigration.includes("idx_attendance_tenant_id_fk"));
+  assert.ok(indexesMigration.includes("idx_role_permissions_permission_key_fk"));
+  assert.ok(indexesMigration.includes("idx_purchase_return_items_product_id_fk"));
+  assert.ok(indexesMigration.includes("idx_sale_refunds_cash_session_id_fk"));
+  assert.ok(indexesMigration.includes("CREATE INDEX IF NOT EXISTS"));
 });
 
 test("complete database snapshot includes migration 17 exactly once", () => {
@@ -370,8 +369,5 @@ test("complete database snapshot includes migration 17 exactly once", () => {
     new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url),
     "utf8",
   );
-  assert.equal(
-    [...snapshot.matchAll(/SOURCE MIGRATION: 20261111000017_index_uncovered_foreign_keys\\.sql/g)].length,
-    1,
-  );
+  assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000017_index_uncovered_foreign_keys.sql").length - 1, 1);
 });
