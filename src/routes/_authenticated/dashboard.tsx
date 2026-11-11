@@ -31,14 +31,17 @@ function Dashboard() {
     queryKey: ["super-owner-stats"],
     queryFn: async () => {
       const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-      const [tenants, branches, users, sales, expenses] = await Promise.all([
+      const [tenants, branches, users, sales, refunds, expenses] = await Promise.all([
         supabase.from("tenants").select("id", { count: "exact", head: true }),
         supabase.from("branches").select("id", { count: "exact", head: true }),
         supabase.from("profiles").select("id", { count: "exact", head: true }),
-        supabase.from("sales").select("total").gte("created_at", startOfMonth),
+        supabase.from("sales").select("total").neq("status", "void").gte("created_at", startOfMonth),
+        supabase.from("sale_refunds").select("total").gte("created_at", startOfMonth),
         supabase.from("expenses").select("amount").gte("paid_at", startOfMonth.slice(0, 10)),
       ]);
-      const salesTotal = (sales.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
+      const salesGross = (sales.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
+      const refundsTotal = (refunds.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
+      const salesTotal = salesGross - refundsTotal;
       const expTotal = (expenses.data ?? []).reduce((s, r) => s + Number((r as { amount: number }).amount), 0);
       return {
         tenantsCount: tenants.count ?? 0,
@@ -61,10 +64,13 @@ function Dashboard() {
       const last30 = new Date(now.getTime() - 29 * 86400000);
       const last30ISO = new Date(last30.getFullYear(), last30.getMonth(), last30.getDate()).toISOString();
 
-      const [salesToday, salesMonth, salesTrend, expensesMonth, expByCat, lowStock, sessions] = await Promise.all([
-        supabase.from("sales").select("total").eq("tenant_id", tenantId).gte("created_at", startOfDay),
-        supabase.from("sales").select("total").eq("tenant_id", tenantId).gte("created_at", startOfMonth),
-        supabase.from("sales").select("total, created_at").eq("tenant_id", tenantId).gte("created_at", last30ISO),
+      const [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions] = await Promise.all([
+        supabase.from("sales").select("total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfDay),
+        supabase.from("sales").select("total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfMonth),
+        supabase.from("sales").select("total, created_at").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", last30ISO),
+        supabase.from("sale_refunds").select("total").eq("tenant_id", tenantId).gte("created_at", startOfDay),
+        supabase.from("sale_refunds").select("total").eq("tenant_id", tenantId).gte("created_at", startOfMonth),
+        supabase.from("sale_refunds").select("total, created_at").eq("tenant_id", tenantId).gte("created_at", last30ISO),
         supabase.from("expenses").select("amount").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10)),
         supabase.from("expenses").select("amount, category_id").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10)),
         supabase.from("inventory").select("quantity, product_id").eq("tenant_id", tenantId),
@@ -74,8 +80,10 @@ function Dashboard() {
       const catsRes = await supabase.from("expense_categories").select("id, name, color").eq("tenant_id", tenantId);
       const catMap = new Map((catsRes.data ?? []).map((c) => [(c as { id: string }).id, c as { name: string; color: string | null }]));
 
-      const totalToday = (salesToday.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
-      const totalMonth = (salesMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
+      const totalToday = (salesToday.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0)
+        - (refundsToday.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
+      const totalMonth = (salesMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0)
+        - (refundsMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
       const totalExpMonth = (expensesMonth.data ?? []).reduce((s, r) => s + Number((r as { amount: number }).amount), 0);
 
       // Trend: group by day
@@ -88,6 +96,10 @@ function Dashboard() {
       for (const s of salesTrend.data ?? []) {
         const key = new Date((s as { created_at: string }).created_at).toISOString().slice(0, 10);
         if (dayMap.has(key)) dayMap.set(key, (dayMap.get(key) ?? 0) + Number((s as { total: number }).total));
+      }
+      for (const refund of refundsTrend.data ?? []) {
+        const key = new Date((refund as { created_at: string }).created_at).toISOString().slice(0, 10);
+        if (dayMap.has(key)) dayMap.set(key, (dayMap.get(key) ?? 0) - Number((refund as { total: number }).total));
       }
       const trend = Array.from(dayMap.entries()).map(([day, total]) => ({ day: day.slice(5), total: +total.toFixed(2) }));
 
