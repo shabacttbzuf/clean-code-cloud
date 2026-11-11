@@ -121,6 +121,7 @@ export function AppSidebar() {
   const { isSuperOwner, totalCount } = useSuperOwner();
   const { tenantId, userId } = useActiveTenant();
   const [customItems, setCustomItems] = useState<Array<{ title: string; url: string }>>([]);
+  const [navOverrides, setNavOverrides] = useState<Record<string, { title?: string; hidden?: boolean }>>({});
 
   useEffect(() => {
     const read = () => {
@@ -135,6 +136,20 @@ export function AppSidebar() {
     window.addEventListener("ras-custom-tabs-updated", read);
     window.addEventListener("storage", read);
     return () => { window.removeEventListener("ras-custom-tabs-updated", read); window.removeEventListener("storage", read); };
+  }, []);
+
+  useEffect(() => {
+    const read = () => {
+      try {
+        const raw = window.localStorage.getItem("ras-sidebar-overrides-v1");
+        const parsed = raw ? JSON.parse(raw) : {};
+        setNavOverrides(parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {});
+      } catch { setNavOverrides({}); }
+    };
+    read();
+    window.addEventListener("ras-sidebar-overrides-updated", read);
+    window.addEventListener("storage", read);
+    return () => { window.removeEventListener("ras-sidebar-overrides-updated", read); window.removeEventListener("storage", read); };
   }, []);
 
   const permissionsQuery = useQuery({
@@ -182,7 +197,15 @@ export function AppSidebar() {
     enterpriseGroup,
     { label: "النظام", items: systemItems },
     ...(isSuperOwner && customItems.length ? [customGroup] : []),
-  ].map((group) => ({ ...group, items: group.items.filter(allowed) })).filter((group) => group.items.length > 0);
+  ].map((group) => ({
+    ...group,
+    items: group.items
+      .filter((item) => !navOverrides[item.url.split("#")[0]]?.hidden && allowed(item))
+      .map((item) => ({
+        ...item,
+        title: navOverrides[item.url.split("#")[0]]?.title?.trim() || item.title,
+      })),
+  })).filter((group) => group.items.length > 0);
 
   return (
     <Sidebar collapsible="icon" side="right">
