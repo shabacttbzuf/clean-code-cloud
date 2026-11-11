@@ -246,6 +246,9 @@ function SaleDetailPage() {
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           <DialogHeader><DialogTitle>تسجيل مرتجع للفاتورة #{s.invoice_no}</DialogTitle></DialogHeader>
           <div className="space-y-4">
+            <p className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground">
+              يسجل النظام المرتجع ويحدّث المخزون. رد البطاقة أو التحويل يُنفّذ خارج التطبيق؛ أما الرد النقدي فيُخصم من الوردية المفتوحة.
+            </p>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>طريقة إعادة المبلغ</Label>
