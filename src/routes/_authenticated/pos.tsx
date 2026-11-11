@@ -39,6 +39,7 @@ type Product = {
   sale_price: number;
   category_id: string | null;
   is_active: boolean;
+  image_url: string | null;
 };
 type Category = { id: string; name: string };
 type Branch = { id: string; name: string; tax_number: string | null; address: string | null; phone: string | null };
@@ -128,7 +129,7 @@ function POSPage() {
     queryFn: async (): Promise<Product[]> => {
       const { data, error } = await supabase
         .from("products")
-        .select("id, name, sale_price, category_id, is_active")
+        .select("id, name, sale_price, category_id, is_active, image_url")
         .eq("tenant_id", tenantId!)
         .eq("is_active", true)
         .order("name");
@@ -430,9 +431,13 @@ function POSPage() {
               <div className="grid min-h-0 flex-1 content-start grid-cols-4 gap-1.5 overflow-y-auto p-0.5 sm:grid-cols-5 md:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8">
                 {filteredProducts.map((product) => (
                   <button key={product.id} type="button" onClick={() => addToCart(product)} disabled={checkoutMut.isPending}
-                    className="flex min-h-[54px] flex-col items-center justify-center rounded-lg border bg-card p-1.5 text-center text-[11px] font-semibold leading-tight shadow-sm transition hover:border-primary hover:bg-primary/5 active:scale-95 sm:min-h-[62px] sm:text-xs">
-                    <span className="line-clamp-2">{product.name}</span>
-                    <span className="mt-1 text-[10px] font-bold text-primary num">{formatMoney(Number(product.sale_price))}</span>
+                    className="flex min-h-[66px] flex-col items-center justify-center rounded-lg border bg-card p-1 text-center text-[10px] font-semibold leading-tight shadow-sm transition hover:border-primary hover:bg-primary/5 active:scale-95 sm:min-h-[70px] sm:p-1.5 sm:text-xs">
+                    <span className="relative mb-0.5 grid h-7 w-7 place-items-center overflow-hidden rounded-md bg-muted text-xs font-black text-muted-foreground">
+                      {product.name.slice(0, 1)}
+                      {product.image_url && <img src={product.image_url} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} />}
+                    </span>
+                    <span className="line-clamp-1 w-full">{product.name}</span>
+                    <span className="mt-0.5 text-[10px] font-bold text-primary num">{formatMoney(Number(product.sale_price))}</span>
                   </button>
                 ))}
                 {filteredProducts.length === 0 && (
