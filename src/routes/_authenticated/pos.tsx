@@ -574,11 +574,11 @@ function CategoryTile({ label, active, onClick }: { label: string; active: boole
     <button
       type="button"
       onClick={onClick}
-      className={`grid min-h-[44px] place-items-center rounded-md border p-1.5 text-center text-[11px] font-semibold leading-tight transition active:scale-95 ${
-        active ? "border-primary bg-primary text-primary-foreground shadow" : "bg-card hover:border-primary hover:bg-primary/5"
-      }`}
+      className={active
+        ? "inline-flex min-h-8 items-center justify-center rounded-full border border-primary bg-primary px-3 py-1 text-center text-[10px] font-semibold leading-tight text-primary-foreground shadow transition active:scale-95 sm:min-h-9 sm:text-xs"
+        : "inline-flex min-h-8 items-center justify-center rounded-full border bg-card px-3 py-1 text-center text-[10px] font-semibold leading-tight transition hover:border-primary hover:bg-primary/5 active:scale-95 sm:min-h-9 sm:text-xs"}
     >
-      <span className="line-clamp-2">{label}</span>
+      <span className="line-clamp-1">{label}</span>
     </button>
   );
 }
