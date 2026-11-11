@@ -7212,3 +7212,8 @@ WHERE tenant_id IS NULL
 
 
 COMMIT;
+
+-- SOURCE MIGRATION: 20261111035000_get_my_permissions_invoker.sql
+-- The effective-permissions RPC only reads the caller's own membership and delegates
+-- protected permission checks to the narrowly scoped has_permission SECURITY DEFINER.
+ALTER FUNCTION public.get_my_permissions(uuid) SECURITY INVOKER;
