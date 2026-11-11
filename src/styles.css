@@ -234,3 +234,19 @@
   width: 100%;
   text-align: center;
 }
+
+
+/* User-selected workspace background remains behind readable cards and controls. */
+.workspace-surface {
+  background-color: var(--color-background);
+  background-image:
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--color-background) 88%, transparent),
+      color-mix(in srgb, var(--color-background) 94%, transparent)
+    ),
+    var(--workspace-background-image, none);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
