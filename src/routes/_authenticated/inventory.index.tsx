@@ -169,9 +169,21 @@ function InventoryPage() {
         </Select>
       </div>
 
-      {branches.isError ? (\n        <Card><CardContent className="flex flex-col items-center gap-3 py-12 text-center">\n          <AlertTriangle className="h-8 w-8 text-destructive" />\n          <p className="text-sm text-destructive">تعذر تحميل قائمة الفروع.</p>\n          <Button variant="outline" onClick={() => branches.refetch()}>إعادة المحاولة</Button>\n        </CardContent></Card>\n      ) : inventory.isLoading ? (
+      {branches.isError ? (
+        <Card><CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+          <AlertTriangle className="h-8 w-8 text-destructive" />
+          <p className="text-sm text-destructive">تعذر تحميل قائمة الفروع.</p>
+          <Button variant="outline" onClick={() => branches.refetch()}>إعادة المحاولة</Button>
+        </CardContent></Card>
+      ) : inventory.isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
-      ) : inventory.isError ? (\n        <Card><CardContent className="flex flex-col items-center gap-3 py-12 text-center">\n          <AlertTriangle className="h-8 w-8 text-destructive" />\n          <p className="text-sm text-destructive">تعذر تحميل أرصدة المخزون. لم نعرض أرقاماً جزئية.</p>\n          <Button variant="outline" onClick={() => inventory.refetch()}>إعادة المحاولة</Button>\n        </CardContent></Card>\n      ) : filtered.length === 0 ? (
+      ) : inventory.isError ? (
+        <Card><CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+          <AlertTriangle className="h-8 w-8 text-destructive" />
+          <p className="text-sm text-destructive">تعذر تحميل أرصدة المخزون. لم نعرض أرقاماً جزئية.</p>
+          <Button variant="outline" onClick={() => inventory.refetch()}>إعادة المحاولة</Button>
+        </CardContent></Card>
+      ) : filtered.length === 0 ? (
         <Card><CardContent className="flex flex-col items-center gap-3 py-16 text-center">
           <Warehouse className="h-10 w-10 text-muted-foreground/50" />
           <p className="text-muted-foreground">لا توجد بيانات</p>
