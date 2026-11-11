@@ -89,7 +89,7 @@ test("sidebar resolves permissions from the database instead of role-name guesse
     "utf8",
   );
   assert.match(sidebar, /get_my_permissions/);
-  assert.match(sidebar, /group\.items\.filter\(allowed\)/);
+  assert.match(sidebar, /\.filter\(\(item\) =>[\s\S]*allowed\(item\)\)/);
   assert.match(sidebar, /permission: "pos\.use"/);
   assert.match(sidebar, /permission: "reports\.view"/);
 });
