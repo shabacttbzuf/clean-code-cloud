@@ -34,7 +34,7 @@ function ReportsPage() {
       const fromDate = `${from}T00:00:00.000Z`;
       const toDate = `${to}T23:59:59.999Z`;
 
-      const [salesRes, expensesRes, itemsRes, sessionsRes, inventoryRes] = await Promise.all([
+      const [salesRes, expensesRes, itemsRes, sessionsRes, inventoryRes, refundsRes] = await Promise.all([
         supabase
           .from("sales")
           .select("id, created_at, total, subtotal, discount, tax_amount, payment_method, cashier_id, branch_id, status")
@@ -70,6 +70,13 @@ function ReportsPage() {
           .select("quantity, product_id, branch_id")
           .eq("tenant_id", tenantId)
           .limit(10000),
+        supabase
+          .from("sale_refunds")
+          .select("id, sale_id, subtotal, discount, tax_amount, total, created_at")
+          .eq("tenant_id", tenantId)
+          .gte("created_at", fromDate)
+          .lte("created_at", toDate)
+          .limit(5000),
       ]);
 
       if (salesRes.error) throw salesRes.error;
@@ -77,8 +84,9 @@ function ReportsPage() {
       if (itemsRes.error) throw itemsRes.error;
       if (sessionsRes.error) throw sessionsRes.error;
       if (inventoryRes.error) throw inventoryRes.error;
+      if (refundsRes.error) throw refundsRes.error;
 
-      const sales = (salesRes.data ?? []) as Array<{
+      const sales = (salesRes.data ?? []).filter((row) => row.status !== "void") as Array<{
         id: string; created_at: string; total: number; subtotal: number; discount: number; tax_amount: number;
         payment_method: string; cashier_id: string; branch_id: string; status: string;
       }>;
@@ -89,8 +97,22 @@ function ReportsPage() {
         expected_cash: number | null; cash_difference: number | null; opened_at: string; closed_at: string | null; status: string;
       }>;
       const inventory = (inventoryRes.data ?? []) as Array<{ quantity: number; product_id: string; branch_id: string }>;
+      const refunds = (refundsRes.data ?? []) as Array<{
+        id: string; sale_id: string; subtotal: number; discount: number;
+        tax_amount: number; total: number; created_at: string;
+      }>;
+      const refundIds = refunds.map((refund) => refund.id);
+      const refundItemsRes = refundIds.length
+        ? await supabase.from("sale_refund_items")
+            .select("refund_id, product_name, quantity, subtotal_amount, discount_amount, tax_amount, restocked")
+            .in("refund_id", refundIds)
+        : { data: [], error: null };
+      if (refundItemsRes.error) throw refundItemsRes.error;
+      const saleIds = new Set(sales.map((sale) => sale.id));
+      const validItems = items.filter((item) => saleIds.has(item.sale_id));
+      const refundItems = refundItemsRes.data ?? [];
 
-      return { sales, expenses, items, sessions, inventory };
+      return { sales, expenses, items: validItems, sessions, inventory, refunds, refundItems };
     },
     enabled: !!tenantId,
     staleTime: 60_000,
@@ -100,17 +122,21 @@ function ReportsPage() {
 
   const data = report.data;
   const safe = useMemo(
-    () => data ?? { sales: [] as any[], expenses: [] as any[], items: [] as any[], sessions: [] as any[], inventory: [] as any[] },
+    () => data ?? { sales: [] as any[], expenses: [] as any[], items: [] as any[], sessions: [] as any[], inventory: [] as any[], refunds: [] as any[], refundItems: [] as any[] },
     [data],
   );
 
   const totals = useMemo(() => {
-    const salesTotal = safe.sales.reduce((s: number, r: any) => s + Number(r.total), 0);
+    const grossSalesTotal = safe.sales.reduce((s: number, r: any) => s + Number(r.total), 0);
+    const refundsTotal = safe.refunds.reduce((s: number, r: any) => s + Number(r.total), 0);
+    const salesTotal = grossSalesTotal - refundsTotal;
     const expensesTotal = safe.expenses.reduce((s: number, e: any) => s + Number(e.amount), 0);
-    const discountTotal = safe.sales.reduce((s: number, r: any) => s + Number(r.discount), 0);
-    const taxTotal = safe.sales.reduce((s: number, r: any) => s + Number(r.tax_amount), 0);
+    const discountTotal = safe.sales.reduce((s: number, r: any) => s + Number(r.discount), 0)
+      - safe.refunds.reduce((s: number, r: any) => s + Number(r.discount), 0);
+    const taxTotal = safe.sales.reduce((s: number, r: any) => s + Number(r.tax_amount), 0)
+      - safe.refunds.reduce((s: number, r: any) => s + Number(r.tax_amount), 0);
     const net = salesTotal - expensesTotal;
-    return { salesTotal, expensesTotal, discountTotal, taxTotal, net };
+    return { salesTotal, grossSalesTotal, refundsTotal, expensesTotal, discountTotal, taxTotal, net };
   }, [safe]);
 
   const groupedSales = useMemo(() => {
@@ -133,11 +159,19 @@ function ReportsPage() {
       cur.count += 1;
       map.set(key, cur);
     }
+    for (const refund of safe.refunds) {
+      const d = new Date(refund.created_at);
+      const key = fmt(d);
+      const cur = map.get(key) ?? { label: label(d), sales: 0, count: 0, expenses: 0 };
+      cur.sales -= Number(refund.total);
+      map.set(key, cur);
+    }
     for (const e of safe.expenses) {
       const d = new Date(e.paid_at);
       const key = fmt(d);
-      const cur = map.get(key);
-      if (cur) cur.expenses += Number(e.amount);
+      const cur = map.get(key) ?? { label: label(d), sales: 0, count: 0, expenses: 0 };
+      cur.expenses += Number(e.amount);
+      map.set(key, cur);
     }
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [safe, groupBy]);
@@ -149,6 +183,12 @@ function ReportsPage() {
       cur.qty += Number(i.quantity);
       cur.revenue += Number(i.line_total);
       map.set(i.product_name, cur);
+    }
+    for (const returned of safe.refundItems) {
+      const cur = map.get(returned.product_name) ?? { name: returned.product_name, qty: 0, revenue: 0 };
+      cur.qty -= Number(returned.quantity);
+      cur.revenue -= Number(returned.subtotal_amount);
+      map.set(returned.product_name, cur);
     }
     return Array.from(map.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
   }, [safe.items]);
