@@ -52,3 +52,20 @@ test("sales history is fully paginated and refund totals are fetched in bounded 
   assert.match(sales, /i \+= 200/);
   assert.match(sales, /لم نعرض نتائج جزئية/);
 });
+
+const pos = readFileSync(new URL("../src/routes/_authenticated/pos.tsx", import.meta.url), "utf8");
+const purchases = readFileSync(new URL("../src/routes/_authenticated/purchases.tsx", import.meta.url), "utf8");
+
+test("POS loads the full product catalogue and branch stock in deterministic pages", () => {
+  assert.match(pos, /async function fetchAllRows<T>/);
+  assert.match(pos, /\.range\(from, from \+ pageSize - 1\)/);
+  assert.match(pos, /\.order\("name"\)/);
+  assert.match(pos, /\.order\("product_id"\)/);
+});
+
+test("purchasing rejects incomplete supplier, branch, and product data", () => {
+  assert.match(purchases, /for \(const result of \[supRes, brRes, returnRes\]\)/);
+  assert.match(purchases, /if \(error\) throw error/);
+  assert.match(purchases, /branches\.isError \|\| suppliers\.isError \|\| products\.isError/);
+  assert.match(purchases, /useEffect\(\(\) =>/);
+});
