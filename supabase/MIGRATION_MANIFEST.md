@@ -52,8 +52,9 @@
 38. `supabase/migrations/20261111000017_index_uncovered_foreign_keys.sql`
 39. `supabase/migrations/20261111000018_optimize_rls_auth_uid_initplans.sql`
 40. `supabase/migrations/20261111000019_harden_definer_paths_and_inventory_branch_scope.sql`
+41. `supabase/migrations/20261111000020_super_owner_return_visibility.sql`
 
-**الإجمالي: 40 ترحيلاً.**
+**الإجمالي: 41 ترحيلاً.**
 
 ## ترحيل Drizzle القديم
 
@@ -64,7 +65,7 @@
 
 ## ملف SQL الشامل
 
-`supabase/COMPLETE_DATABASE.sql` يجمع محتويات الترحيلات الأربعين بالترتيب، وهو Snapshot كامل لإعادة البناء من قاعدة فارغة.
+`supabase/COMPLETE_DATABASE.sql` يجمع محتويات الترحيلات الإحدى والأربعين بالترتيب، وهو Snapshot كامل لإعادة البناء من قاعدة فارغة.
 
 **المسار الموصى به:** `supabase db push` لأنه يحافظ على سجل الترحيلات. لا تشغّل Snapshot يدوياً ثم تشغّل `db push` على القاعدة نفسها؛ اختر طريقة واحدة فقط.
 
