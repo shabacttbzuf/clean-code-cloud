@@ -350,3 +350,28 @@ test("complete database snapshot includes migrations 15 and 16 exactly once", ()
     assert.equal([...snapshot.matchAll(new RegExp("SOURCE MIGRATION: " + name, "g"))].length, 1);
   }
 });
+
+
+const indexesMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000017_index_uncovered_foreign_keys.sql", import.meta.url),
+  "utf8",
+);
+
+test("all previously uncovered foreign-key columns receive leading-key indexes", () => {
+  assert.match(indexesMigration, /idx_attendance_tenant_id_fk/);
+  assert.match(indexesMigration, /idx_role_permissions_permission_key_fk/);
+  assert.match(indexesMigration, /idx_purchase_return_items_product_id_fk/);
+  assert.match(indexesMigration, /idx_sale_refunds_cash_session_id_fk/);
+  assert.match(indexesMigration, /CREATE INDEX IF NOT EXISTS/);
+});
+
+test("complete database snapshot includes migration 17 exactly once", () => {
+  const snapshot = readFileSync(
+    new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url),
+    "utf8",
+  );
+  assert.equal(
+    [...snapshot.matchAll(/SOURCE MIGRATION: 20261111000017_index_uncovered_foreign_keys\\.sql/g)].length,
+    1,
+  );
+});
