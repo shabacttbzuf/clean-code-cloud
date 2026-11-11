@@ -112,7 +112,7 @@ function InventoryPage() {
 
   const negativeStock = filtered.filter((r) => r.quantity < 0).length;
   const missingStock = filtered.filter((r) => !r.has_inventory_record).length;
-  const belowMinStock = filtered.filter((r) => r.has_inventory_record && r.min_stock > 0 && r.quantity < r.min_stock).length;
+  const belowMinStock = filtered.filter((r) => r.has_inventory_record && r.min_stock > 0 && r.quantity >= 0 && r.quantity < r.min_stock).length;
   const lowStock = negativeStock + missingStock + belowMinStock;
   const visibleRows = useMemo(() => {
     const byPriority = [...filtered].sort((a, b) => {
