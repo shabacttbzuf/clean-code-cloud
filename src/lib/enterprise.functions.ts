@@ -10,32 +10,19 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const uuid = z.string().uuid();
 
-async function assertTenantAdmin(supabase: any, userId: string, tenantId: string) {
-  const { data: isSO } = await supabase.rpc("is_super_owner", { _user_id: userId });
-  if (isSO) return;
-  const { data } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("tenant_id", tenantId);
-  const roles = (data ?? []).map((r: any) => r.role);
-  if (!roles.includes("owner") && !roles.includes("manager")) {
-    throw new Error("غير مصرح: هذا الإجراء للمالك أو المدير فقط.");
-  }
-}
-
-async function assertOwner(supabase: any, userId: string, tenantId: string) {
-  const { data: isSO } = await supabase.rpc("is_super_owner", { _user_id: userId });
-  if (isSO) return;
-  const { data } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("tenant_id", tenantId);
-  const roles = (data ?? []).map((r: any) => r.role);
-  if (!roles.includes("owner")) {
-    throw new Error("غير مصرح: هذا الإجراء للمالك فقط.");
-  }
+async function assertPermission(
+  supabase: any,
+  userId: string,
+  tenantId: string,
+  permissionKey: string,
+) {
+  const { data, error } = await supabase.rpc("has_permission", {
+    _user_id: userId,
+    _tenant_id: tenantId,
+    _permission_key: permissionKey,
+  });
+  if (error) throw new Error(error.message);
+  if (data !== true) throw new Error(`غير مصرح: الصلاحية المطلوبة ${permissionKey}.`);
 }
 
 async function assertTargetUserManageable(
@@ -197,7 +184,7 @@ export const upsertCompany = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => companyInput.parse(data))
   .handler(async ({ data, context }) => {
-    await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "companies.manage");
     const payload = { ...data };
     const { error } = data.id
       ? await context.supabase.from("companies").update(payload).eq("id", data.id)
@@ -210,7 +197,7 @@ export const deleteCompany = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: uuid, tenant_id: uuid }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertOwner(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "companies.manage");
     const { error } = await context.supabase.from("companies").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -234,7 +221,7 @@ export const upsertDepartment = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => departmentInput.parse(data))
   .handler(async ({ data, context }) => {
-    await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "departments.manage");
     const { error } = data.id
       ? await context.supabase.from("departments").update(data).eq("id", data.id)
       : await context.supabase.from("departments").insert(data);
@@ -246,7 +233,7 @@ export const deleteDepartment = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: uuid, tenant_id: uuid }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "departments.manage");
     const { error } = await context.supabase.from("departments").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -266,7 +253,7 @@ export const upsertJobTitle = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => jobTitleInput.parse(data))
   .handler(async ({ data, context }) => {
-    await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "job_titles.manage");
     const { error } = data.id
       ? await context.supabase.from("job_titles").update(data).eq("id", data.id)
       : await context.supabase.from("job_titles").insert(data);
@@ -278,7 +265,7 @@ export const deleteJobTitle = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: uuid, tenant_id: uuid }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "job_titles.manage");
     const { error } = await context.supabase.from("job_titles").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -298,7 +285,7 @@ export const upsertEmploymentType = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => employmentTypeInput.parse(data))
   .handler(async ({ data, context }) => {
-    await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "employment_types.manage");
     const { error } = data.id
       ? await context.supabase.from("employment_types").update(data).eq("id", data.id)
       : await context.supabase.from("employment_types").insert(data);
@@ -310,7 +297,7 @@ export const deleteEmploymentType = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: uuid, tenant_id: uuid }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "employment_types.manage");
     const { error } = await context.supabase.from("employment_types").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -341,7 +328,7 @@ export const updateUserEnterpriseProfile = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "users.edit");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await assertTargetUserManageable(context.supabase, supabaseAdmin, context.userId, data.user_id, data.tenant_id);
     const { error } = await supabaseAdmin
@@ -359,7 +346,8 @@ export const setUserStatus = createServerFn({ method: "POST" })
     z.object({ user_id: uuid, tenant_id: uuid, status: STATUS }).parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
+    const statusPermission = data.status === "suspended" ? "users.suspend" : data.status === "frozen" ? "users.freeze" : data.status === "archived" ? "users.archive" : "users.approve";
+    await assertPermission(context.supabase, context.userId, data.tenant_id, statusPermission);
     if (data.user_id === context.userId && data.status !== "active") {
       throw new Error("لا يمكنك تغيير حالة حسابك بنفسك.");
     }
@@ -398,7 +386,7 @@ export const approveUser = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ user_id: uuid, tenant_id: uuid }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "users.approve");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await assertTargetUserManageable(context.supabase, supabaseAdmin, context.userId, data.user_id, data.tenant_id);
     const { data: targetProfile, error: readError } = await supabaseAdmin
@@ -437,7 +425,7 @@ export const forcePasswordReset = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ user_id: uuid, tenant_id: uuid }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "users.force_password_reset");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await assertTargetUserManageable(context.supabase, supabaseAdmin, context.userId, data.user_id, data.tenant_id);
     const { error } = await supabaseAdmin
@@ -468,7 +456,7 @@ export const createCustomRole = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertOwner(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "roles.manage");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: role, error } = await supabaseAdmin
       .from("custom_roles")
@@ -501,7 +489,7 @@ export const deleteCustomRole = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: uuid, tenant_id: uuid }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertOwner(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "roles.manage");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin.from("custom_roles").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
@@ -521,7 +509,7 @@ export const setCustomRolePermission = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertOwner(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "roles.manage");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: role, error: roleError } = await supabaseAdmin
       .from("custom_roles")
@@ -580,7 +568,7 @@ export const createNotification = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "notifications.manage");
     const { error } = await context.supabase.from("notifications").insert({
       ...data,
       audience_id: data.audience_id ?? null,
