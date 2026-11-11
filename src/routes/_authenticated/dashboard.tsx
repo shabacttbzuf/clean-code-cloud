@@ -64,21 +64,31 @@ function Dashboard() {
       const last30 = new Date(now.getTime() - 29 * 86400000);
       const last30ISO = new Date(last30.getFullYear(), last30.getMonth(), last30.getDate()).toISOString();
 
-      const [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, profitabilityMonth] = await Promise.all([
+      const [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions] = await Promise.all([
         supabase.from("sales").select("total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfDay),
-        supabase.from("sales").select("total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfMonth),
+        supabase.from("sales").select("id, total, subtotal, discount").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfMonth),
         supabase.from("sales").select("total, created_at").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", last30ISO),
         supabase.from("sale_refunds").select("total").eq("tenant_id", tenantId).gte("created_at", startOfDay),
-        supabase.from("sale_refunds").select("total").eq("tenant_id", tenantId).gte("created_at", startOfMonth),
+        supabase.from("sale_refunds").select("id, total, subtotal, discount").eq("tenant_id", tenantId).gte("created_at", startOfMonth),
         supabase.from("sale_refunds").select("total, created_at").eq("tenant_id", tenantId).gte("created_at", last30ISO),
         supabase.from("expenses").select("amount").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10)),
         supabase.from("expenses").select("amount, category_id").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10)),
         supabase.from("inventory").select("quantity, product_id").eq("tenant_id", tenantId),
         supabase.from("cash_sessions").select("id").eq("tenant_id", tenantId).eq("status", "open"),
-        supabase.from("sales_profitability").select("gross_profit, items_with_unknown_cost").eq("tenant_id", tenantId).gte("created_at", startOfMonth),
       ]);
 
-      if (profitabilityMonth.error) throw profitabilityMonth.error;
+      const saleIdsMonth = (salesMonth.data ?? []).map((sale) => sale.id);
+      const refundIdsMonth = (refundsMonth.data ?? []).map((refund) => refund.id);
+      const [saleCostRows, refundCostRows] = await Promise.all([
+        saleIdsMonth.length
+          ? supabase.from("sale_items").select("quantity, cost_price_snapshot").in("sale_id", saleIdsMonth)
+          : Promise.resolve({ data: [], error: null }),
+        refundIdsMonth.length
+          ? supabase.from("sale_refund_items").select("quantity, cost_price_snapshot, restocked").in("refund_id", refundIdsMonth)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+      if (saleCostRows.error) throw saleCostRows.error;
+      if (refundCostRows.error) throw refundCostRows.error;
       const catsRes = await supabase.from("expense_categories").select("id, name, color").eq("tenant_id", tenantId);
       const catMap = new Map((catsRes.data ?? []).map((c) => [(c as { id: string }).id, c as { name: string; color: string | null }]));
 
@@ -87,12 +97,21 @@ function Dashboard() {
       const totalMonth = (salesMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0)
         - (refundsMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
       const totalExpMonth = (expensesMonth.data ?? []).reduce((s, r) => s + Number((r as { amount: number }).amount), 0);
-      const unknownCostItems = (profitabilityMonth.data ?? []).reduce(
-        (sum, row) => sum + Number((row as { items_with_unknown_cost: number }).items_with_unknown_cost ?? 0), 0,
+      const unknownSaleCosts = (saleCostRows.data ?? []).filter((row) => row.cost_price_snapshot == null).length;
+      const unknownReturnedCosts = (refundCostRows.data ?? []).filter((row) => row.restocked && row.cost_price_snapshot == null).length;
+      const unknownCostItems = unknownSaleCosts + unknownReturnedCosts;
+      const cogsSales = (saleCostRows.data ?? []).reduce(
+        (sum, row) => sum + Number(row.cost_price_snapshot ?? 0) * Number(row.quantity), 0,
       );
-      const grossProfit = unknownCostItems > 0 ? null : (profitabilityMonth.data ?? []).reduce(
-        (sum, row) => sum + Number((row as { gross_profit: number | null }).gross_profit ?? 0), 0,
+      const cogsRestockedReturns = (refundCostRows.data ?? []).reduce(
+        (sum, row) => sum + (row.restocked ? Number(row.cost_price_snapshot ?? 0) * Number(row.quantity) : 0), 0,
       );
+      const revenueBeforeTax = (salesMonth.data ?? []).reduce(
+        (sum, row) => sum + Number(row.subtotal) - Number(row.discount), 0,
+      ) - (refundsMonth.data ?? []).reduce(
+        (sum, row) => sum + Number(row.subtotal) - Number(row.discount), 0,
+      );
+      const grossProfit = unknownCostItems > 0 ? null : revenueBeforeTax - cogsSales + cogsRestockedReturns;
       const profit = grossProfit === null ? null : grossProfit - totalExpMonth;
 
       // Trend: group by day
