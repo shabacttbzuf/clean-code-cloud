@@ -63,8 +63,12 @@ test("POS loads the full product catalogue and branch stock in deterministic pag
   assert.match(pos, /\.order\("product_id"\)/);
 });
 
-test("purchasing rejects incomplete supplier, branch, and product data", () => {
-  assert.match(purchases, /for \(const result of \[supRes, brRes, returnRes\]\)/);
+test("purchasing loads the full history and batches supplier, branch, and return lookups", () => {
+  assert.match(purchases, /async function fetchAllRows<T>/);
+  assert.match(purchases, /\.range\(from, from \+ pageSize - 1\)/);
+  assert.match(purchases, /\.order\("created_at", \{ ascending: false \}\)/);
+  assert.match(purchases, /\.order\("id", \{ ascending: false \}\)/);
+  assert.match(purchases, /const batchSize = 200/);
   assert.match(purchases, /if \(error\) throw error/);
   assert.match(purchases, /branches\.isError \|\| suppliers\.isError \|\| products\.isError/);
   assert.match(purchases, /useEffect\(\(\) =>/);
