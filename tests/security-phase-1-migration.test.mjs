@@ -371,3 +371,23 @@ test("complete database snapshot includes migration 17 exactly once", () => {
   );
   assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000017_index_uncovered_foreign_keys.sql").length - 1, 1);
 });
+
+
+const rlsPerformanceMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000018_optimize_rls_auth_uid_initplans.sql", import.meta.url),
+  "utf8",
+);
+
+test("RLS policies cache auth.uid() once per statement without changing policy logic", () => {
+  assert.ok(rlsPerformanceMigration.includes("ALTER POLICY"));
+  assert.ok(rlsPerformanceMigration.includes("replace(p.qual, 'auth.uid()', '(select auth.uid())')"));
+  assert.ok(rlsPerformanceMigration.includes("replace(p.with_check, 'auth.uid()', '(select auth.uid())')"));
+});
+
+test("complete database snapshot includes migration 18 exactly once", () => {
+  const snapshot = readFileSync(
+    new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url),
+    "utf8",
+  );
+  assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000018_optimize_rls_auth_uid_initplans.sql").length - 1, 1);
+});
