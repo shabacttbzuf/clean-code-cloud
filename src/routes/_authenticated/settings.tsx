@@ -96,8 +96,9 @@ function SettingsPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["marketing-campaigns", tenantId] });
+      setEditingCampaignId(null);
       setCampaignTitle(""); setCampaignDescription(""); setCampaignImage(""); setCampaignTarget(""); setCampaignStart(""); setCampaignEnd("");
-      toast.success("تم حفظ العرض كمسودة. فعّله عند جاهزيته.");
+      toast.success("تم حفظ بيانات العرض.");
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر حفظ العرض"),
   });
