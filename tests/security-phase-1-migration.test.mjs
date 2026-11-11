@@ -391,3 +391,30 @@ test("complete database snapshot includes migration 18 exactly once", () => {
   );
   assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000018_optimize_rls_auth_uid_initplans.sql").length - 1, 1);
 });
+
+
+const finalDefinerMigration = readFileSync(
+  new URL("../supabase/migrations/20261111000019_harden_definer_paths_and_inventory_branch_scope.sql", import.meta.url),
+  "utf8",
+);
+
+test("warehouse inventory adjustment is restricted to the assigned branch", () => {
+  assert.ok(finalDefinerMigration.includes("role = 'warehouse'"));
+  assert.ok(finalDefinerMigration.includes("AND branch_id = _branch_id"));
+  assert.ok(!finalDefinerMigration.includes("branch_id IS NULL OR branch_id = _branch_id"));
+  assert.ok(finalDefinerMigration.includes("is_active = true"));
+});
+
+test("remaining SECURITY DEFINER functions pin pg_catalog before application schemas", () => {
+  assert.ok(finalDefinerMigration.includes("ALTER FUNCTION public.handle_new_user() SET search_path = pg_catalog, public, pg_temp"));
+  assert.ok(finalDefinerMigration.includes("ALTER FUNCTION public.touch_last_login() SET search_path = pg_catalog, public, pg_temp"));
+  assert.ok(finalDefinerMigration.includes("ALTER FUNCTION private.can_access_branch(uuid, uuid, uuid) SET search_path = pg_catalog, public, private, pg_temp"));
+});
+
+test("complete database snapshot includes migration 19 exactly once", () => {
+  const snapshot = readFileSync(
+    new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url),
+    "utf8",
+  );
+  assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000019_harden_definer_paths_and_inventory_branch_scope.sql").length - 1, 1);
+});
