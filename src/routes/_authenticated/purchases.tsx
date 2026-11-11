@@ -19,6 +19,19 @@ export const Route = createFileRoute("/_authenticated/purchases")({
   component: PurchasesPage,
 });
 
+// Read complete datasets in bounded pages; Supabase's REST row cap must never hide purchase history.
+async function fetchAllRows<T>(query: any): Promise<T[]> {
+  const pageSize = 500;
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await query.range(from, from + pageSize - 1);
+    if (error) throw error;
+    const page = (data ?? []) as T[];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+}
+
 type PurchaseRow = {
   id: string; reference: string | null; supplier_id: string | null;
   branch_id: string; user_id: string;
@@ -37,30 +50,40 @@ function PurchasesPage() {
   const purchases = useQuery({
     queryKey: ["purchases", tenantId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("purchases")
-        .select("id, reference, supplier_id, branch_id, user_id, total, status, created_at")
-        .eq("tenant_id", tenantId!)
-        .order("created_at", { ascending: false })
-        .limit(100);
-      if (error) throw error;
-      const baseList = (data ?? []) as Omit<PurchaseRow, "returned_total">[];
+      const baseList = await fetchAllRows<Omit<PurchaseRow, "returned_total">>(
+        supabase.from("purchases")
+          .select("id, reference, supplier_id, branch_id, user_id, total, status, created_at")
+          .eq("tenant_id", tenantId!)
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false }),
+      );
       const supIds = Array.from(new Set(baseList.map((p) => p.supplier_id).filter(Boolean) as string[]));
       const brIds = Array.from(new Set(baseList.map((p) => p.branch_id)));
       const purchaseIds = baseList.map((p) => p.id);
-      const [supRes, brRes, returnRes] = await Promise.all([
-        supIds.length > 0 ? supabase.from("suppliers").select("id, name").in("id", supIds) : Promise.resolve({ data: [] }),
-        brIds.length > 0 ? supabase.from("branches").select("id, name").in("id", brIds) : Promise.resolve({ data: [] }),
-        purchaseIds.length > 0 ? supabase.from("purchase_returns").select("purchase_id, total").in("purchase_id", purchaseIds) : Promise.resolve({ data: [] }),
-      ]);
-      for (const result of [supRes, brRes, returnRes]) {
-        if ("error" in result && result.error) throw result.error;
+      const supRows: Array<{ id: string; name: string }> = [];
+      const brRows: Array<{ id: string; name: string }> = [];
+      const returnRows: Array<{ purchase_id: string; total: number }> = [];
+      const batchSize = 200;
+      for (let i = 0; i < supIds.length; i += batchSize) {
+        const { data, error } = await supabase.from("suppliers").select("id, name").in("id", supIds.slice(i, i + batchSize));
+        if (error) throw error;
+        supRows.push(...(data ?? []));
+      }
+      for (let i = 0; i < brIds.length; i += batchSize) {
+        const { data, error } = await supabase.from("branches").select("id, name").in("id", brIds.slice(i, i + batchSize));
+        if (error) throw error;
+        brRows.push(...(data ?? []));
+      }
+      for (let i = 0; i < purchaseIds.length; i += batchSize) {
+        const { data, error } = await supabase.from("purchase_returns").select("purchase_id, total").in("purchase_id", purchaseIds.slice(i, i + batchSize));
+        if (error) throw error;
+        returnRows.push(...(data ?? []));
       }
       const returnedTotals = new Map<string, number>();
-      for (const ret of returnRes.data ?? []) returnedTotals.set(ret.purchase_id, (returnedTotals.get(ret.purchase_id) ?? 0) + Number(ret.total));
+      for (const ret of returnRows) returnedTotals.set(ret.purchase_id, (returnedTotals.get(ret.purchase_id) ?? 0) + Number(ret.total));
       const list = baseList.map((purchase) => ({ ...purchase, returned_total: returnedTotals.get(purchase.id) ?? 0 }));
-      const supMap = new Map((supRes.data ?? []).map((s) => [(s as { id: string }).id, (s as { name: string }).name]));
-      const brMap = new Map((brRes.data ?? []).map((b) => [(b as { id: string }).id, (b as { name: string }).name]));
+      const supMap = new Map(supRows.map((s) => [s.id, s.name]));
+      const brMap = new Map(brRows.map((b) => [b.id, b.name]));
       return { list, supMap, brMap };
     },
     enabled: !!tenantId,
