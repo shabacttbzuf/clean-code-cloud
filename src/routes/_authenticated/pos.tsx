@@ -491,7 +491,7 @@ function POSPage() {
                 <h2 className="text-xs font-bold">الأقسام</h2>
                 <span className="text-[10px] text-muted-foreground">{(categories.data?.length ?? 0) + 1} قسم</span>
               </div>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="grid grid-cols-5 gap-1 sm:grid-cols-6 xl:grid-cols-9">
                 <CategoryTile label="الكل" active={catFilter === "all"} onClick={() => setCatFilter("all")} />
                 {(categories.data ?? []).map((category) => (
                   <CategoryTile key={category.id} label={category.name} active={catFilter === category.id} onClick={() => setCatFilter(category.id)} />
@@ -519,7 +519,7 @@ function POSPage() {
                   لا يوجد رصيد متاح في هذا الفرع. سجّل الكميات الافتتاحية من شاشة المخزون قبل البيع.
                 </div>
               ) : null}
-              <div className="grid min-h-0 flex-1 content-start grid-cols-4 gap-1.5 overflow-y-auto p-0.5 sm:grid-cols-5 md:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8">
+              <div className="grid min-h-0 flex-1 content-start grid-cols-4 gap-1 overflow-y-auto p-0.5 sm:grid-cols-5 md:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8">
                 {filteredProducts.map((product) => {
                   const available = stockByProduct.get(product.id);
                   const stockUnavailable = inventory.isLoading || inventory.isError || available === undefined || available <= 0;
@@ -538,13 +538,13 @@ function POSPage() {
                     <button key={product.id} type="button" onClick={() => addToCart(product)}
                       disabled={stockUnavailable || checkoutMut.isPending}
                       title={stockLabel}
-                      className="flex min-h-[66px] flex-col items-center justify-center rounded-lg border bg-card p-1 text-center text-[10px] font-semibold leading-tight shadow-sm transition hover:border-primary hover:bg-primary/5 active:scale-95 disabled:cursor-not-allowed disabled:opacity-55 sm:min-h-[70px] sm:p-1.5 sm:text-xs">
-                      <span className="relative mb-0.5 grid h-7 w-7 place-items-center overflow-hidden rounded-md bg-muted text-xs font-black text-muted-foreground">
+                      className="flex min-h-[52px] flex-col items-center justify-center rounded-md border bg-card p-0.5 text-center text-[9px] font-semibold leading-tight shadow-sm transition hover:border-primary hover:bg-primary/5 active:scale-95 disabled:cursor-not-allowed disabled:opacity-55 sm:min-h-[58px] sm:p-1 sm:text-[10px]">
+                      <span className="relative mb-0.5 grid h-5 w-5 place-items-center overflow-hidden rounded bg-muted text-[10px] font-black text-muted-foreground sm:h-6 sm:w-6">
                         {product.name.slice(0, 1)}
                         {product.image_url && <img src={product.image_url} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} />}
                       </span>
                       <span className="line-clamp-1 w-full">{product.name}</span>
-                      <span className="mt-0.5 text-[10px] font-bold text-primary num">{formatMoney(Number(product.sale_price))}</span>
+                      <span className="mt-0.5 text-[9px] font-bold text-primary num">{formatMoney(Number(product.sale_price))}</span>
                       <span className={`mt-0.5 text-[9px] font-semibold ${available !== undefined && available > 0 ? "text-success" : "text-destructive"}`}>{stockLabel}</span>
                     </button>
                   );
@@ -690,8 +690,9 @@ function CategoryTile({ label, active, onClick }: { label: string; active: boole
       type="button"
       onClick={onClick}
       className={active
-        ? "inline-flex min-h-8 items-center justify-center rounded-full border border-primary bg-primary px-3 py-1 text-center text-[10px] font-semibold leading-tight text-primary-foreground shadow transition active:scale-95 sm:min-h-9 sm:text-xs"
-        : "inline-flex min-h-8 items-center justify-center rounded-full border bg-card px-3 py-1 text-center text-[10px] font-semibold leading-tight transition hover:border-primary hover:bg-primary/5 active:scale-95 sm:min-h-9 sm:text-xs"}
+        ? "inline-flex min-h-7 w-full items-center justify-center rounded-md border border-primary bg-primary px-1 py-0.5 text-center text-[9px] font-semibold leading-tight text-primary-foreground shadow transition active:scale-95 sm:min-h-8 sm:text-[10px]"
+        : "inline-flex min-h-7 w-full items-center justify-center rounded-md border bg-card px-1 py-0.5 text-center text-[9px] font-semibold leading-tight transition hover:border-primary hover:bg-primary/5 active:scale-95 sm:min-h-8 sm:text-[10px]"}
+      title={label}
     >
       <span className="line-clamp-1">{label}</span>
     </button>
