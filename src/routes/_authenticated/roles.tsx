@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Loader2, Plus, Trash2, ShieldAlert, Copy } from "lucide-react";
 import { toast } from "sonner";
+import { useSuperOwner } from "@/hooks/use-super-owner";
 
 export const Route = createFileRoute("/_authenticated/roles")({ component: RolesPage });
 
@@ -23,6 +24,7 @@ const BUILTIN = ["owner", "manager", "accountant", "cashier", "warehouse", "wait
 
 function RolesPage() {
   const { tenantId, role, loading } = useActiveTenant();
+  const { isSuperOwner } = useSuperOwner();
   const qc = useQueryClient();
   const createFn = useServerFn(createCustomRole);
   const delFn = useServerFn(deleteCustomRole);
@@ -30,8 +32,8 @@ function RolesPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", copy_from_builtin: "" as string, copy_from_custom: "" });
   const [selected, setSelected] = useState<string | null>(null);
-  const canAccess = role === "owner" || role === "manager";
-  const canManage = role === "owner";
+  const canAccess = role === "owner" || role === "manager" || isSuperOwner;
+  const canManage = role === "owner" || isSuperOwner;
 
   const customRolesQ = useQuery({
     queryKey: ["custom-roles", tenantId],
