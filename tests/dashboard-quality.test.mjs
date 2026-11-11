@@ -69,3 +69,30 @@ test("purchasing rejects incomplete supplier, branch, and product data", () => {
   assert.match(purchases, /branches\.isError \|\| suppliers\.isError \|\| products\.isError/);
   assert.match(purchases, /useEffect\(\(\) =>/);
 });
+
+const authLayout = readFileSync(new URL("../src/routes/_authenticated/route.tsx", import.meta.url), "utf8");
+const sidebar = readFileSync(new URL("../src/components/ui/sidebar.tsx", import.meta.url), "utf8");
+const sonner = readFileSync(new URL("../src/components/ui/sonner.tsx", import.meta.url), "utf8");
+const userAdmin = readFileSync(new URL("../src/routes/_authenticated/users-admin.tsx", import.meta.url), "utf8");
+
+test("dashboard and account menu show profile names, including the platform owner's requested name", () => {
+  assert.match(dashboard, /مرحبا \$\{displayName\}/);
+  assert.match(dashboard, /shafiqalwatiry@gmail\.com/);
+  assert.match(authLayout, /topbar-profile-name/);
+  assert.match(authLayout, /شفيق الوتيري/);
+  assert.doesNotMatch(userAdmin, /u\.email \?\? u\.username/);
+});
+
+test("mobile sidebar supports RTL edge swipes and closes after route navigation", () => {
+  assert.match(sidebar, /Edge-swipe navigation for RTL mobile layouts/);
+  assert.match(sidebar, /setOpenMobile\(true\)/);
+  assert.match(sidebar, /setOpenMobile\(false\)/);
+  assert.match(authLayout, /SidebarRouteSync/);
+  assert.match(authLayout, /setOpenMobile\(false\)/);
+});
+
+test("action toasts are centered at the top in RTL layout", () => {
+  assert.match(sonner, /dir="rtl"/);
+  assert.match(styles, /data-x-position="center"/);
+  assert.match(styles, /data-y-position="top"/);
+});
