@@ -72,6 +72,20 @@ function POSPage() {
   const { tenantId, tenant, userId, membership, isAdmin } = useActiveTenant();
   const qc = useQueryClient();
 
+  const cashierProfile = useQuery({
+    queryKey: ["pos-cashier-profile", userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("full_name, username")
+        .eq("id", userId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!userId,
+  });
+
   const [branchId, setBranchId] = useState<string | null>(membership?.branch_id ?? null);
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState<string>("all");
@@ -264,7 +278,7 @@ function POSPage() {
     invoice_no: sale.invoice_no,
     created_at: sale.created_at,
     branch_name: currentBranch?.name ?? "",
-    cashier_name: "",
+    cashier_name: cashierProfile.data?.full_name?.trim() || cashierProfile.data?.username || "—",
     tax_number: currentBranch?.tax_number,
     address: currentBranch?.address,
     phone: currentBranch?.phone,
