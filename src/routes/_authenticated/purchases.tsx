@@ -116,7 +116,7 @@ function PurchasesPage() {
                       <td className="p-3 num font-bold text-primary">{formatMoney(Number(p.total) - p.returned_total)}</td>
                       <td className="p-3 text-xs">{p.status === "returned" ? "مرتجعة بالكامل" : p.status === "cancelled" ? "ملغاة" : p.status === "draft" ? "مسودة" : "مستلمة"}</td>
                       <td className="p-3 text-xs text-muted-foreground">{formatDateTime(p.created_at)}</td>
-                      {canReturn && p.status === "received" && <td className="p-3"><Button size="sm" variant="outline" onClick={() => setReturningPurchaseId(p.id)}><RotateCcw className="ml-1 h-3 w-3" />إرجاع للمورد</Button></td>}
+                      {canReturn && <td className="p-3">{p.status === "received" ? <Button size="sm" variant="outline" onClick={() => setReturningPurchaseId(p.id)}><RotateCcw className="ml-1 h-3 w-3" />إرجاع للمورد</Button> : "—"}</td>}
                     </tr>
                   ))}
                 </tbody>
