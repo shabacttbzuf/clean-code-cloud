@@ -57,8 +57,12 @@
 43. `supabase/migrations/20261111000022_grant_private_tenant_trigger_execute.sql`
 44. `supabase/migrations/20261111000023_least_privilege_return_api_and_defaults.sql`
 45. `supabase/migrations/20261111000024_read_only_profitability_view.sql`
+46. `supabase/migrations/20261111000025_immutable_tenant_scope_and_branch_memberships.sql`
+47. `supabase/migrations/20261111000026_strict_tenant_immutability.sql`
+48. `supabase/migrations/20261111000027_validate_unconstrained_tenant_references.sql`
+49. `supabase/migrations/20261111000028_validate_notification_receipts.sql`
 
-**الإجمالي: 45 ترحيلاً.**
+**الإجمالي: 49 ترحيلاً.**
 
 ## ترحيل Drizzle القديم
 
@@ -69,7 +73,7 @@
 
 ## ملف SQL الشامل
 
-`supabase/COMPLETE_DATABASE.sql` يجمع محتويات الترحيلات الخمس والأربعين بالترتيب، وهو Snapshot كامل لإعادة البناء من قاعدة فارغة.
+`supabase/COMPLETE_DATABASE.sql` يجمع محتويات الترحيلات التسع والأربعين بالترتيب، وهو Snapshot كامل لإعادة البناء من قاعدة فارغة.
 
 **المسار الموصى به:** `supabase db push` لأنه يحافظ على سجل الترحيلات. لا تشغّل Snapshot يدوياً ثم تشغّل `db push` على القاعدة نفسها؛ اختر طريقة واحدة فقط.
 
