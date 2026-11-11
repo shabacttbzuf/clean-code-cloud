@@ -177,3 +177,13 @@ test("POS supports scheduled promotional placements without changing checkout lo
   assert.match(posPage, /eq\("placement", "pos_promo"\)/);
   assert.match(posPage, /posPromos\.data\.map/);
 });
+
+test("developer studio can rename or hide non-critical built-in tabs and restores defaults", () => {
+  assert.match(settings, /MANAGEABLE_NAV_ITEMS/);
+  assert.match(settings, /ras-sidebar-overrides-v1/);
+  assert.match(settings, /تعديل أسماء التبويبات وإظهارها/);
+  assert.match(settings, /protected: true/);
+  assert.match(settings, /resetNavOverrides/);
+  assert.match(appSidebar, /navOverrides\[item\.url\.split\("#"\)\[0\]\]/);
+  assert.match(appSidebar, /ras-sidebar-overrides-updated/);
+});
