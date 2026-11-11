@@ -31,14 +31,17 @@ function Dashboard() {
     queryKey: ["super-owner-stats"],
     queryFn: async () => {
       const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-      const [tenants, branches, users, sales, expenses] = await Promise.all([
+      const [tenants, branches, users, sales, refunds, expenses] = await Promise.all([
         supabase.from("tenants").select("id", { count: "exact", head: true }),
         supabase.from("branches").select("id", { count: "exact", head: true }),
         supabase.from("profiles").select("id", { count: "exact", head: true }),
-        supabase.from("sales").select("total").gte("created_at", startOfMonth),
+        supabase.from("sales").select("total").neq("status", "void").gte("created_at", startOfMonth),
+        supabase.from("sale_refunds").select("total").gte("created_at", startOfMonth),
         supabase.from("expenses").select("amount").gte("paid_at", startOfMonth.slice(0, 10)),
       ]);
-      const salesTotal = (sales.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
+      const salesGross = (sales.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
+      const refundsTotal = (refunds.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
+      const salesTotal = salesGross - refundsTotal;
       const expTotal = (expenses.data ?? []).reduce((s, r) => s + Number((r as { amount: number }).amount), 0);
       return {
         tenantsCount: tenants.count ?? 0,
@@ -61,22 +64,55 @@ function Dashboard() {
       const last30 = new Date(now.getTime() - 29 * 86400000);
       const last30ISO = new Date(last30.getFullYear(), last30.getMonth(), last30.getDate()).toISOString();
 
-      const [salesToday, salesMonth, salesTrend, expensesMonth, expByCat, lowStock, sessions] = await Promise.all([
-        supabase.from("sales").select("total").eq("tenant_id", tenantId).gte("created_at", startOfDay),
-        supabase.from("sales").select("total").eq("tenant_id", tenantId).gte("created_at", startOfMonth),
-        supabase.from("sales").select("total, created_at").eq("tenant_id", tenantId).gte("created_at", last30ISO),
+      const [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions] = await Promise.all([
+        supabase.from("sales").select("total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfDay),
+        supabase.from("sales").select("id, total, subtotal, discount").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfMonth),
+        supabase.from("sales").select("total, created_at").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", last30ISO),
+        supabase.from("sale_refunds").select("total").eq("tenant_id", tenantId).gte("created_at", startOfDay),
+        supabase.from("sale_refunds").select("id, total, subtotal, discount").eq("tenant_id", tenantId).gte("created_at", startOfMonth),
+        supabase.from("sale_refunds").select("total, created_at").eq("tenant_id", tenantId).gte("created_at", last30ISO),
         supabase.from("expenses").select("amount").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10)),
         supabase.from("expenses").select("amount, category_id").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10)),
         supabase.from("inventory").select("quantity, product_id").eq("tenant_id", tenantId),
         supabase.from("cash_sessions").select("id").eq("tenant_id", tenantId).eq("status", "open"),
       ]);
 
+      const saleIdsMonth = (salesMonth.data ?? []).map((sale) => sale.id);
+      const refundIdsMonth = (refundsMonth.data ?? []).map((refund) => refund.id);
+      const [saleCostRows, refundCostRows] = await Promise.all([
+        saleIdsMonth.length
+          ? supabase.from("sale_items").select("quantity, cost_price_snapshot").in("sale_id", saleIdsMonth)
+          : Promise.resolve({ data: [], error: null }),
+        refundIdsMonth.length
+          ? supabase.from("sale_refund_items").select("quantity, cost_price_snapshot, restocked").in("refund_id", refundIdsMonth)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+      if (saleCostRows.error) throw saleCostRows.error;
+      if (refundCostRows.error) throw refundCostRows.error;
       const catsRes = await supabase.from("expense_categories").select("id, name, color").eq("tenant_id", tenantId);
       const catMap = new Map((catsRes.data ?? []).map((c) => [(c as { id: string }).id, c as { name: string; color: string | null }]));
 
-      const totalToday = (salesToday.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
-      const totalMonth = (salesMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
+      const totalToday = (salesToday.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0)
+        - (refundsToday.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
+      const totalMonth = (salesMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0)
+        - (refundsMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
       const totalExpMonth = (expensesMonth.data ?? []).reduce((s, r) => s + Number((r as { amount: number }).amount), 0);
+      const unknownSaleCosts = (saleCostRows.data ?? []).filter((row) => row.cost_price_snapshot == null).length;
+      const unknownReturnedCosts = (refundCostRows.data ?? []).filter((row) => row.restocked && row.cost_price_snapshot == null).length;
+      const unknownCostItems = unknownSaleCosts + unknownReturnedCosts;
+      const cogsSales = (saleCostRows.data ?? []).reduce(
+        (sum, row) => sum + Number(row.cost_price_snapshot ?? 0) * Number(row.quantity), 0,
+      );
+      const cogsRestockedReturns = (refundCostRows.data ?? []).reduce(
+        (sum, row) => sum + (row.restocked ? Number(row.cost_price_snapshot ?? 0) * Number(row.quantity) : 0), 0,
+      );
+      const revenueBeforeTax = (salesMonth.data ?? []).reduce(
+        (sum, row) => sum + Number(row.subtotal) - Number(row.discount), 0,
+      ) - (refundsMonth.data ?? []).reduce(
+        (sum, row) => sum + Number(row.subtotal) - Number(row.discount), 0,
+      );
+      const grossProfit = unknownCostItems > 0 ? null : revenueBeforeTax - cogsSales + cogsRestockedReturns;
+      const profit = grossProfit === null ? null : grossProfit - totalExpMonth;
 
       // Trend: group by day
       const dayMap = new Map<string, number>();
@@ -88,6 +124,10 @@ function Dashboard() {
       for (const s of salesTrend.data ?? []) {
         const key = new Date((s as { created_at: string }).created_at).toISOString().slice(0, 10);
         if (dayMap.has(key)) dayMap.set(key, (dayMap.get(key) ?? 0) + Number((s as { total: number }).total));
+      }
+      for (const refund of refundsTrend.data ?? []) {
+        const key = new Date((refund as { created_at: string }).created_at).toISOString().slice(0, 10);
+        if (dayMap.has(key)) dayMap.set(key, (dayMap.get(key) ?? 0) - Number((refund as { total: number }).total));
       }
       const trend = Array.from(dayMap.entries()).map(([day, total]) => ({ day: day.slice(5), total: +total.toFixed(2) }));
 
@@ -108,7 +148,7 @@ function Dashboard() {
 
       return {
         totalToday, totalMonth, totalExpMonth,
-        profit: totalMonth - totalExpMonth,
+        profit, unknownCostItems,
         salesTodayCount: (salesToday.data ?? []).length,
         openSessions: (sessions.data ?? []).length,
         lowStockCount,
@@ -149,7 +189,7 @@ function Dashboard() {
             <Kpi label="مبيعات اليوم" value={`${formatMoney(stats.data.totalToday)} ${currency}`} sub={`${stats.data.salesTodayCount} فاتورة`} icon={<Receipt className="h-5 w-5" />} tone="primary" />
             <Kpi label="مبيعات الشهر" value={`${formatMoney(stats.data.totalMonth)} ${currency}`} icon={<TrendingUp className="h-5 w-5" />} tone="success" />
             <Kpi label="مصروفات الشهر" value={`${formatMoney(stats.data.totalExpMonth)} ${currency}`} icon={<TrendingDown className="h-5 w-5" />} tone="destructive" />
-            <Kpi label="صافي الربح" value={`${formatMoney(stats.data.profit)} ${currency}`} icon={<Wallet className="h-5 w-5" />} tone={stats.data.profit >= 0 ? "success" : "destructive"} />
+            <Kpi label="الربح التقديري" value={stats.data.profit === null ? "غير مكتمل" : `${formatMoney(stats.data.profit)} ${currency}`} sub={stats.data.unknownCostItems > 0 ? `${stats.data.unknownCostItems} صنفاً بلا تكلفة محفوظة` : "بعد تكلفة البضاعة والمصروفات المسجلة"} icon={<Wallet className="h-5 w-5" />} tone={stats.data.profit !== null && stats.data.profit >= 0 ? "success" : "destructive"} />
           </div>
 
           <div className="grid gap-4 lg:grid-cols-3">

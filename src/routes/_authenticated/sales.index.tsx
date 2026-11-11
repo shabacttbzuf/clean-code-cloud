@@ -26,6 +26,7 @@ type SaleRow = {
   status: string;
   branch_id: string;
   cashier_id: string;
+  refund_total: number;
 };
 
 const methodLabels: Record<string, string> = {
@@ -50,10 +51,21 @@ function SalesListPage() {
         .from("sales")
         .select("id, invoice_no, created_at, total, discount, tax_amount, subtotal, payment_method, status, branch_id, cashier_id")
         .eq("tenant_id", tenantId!)
+        .neq("status", "void")
         .order("created_at", { ascending: false })
         .limit(200);
       if (error) throw error;
-      return (data ?? []) as SaleRow[];
+      const list = (data ?? []) as Omit<SaleRow, "refund_total">[];
+      const saleIds = list.map((sale) => sale.id);
+      const refunds = saleIds.length
+        ? await supabase.from("sale_refunds").select("sale_id, total").in("sale_id", saleIds)
+        : { data: [], error: null };
+      if (refunds.error) throw refunds.error;
+      const refundTotals = new Map<string, number>();
+      for (const refund of refunds.data ?? []) {
+        refundTotals.set(refund.sale_id, (refundTotals.get(refund.sale_id) ?? 0) + Number(refund.total));
+      }
+      return list.map((sale) => ({ ...sale, refund_total: refundTotals.get(sale.id) ?? 0 }));
     },
     enabled: !!tenantId,
   });
@@ -67,7 +79,7 @@ function SalesListPage() {
     });
   }, [sales.data, search, methodFilter]);
 
-  const totalSum = filtered.reduce((a, s) => a + Number(s.total), 0);
+  const totalSum = filtered.reduce((a, s) => a + Number(s.total) - Number(s.refund_total), 0);
 
   return (
     <div className="space-y-6">
@@ -108,7 +120,8 @@ function SalesListPage() {
                     <th className="p-3 font-medium">الدفع</th>
                     <th className="p-3 font-medium">الخصم</th>
                     <th className="p-3 font-medium">الضريبة</th>
-                    <th className="p-3 font-medium">الإجمالي</th>
+                    <th className="p-3 font-medium">المرتجع</th>
+                    <th className="p-3 font-medium">الصافي</th>
                     <th className="p-3"></th>
                   </tr>
                 </thead>
@@ -124,7 +137,8 @@ function SalesListPage() {
                       </td>
                       <td className="p-3 num text-muted-foreground">{formatMoney(s.discount)}</td>
                       <td className="p-3 num text-muted-foreground">{formatMoney(s.tax_amount)}</td>
-                      <td className="p-3 num font-bold text-primary">{formatMoney(s.total)}</td>
+                      <td className="p-3 num text-destructive">{s.refund_total > 0 ? `-${formatMoney(s.refund_total)}` : "—"}</td>
+                      <td className="p-3 num font-bold text-primary">{formatMoney(Number(s.total) - Number(s.refund_total))}</td>
                       <td className="p-3">
                         <Link to="/sales/$id" params={{ id: s.id }} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
                           التفاصيل <ChevronLeft className="h-3 w-3" />

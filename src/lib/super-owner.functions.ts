@@ -32,24 +32,25 @@ export const listSuperOwners = createServerFn({ method: "GET" })
   });
 
 /**
- * Bootstrap the first super owner. Only works if the super_owners table is
- * currently empty. Any authenticated user can claim the role at that point.
- * After bootstrap, only existing super owners can grant new ones.
+ * Bootstrap the first super owner. Requires an explicit server-side
+ * INITIAL_SUPER_OWNER_USER_ID allowlist and an atomic service-role database RPC.
  */
 export const bootstrapSuperOwner = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { count, error: countError } = await supabaseAdmin
-      .from("super_owners")
-      .select("*", { count: "exact", head: true });
-    if (countError) throw new Error(countError.message);
-    if ((count ?? 0) > 0) {
-      throw new Error("تم تعيين المالك الرئيسي مسبقاً. لا يمكن التسجيل الذاتي بعد الآن.");
+    // Bootstrap is disabled unless this exact authenticated account was
+    // explicitly allow-listed by the deployment administrator.
+    const initialOwnerId = process.env.INITIAL_SUPER_OWNER_USER_ID;
+    if (!initialOwnerId || initialOwnerId !== context.userId) {
+      throw new Error("إعداد المالك الرئيسي الأول يتطلب تفويضاً مسبقاً من مسؤول النظام.");
     }
-    const { error } = await supabaseAdmin
-      .from("super_owners")
-      .insert({ user_id: context.userId, granted_by: context.userId, notes: "Bootstrap" });
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // The database function serializes concurrent attempts with an advisory
+    // transaction lock and permits only service_role to execute.
+    const { error } = await supabaseAdmin.rpc("bootstrap_first_super_owner", {
+      _user_id: context.userId,
+    });
     if (error) throw new Error(error.message);
     return { ok: true, user_id: context.userId };
   });

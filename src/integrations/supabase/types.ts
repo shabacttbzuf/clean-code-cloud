@@ -1244,6 +1244,35 @@ export type Database = {
           },
         ]
       }
+      notification_reads: {
+        Row: {
+          id: string
+          notification_id: string
+          read_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          notification_id: string
+          read_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          notification_id?: string
+          read_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_reads_notification_id_fkey"
+            columns: ["notification_id"]
+            isOneToOne: false
+            referencedRelation: "notifications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           audience_id: string | null
@@ -1793,6 +1822,129 @@ export type Database = {
           },
         ]
       }
+      purchase_returns: {
+        Row: {
+          branch_id: string
+          created_at: string
+          id: string
+          processed_by: string
+          purchase_id: string
+          reason: string
+          tenant_id: string
+          total: number
+        }
+        Insert: {
+          branch_id: string
+          created_at?: string
+          id?: string
+          processed_by: string
+          purchase_id: string
+          reason: string
+          tenant_id: string
+          total?: number
+        }
+        Update: {
+          branch_id?: string
+          created_at?: string
+          id?: string
+          processed_by?: string
+          purchase_id?: string
+          reason?: string
+          tenant_id?: string
+          total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_returns_purchase_id_fkey"
+            columns: ["purchase_id"]
+            isOneToOne: false
+            referencedRelation: "purchases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_returns_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_returns_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      purchase_return_items: {
+        Row: {
+          cost_price: number
+          created_at: string
+          id: string
+          line_total: number
+          product_id: string
+          product_name: string
+          purchase_item_id: string
+          purchase_return_id: string
+          quantity: number
+          tenant_id: string
+        }
+        Insert: {
+          cost_price: number
+          created_at?: string
+          id?: string
+          line_total: number
+          product_id: string
+          product_name: string
+          purchase_item_id: string
+          purchase_return_id: string
+          quantity: number
+          tenant_id: string
+        }
+        Update: {
+          cost_price?: number
+          created_at?: string
+          id?: string
+          line_total?: number
+          product_id?: string
+          product_name?: string
+          purchase_item_id?: string
+          purchase_return_id?: string
+          quantity?: number
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_return_items_purchase_return_id_fkey"
+            columns: ["purchase_return_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_returns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_return_items_purchase_item_id_fkey"
+            columns: ["purchase_item_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_return_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_return_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       purchases: {
         Row: {
           branch_id: string
@@ -1914,6 +2066,7 @@ export type Database = {
       }
       sale_items: {
         Row: {
+          cost_price_snapshot: number | null
           created_at: string
           discount: number
           id: string
@@ -1927,6 +2080,7 @@ export type Database = {
           unit_price: number
         }
         Insert: {
+          cost_price_snapshot?: number | null
           created_at?: string
           discount?: number
           id?: string
@@ -1940,6 +2094,7 @@ export type Database = {
           unit_price: number
         }
         Update: {
+          cost_price_snapshot?: number | null
           created_at?: string
           discount?: number
           id?: string
@@ -1969,6 +2124,166 @@ export type Database = {
           },
           {
             foreignKeyName: "sale_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sale_refunds: {
+        Row: {
+          branch_id: string
+          cash_session_id: string | null
+          created_at: string
+          discount: number
+          id: string
+          processed_by: string
+          reason: string
+          refund_method: Database["public"]["Enums"]["payment_method"]
+          sale_id: string
+          subtotal: number
+          tax_amount: number
+          tenant_id: string
+          total: number
+        }
+        Insert: {
+          branch_id: string
+          cash_session_id?: string | null
+          created_at?: string
+          discount?: number
+          id?: string
+          processed_by: string
+          reason: string
+          refund_method: Database["public"]["Enums"]["payment_method"]
+          sale_id: string
+          subtotal?: number
+          tax_amount?: number
+          tenant_id: string
+          total?: number
+        }
+        Update: {
+          branch_id?: string
+          cash_session_id?: string | null
+          created_at?: string
+          discount?: number
+          id?: string
+          processed_by?: string
+          reason?: string
+          refund_method?: Database["public"]["Enums"]["payment_method"]
+          sale_id?: string
+          subtotal?: number
+          tax_amount?: number
+          tenant_id?: string
+          total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sale_refunds_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_refunds_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_refunds_cash_session_id_fkey"
+            columns: ["cash_session_id"]
+            isOneToOne: false
+            referencedRelation: "cash_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_refunds_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sale_refund_items: {
+        Row: {
+          cost_price_snapshot: number | null
+          created_at: string
+          discount_amount: number
+          id: string
+          product_id: string | null
+          product_name: string
+          quantity: number
+          refund_id: string
+          restocked: boolean
+          sale_item_id: string
+          subtotal_amount: number
+          tax_amount: number
+          tenant_id: string
+          total_amount: number
+          unit_price: number
+        }
+        Insert: {
+          cost_price_snapshot?: number | null
+          created_at?: string
+          discount_amount: number
+          id?: string
+          product_id?: string | null
+          product_name: string
+          quantity: number
+          refund_id: string
+          restocked?: boolean
+          sale_item_id: string
+          subtotal_amount: number
+          tax_amount: number
+          tenant_id: string
+          total_amount: number
+          unit_price: number
+        }
+        Update: {
+          cost_price_snapshot?: number | null
+          created_at?: string
+          discount_amount?: number
+          id?: string
+          product_id?: string | null
+          product_name?: string
+          quantity?: number
+          refund_id?: string
+          restocked?: boolean
+          sale_item_id?: string
+          subtotal_amount?: number
+          tax_amount?: number
+          tenant_id?: string
+          total_amount?: number
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sale_refund_items_refund_id_fkey"
+            columns: ["refund_id"]
+            isOneToOne: false
+            referencedRelation: "sale_refunds"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_refund_items_sale_item_id_fkey"
+            columns: ["sale_item_id"]
+            isOneToOne: false
+            referencedRelation: "sale_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_refund_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_refund_items_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -2241,9 +2556,35 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      sales_profitability: {
+        Row: {
+          branch_id: string
+          cost_of_goods_sold: number | null
+          created_at: string
+          discount: number
+          gross_profit: number | null
+          invoice_no: number
+          items_with_unknown_cost: number
+          net_revenue_before_tax: number
+          sale_id: string
+          status: Database["public"]["Enums"]["sale_status"]
+          subtotal: number
+          tenant_id: string
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      adjust_inventory_balance: {
+        Args: {
+          _branch_id: string
+          _product_id: string
+          _reason: string
+          _target_quantity: number
+          _tenant_id: string
+        }
+        Returns: undefined
+      }
       apply_stock_change: {
         Args: {
           _branch_id: string
@@ -2251,6 +2592,10 @@ export type Database = {
           _product_id: string
           _tenant_id: string
         }
+        Returns: undefined
+      }
+      bootstrap_first_super_owner: {
+        Args: { _user_id: string }
         Returns: undefined
       }
       clone_role_permissions: {
@@ -2262,21 +2607,190 @@ export type Database = {
         }
         Returns: number
       }
-      get_super_owner_status: { Args: never; Returns: Json }
+      close_cash_session: {
+        Args: { _closing_balance: number; _session_id: string }
+        Returns: {
+          branch_id: string
+          cash_difference: number | null
+          cashier_id: string
+          closed_at: string | null
+          closing_balance: number | null
+          created_at: string
+          expected_cash: number | null
+          id: string
+          notes: string | null
+          opened_at: string
+          opening_balance: number
+          status: Database["public"]["Enums"]["cash_session_status"]
+          tenant_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cash_sessions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_purchase_with_items: {
+        Args: {
+          _branch_id: string
+          _items: Json
+          _notes: string | null
+          _reference: string | null
+          _supplier_id: string | null
+          _tenant_id: string
+          _user_id: string
+        }
+        Returns: {
+          branch_id: string
+          created_at: string
+          id: string
+          notes: string | null
+          received_at: string
+          reference: string | null
+          status: Database["public"]["Enums"]["purchase_status"]
+          supplier_id: string | null
+          tenant_id: string
+          total: number
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "purchases"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_sale_with_items: {
+        Args: {
+          _branch_id: string
+          _cashier_id: string
+          _discount: number
+          _items: Json
+          _payment_method: Database["public"]["Enums"]["payment_method"]
+          _session_id: string
+          _tenant_id: string
+        }
+        Returns: {
+          branch_id: string
+          cashier_id: string
+          created_at: string
+          discount: number
+          id: string
+          invoice_no: number
+          notes: string | null
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          session_id: string | null
+          status: Database["public"]["Enums"]["sale_status"]
+          subtotal: number
+          tax_amount: number
+          tenant_id: string
+          total: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sales"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_sale_refund: {
+        Args: {
+          _items: Json
+          _reason: string
+          _refund_method: Database["public"]["Enums"]["payment_method"]
+          _sale_id: string
+          _tenant_id: string
+        }
+        Returns: {
+          branch_id: string
+          cash_session_id: string | null
+          created_at: string
+          discount: number
+          id: string
+          processed_by: string
+          reason: string
+          refund_method: Database["public"]["Enums"]["payment_method"]
+          sale_id: string
+          subtotal: number
+          tax_amount: number
+          tenant_id: string
+          total: number
+        }
+      }
+      create_purchase_return: {
+        Args: {
+          _items: Json
+          _purchase_id: string
+          _reason: string
+          _tenant_id: string
+        }
+        Returns: {
+          branch_id: string
+          created_at: string
+          id: string
+          processed_by: string
+          purchase_id: string
+          reason: string
+          tenant_id: string
+          total: number
+        }
+      }
+      create_tenant_with_owner: {
+        Args: { _currency: string; _name: string; _tax_rate: number }
+        Returns: {
+          created_at: string
+          currency: string
+          id: string
+          logo_url: string | null
+          name: string
+          owner_id: string
+          password_max_age_days: number | null
+          require_owner_approval: boolean
+          tax_rate: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tenants"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       has_permission: {
         Args: { _permission_key: string; _tenant_id: string; _user_id: string }
         Returns: boolean
       }
+      get_super_owner_status: { Args: never; Returns: Json }
       is_super_owner: { Args: { _user_id: string }; Returns: boolean }
+      reject_payroll_run: {
+        Args: {
+          _actor_id: string
+          _reason: string
+          _run_id: string
+          _tenant_id: string
+        }
+        Returns: undefined
+      }
+      replace_user_role_in_tenant: {
+        Args: {
+          _actor_id: string
+          _branch_id: string | null
+          _role: Database["public"]["Enums"]["app_role"]
+          _tenant_id: string
+          _user_id: string
+        }
+        Returns: undefined
+      }
       touch_last_login: { Args: never; Returns: undefined }
-      user_has_role_in_tenant: {
-        Args: { _roles: string[]; _tenant_id: string; _user_id: string }
-        Returns: boolean
+      transfer_user_role_branch: {
+        Args: { _branch_id: string | null; _tenant_id: string; _user_role_id: string }
+        Returns: undefined
       }
-      was_hired_by: {
-        Args: { _actor: string; _target: string; _tenant_id: string }
-        Returns: boolean
-      }
+
     }
     Enums: {
       account_status:
@@ -2297,7 +2811,7 @@ export type Database = {
       cash_session_status: "open" | "closed"
       inventory_txn_type: "in" | "out" | "adjust" | "sale" | "refund"
       payment_method: "cash" | "card" | "transfer" | "mixed"
-      purchase_status: "draft" | "received" | "cancelled"
+      purchase_status: "draft" | "received" | "cancelled" | "returned"
       sale_status: "completed" | "refunded" | "void"
     }
     CompositeTypes: {

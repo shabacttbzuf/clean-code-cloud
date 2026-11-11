@@ -406,7 +406,7 @@ function CreateUserDialog({
             </div>
           </div>
           <div>
-            <Label>كلمة المرور * (6+ أحرف)</Label>
+            <Label>كلمة المرور * (8+ أحرف)</Label>
             <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -439,7 +439,7 @@ function CreateUserDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>إلغاء</Button>
           <Button
             onClick={() => mut.mutate()}
-            disabled={mut.isPending || !form.email || !form.password || !form.full_name}
+            disabled={mut.isPending || !form.email || form.password.length < 8 || !form.full_name}
           >
             {mut.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
             إنشاء
@@ -480,12 +480,12 @@ function PasswordDialog({
           <DialogTitle>تغيير كلمة مرور {user?.full_name}</DialogTitle>
         </DialogHeader>
         <div>
-          <Label>كلمة المرور الجديدة (6+ أحرف)</Label>
+          <Label>كلمة المرور الجديدة (8+ أحرف)</Label>
           <Input type="password" value={pwd} onChange={(e) => setPwd(e.target.value)} />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>إلغاء</Button>
-          <Button onClick={() => mut.mutate()} disabled={mut.isPending || pwd.length < 6}>
+          <Button onClick={() => mut.mutate()} disabled={mut.isPending || pwd.length < 8}>
             {mut.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
             حفظ
           </Button>

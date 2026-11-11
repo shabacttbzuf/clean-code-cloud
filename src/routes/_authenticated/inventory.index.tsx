@@ -109,32 +109,14 @@ function InventoryPage() {
       const delta = target - Number(adjustFor.quantity);
       if (delta === 0) return;
 
-      const { data: user } = await supabase.auth.getUser();
-      const uid = user.user?.id;
-
-      // Client-side upsert + log
-      const { error: upErr } = await supabase.from("inventory").upsert(
-        {
-          tenant_id: tenantId,
-          product_id: adjustFor.product_id,
-          branch_id: adjustFor.branch_id,
-          quantity: target,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "product_id,branch_id" },
-      );
-      if (upErr) throw upErr;
-
-      const { error: txnErr } = await supabase.from("inventory_transactions").insert({
-        tenant_id: tenantId,
-        product_id: adjustFor.product_id,
-        branch_id: adjustFor.branch_id,
-        user_id: uid,
-        txn_type: "adjust",
-        quantity: delta,
-        reason: adjustReason || "تعديل يدوي",
+      const { error } = await supabase.rpc("adjust_inventory_balance", {
+        _tenant_id: tenantId,
+        _product_id: adjustFor.product_id,
+        _branch_id: adjustFor.branch_id,
+        _target_quantity: target,
+        _reason: adjustReason || "تعديل يدوي",
       });
-      if (txnErr) throw txnErr;
+      if (error) throw error;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["inventory"] });

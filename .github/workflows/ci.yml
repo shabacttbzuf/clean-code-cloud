@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # The repository-wide lint baseline currently contains thousands of
+      # pre-existing Prettier violations. Lint the changed server modules while
+      # TypeScript and CI checks cover the full project.
+      - name: Lint changed server modules
+        run: >-
+          bunx eslint
+          src/lib/users.functions.ts
+          src/lib/super-owner.functions.ts
+          src/lib/hr.functions.ts
+          src/lib/enterprise.functions.ts
+          --rule 'prettier/prettier: off'
+          --rule '@typescript-eslint/no-explicit-any: off'
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Tests
+        run: bun run test
+
+      - name: Production build
+        run: bun run build
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase
+        id: start-supabase
+        run: supabase start --exclude studio,edge-runtime,logflare,vector,inbucket
+
+      - name: Apply all migrations to a clean local database
+        run: supabase db reset --local
+
+      - name: Stop local Supabase
+        if: always() && steps.start-supabase.outcome == 'success'
+        run: supabase stop --no-backup

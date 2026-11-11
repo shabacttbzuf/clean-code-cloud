@@ -96,6 +96,16 @@ function TopBar() {
     try {
       await qc.cancelQueries();
       qc.clear();
+      try {
+        const loginHistoryId = sessionStorage.getItem("clean-code-cloud-login-history-id");
+        const { recordLogout } = await import("@/lib/enterprise.functions");
+        await recordLogout({
+          data: loginHistoryId ? { login_history_id: loginHistoryId } : {},
+        });
+        sessionStorage.removeItem("clean-code-cloud-login-history-id");
+      } catch (historyError) {
+        console.warn("Could not record logout history", historyError);
+      }
       await supabase.auth.signOut();
       navigate({ to: "/auth", replace: true });
       toast.success("تم تسجيل الخروج");

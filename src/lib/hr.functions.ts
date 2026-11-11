@@ -42,7 +42,8 @@ export const runMonthlyPayroll = createServerFn({ method: "POST" })
       .eq("period_year", data.year)
       .eq("period_month", data.month);
     existQ = data.branch_id ? existQ.eq("branch_id", data.branch_id) : existQ.is("branch_id", null);
-    const { data: existing } = await existQ.maybeSingle();
+    const { data: existing, error: existingError } = await existQ.maybeSingle();
+    if (existingError) throw new Error(existingError.message);
     if (existing) throw new Error("دورة الرواتب لهذا الشهر موجودة مسبقاً");
 
     // Fetch active employees
@@ -75,9 +76,10 @@ export const runMonthlyPayroll = createServerFn({ method: "POST" })
       .single();
     if (runErr) throw new Error(runErr.message);
 
-    let totalGross = 0, totalNet = 0, totalBonuses = 0, totalDeductions = 0;
+    try {
+      let totalGross = 0, totalNet = 0, totalBonuses = 0, totalDeductions = 0;
 
-    for (const e of employees) {
+      for (const e of employees) {
       const empId = e.id as string;
       const workingDays = Number((e as any).working_days_per_month || 26);
       const workingHours = Number((e as any).working_hours_per_day || 8);
@@ -85,7 +87,7 @@ export const runMonthlyPayroll = createServerFn({ method: "POST" })
       const dailyRate = Number((e as any).daily_salary) || (baseMonthly / Math.max(1, workingDays));
       const hourlyRate = Number((e as any).hourly_salary) || (dailyRate / Math.max(1, workingHours));
 
-      const [{ data: bList }, { data: dList }, { data: attList }] = await Promise.all([
+      const [bonusResult, deductionResult, attendanceResult] = await Promise.all([
         supabase.from("bonuses").select("id, amount").eq("employee_id", empId)
           .is("payroll_item_id", null)
           .gte("applied_date", startDate).lte("applied_date", endDate),
@@ -95,25 +97,41 @@ export const runMonthlyPayroll = createServerFn({ method: "POST" })
         supabase.from("attendance").select("status, hours_worked, late_minutes, overtime_hours")
           .eq("employee_id", empId).gte("date", startDate).lte("date", endDate),
       ]);
-      const bonusesTotal = (bList ?? []).reduce((s: number, x: any) => s + Number(x.amount), 0);
-      const manualDeductions = (dList ?? []).reduce((s: number, x: any) => s + Number(x.amount), 0);
+      if (bonusResult.error) throw new Error(bonusResult.error.message);
+      if (deductionResult.error) throw new Error(deductionResult.error.message);
+      if (attendanceResult.error) throw new Error(attendanceResult.error.message);
 
-      const att = attList ?? [];
-      const presentDays = att.filter((a: any) => ["present", "late", "early_leave", "overtime", "half_day"].includes(a.status)).length;
-      const holidays = att.filter((a: any) => ["weekly_holiday", "official_holiday"].includes(a.status)).length;
-      const leaves = att.filter((a: any) => ["annual_leave", "sick_leave"].includes(a.status)).length;
-      const unexcusedAbsent = att.filter((a: any) => ["absent", "absent_unexcused"].includes(a.status)).length;
-      const totalLateMinutes = att.reduce((s: number, a: any) => s + Number(a.late_minutes || 0), 0);
-      const overtimeHours = att.reduce((s: number, a: any) => s + Number(a.overtime_hours || 0), 0);
-      const workedHours = att.reduce((s: number, a: any) => s + Number(a.hours_worked || 0), 0);
+      const bList = bonusResult.data ?? [];
+      const dList = deductionResult.data ?? [];
+      const att = attendanceResult.data ?? [];
+      const bonusesTotal = bList.reduce((s: number, x: any) => s + Number(x.amount), 0);
+      const manualDeductions = dList.reduce((s: number, x: any) => s + Number(x.amount), 0);
 
-      // Deductions computed from BASE salary rate (not final)
-      const absenceDeduction = +(unexcusedAbsent * dailyRate).toFixed(2);
-      const lateDeduction = +((totalLateMinutes / 60) * hourlyRate).toFixed(2);
-      const overtimeAmount = +(overtimeHours * hourlyRate * 1.5).toFixed(2); // 1.5x standard
+      const presentDays = att.reduce((sum: number, row: any) =>
+        sum + (row.status === "present" ? 1 : row.status === "half_day" ? 0.5 : 0), 0);
+      const holidays = att.filter((row: any) => row.status === "holiday").length;
+      const leaves = att.filter((row: any) => row.status === "leave").length;
+      const unexcusedAbsent = att.filter((row: any) => row.status === "absent").length;
+      const totalLateMinutes = att.reduce((sum: number, row: any) => sum + Number(row.late_minutes || 0), 0);
+      const overtimeHours = att.reduce((sum: number, row: any) => sum + Number(row.overtime_hours || 0), 0);
+      const workedHours = att.reduce((sum: number, row: any) => sum + Number(row.hours_worked || 0), 0);
+
+      const salaryType = String(e.salary_type || "monthly");
+      const overtimeAmount = +(overtimeHours * hourlyRate * 1.5).toFixed(2);
+      const regularHourlyEarnings = Math.max(0, workedHours - overtimeHours) * hourlyRate;
+      const baseEarnings =
+        salaryType === "daily" ? presentDays * dailyRate :
+        salaryType === "hourly" ? regularHourlyEarnings :
+        baseMonthly;
+
+      // Monthly salaries deduct absences; hourly salaries already reflect actual hours.
+      const absenceDeduction = salaryType === "monthly" ? +(unexcusedAbsent * dailyRate).toFixed(2) : 0;
+      const lateDeduction = salaryType === "hourly"
+        ? 0
+        : +((totalLateMinutes / 60) * hourlyRate).toFixed(2);
 
       const deductionsTotal = +(manualDeductions + absenceDeduction + lateDeduction).toFixed(2);
-      const gross = +(baseMonthly + bonusesTotal + overtimeAmount).toFixed(2);
+      const gross = +(baseEarnings + bonusesTotal + overtimeAmount).toFixed(2);
       const net = +(gross - deductionsTotal).toFixed(2);
 
       const { data: item, error: itemErr } = await supabase.from("payroll_items").insert({
@@ -140,18 +158,40 @@ export const runMonthlyPayroll = createServerFn({ method: "POST" })
 
       const bIds = (bList ?? []).map((x: any) => x.id);
       const dIds = (dList ?? []).map((x: any) => x.id);
-      if (bIds.length) await supabase.from("bonuses").update({ payroll_item_id: item.id }).in("id", bIds);
-      if (dIds.length) await supabase.from("deductions").update({ payroll_item_id: item.id }).in("id", dIds);
+      if (bIds.length) {
+        const { error } = await supabase.from("bonuses").update({ payroll_item_id: item.id }).in("id", bIds);
+        if (error) throw new Error(error.message);
+      }
+      if (dIds.length) {
+        const { error } = await supabase.from("deductions").update({ payroll_item_id: item.id }).in("id", dIds);
+        if (error) throw new Error(error.message);
+      }
 
       totalGross += gross; totalNet += net; totalBonuses += bonusesTotal; totalDeductions += deductionsTotal;
     }
 
-    await supabase.from("payroll_runs").update({
+    const { error: totalsError } = await supabase.from("payroll_runs").update({
       total_gross: totalGross, total_net: totalNet,
       total_bonuses: totalBonuses, total_deductions: totalDeductions,
-    }).eq("id", run.id);
+    }).eq("id", run.id).eq("tenant_id", data.tenant_id);
+      if (totalsError) throw new Error(totalsError.message);
 
-    return { run_id: run.id as string, employees_count: employees.length };
+      return { run_id: run.id as string, employees_count: employees.length };
+    } catch (error) {
+      // Remove the draft and its items if any calculation or write fails.
+      // FK cleanup detaches bonus/deduction references so they remain reusable.
+      const { error: cleanupError } = await supabase
+        .from("payroll_runs")
+        .delete()
+        .eq("id", run.id)
+        .eq("tenant_id", data.tenant_id);
+      if (cleanupError) {
+        throw new Error(
+          `Payroll generation failed: ${error instanceof Error ? error.message : String(error)}. Cleanup also failed: ${cleanupError.message}`,
+        );
+      }
+      throw error;
+    }
   });
 
 export const approvePayroll = createServerFn({ method: "POST" })
@@ -159,10 +199,20 @@ export const approvePayroll = createServerFn({ method: "POST" })
   .inputValidator((data) => z.object({ id: z.string().uuid(), tenant_id: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
     await assertHRAccess(context.supabase, context.userId, data.tenant_id);
-    const { error } = await context.supabase.from("payroll_runs").update({
-      status: "approved", approved_by: context.userId, approved_at: new Date().toISOString(),
-    }).eq("id", data.id);
+    const { data: updated, error } = await context.supabase
+      .from("payroll_runs")
+      .update({
+        status: "approved",
+        approved_by: context.userId,
+        approved_at: new Date().toISOString(),
+      })
+      .eq("id", data.id)
+      .eq("tenant_id", data.tenant_id)
+      .eq("status", "draft")
+      .select("id")
+      .maybeSingle();
     if (error) throw new Error(error.message);
+    if (!updated) throw new Error("لا يمكن اعتماد دورة الرواتب: يجب أن تكون في حالة مسودة.");
     return { ok: true };
   });
 
@@ -171,10 +221,16 @@ export const markPayrollPaid = createServerFn({ method: "POST" })
   .inputValidator((data) => z.object({ id: z.string().uuid(), tenant_id: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
     await assertHRAccess(context.supabase, context.userId, data.tenant_id);
-    const { error } = await context.supabase.from("payroll_runs").update({
-      status: "paid", paid_at: new Date().toISOString(),
-    }).eq("id", data.id);
+    const { data: updated, error } = await context.supabase
+      .from("payroll_runs")
+      .update({ status: "paid", paid_at: new Date().toISOString() })
+      .eq("id", data.id)
+      .eq("tenant_id", data.tenant_id)
+      .eq("status", "approved")
+      .select("id")
+      .maybeSingle();
     if (error) throw new Error(error.message);
+    if (!updated) throw new Error("لا يمكن صرف دورة الرواتب: يجب أن تكون معتمدة أولاً.");
     return { ok: true };
   });
 
@@ -194,23 +250,13 @@ export const rejectPayroll = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await assertHRAccess(context.supabase, context.userId, data.tenant_id);
-    const supabase = context.supabase;
-
-    const { data: items } = await supabase.from("payroll_items").select("id").eq("payroll_run_id", data.id);
-    const itemIds = (items ?? []).map((x: any) => x.id);
-    if (itemIds.length) {
-      await supabase.from("bonuses").update({ payroll_item_id: null }).in("payroll_item_id", itemIds);
-      await supabase.from("deductions").update({ payroll_item_id: null }).in("payroll_item_id", itemIds);
-      await supabase.from("payroll_items").delete().eq("payroll_run_id", data.id);
-    }
-
-    const { error } = await supabase.from("payroll_runs").update({
-      status: "rejected",
-      rejection_reason: data.reason,
-      rejected_by: context.userId,
-      rejected_at: new Date().toISOString(),
-      total_gross: 0, total_net: 0, total_bonuses: 0, total_deductions: 0,
-    }).eq("id", data.id);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.rpc("reject_payroll_run", {
+      _run_id: data.id,
+      _tenant_id: data.tenant_id,
+      _reason: data.reason,
+      _actor_id: context.userId,
+    });
     if (error) throw new Error(error.message);
     return { ok: true };
   });
