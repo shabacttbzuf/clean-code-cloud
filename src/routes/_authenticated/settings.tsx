@@ -305,7 +305,10 @@ function SettingsPage() {
               <div className="space-y-2"><Label>بداية العرض (اختياري)</Label><Input type="datetime-local" value={campaignStart} onChange={(e) => setCampaignStart(e.target.value)} /></div>
               <div className="space-y-2"><Label>نهاية العرض (اختياري)</Label><Input type="datetime-local" value={campaignEnd} onChange={(e) => setCampaignEnd(e.target.value)} /></div>
             </div>
-            <Button type="button" onClick={() => campaignCreate.mutate()} disabled={campaignCreate.isPending || !campaignTitle.trim()}>{campaignCreate.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}{editingCampaignId ? "حفظ التعديلات" : "حفظ كمسودة"}</Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" onClick={() => campaignCreate.mutate()} disabled={campaignCreate.isPending || !campaignTitle.trim()}>{campaignCreate.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}{editingCampaignId ? "حفظ التعديلات" : "حفظ كمسودة"}</Button>
+              {editingCampaignId && <Button type="button" variant="outline" onClick={() => { setEditingCampaignId(null); setCampaignTitle(""); setCampaignDescription(""); setCampaignImage(""); setCampaignTarget(""); setCampaignStart(""); setCampaignEnd(""); }}>إلغاء التعديل</Button>}
+            </div>
             <div className="space-y-2 border-t pt-4">
               <h3 className="font-semibold">الحملات المحفوظة</h3>
               {campaignsQuery.isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : campaignsQuery.isError ? <div className="text-sm text-destructive">تعذر تحميل الحملات. <Button type="button" variant="link" onClick={() => campaignsQuery.refetch()}>إعادة المحاولة</Button></div> : campaignsQuery.data?.length ? campaignsQuery.data.map((campaign) => (
