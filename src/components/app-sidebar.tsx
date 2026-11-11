@@ -114,7 +114,7 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { isSuperOwner, totalCount } = useSuperOwner();
-  const { role, tenantId, userId } = useActiveTenant();
+  const { tenantId, userId } = useActiveTenant();
 
   const permissionsQuery = useQuery({
     queryKey: ["sidebar-effective-permissions", tenantId, userId],
