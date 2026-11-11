@@ -210,6 +210,21 @@ export const createUser = createServerFn({ method: "POST" })
       throw new Error(roleErr.message);
     }
 
+    // Transfer the tenant's owner reference to the newly provisioned owner.
+    if (actorIsSuperOwner) {
+      const { data: linkedTenant, error: ownerLinkError } = await supabaseAdmin
+        .from("tenants")
+        .update({ owner_id: newId })
+        .eq("id", data.tenant_id)
+        .or(`owner_id.eq.${context.userId},owner_id.is.null`)
+        .select("id")
+        .maybeSingle();
+      if (ownerLinkError || !linkedTenant) {
+        await supabaseAdmin.auth.admin.deleteUser(newId);
+        throw new Error(ownerLinkError?.message ?? "تعذر ربط مالك المؤسسة بسجل المؤسسة.");
+      }
+    }
+
     // Also stamp hired_by on profile for quick lookups
     const { error: hiredByError } = await supabaseAdmin
       .from("profiles")
