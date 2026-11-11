@@ -78,6 +78,7 @@ function Dashboard() {
         supabase.from("sales_profitability").select("gross_profit, items_with_unknown_cost").eq("tenant_id", tenantId).gte("created_at", startOfMonth),
       ]);
 
+      if (profitabilityMonth.error) throw profitabilityMonth.error;
       const catsRes = await supabase.from("expense_categories").select("id, name, color").eq("tenant_id", tenantId);
       const catMap = new Map((catsRes.data ?? []).map((c) => [(c as { id: string }).id, c as { name: string; color: string | null }]));
 
