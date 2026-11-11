@@ -2,8 +2,6 @@
 set -euo pipefail
 
 PROJECT_REF="elflszuqcznexrepblsz"
-ALREADY_MATCHED_VERSION="20261111030810"
-
 if ! command -v supabase >/dev/null 2>&1; then
   echo "خطأ: Supabase CLI غير مثبت في Termux."
   exit 1
@@ -31,6 +29,8 @@ REMOTE_VERSIONS=(
   20261111000931 20261111001001 20261111001222 20261111001430
   20261111001438 20261111001618
 )
+
+if [[ ${#REMOTE_VERSIONS[@]} -ne 54 ]]; then echo "خطأ: قائمة الإصدارات البعيدة غير مكتملة."; exit 1; fi
 
 LOCAL_VERSIONS=(
   20260708094803 20260708094827 20260708094855 20260708095952
