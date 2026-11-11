@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -13,13 +13,13 @@ import { z } from "zod";
 import { PageHeader } from "@/components/page-header";
 import { useTheme, DEFAULT_DESIGN, type DesignSettings } from "@/lib/theme";
 import { useSuperOwner } from "@/hooks/use-super-owner";
-import { Palette, RotateCcw, Plus, Trash2, MonitorCog } from "lucide-react";
+import { Palette, RotateCcw, Plus, Trash2, MonitorCog, Megaphone, Image } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   component: SettingsPage,
 });
 
-const schema = z.object({
+type MarketingCampaign = { id: string; title: string; description: string; image_url: string | null; target_url: string | null; placement: string; status: string; starts_at: string | null; ends_at: string | null; sort_order: number };\n\nconst schema = z.object({
   name: z.string().trim().min(2, "الاسم قصير").max(100),
   currency: z.string().trim().min(1).max(5),
   tax_rate: z.coerce.number().min(0).max(100),
@@ -40,7 +40,7 @@ function SettingsPage() {
   const [uploadingBackground, setUploadingBackground] = useState(false);
   const [customTabs, setCustomTabs] = useState<Array<{ title: string; url: string }>>([]);
   const [newTabTitle, setNewTabTitle] = useState("");
-  const [newTabUrl, setNewTabUrl] = useState("/dashboard");
+  const [newTabUrl, setNewTabUrl] = useState("/dashboard");\n  const [campaignTitle, setCampaignTitle] = useState("");\n  const [campaignDescription, setCampaignDescription] = useState("");\n  const [campaignImage, setCampaignImage] = useState("");\n  const [campaignTarget, setCampaignTarget] = useState("");\n  const [campaignPlacement, setCampaignPlacement] = useState("dashboard_banner");\n  const [campaignStart, setCampaignStart] = useState("");\n  const [campaignEnd, setCampaignEnd] = useState("");\n  const [uploadingCampaignImage, setUploadingCampaignImage] = useState(false);
 
   useEffect(() => {
     if (tenant) {
@@ -50,6 +50,81 @@ function SettingsPage() {
       setLogoUrl(tenant.logo_url ?? "");
     }
   }, [tenant]);
+
+  const canManageMarketing = role === "owner" || role === "manager" || isSuperOwner;
+  const campaignsQuery = useQuery({
+    queryKey: ["marketing-campaigns", tenantId],
+    queryFn: async (): Promise<MarketingCampaign[]> => {
+      const { data, error } = await supabase.from("marketing_campaigns").select("id,title,description,image_url,target_url,placement,status,starts_at,ends_at,sort_order").eq("tenant_id", tenantId!).order("sort_order").order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as MarketingCampaign[];
+    },
+    enabled: !!tenantId && canManageMarketing,
+  });
+
+  const campaignCreate = useMutation({
+    mutationFn: async () => {
+      const title = campaignTitle.trim();
+      if (title.length < 2 || title.length > 120) throw new Error("اسم العرض يجب أن يكون بين حرفين و120 حرفاً");
+      if (campaignDescription.length > 500) throw new Error("الوصف أطول من الحد المسموح");
+      if (campaignTarget && !/^https?:\\/\\//i.test(campaignTarget)) throw new Error("رابط الوجهة يجب أن يبدأ بـ https:// أو http://");
+      if (campaignStart && campaignEnd && new Date(campaignEnd) <= new Date(campaignStart)) throw new Error("تاريخ النهاية يجب أن يكون بعد البداية");
+      const { error } = await supabase.from("marketing_campaigns").insert({
+        tenant_id: tenantId!,
+        title,
+        description: campaignDescription.trim(),
+        image_url: campaignImage || null,
+        target_url: campaignTarget.trim() || null,
+        placement: campaignPlacement,
+        status: "draft",
+        starts_at: campaignStart ? new Date(campaignStart).toISOString() : null,
+        ends_at: campaignEnd ? new Date(campaignEnd).toISOString() : null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["marketing-campaigns", tenantId] });
+      setCampaignTitle(""); setCampaignDescription(""); setCampaignImage(""); setCampaignTarget(""); setCampaignStart(""); setCampaignEnd("");
+      toast.success("تم حفظ العرض كمسودة. فعّله عند جاهزيته.");
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر حفظ العرض"),
+  });
+
+  const campaignUpdate = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const { error } = await supabase.from("marketing_campaigns").update({ status }).eq("id", id).eq("tenant_id", tenantId!);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["marketing-campaigns", tenantId] }),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر تحديث العرض"),
+  });
+
+  const campaignDelete = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("marketing_campaigns").delete().eq("id", id).eq("tenant_id", tenantId!);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["marketing-campaigns", tenantId] }); toast.success("تم حذف العرض"); },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر حذف العرض"),
+  });
+
+  async function uploadCampaignImage(file?: File) {
+    if (!file || !tenantId || !canManageMarketing) return;
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/avif"];
+    if (!allowed.includes(file.type)) { toast.error("صيغة الصورة غير مدعومة"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("الحجم الأقصى للصورة 5MB"); return; }
+    setUploadingCampaignImage(true);
+    try {
+      const ext = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif" } as Record<string, string>)[file.type];
+      const path = `${tenantId}/marketing/${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage.from("restaurant-assets").upload(path, file, { upsert: false, contentType: file.type, cacheControl: "31536000" });
+      if (error) throw error;
+      const { data } = supabase.storage.from("restaurant-assets").getPublicUrl(path);
+      setCampaignImage(data.publicUrl);
+      toast.success("تم رفع صورة العرض");
+    } catch (error) { toast.error(error instanceof Error ? error.message : "تعذر رفع الصورة"); }
+    finally { setUploadingCampaignImage(false); }
+  }
 
   const save = useMutation({
     mutationFn: async () => {
@@ -193,6 +268,47 @@ function SettingsPage() {
           </form>
         </CardContent>
       </Card>
+
+      {canManageMarketing && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Megaphone className="h-5 w-5 text-primary" /> إدارة العروض والإعلانات</CardTitle>
+            <CardDescription>أنشئ حملات ترويجية بصور وروابط، وحدد مكان ظهورها وفترة تشغيلها. تحفظ الحملات كمسودات حتى تقوم بتفعيلها.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-2"><Label>عنوان العرض</Label><Input value={campaignTitle} onChange={(e) => setCampaignTitle(e.target.value)} maxLength={120} placeholder="مثال: عرض نهاية الأسبوع" /></div>
+              <div className="space-y-2"><Label>مكان العرض</Label>
+                <select value={campaignPlacement} onChange={(e) => setCampaignPlacement(e.target.value)} className="h-10 w-full rounded-md border bg-background px-3 text-sm">
+                  <option value="dashboard_banner">شريط أعلى لوحة التحكم</option><option value="dashboard_card">بطاقة داخل لوحة التحكم</option><option value="pos_promo">منطقة ترويج نقطة البيع</option>
+                </select>
+              </div>
+              <div className="space-y-2 md:col-span-2"><Label>الوصف</Label><Input value={campaignDescription} onChange={(e) => setCampaignDescription(e.target.value)} maxLength={500} placeholder="تفاصيل العرض أو الإعلان" /></div>
+              <div className="space-y-2"><Label>رابط الوجهة (اختياري)</Label><Input dir="ltr" value={campaignTarget} onChange={(e) => setCampaignTarget(e.target.value)} placeholder="https://example.com/offer" /></div>
+              <div className="space-y-2"><Label>صورة الإعلان</Label>
+                <div className="flex items-center gap-3">
+                  <div className="grid h-14 w-20 shrink-0 place-items-center overflow-hidden rounded-md border bg-muted">{campaignImage ? <img src={campaignImage} alt="صورة العرض" className="h-full w-full object-cover" /> : <Image className="h-5 w-5 text-muted-foreground" />}</div>
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-muted">{uploadingCampaignImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}{uploadingCampaignImage ? "جارٍ الرفع..." : "اختيار صورة"}<input className="hidden" type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={uploadingCampaignImage} onChange={(e) => { void uploadCampaignImage(e.target.files?.[0]); e.currentTarget.value = ""; }} /></label>
+                </div>
+              </div>
+              <div className="space-y-2"><Label>بداية العرض (اختياري)</Label><Input type="datetime-local" value={campaignStart} onChange={(e) => setCampaignStart(e.target.value)} /></div>
+              <div className="space-y-2"><Label>نهاية العرض (اختياري)</Label><Input type="datetime-local" value={campaignEnd} onChange={(e) => setCampaignEnd(e.target.value)} /></div>
+            </div>
+            <Button type="button" onClick={() => campaignCreate.mutate()} disabled={campaignCreate.isPending || !campaignTitle.trim()}>{campaignCreate.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}حفظ كمسودة</Button>
+            <div className="space-y-2 border-t pt-4">
+              <h3 className="font-semibold">الحملات المحفوظة</h3>
+              {campaignsQuery.isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : campaignsQuery.isError ? <div className="text-sm text-destructive">تعذر تحميل الحملات. <Button type="button" variant="link" onClick={() => campaignsQuery.refetch()}>إعادة المحاولة</Button></div> : campaignsQuery.data?.length ? campaignsQuery.data.map((campaign) => (
+                <div key={campaign.id} className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
+                  {campaign.image_url && <img src={campaign.image_url} alt="" className="h-14 w-20 rounded object-cover" />}
+                  <div className="min-w-0 flex-1"><div className="font-medium">{campaign.title}</div><div className="text-xs text-muted-foreground">{campaign.placement === "dashboard_banner" ? "شريط لوحة التحكم" : campaign.placement === "dashboard_card" ? "بطاقة لوحة التحكم" : "نقطة البيع"} · {campaign.status === "active" ? "نشط" : campaign.status === "paused" ? "متوقف" : campaign.status === "archived" ? "مؤرشف" : "مسودة"}</div></div>
+                  <Button type="button" size="sm" variant="outline" disabled={campaignUpdate.isPending} onClick={() => campaignUpdate.mutate({ id: campaign.id, status: campaign.status === "active" ? "paused" : "active" })}>{campaign.status === "active" ? "إيقاف" : "تفعيل"}</Button>
+                  <Button type="button" size="icon" variant="ghost" aria-label={`حذف ${campaign.title}`} disabled={campaignDelete.isPending} onClick={() => { if (window.confirm("هل تريد حذف هذا العرض؟")) campaignDelete.mutate(campaign.id); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                </div>
+              )) : <p className="text-sm text-muted-foreground">لا توجد حملات بعد.</p>}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {isSuperOwner && (
         <Card className="border-primary/30">
