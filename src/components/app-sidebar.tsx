@@ -1,4 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -34,6 +35,7 @@ import {
   History,
   Bell,
   Crown,
+  Bookmark,
 } from "lucide-react";
 import { useSuperOwner } from "@/hooks/use-super-owner";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
@@ -115,6 +117,22 @@ export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { isSuperOwner, totalCount } = useSuperOwner();
   const { tenantId, userId } = useActiveTenant();
+  const [customItems, setCustomItems] = useState<Array<{ title: string; url: string }>>([]);
+
+  useEffect(() => {
+    const read = () => {
+      try {
+        const raw = window.localStorage.getItem("ras-custom-sidebar-items-v1");
+        const parsed = raw ? JSON.parse(raw) : [];
+        const allowedRoutes = new Set(["/dashboard", "/pos", "/sales", "/products", "/inventory", "/purchases", "/reports", "/customers", "/branches", "/users", "/settings"]);
+        setCustomItems(Array.isArray(parsed) ? parsed.filter((item) => item && typeof item.title === "string" && allowedRoutes.has(item.url)).slice(0, 12) : []);
+      } catch { setCustomItems([]); }
+    };
+    read();
+    window.addEventListener("ras-custom-tabs-updated", read);
+    window.addEventListener("storage", read);
+    return () => { window.removeEventListener("ras-custom-tabs-updated", read); window.removeEventListener("storage", read); };
+  }, []);
 
   const permissionsQuery = useQuery({
     queryKey: ["sidebar-effective-permissions", tenantId, userId],
@@ -153,7 +171,7 @@ export function AppSidebar() {
   const allGroups: Group[] = [
     ...groups,
     enterpriseGroup,
-    { label: "النظام", items: systemItems },
+    { label: "النظام", items: systemItems },\n    ...(isSuperOwner && customItems.length ? [customGroup] : []),
   ].map((group) => ({ ...group, items: group.items.filter(allowed) })).filter((group) => group.items.length > 0);
 
   return (
