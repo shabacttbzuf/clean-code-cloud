@@ -33,13 +33,14 @@ function readDesign(): DesignSettings {
   } catch { return DEFAULT_DESIGN; }
 }
 
-function applyDesign(design: DesignSettings) {
+function applyDesign(design: DesignSettings, theme: Theme) {
   const root = document.documentElement;
-  root.style.setProperty("--background", design.background);
-  root.style.setProperty("--primary", design.primary);
-  root.style.setProperty("--accent", design.accent);
-  root.style.setProperty("--sidebar", design.sidebar);
-  root.style.setProperty("--card", design.card);
+  const dark = theme === "dark";
+  root.style.setProperty("--background", dark ? `color-mix(in srgb, ${design.background} 22%, #101a17)` : design.background);
+  root.style.setProperty("--primary", dark ? `color-mix(in srgb, ${design.primary} 82%, white)` : design.primary);
+  root.style.setProperty("--accent", dark ? `color-mix(in srgb, ${design.accent} 82%, white)` : design.accent);
+  root.style.setProperty("--sidebar", dark ? `color-mix(in srgb, ${design.sidebar} 75%, #050907)` : design.sidebar);
+  root.style.setProperty("--card", dark ? `color-mix(in srgb, ${design.card} 22%, #18211e)` : design.card);
   root.style.setProperty(
     "--workspace-background-image",
     design.backgroundImage ? `url("${design.backgroundImage.replace(/["\\\\]/g, "")}")` : "none",
@@ -66,8 +67,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [theme]);
 
   useEffect(() => {
-    applyDesign(design);
-  }, [design]);
+    applyDesign(design, theme);
+  }, [design, theme]);
 
   useEffect(() => {
     const sync = () => setDesign(readDesign());
