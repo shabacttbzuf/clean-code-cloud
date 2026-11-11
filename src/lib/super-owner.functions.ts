@@ -38,20 +38,19 @@ export const listSuperOwners = createServerFn({ method: "GET" })
 export const bootstrapSuperOwner = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    // Bootstrap is disabled unless this exact authenticated account was
-    // explicitly allow-listed by the deployment administrator.
-    const initialOwnerId = process.env.INITIAL_SUPER_OWNER_USER_ID;
-    if (!initialOwnerId || initialOwnerId !== context.userId) {
-      throw new Error("إعداد المالك الرئيسي الأول يتطلب تفويضاً مسبقاً من مسؤول النظام.");
+    // The Edge Function validates the authenticated user against the
+    // server-side fixed initial-owner allowlist and performs the atomic
+    // service-role RPC without exposing privileged credentials to this app.
+    const { data, error } = await context.supabase.functions.invoke(
+      "bootstrap-first-super-owner",
+      { method: "POST" },
+    );
+    if (error) {
+      const details = data && typeof data === "object" && "error" in data
+        ? String((data as { error: unknown }).error)
+        : error.message;
+      throw new Error(details || "تعذر تهيئة المالك الرئيسي.");
     }
-
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    // The database function serializes concurrent attempts with an advisory
-    // transaction lock and permits only service_role to execute.
-    const { error } = await supabaseAdmin.rpc("bootstrap_first_super_owner", {
-      _user_id: context.userId,
-    });
-    if (error) throw new Error(error.message);
     return { ok: true, user_id: context.userId };
   });
 
