@@ -108,4 +108,5 @@ test("inventory alerts can be filtered by negative, missing, and below-minimum s
   assert.match(inventory, /stockFilter === "below-min"/);
   assert.match(inventory, /const visibleRows = useMemo/);
   assert.match(inventory, /أقل من الحد الأدنى/);
+  assert.match(inventory, /r\.quantity >= 0 && r\.quantity < r\.min_stock/);
 });
