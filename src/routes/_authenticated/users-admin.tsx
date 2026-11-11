@@ -274,10 +274,7 @@ function UsersAdminPage() {
                             <AvatarFallback>{(u.full_name ?? "?").charAt(0)}</AvatarFallback>
                           </Avatar>
                           <div>
-                            <div className="text-sm font-medium">{u.full_name ?? "—"}</div>
-                            <div dir="ltr" className="text-[10px] text-muted-foreground">
-                              {u.email ?? u.username ?? u.id.slice(0, 8)}
-                            </div>
+                            <div className="text-sm font-medium">{u.full_name?.trim() || u.username?.trim() || "مستخدم"}</div>
                           </div>
                         </div>
                       </TableCell>
