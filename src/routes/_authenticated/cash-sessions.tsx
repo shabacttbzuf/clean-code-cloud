@@ -219,21 +219,25 @@ function CashSessionsPage() {
               <div className="rounded-lg bg-muted/30 p-3">
                 <div className="text-xs text-muted-foreground">النقد المتوقع</div>
                 <div className="mt-1 text-lg font-bold num text-primary">
-                  {expectedCashQuery.isLoading ? "..." : formatMoney(expectedCashQuery.data ?? 0)}
+                  {expectedCashQuery.isLoading ? "..." : expectedCashQuery.isError ? "تعذر الحساب" : formatMoney(expectedCashQuery.data ?? 0)}
                 </div>
               </div>
             </div>
             <div className="space-y-2">
               <Label>النقد الفعلي في الصندوق</Label>
               <Input type="number" min="0" step="0.01" value={closingCash} onChange={(e) => setClosingCash(e.target.value)} autoFocus />
-              <div className="text-xs text-muted-foreground">
-                الفرق: <span className="num font-medium">{formatMoney(Number(closingCash) - (expectedCashQuery.data ?? 0))}</span>
-              </div>
+              {expectedCashQuery.isError ? (
+                <p className="text-xs text-destructive" role="alert">تعذر احتساب الرصيد المتوقع. أعد المحاولة قبل إغلاق الوردية.</p>
+              ) : (
+                <div className="text-xs text-muted-foreground">
+                  الفرق: <span className="num font-medium">{formatMoney(Number(closingCash) - (expectedCashQuery.data ?? 0))}</span>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setClosingId(null)}>إلغاء</Button>
-            <Button onClick={() => closeSess.mutate()} disabled={closeSess.isPending}>
+            <Button onClick={() => closeSess.mutate()} disabled={closeSess.isPending || expectedCashQuery.isLoading || expectedCashQuery.isError}>
               {closeSess.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
               تأكيد الإغلاق
             </Button>
