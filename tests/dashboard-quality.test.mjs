@@ -96,7 +96,7 @@ test("mobile sidebar supports RTL edge swipes and closes after route navigation"
 });
 
 test("user edit dialog remains scrollable on short mobile screens", () => {
-  assert.match(userAdmin, /max-h-\\[85dvh\\] overflow-y-auto overscroll-contain/);
+  assert.ok(userAdmin.includes("max-h-[85dvh] overflow-y-auto overscroll-contain"));
 });
 
 test("action toasts are centered at the top in RTL layout", () => {
