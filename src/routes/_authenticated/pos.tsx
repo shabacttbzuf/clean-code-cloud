@@ -139,6 +139,25 @@ function POSPage() {
     enabled: !!tenantId,
   });
 
+  const inventory = useQuery({
+    queryKey: ["pos-inventory", tenantId, branchId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("inventory")
+        .select("product_id, quantity")
+        .eq("tenant_id", tenantId!)
+        .eq("branch_id", branchId!);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!tenantId && !!branchId,
+  });
+
+  const stockByProduct = useMemo(
+    () => new Map((inventory.data ?? []).map((row) => [row.product_id, Number(row.quantity)])),
+    [inventory.data],
+  );
+
   const openSession = useQuery({
     queryKey: ["open-session", userId, branchId],
     queryFn: async (): Promise<Session | null> => {
@@ -165,13 +184,35 @@ function POSPage() {
   }, [products.data, search, catFilter]);
 
   const addToCart = (p: Product) => {
+    if (inventory.isLoading || inventory.isError) {
+      toast.error("لا يمكن إضافة المنتج قبل التحقق من المخزون");
+      return;
+    }
+    const available = stockByProduct.get(p.id);
+    const current = cart.find((item) => item.product_id === p.id)?.quantity ?? 0;
+    if (available === undefined) {
+      toast.error("لا يوجد رصيد مخزون مسجل لهذا المنتج في الفرع");
+      return;
+    }
+    if (available <= current) {
+      toast.error(available <= 0 ? "المنتج غير متوفر في المخزون" : "الكمية المطلوبة تتجاوز المخزون المتاح");
+      return;
+    }
     setCart((prev) => {
-      const found = prev.find((i) => i.product_id === p.id);
-      if (found) return prev.map((i) => (i.product_id === p.id ? { ...i, quantity: i.quantity + 1 } : i));
+      const found = prev.find((item) => item.product_id === p.id);
+      if (found) return prev.map((item) => (item.product_id === p.id ? { ...item, quantity: item.quantity + 1 } : item));
       return [...prev, { product_id: p.id, name: p.name, unit_price: Number(p.sale_price), quantity: 1 }];
     });
   };
-  const inc = (id: string) => setCart((p) => p.map((i) => (i.product_id === id ? { ...i, quantity: i.quantity + 1 } : i)));
+  const inc = (id: string) => {
+    const item = cart.find((entry) => entry.product_id === id);
+    const available = stockByProduct.get(id);
+    if (!item || available === undefined || item.quantity >= available) {
+      toast.error("لا يمكن زيادة الكمية؛ تحقق من رصيد المخزون");
+      return;
+    }
+    setCart((prev) => prev.map((entry) => (entry.product_id === id ? { ...entry, quantity: entry.quantity + 1 } : entry)));
+  };
   const dec = (id: string) => setCart((p) => p.flatMap((i) => (i.product_id === id ? (i.quantity > 1 ? [{ ...i, quantity: i.quantity - 1 }] : []) : [i])));
   const remove = (id: string) => setCart((p) => p.filter((i) => i.product_id !== id));
 
@@ -291,6 +332,7 @@ function POSPage() {
       setDiscount("0");
       qc.invalidateQueries({ queryKey: ["sales"] });
       qc.invalidateQueries({ queryKey: ["inventory"] });
+      qc.invalidateQueries({ queryKey: ["pos-inventory", tenantId, branchId] });
       qc.invalidateQueries({ queryKey: ["inventory-movements"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشل إتمام البيع"),
@@ -429,17 +471,35 @@ function POSPage() {
                 <span className="text-[10px] text-muted-foreground">{filteredProducts.length} منتج</span>
               </div>
               <div className="grid min-h-0 flex-1 content-start grid-cols-4 gap-1.5 overflow-y-auto p-0.5 sm:grid-cols-5 md:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8">
-                {filteredProducts.map((product) => (
-                  <button key={product.id} type="button" onClick={() => addToCart(product)} disabled={checkoutMut.isPending}
-                    className="flex min-h-[66px] flex-col items-center justify-center rounded-lg border bg-card p-1 text-center text-[10px] font-semibold leading-tight shadow-sm transition hover:border-primary hover:bg-primary/5 active:scale-95 sm:min-h-[70px] sm:p-1.5 sm:text-xs">
-                    <span className="relative mb-0.5 grid h-7 w-7 place-items-center overflow-hidden rounded-md bg-muted text-xs font-black text-muted-foreground">
-                      {product.name.slice(0, 1)}
-                      {product.image_url && <img src={product.image_url} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} />}
-                    </span>
-                    <span className="line-clamp-1 w-full">{product.name}</span>
-                    <span className="mt-0.5 text-[10px] font-bold text-primary num">{formatMoney(Number(product.sale_price))}</span>
-                  </button>
-                ))}
+                {filteredProducts.map((product) => {
+                  const available = stockByProduct.get(product.id);
+                  const stockUnavailable = inventory.isLoading || inventory.isError || available === undefined || available <= 0;
+                  const stockLabel = inventory.isLoading
+                    ? "جاري التحقق"
+                    : inventory.isError
+                      ? "تعذر المخزون"
+                      : available === undefined
+                        ? "غير مسجل"
+                        : available < 0
+                          ? `رصيد سالب: ${available}`
+                          : available === 0
+                            ? "نفد المخزون"
+                            : `متاح: ${available}`;
+                  return (
+                    <button key={product.id} type="button" onClick={() => addToCart(product)}
+                      disabled={stockUnavailable || checkoutMut.isPending}
+                      title={stockLabel}
+                      className="flex min-h-[66px] flex-col items-center justify-center rounded-lg border bg-card p-1 text-center text-[10px] font-semibold leading-tight shadow-sm transition hover:border-primary hover:bg-primary/5 active:scale-95 disabled:cursor-not-allowed disabled:opacity-55 sm:min-h-[70px] sm:p-1.5 sm:text-xs">
+                      <span className="relative mb-0.5 grid h-7 w-7 place-items-center overflow-hidden rounded-md bg-muted text-xs font-black text-muted-foreground">
+                        {product.name.slice(0, 1)}
+                        {product.image_url && <img src={product.image_url} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} />}
+                      </span>
+                      <span className="line-clamp-1 w-full">{product.name}</span>
+                      <span className="mt-0.5 text-[10px] font-bold text-primary num">{formatMoney(Number(product.sale_price))}</span>
+                      <span className={`mt-0.5 text-[9px] font-semibold ${available !== undefined && available > 0 ? "text-success" : "text-destructive"}`}>{stockLabel}</span>
+                    </button>
+                  );
+                })}
                 {filteredProducts.length === 0 && (
                   <div className="col-span-full grid place-items-center rounded-md border bg-muted/30 p-6 text-center text-xs text-muted-foreground">لا توجد منتجات مطابقة</div>
                 )}
