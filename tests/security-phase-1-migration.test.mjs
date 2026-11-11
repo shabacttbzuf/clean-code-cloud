@@ -644,3 +644,28 @@ test("complete database snapshot includes active branch migration once", () => {
   );
   assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000033_require_active_branch_for_sales_and_sessions.sql").length - 1, 1);
 });
+
+const posSource = readFileSync(
+  new URL("../src/routes/_authenticated/pos.tsx", import.meta.url),
+  "utf8",
+);
+const cashSessionsSource = readFileSync(
+  new URL("../src/routes/_authenticated/cash-sessions.tsx", import.meta.url),
+  "utf8",
+);
+
+test("POS requires an editable invoice review before atomic checkout", () => {
+  assert.match(posSource, /const beginCheckout = \(method: PaymentUI\)/);
+  assert.match(posSource, /مراجعة الفاتورة قبل الإصدار/);
+  assert.match(posSource, /checkoutMut\.mutate\(reviewMethod\)/);
+  assert.doesNotMatch(posSource, /checkoutMut\.mutate\("(cash|card|wallet)"\)/);
+  assert.match(posSource, /aria-label="حذف الصنف"/);
+});
+
+test("cash session preview matches the database cash-payment and refund calculation", () => {
+  assert.match(cashSessionsSource, /\.from\("payments"\)/);
+  assert.match(cashSessionsSource, /\.eq\("method", "cash"\)/);
+  assert.match(cashSessionsSource, /\.from\("sale_refunds"\)/);
+  assert.match(cashSessionsSource, /\.eq\("refund_method", "cash"\)/);
+  assert.match(cashSessionsSource, /opening_balance\) \+ salesCash - cashRefunds/);
+});
