@@ -142,13 +142,13 @@ export const createUser = createServerFn({ method: "POST" })
     );
     if (actorRoleError) throw new Error(actorRoleError.message);
 
-    // Platform Super Owner provisions ONLY the institution owner account.
-    // All operational staff accounts must be created by that institution's owner.
-    if (actorIsSuperOwner && data.role !== "owner") {
-      throw new Error("المالك الأعلى ينشئ حساب مالك المؤسسة فقط. يجب على مالك المؤسسة إنشاء حسابات الموظفين.");
+    // Platform Super Owner provisions only the institution's operational Manager.
+    // The Manager then creates and manages the restaurant's staff accounts.
+    if (actorIsSuperOwner && data.role !== "manager") {
+      throw new Error("المالك الأعلى ينشئ حساب مدير المؤسسة فقط. مدير المؤسسة هو من ينشئ حسابات الموظفين.");
     }
     if (!actorIsSuperOwner && data.role === "owner") {
-      throw new Error("إنشاء حساب مالك المؤسسة مخصص للمالك الأعلى للمنصة.");
+      throw new Error("لا يمكن إنشاء حساب مالك مؤسسة من خلال إدارة الموظفين.");
     }
 
     await assertPermission(context.supabase, context.userId, data.tenant_id, "users.create");
@@ -158,18 +158,6 @@ export const createUser = createServerFn({ method: "POST" })
     }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    if (actorIsSuperOwner) {
-      const { data: tenantRecord, error: tenantReadError } = await supabaseAdmin
-        .from("tenants")
-        .select("id, owner_id")
-        .eq("id", data.tenant_id)
-        .maybeSingle();
-      if (tenantReadError) throw new Error(tenantReadError.message);
-      if (!tenantRecord) throw new Error("المؤسسة المحددة غير موجودة.");
-      if (tenantRecord.owner_id && tenantRecord.owner_id !== context.userId) {
-        throw new Error("هذه المؤسسة مرتبطة بمالك آخر بالفعل.");
-      }
-    }
     await assertBranchBelongsToTenant(supabaseAdmin, data.branch_id, data.tenant_id);
 
     // Create auth user (auto-confirm so they can sign in immediately)
@@ -211,21 +199,6 @@ export const createUser = createServerFn({ method: "POST" })
     if (roleErr) {
       await supabaseAdmin.auth.admin.deleteUser(newId);
       throw new Error(roleErr.message);
-    }
-
-    // Transfer the tenant's owner reference to the newly provisioned owner.
-    if (actorIsSuperOwner) {
-      const { data: linkedTenant, error: ownerLinkError } = await supabaseAdmin
-        .from("tenants")
-        .update({ owner_id: newId })
-        .eq("id", data.tenant_id)
-        .or(`owner_id.eq.${context.userId},owner_id.is.null`)
-        .select("id")
-        .maybeSingle();
-      if (ownerLinkError || !linkedTenant) {
-        await supabaseAdmin.auth.admin.deleteUser(newId);
-        throw new Error(ownerLinkError?.message ?? "تعذر ربط مالك المؤسسة بسجل المؤسسة.");
-      }
     }
 
     // Also stamp hired_by on profile for quick lookups
