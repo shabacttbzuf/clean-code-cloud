@@ -25,6 +25,16 @@ async function assertPermission(
   if (data !== true) throw new Error(`غير مصرح: الصلاحية المطلوبة ${permissionKey}.`);
 }
 
+async function assertTenantOwnerOrSuperOwner(supabase: any, userId: string, tenantId: string) {
+  const { data: isSuperOwner, error: superOwnerError } = await supabase.rpc("is_super_owner", { _user_id: userId });
+  if (superOwnerError) throw new Error(superOwnerError.message);
+  if (isSuperOwner) return;
+  const { data, error } = await supabase.from("user_roles").select("id")
+    .eq("user_id", userId).eq("tenant_id", tenantId).eq("role", "owner").limit(1);
+  if (error) throw new Error(error.message);
+  if (!data?.length) throw new Error("إدارة الأدوار المخصصة متاحة لمالك المؤسسة فقط.");
+}
+
 async function assertTargetUserManageable(
   supabase: any,
   supabaseAdmin: any,
@@ -457,6 +467,7 @@ export const createCustomRole = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await assertPermission(context.supabase, context.userId, data.tenant_id, "roles.manage");
+    await assertTenantOwnerOrSuperOwner(context.supabase, context.userId, data.tenant_id);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: role, error } = await supabaseAdmin
       .from("custom_roles")
@@ -490,6 +501,7 @@ export const deleteCustomRole = createServerFn({ method: "POST" })
   .inputValidator((data) => z.object({ id: uuid, tenant_id: uuid }).parse(data))
   .handler(async ({ data, context }) => {
     await assertPermission(context.supabase, context.userId, data.tenant_id, "roles.manage");
+    await assertTenantOwnerOrSuperOwner(context.supabase, context.userId, data.tenant_id);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin.from("custom_roles").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
@@ -510,6 +522,7 @@ export const setCustomRolePermission = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await assertPermission(context.supabase, context.userId, data.tenant_id, "roles.manage");
+    await assertTenantOwnerOrSuperOwner(context.supabase, context.userId, data.tenant_id);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: role, error: roleError } = await supabaseAdmin
       .from("custom_roles")
