@@ -102,4 +102,6 @@
 
 66. `supabase/migrations/20261112003745_supplier_cash_session_fk_index.sql`
 
-**الإجمالي: 66 ترحيلاً.**
+67. `supabase/migrations/20261112004325_assignable_custom_roles.sql`
+
+**الإجمالي: 67 ترحيلاً.**
