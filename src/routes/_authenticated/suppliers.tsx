@@ -44,6 +44,7 @@ function SuppliersPage() {
   const [paymentSupplier, setPaymentSupplier] = useState<Supplier | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [cashSessionId, setCashSessionId] = useState("");
   const [paymentBranchId, setPaymentBranchId] = useState(membership?.branch_id ?? "");
   const [paymentReference, setPaymentReference] = useState("");
   const [paymentNotes, setPaymentNotes] = useState("");
@@ -77,6 +78,19 @@ function SuppliersPage() {
       return data ?? [];
     },
     enabled: !!tenantId && canManagePayments,
+  });
+
+  const cashSessions = useQuery({
+    queryKey: ["supplier-payment-open-cash-sessions", tenantId, userId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("cash_sessions")
+        .select("id, branch_id, opened_at, cashier_id")
+        .eq("tenant_id", tenantId!).eq("status", "open")
+        .order("opened_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!tenantId && !!userId && canManagePayments,
   });
 
   const ledger = useQuery({
@@ -121,8 +135,12 @@ function SuppliersPage() {
       if (!paymentSupplier || !tenantId || !userId || !paymentBranchId || !Number.isFinite(amount) || amount <= 0) {
         throw new Error("أدخل مبلغاً صحيحاً وحدد الفرع");
       }
+      if (paymentMethod === "cash" && !cashSessionId) {
+        throw new Error("اختر وردية نقدية مفتوحة لهذا الفرع قبل تسجيل الدفعة");
+      }
       const { error } = await supabase.from("supplier_payments").insert({
         tenant_id: tenantId, branch_id: paymentBranchId, supplier_id: paymentSupplier.id,
+        cash_session_id: paymentMethod === "cash" ? cashSessionId : null,
         amount, payment_method: paymentMethod, reference: paymentReference.trim() || null,
         notes: paymentNotes.trim() || null, created_by: userId,
       });
@@ -233,7 +251,7 @@ function SuppliersPage() {
                 </div>
                 {(isAdmin || canManagePayments) && (
                   <div className="mt-3 flex flex-wrap gap-1 border-t pt-3">
-                    {canManagePayments && <Button size="sm" variant="outline" className="flex-1" onClick={() => { setPaymentSupplier(s); setPaymentBranchId(membership?.branch_id ?? branches.data?.[0]?.id ?? ""); }} disabled={!branches.data?.length || branches.isLoading}>
+                    {canManagePayments && <Button size="sm" variant="outline" className="flex-1" onClick={() => { const branchId = membership?.branch_id ?? branches.data?.[0]?.id ?? ""; setPaymentSupplier(s); setPaymentBranchId(branchId); setCashSessionId(cashSessions.data?.find((session) => session.branch_id === branchId)?.id ?? ""); }} disabled={!branches.data?.length || branches.isLoading}>
                       <Wallet className="ml-2 h-3 w-3" />تسجيل دفعة
                     </Button>}
                     {isAdmin && <Button size="sm" variant="ghost" className="flex-1" onClick={() => { setEditing(s); setOpen(true); }}>
@@ -263,13 +281,22 @@ function SuppliersPage() {
               <option value="">اختر الفرع</option>{(branches.data ?? []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select></div>
             <div className="space-y-2"><Label>المبلغ</Label><Input type="number" inputMode="decimal" min="0.01" step="0.01" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} required /></div>
-            <div className="space-y-2"><Label>طريقة الدفع</Label><select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
-              <option value="cash">نقداً</option><option value="card">بطاقة</option><option value="transfer">تحويل بنكي</option><option value="cheque">شيك</option><option value="other">أخرى</option>
+            <div className="space-y-2"><Label>طريقة الدفع</Label><select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={paymentMethod} onChange={(e) => { const method = e.target.value; setPaymentMethod(method); setCashSessionId(method === "cash" ? cashSessions.data?.find((session) => session.branch_id === paymentBranchId)?.id ?? "" : ""); }}>
+              <option value="cash">نقداً من الصندوق</option><option value="card">بطاقة</option><option value="transfer">تحويل بنكي</option><option value="cheque">شيك</option><option value="other">أخرى</option>
             </select></div>
+            {paymentMethod === "cash" && <div className="space-y-2"><Label>الوردية النقدية المفتوحة</Label>
+              <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={cashSessionId} onChange={(e) => setCashSessionId(e.target.value)} required>
+                <option value="">اختر وردية مفتوحة</option>
+                {(cashSessions.data ?? []).filter((session) => session.branch_id === paymentBranchId).map((session) => <option key={session.id} value={session.id}>وردية {session.id.slice(0, 8)} · {formatDateTime(session.opened_at)}</option>)}
+              </select>
+              {cashSessions.isLoading && <p className="text-xs text-muted-foreground">جارٍ تحميل الورديات المفتوحة...</p>}
+              {cashSessions.isError && <p className="text-xs text-destructive">تعذر تحميل الورديات. أعد المحاولة قبل تسجيل دفعة نقدية.</p>}
+              {!cashSessions.isLoading && !cashSessions.isError && !(cashSessions.data ?? []).some((session) => session.branch_id === paymentBranchId) && <p className="text-xs text-destructive">لا توجد وردية مفتوحة لهذا الفرع. افتح وردية نقدية أولاً أو اختر طريقة دفع أخرى.</p>}
+            </div>}
             <div className="space-y-2"><Label>رقم المرجع (اختياري)</Label><Input maxLength={120} value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} /></div>
             <div className="space-y-2"><Label>ملاحظات</Label><Textarea maxLength={1000} rows={2} value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} /></div>
-            <p className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-xs text-muted-foreground">يُسجل هذا القيد في كشف المورد فقط، ولا يغيّر رصيد درج النقد أو وردية الصندوق تلقائياً.</p>
-            <DialogFooter><Button type="submit" disabled={addPayment.isPending || !paymentBranchId}>{addPayment.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}حفظ الدفعة</Button></DialogFooter>
+            <p className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-xs text-muted-foreground">الدفعة النقدية ترتبط بورديّة مفتوحة وتُخصم من الرصيد المتوقع عند إغلاقها. طرق الدفع الأخرى تُسجل في كشف المورد دون تعديل درج النقد.</p>
+            <DialogFooter><Button type="submit" disabled={addPayment.isPending || !paymentBranchId || (paymentMethod === "cash" && !cashSessionId)}>{addPayment.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}حفظ الدفعة</Button></DialogFooter>
           </form>
           <div className="border-t pt-3"><div className="mb-2 flex items-center gap-2 text-sm font-semibold"><History className="h-4 w-4" />آخر الدفعات المسجلة</div>
             {ledger.data?.payments.filter((p) => p.supplier_id === paymentSupplier?.id).slice(0, 8).map((p) => <div key={p.id} className="flex justify-between border-b py-2 text-xs"><span>{formatDateTime(p.paid_at)} · {p.payment_method === "cash" ? "نقداً" : p.payment_method === "transfer" ? "تحويل" : p.payment_method === "card" ? "بطاقة" : p.payment_method === "cheque" ? "شيك" : "أخرى"}</span><strong>{`${formatMoney(p.amount)} ${tenant?.currency ?? ""}`}</strong></div>)}
