@@ -36,7 +36,8 @@ const schema = z.object({
 });
 
 function SuppliersPage() {
-  const { tenantId, userId, isAdmin, membership, tenant } = useActiveTenant();
+  const { tenantId, userId, isAdmin, role, isSuperOwner, membership, tenant } = useActiveTenant();
+  const canManagePayments = isAdmin || role === "warehouse" || isSuperOwner;
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Supplier | null>(null);
@@ -75,7 +76,7 @@ function SuppliersPage() {
       if (error) throw error;
       return data ?? [];
     },
-    enabled: !!tenantId && isAdmin,
+    enabled: !!tenantId && canManagePayments,
   });
 
   const ledger = useQuery({
@@ -230,22 +231,22 @@ function SuppliersPage() {
                   {s.email && <div dir="ltr">✉ {s.email}</div>}
                   {s.address && <div>📍 {s.address}</div>}
                 </div>
-                {isAdmin && (
+                {(isAdmin || canManagePayments) && (
                   <div className="mt-3 flex flex-wrap gap-1 border-t pt-3">
-                    <Button size="sm" variant="outline" className="flex-1" onClick={() => { setPaymentSupplier(s); setPaymentBranchId(membership?.branch_id ?? branches.data?.[0]?.id ?? ""); }} disabled={!branches.data?.length || branches.isLoading}>
+                    {canManagePayments && <Button size="sm" variant="outline" className="flex-1" onClick={() => { setPaymentSupplier(s); setPaymentBranchId(membership?.branch_id ?? branches.data?.[0]?.id ?? ""); }} disabled={!branches.data?.length || branches.isLoading}>
                       <Wallet className="ml-2 h-3 w-3" />تسجيل دفعة
-                    </Button>
-                    <Button size="sm" variant="ghost" className="flex-1" onClick={() => { setEditing(s); setOpen(true); }}>
+                    </Button>}
+                    {isAdmin && <Button size="sm" variant="ghost" className="flex-1" onClick={() => { setEditing(s); setOpen(true); }}>
                       <Edit className="ml-2 h-3 w-3" />تعديل
-                    </Button>
-                    <Button size="sm" variant="ghost" className={s.is_active ? "text-amber-600" : "text-emerald-600"} disabled={setActive.isPending} onClick={() => {
+                    </Button>}
+                    {isAdmin && <Button size="sm" variant="ghost" className={s.is_active ? "text-amber-600" : "text-emerald-600"} disabled={setActive.isPending} onClick={() => {
                       const action = s.is_active ? "إيقاف" : "إعادة تفعيل";
                       if (confirm(`${action} المورد "${s.name}"؟ ستبقى جميع فواتيره وسجلاته محفوظة.`)) {
                         setActive.mutate({ id: s.id, isActive: !s.is_active });
                       }
                     }}>
                       {s.is_active ? <Archive className="h-3 w-3" /> : <RotateCcw className="h-3 w-3" />}
-                    </Button>
+                    </Button>}
                   </div>
                 )}
               </CardContent>
