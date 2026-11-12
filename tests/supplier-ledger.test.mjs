@@ -52,7 +52,7 @@ test("supplier payment foreign keys are indexed and marketing RLS uses initplan-
 const purchasesPage = readFileSync(new URL("../src/routes/_authenticated/purchases.tsx", import.meta.url), "utf8");
 test("purchase page directs users to the supplier ledger for settlements", () => {
   assert.match(purchasesPage, /سجّل دفعات المورد من تبويب الموردين/);
-  assert.match(purchasesPage, /لا تعدّل درج النقد أو وردية الصندوق تلقائياً/);
+  assert.match(purchasesPage, /الدفعات النقدية ترتبط بورديّة مفتوحة/);
 });
 
 const privilegesMigration = readFileSync(new URL("../supabase/migrations/20261112002832_restrict_supplier_payment_mutations.sql", import.meta.url), "utf8");
