@@ -277,7 +277,7 @@ function SuppliersPage() {
         <DialogContent className="max-h-[90dvh] overflow-y-auto overscroll-contain">
           <DialogHeader><DialogTitle>تسجيل دفعة للمورد {paymentSupplier?.name}</DialogTitle></DialogHeader>
           <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); addPayment.mutate(); }}>
-            <div className="space-y-2"><Label>الفرع</Label><select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={paymentBranchId} onChange={(e) => setPaymentBranchId(e.target.value)} required>
+            <div className="space-y-2"><Label>الفرع</Label><select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={paymentBranchId} onChange={(e) => { setPaymentBranchId(e.target.value); setCashSessionId(cashSessions.data?.find((session) => session.branch_id === e.target.value)?.id ?? ""); }} required>
               <option value="">اختر الفرع</option>{(branches.data ?? []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select></div>
             <div className="space-y-2"><Label>المبلغ</Label><Input type="number" inputMode="decimal" min="0.01" step="0.01" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} required /></div>
