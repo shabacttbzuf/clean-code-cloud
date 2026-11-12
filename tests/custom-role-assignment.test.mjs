@@ -47,3 +47,9 @@ test("team permission review displays the custom role's actual permission defaul
   assert.match(teamPermissionsPage, /selectedTeamMember\.custom_role_id/);
   assert.match(teamPermissionsPage, /custom_role_name/);
 });
+
+const ownerGuardMigration = readFileSync(new URL("../supabase/migrations/20261112005125_owner_only_custom_role_management.sql", import.meta.url), "utf8");
+test("custom role assignment is owner-only even if a permission override is granted", () => {
+  assert.match(ownerGuardMigration, /Only the tenant owner or platform super owner may assign custom roles/);
+  assert.match(ownerGuardMigration, /actor_role\.role = 'owner'::public\.app_role/);
+});
