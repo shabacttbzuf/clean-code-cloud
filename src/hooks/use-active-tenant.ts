@@ -91,10 +91,23 @@ export function useActiveTenant() {
   const isAdmin = role === "owner" || role === "manager";
   const isSuperOwner = superOwnerQuery.data === true;
 
+  const permissionsQuery = useQuery({
+    queryKey: ["effective-permissions", user?.id, activeId],
+    queryFn: async (): Promise<string[]> => {
+      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: activeId! });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!user?.id && !!activeId,
+    staleTime: 15_000,
+  });
+  const permissions = useMemo(() => new Set(permissionsQuery.data ?? []), [permissionsQuery.data]);
+  const hasPermission = (permission: string) => isSuperOwner || permissions.has(permission);
+
   return {
     user,
     userId: user?.id ?? null,
-    loading: sessionLoading || memQuery.isLoading || tenantQuery.isLoading || superOwnerQuery.isLoading,
+    loading: sessionLoading || memQuery.isLoading || tenantQuery.isLoading || superOwnerQuery.isLoading || permissionsQuery.isLoading,
     tenantId: activeId,
     tenant: tenantQuery.data ?? null,
     memberships: memQuery.data ?? [],
@@ -102,6 +115,10 @@ export function useActiveTenant() {
     role,
     isAdmin,
     isSuperOwner,
+    permissions,
+    hasPermission,
+    permissionsLoading: permissionsQuery.isLoading,
+    permissionsError: permissionsQuery.error,
     switchTenant: (id: string) => {
       setActiveId(id);
       if (typeof window !== "undefined") window.localStorage.setItem(ACTIVE_TENANT_KEY, id);
