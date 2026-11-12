@@ -54,3 +54,9 @@ test("purchase page directs users to the supplier ledger for settlements", () =>
   assert.match(purchasesPage, /سجّل دفعات المورد من تبويب الموردين/);
   assert.match(purchasesPage, /لا تعدّل درج النقد أو وردية الصندوق تلقائياً/);
 });
+
+const privilegesMigration = readFileSync(new URL("../supabase/migrations/20261112002832_restrict_supplier_payment_mutations.sql", import.meta.url), "utf8");
+test("supplier payment ledger grants only select and insert to authenticated clients", () => {
+  assert.match(privilegesMigration, /revoke all on table public\.supplier_payments from anon, authenticated/i);
+  assert.match(privilegesMigration, /grant select, insert on table public\.supplier_payments to authenticated/i);
+});
