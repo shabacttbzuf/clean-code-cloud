@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
@@ -221,9 +221,9 @@ function SuppliersPage() {
                   const totals = ledger.data?.totals.get(s.id) ?? { purchases: 0, returns: 0, paid: 0 };
                   const balance = totals.purchases - totals.returns - totals.paid;
                   return <div className="mt-3 rounded-lg border bg-muted/30 p-3 text-xs space-y-1">
-                    <div className="flex justify-between"><span>صافي المشتريات</span><strong>{formatMoney(totals.purchases - totals.returns, tenant?.currency)}</strong></div>
-                    <div className="flex justify-between"><span>المدفوع</span><strong>{formatMoney(totals.paid, tenant?.currency)}</strong></div>
-                    <div className="flex justify-between border-t pt-1 font-bold"><span>{balance >= 0 ? "المتبقي للمورد" : "رصيد دائن للمطعم"}</span><strong className={balance > 0 ? "text-destructive" : "text-emerald-600"}>{formatMoney(Math.abs(balance), tenant?.currency)}</strong></div>
+                    <div className="flex justify-between"><span>صافي المشتريات</span><strong>{`${formatMoney(totals.purchases - totals.returns)} ${tenant?.currency ?? ""}`}</strong></div>
+                    <div className="flex justify-between"><span>المدفوع</span><strong>{`${formatMoney(totals.paid)} ${tenant?.currency ?? ""}`}</strong></div>
+                    <div className="flex justify-between border-t pt-1 font-bold"><span>{balance >= 0 ? "المتبقي للمورد" : "رصيد دائن للمطعم"}</span><strong className={balance > 0 ? "text-destructive" : "text-emerald-600"}>{`${formatMoney(Math.abs(balance))} ${tenant?.currency ?? ""}`}</strong></div>
                   </div>;
                 })()}
                 <div className="space-y-1 text-sm text-muted-foreground">
@@ -271,7 +271,7 @@ function SuppliersPage() {
             <DialogFooter><Button type="submit" disabled={addPayment.isPending || !paymentBranchId}>{addPayment.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}حفظ الدفعة</Button></DialogFooter>
           </form>
           <div className="border-t pt-3"><div className="mb-2 flex items-center gap-2 text-sm font-semibold"><History className="h-4 w-4" />آخر الدفعات المسجلة</div>
-            {ledger.data?.payments.filter((p) => p.supplier_id === paymentSupplier?.id).slice(0, 8).map((p) => <div key={p.id} className="flex justify-between border-b py-2 text-xs"><span>{formatDateTime(p.paid_at)} · {p.payment_method === "cash" ? "نقداً" : p.payment_method === "transfer" ? "تحويل" : p.payment_method === "card" ? "بطاقة" : p.payment_method === "cheque" ? "شيك" : "أخرى"}</span><strong>{formatMoney(p.amount, tenant?.currency)}</strong></div>)}
+            {ledger.data?.payments.filter((p) => p.supplier_id === paymentSupplier?.id).slice(0, 8).map((p) => <div key={p.id} className="flex justify-between border-b py-2 text-xs"><span>{formatDateTime(p.paid_at)} · {p.payment_method === "cash" ? "نقداً" : p.payment_method === "transfer" ? "تحويل" : p.payment_method === "card" ? "بطاقة" : p.payment_method === "cheque" ? "شيك" : "أخرى"}</span><strong>{`${formatMoney(p.amount)} ${tenant?.currency ?? ""}`}</strong></div>)}
             {!ledger.data?.payments.some((p) => p.supplier_id === paymentSupplier?.id) && <p className="text-xs text-muted-foreground">لا توجد دفعات مسجلة لهذا المورد.</p>}
           </div>
         </DialogContent>
