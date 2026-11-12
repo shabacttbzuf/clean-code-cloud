@@ -2497,6 +2497,63 @@ export type Database = {
           },
         ]
       }
+      supplier_payments: {
+        Row: {
+          id: string
+          tenant_id: string
+          branch_id: string
+          supplier_id: string
+          amount: number
+          payment_method: string
+          reference: string | null
+          notes: string | null
+          paid_at: string
+          created_by: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          branch_id: string
+          supplier_id: string
+          amount: number
+          payment_method: string
+          reference?: string | null
+          notes?: string | null
+          paid_at?: string
+          created_by?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          branch_id?: string
+          supplier_id?: string
+          amount?: number
+          payment_method?: string
+          reference?: string | null
+          notes?: string | null
+          paid_at?: string
+          created_by?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_payments_branch_tenant_fkey"
+            columns: ["branch_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_payments_supplier_tenant_fkey"
+            columns: ["supplier_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id", "tenant_id"]
+          }
+        ]
+      }
       tenants: {
         Row: {
           created_at: string
