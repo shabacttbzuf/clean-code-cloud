@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Edit, Trash2, Truck, Loader2 } from "lucide-react";
+import { Plus, Edit, Archive, RotateCcw, Truck, Loader2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { PageHeader } from "@/components/page-header";
@@ -43,9 +43,19 @@ function SuppliersPage() {
   const q = useQuery({
     queryKey: ["suppliers", tenantId],
     queryFn: async (): Promise<Supplier[]> => {
-      const { data, error } = await supabase.from("suppliers").select("*").eq("tenant_id", tenantId!).order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as Supplier[];
+      const rows: Supplier[] = [];
+      const pageSize = 500;
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await supabase.from("suppliers").select("*")
+          .eq("tenant_id", tenantId!)
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        const page = (data ?? []) as Supplier[];
+        rows.push(...page);
+        if (page.length < pageSize) return rows;
+      }
     },
     enabled: !!tenantId,
   });
@@ -75,13 +85,18 @@ function SuppliersPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشل"),
   });
 
-  const del = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("suppliers").delete().eq("id", id);
+  // Suppliers may be referenced by historical purchase invoices; archive instead of deleting.
+  const setActive = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      const { error } = await supabase.from("suppliers").update({ is_active: isActive }).eq("id", id).eq("tenant_id", tenantId!);
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["suppliers"] }); toast.success("تم الحذف"); },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "فشل الحذف"),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ["suppliers", tenantId] });
+      qc.invalidateQueries({ queryKey: ["purchases", tenantId] });
+      toast.success(variables.isActive ? "تمت إعادة تفعيل المورد" : "تم إيقاف المورد مع الاحتفاظ بسجلاته");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "تعذر تغيير حالة المورد"),
   });
 
   return (
@@ -97,6 +112,12 @@ function SuppliersPage() {
 
       {q.isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+      ) : q.isError ? (
+        <Card><CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+          <AlertCircle className="h-8 w-8 text-destructive" />
+          <p className="text-sm text-destructive">تعذر تحميل قائمة الموردين. لم يتم اعتبار فشل الاتصال قائمة فارغة.</p>
+          <Button variant="outline" onClick={() => q.refetch()}>إعادة المحاولة</Button>
+        </CardContent></Card>
       ) : !q.data || q.data.length === 0 ? (
         <Card><CardContent className="flex flex-col items-center gap-3 py-16 text-center">
           <Truck className="h-10 w-10 text-muted-foreground/50" />
@@ -116,6 +137,7 @@ function SuppliersPage() {
                     )}
                     <div>
                       <div className="font-semibold">{s.name}</div>
+                      <div className={s.is_active ? "text-xs text-emerald-600" : "text-xs text-muted-foreground"}>{s.is_active ? "مورد نشط" : "مورد موقوف"}</div>
                       {s.phone && <div className="text-xs text-muted-foreground" dir="ltr">{s.phone}</div>}
                     </div>
                   </div>
@@ -129,8 +151,13 @@ function SuppliersPage() {
                     <Button size="sm" variant="ghost" className="flex-1" onClick={() => { setEditing(s); setOpen(true); }}>
                       <Edit className="ml-2 h-3 w-3" />تعديل
                     </Button>
-                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => { if (confirm(`حذف "${s.name}"؟`)) del.mutate(s.id); }}>
-                      <Trash2 className="h-3 w-3" />
+                    <Button size="sm" variant="ghost" className={s.is_active ? "text-amber-600" : "text-emerald-600"} disabled={setActive.isPending} onClick={() => {
+                      const action = s.is_active ? "إيقاف" : "إعادة تفعيل";
+                      if (confirm(`${action} المورد "${s.name}"؟ ستبقى جميع فواتيره وسجلاته محفوظة.`)) {
+                        setActive.mutate({ id: s.id, isActive: !s.is_active });
+                      }
+                    }}>
+                      {s.is_active ? <Archive className="h-3 w-3" /> : <RotateCcw className="h-3 w-3" />}
                     </Button>
                   </div>
                 )}
