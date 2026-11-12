@@ -130,6 +130,7 @@ export const createUser = createServerFn({ method: "POST" })
         username: z.string().min(2).max(60).optional().nullable(),
         phone: z.string().max(30).optional().nullable(),
         role: ROLE_ENUM,
+        custom_role_id: z.string().uuid().optional().nullable(),
         branch_id: z.string().uuid().optional().nullable(),
         avatar_url: z.string().url().optional().nullable(),
       })
@@ -188,17 +189,37 @@ export const createUser = createServerFn({ method: "POST" })
       throw new Error(profErr.message);
     }
 
-    // Assign role
-    const { error: roleErr } = await supabaseAdmin.from("user_roles").insert({
-      user_id: newId,
-      tenant_id: data.tenant_id,
-      role: data.role as any,
-      branch_id: data.branch_id ?? null,
-      hired_by: context.userId,
-    });
-    if (roleErr) {
-      await supabaseAdmin.auth.admin.deleteUser(newId);
-      throw new Error(roleErr.message);
+    // Assign either a built-in role or a tenant-owned custom role.
+    if (data.custom_role_id) {
+      if (data.role !== "waiter") {
+        await supabaseAdmin.auth.admin.deleteUser(newId);
+        throw new Error("الدور المخصص يستخدم مستوى أساس محدوداً؛ امنح الصلاحيات المطلوبة من إعدادات الدور.");
+      }
+      await assertPermission(context.supabase, context.userId, data.tenant_id, "roles.manage");
+      const { data: customRole, error: customRoleError } = await supabaseAdmin
+        .from("custom_roles").select("id").eq("id", data.custom_role_id)
+        .eq("tenant_id", data.tenant_id).maybeSingle();
+      if (customRoleError || !customRole) {
+        await supabaseAdmin.auth.admin.deleteUser(newId);
+        throw new Error(customRoleError?.message ?? "الدور المخصص لا يتبع هذه المؤسسة.");
+      }
+      const { error: roleErr } = await context.supabase.rpc("assign_custom_role_to_user", {
+        _user_id: newId, _tenant_id: data.tenant_id, _custom_role_id: data.custom_role_id,
+        _branch_id: data.branch_id ?? null, _actor_id: context.userId,
+      });
+      if (roleErr) {
+        await supabaseAdmin.auth.admin.deleteUser(newId);
+        throw new Error(roleErr.message);
+      }
+    } else {
+      const { error: roleErr } = await supabaseAdmin.from("user_roles").insert({
+        user_id: newId, tenant_id: data.tenant_id, role: data.role as any,
+        branch_id: data.branch_id ?? null, hired_by: context.userId,
+      });
+      if (roleErr) {
+        await supabaseAdmin.auth.admin.deleteUser(newId);
+        throw new Error(roleErr.message);
+      }
     }
 
     // Also stamp hired_by on profile for quick lookups
@@ -343,6 +364,7 @@ export const changeUserRole = createServerFn({ method: "POST" })
         user_id: z.string().uuid(),
         tenant_id: z.string().uuid(),
         role: ROLE_ENUM,
+        custom_role_id: z.string().uuid().optional().nullable(),
         branch_id: z.string().uuid().optional().nullable(),
       })
       .parse(data),
@@ -353,14 +375,25 @@ export const changeUserRole = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await assertTargetBelongsToTenant(supabaseAdmin, data.user_id, data.tenant_id);
     await assertTargetRoleManageable(context.supabase, supabaseAdmin, context.userId, data.user_id, data.tenant_id);
-    const { error } = await supabaseAdmin.rpc("replace_user_role_in_tenant", {
-      _user_id: data.user_id,
-      _tenant_id: data.tenant_id,
-      _role: data.role,
-      _branch_id: data.branch_id ?? null,
-      _actor_id: context.userId,
-    });
-    if (error) throw new Error(error.message);
+    if (data.custom_role_id) {
+      if (data.role !== "waiter") throw new Error("الدور المخصص يستخدم مستوى أساس محدوداً.");
+      await assertPermission(context.supabase, context.userId, data.tenant_id, "roles.manage");
+      const { data: customRole, error: customRoleError } = await supabaseAdmin
+        .from("custom_roles").select("id").eq("id", data.custom_role_id)
+        .eq("tenant_id", data.tenant_id).maybeSingle();
+      if (customRoleError || !customRole) throw new Error(customRoleError?.message ?? "الدور المخصص لا يتبع هذه المؤسسة.");
+      const { error } = await context.supabase.rpc("assign_custom_role_to_user", {
+        _user_id: data.user_id, _tenant_id: data.tenant_id, _custom_role_id: data.custom_role_id,
+        _branch_id: data.branch_id ?? null, _actor_id: context.userId,
+      });
+      if (error) throw new Error(error.message);
+    } else {
+      const { error } = await supabaseAdmin.rpc("replace_user_role_in_tenant", {
+        _user_id: data.user_id, _tenant_id: data.tenant_id, _role: data.role,
+        _branch_id: data.branch_id ?? null, _actor_id: context.userId,
+      });
+      if (error) throw new Error(error.message);
+    }
     return { ok: true };
   });
 
