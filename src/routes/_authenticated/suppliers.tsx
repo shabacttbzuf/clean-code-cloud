@@ -93,7 +93,7 @@ function SuppliersPage() {
         }
       };
       const [purchases, returns, payments] = await Promise.all([
-        page<{ id: string; supplier_id: string | null; total: number }>(supabase.from("purchases").select("id, supplier_id, total").eq("tenant_id", tenantId!).eq("status", "received").order("created_at").order("id")),
+        page<{ id: string; supplier_id: string | null; total: number }>(supabase.from("purchases").select("id, supplier_id, total").eq("tenant_id", tenantId!).in("status", ["received", "returned"]).order("created_at").order("id")),
         page<{ purchase_id: string; total: number }>(supabase.from("purchase_returns").select("purchase_id, total").eq("tenant_id", tenantId!).order("created_at").order("id")),
         page<{ id: string; supplier_id: string; amount: number; payment_method: string; reference: string | null; paid_at: string; branch_id: string }>(supabase.from("supplier_payments").select("id, supplier_id, amount, payment_method, reference, paid_at, branch_id").eq("tenant_id", tenantId!).order("paid_at", { ascending: false }).order("id", { ascending: false })),
       ]);
