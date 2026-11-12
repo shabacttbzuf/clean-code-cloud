@@ -104,4 +104,6 @@
 
 67. `supabase/migrations/20261112004325_assignable_custom_roles.sql`
 
-**الإجمالي: 67 ترحيلاً.**
+68. `supabase/migrations/20261112005125_owner_only_custom_role_management.sql`
+
+**الإجمالي: 68 ترحيلاً.**
