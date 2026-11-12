@@ -53,3 +53,14 @@ test("custom role assignment is owner-only even if a permission override is gran
   assert.match(ownerGuardMigration, /Only the tenant owner or platform super owner may assign custom roles/);
   assert.match(ownerGuardMigration, /actor_role\.role = 'owner'::public\.app_role/);
 });
+
+const ownerMutationMigration = readFileSync(new URL("../supabase/migrations/20261112005250_owner_only_custom_role_mutations.sql", import.meta.url), "utf8");
+test("custom role and role-permission mutations require immutable owner identity", () => {
+  assert.match(ownerMutationMigration, /custom_roles_owner_only_insert_guard/);
+  assert.match(ownerMutationMigration, /custom_roles_owner_only_update_guard/);
+  assert.match(ownerMutationMigration, /custom_roles_owner_only_delete_guard/);
+  assert.match(ownerMutationMigration, /role_permissions_owner_only_insert_guard/);
+  assert.match(ownerMutationMigration, /role_permissions_owner_only_update_guard/);
+  assert.match(ownerMutationMigration, /role_permissions_owner_only_delete_guard/);
+  assert.match(ownerMutationMigration, /private\.has_role\(\(select auth\.uid\(\)\), tenant_id, 'owner'/);
+});
