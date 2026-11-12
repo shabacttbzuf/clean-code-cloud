@@ -133,7 +133,7 @@ function UsersAdminPage() {
       if (error) throw error;
       return data ?? [];
     },
-    enabled: !!tenantId && canAccess,
+    enabled: !!tenantId && (role === "owner" || isSuperOwner),
   });
 
   const branchesQ = useQuery({
