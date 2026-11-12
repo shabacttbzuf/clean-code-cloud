@@ -2642,6 +2642,7 @@ export type Database = {
           branch_id: string | null
           company_id: string | null
           created_at: string
+          custom_role_id: string | null
           department_id: string | null
           hired_by: string | null
           id: string
@@ -2653,6 +2654,7 @@ export type Database = {
           branch_id?: string | null
           company_id?: string | null
           created_at?: string
+          custom_role_id?: string | null
           department_id?: string | null
           hired_by?: string | null
           id?: string
@@ -2664,6 +2666,7 @@ export type Database = {
           branch_id?: string | null
           company_id?: string | null
           created_at?: string
+          custom_role_id?: string | null
           department_id?: string | null
           hired_by?: string | null
           id?: string
@@ -2672,6 +2675,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "user_roles_custom_role_tenant_fkey"
+            columns: ["custom_role_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "custom_roles"
+            referencedColumns: ["id", "tenant_id"]
+          },
           {
             foreignKeyName: "user_roles_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -2886,6 +2896,16 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      assign_custom_role_to_user: {
+        Args: {
+          _actor_id: string
+          _branch_id: string | null
+          _custom_role_id: string
+          _tenant_id: string
+          _user_id: string
+        }
+        Returns: undefined
       }
       has_permission: {
         Args: { _permission_key: string; _tenant_id: string; _user_id: string }
