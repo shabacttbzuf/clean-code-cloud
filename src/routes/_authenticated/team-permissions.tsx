@@ -38,20 +38,27 @@ function TeamPermissionsPage() {
     queryKey: ["team-list", tenantId, userId, role, isSuperOwner],
     queryFn: async () => {
       if (!tenantId || !userId) return [] as Array<{
-        user_id: string; role: string; branch_id: string | null;
+        user_id: string; role: string; branch_id: string | null; custom_role_id: string | null; custom_role_name: string | null;
         hired_by: string | null; full_name: string | null;
       }>;
       const { data: rolesRows, error } = await supabase
         .from("user_roles")
-        .select("user_id, role, branch_id, hired_by")
+        .select("user_id, role, branch_id, custom_role_id, hired_by")
         .eq("tenant_id", tenantId);
       if (error) throw error;
       const ids = Array.from(new Set((rolesRows ?? []).map((r) => r.user_id)));
       const { data: profiles } = ids.length
         ? await supabase.from("profiles").select("id, full_name").in("id", ids)
         : { data: [] as { id: string; full_name: string | null }[] };
+      const customIds = Array.from(new Set((rolesRows ?? []).map((r) => r.custom_role_id).filter(Boolean))) as string[];
+      const { data: customRows, error: customError } = customIds.length
+        ? await supabase.from("custom_roles").select("id, name").eq("tenant_id", tenantId!).in("id", customIds)
+        : { data: [], error: null };
+      if (customError) throw customError;
       const pmap = new Map((profiles ?? []).map((p) => [p.id, p.full_name] as const));
-      return (rolesRows ?? []).map((r) => ({ ...r, full_name: pmap.get(r.user_id) ?? null }));
+      const cmap = new Map((customRows ?? []).map((r) => [r.id, r.name] as const));
+      return (rolesRows ?? []).map((r) => ({ ...r, full_name: pmap.get(r.user_id) ?? null,
+        custom_role_name: r.custom_role_id ? cmap.get(r.custom_role_id) ?? "دور مخصص" : null }));
     },
     enabled: !!tenantId && !!userId && canAccess,
   });
@@ -113,6 +120,18 @@ function TeamPermissionsPage() {
 
   const selectedTeamMember = filteredTeam.find((r) => r.user_id === selectedUser) ?? null;
 
+  const customRoleDefaults = useQuery({
+    queryKey: ["custom-role-default-perms", tenantId, selectedTeamMember?.custom_role_id],
+    queryFn: async () => {
+      if (!selectedTeamMember?.custom_role_id) return [] as string[];
+      const { data, error } = await supabase.from("role_permissions").select("permission_key")
+        .eq("tenant_id", tenantId!).eq("custom_role_id", selectedTeamMember.custom_role_id).eq("role_kind", "custom");
+      if (error) throw error;
+      return (data ?? []).map((row) => row.permission_key);
+    },
+    enabled: !!tenantId && !!selectedTeamMember?.custom_role_id,
+  });
+
   // Owner may only VIEW (not edit) permissions of users the OTHER MANAGERS hired.
   const canEditSelected = useMemo(() => {
     if (!selectedTeamMember) return false;
@@ -166,7 +185,11 @@ function TeamPermissionsPage() {
     : isOwner ? "تحكّم بصلاحيات المديرين ومن وظّفتهم بنفسك، وشاهد صلاحيات فريق المديرين"
     : "تحكّم بصلاحيات الموظفين الذين وظّفتهم أنت في فرعك";
 
-  const roleDefaults = selectedTeamMember ? defaultsFor(selectedTeamMember.role) : new Set<string>();
+  const roleDefaults = selectedTeamMember
+    ? selectedTeamMember.custom_role_id
+      ? new Set(customRoleDefaults.data ?? [])
+      : defaultsFor(selectedTeamMember.role)
+    : new Set<string>();
 
   return (
     <div className="space-y-6">
@@ -183,7 +206,7 @@ function TeamPermissionsPage() {
                   <SelectItem key={m.user_id} value={m.user_id}>
                     <span className="flex items-center gap-2">
                       <span>{m.full_name ?? m.user_id.slice(0, 8)}</span>
-                      <Badge variant="outline" className="text-[10px]">{m.role}</Badge>
+                      <Badge variant="outline" className="text-[10px]">{m.custom_role_name ?? m.role}</Badge>
                     </span>
                   </SelectItem>
                 ))}
@@ -194,7 +217,7 @@ function TeamPermissionsPage() {
             )}
             {selectedTeamMember && (
               <div className="rounded-md border p-3 text-xs">
-                <div><span className="text-muted-foreground">الدور: </span>{selectedTeamMember.role}</div>
+                <div><span className="text-muted-foreground">الدور: </span>{selectedTeamMember.custom_role_name ?? selectedTeamMember.role}</div>
                 <div><span className="text-muted-foreground">وظّفه: </span>
                   {selectedTeamMember.hired_by === userId ? "أنت" : (team.data?.find((t) => t.user_id === selectedTeamMember.hired_by)?.full_name ?? "—")}
                 </div>
@@ -212,7 +235,7 @@ function TeamPermissionsPage() {
           <div>
             {!selectedUser ? (
               <div className="grid h-40 place-items-center text-sm text-muted-foreground">اختر موظفاً لعرض صلاحياته</div>
-            ) : permissions.isLoading || overrides.isLoading ? (
+            ) : permissions.isLoading || overrides.isLoading || (selectedTeamMember?.custom_role_id && customRoleDefaults.isLoading) ? (
               <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></div>
             ) : (
               <div className="space-y-4">
