@@ -3077,7 +3077,7 @@ export const Constants = {
       cash_session_status: ["open", "closed"],
       inventory_txn_type: ["in", "out", "adjust", "sale", "refund"],
       payment_method: ["cash", "card", "transfer", "mixed"],
-      purchase_status: ["draft", "received", "cancelled"],
+      purchase_status: ["draft", "received", "cancelled", "returned"],
       sale_status: ["completed", "refunded", "void"],
     },
   },
