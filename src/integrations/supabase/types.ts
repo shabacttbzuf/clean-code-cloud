@@ -2502,6 +2502,7 @@ export type Database = {
           id: string
           tenant_id: string
           branch_id: string
+          cash_session_id: string | null
           supplier_id: string
           amount: number
           payment_method: string
@@ -2515,6 +2516,7 @@ export type Database = {
           id?: string
           tenant_id: string
           branch_id: string
+          cash_session_id?: string | null
           supplier_id: string
           amount: number
           payment_method: string
@@ -2538,6 +2540,14 @@ export type Database = {
           created_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "supplier_payments_cash_session_scope_fkey"
+            columns: ["cash_session_id", "tenant_id", "branch_id"]
+            isOneToOne: false
+            referencedRelation: "cash_sessions"
+            referencedColumns: ["id", "tenant_id", "branch_id"]
+          },
+
           {
             foreignKeyName: "supplier_payments_branch_tenant_fkey"
             columns: ["branch_id", "tenant_id"]
