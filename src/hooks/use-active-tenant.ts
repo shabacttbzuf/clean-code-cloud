@@ -9,6 +9,7 @@ export type Membership = {
   tenant_id: string;
   role: "owner" | "manager" | "accountant" | "cashier" | "warehouse" | "waiter";
   branch_id: string | null;
+  custom_role_id: string | null;
 };
 
 export type Tenant = {
@@ -33,7 +34,7 @@ export function useActiveTenant() {
     queryFn: async (): Promise<Membership[]> => {
       const { data, error } = await supabase
         .from("user_roles")
-        .select("tenant_id, role, branch_id")
+        .select("tenant_id, role, branch_id, custom_role_id")
         .eq("user_id", user!.id);
       if (error) throw error;
       return (data ?? []) as Membership[];
