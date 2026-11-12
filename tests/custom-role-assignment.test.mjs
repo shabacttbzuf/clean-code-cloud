@@ -64,3 +64,9 @@ test("custom role and role-permission mutations require immutable owner identity
   assert.match(ownerMutationMigration, /role_permissions_owner_only_delete_guard/);
   assert.match(ownerMutationMigration, /private\.has_role\(\(select auth\.uid\(\)\), tenant_id, 'owner'/);
 });
+
+const protectOwnerMigration = readFileSync(new URL("../supabase/migrations/20261112005412_protect_tenant_owner_from_custom_role_demotion.sql", import.meta.url), "utf8");
+test("custom role assignment cannot demote the tenant owner", () => {
+  assert.match(protectOwnerMigration, /v_target_role = 'owner'::public\.app_role/);
+  assert.match(protectOwnerMigration, /tenant owner cannot be assigned a custom staff role/);
+});
