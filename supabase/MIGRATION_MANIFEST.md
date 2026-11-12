@@ -98,4 +98,6 @@
 
 64. `supabase/migrations/20261112002832_restrict_supplier_payment_mutations.sql`
 
-**الإجمالي: 64 ترحيلاً.**
+65. `supabase/migrations/20261112003426_supplier_cash_session_integration.sql`
+
+**الإجمالي: 65 ترحيلاً.**
