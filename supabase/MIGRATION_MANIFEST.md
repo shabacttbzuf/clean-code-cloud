@@ -108,4 +108,6 @@
 
 69. `supabase/migrations/20261112005250_owner_only_custom_role_mutations.sql`
 
-**الإجمالي: 69 ترحيلاً.**
+70. `supabase/migrations/20261112005412_protect_tenant_owner_from_custom_role_demotion.sql`
+
+**الإجمالي: 70 ترحيلاً.**
