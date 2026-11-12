@@ -29,7 +29,7 @@ test("supplier balance includes received purchases, returns, and recorded paymen
 });
 
 test("supplier payment form warns that it does not alter cash-session balances", () => {
-  assert.match(suppliers, /لا يغيّر رصيد درج النقد أو وردية الصندوق تلقائياً/);
+  assert.match(suppliers, /الدفعة النقدية ترتبط بورديّة مفتوحة/);
   assert.match(migration, /Does not mutate cash sessions/i);
 });
 
