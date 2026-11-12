@@ -63,6 +63,8 @@ type EnterpriseUser = {
   branch_id: string | null;
   tenant_id: string | null;
   role?: string | null;
+  custom_role_id?: string | null;
+  custom_role_name?: string | null;
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -98,7 +100,7 @@ function UsersAdminPage() {
       if (!tenantId) return [] as EnterpriseUser[];
       const { data: roles } = await supabase
         .from("user_roles")
-        .select("user_id, role, branch_id")
+        .select("user_id, role, branch_id, custom_role_id")
         .eq("tenant_id", tenantId);
       const ids = Array.from(new Set((roles ?? []).map((r) => r.user_id)));
       if (ids.length === 0) return [];
@@ -108,8 +110,28 @@ function UsersAdminPage() {
           "id, full_name, username, email, phone, avatar_url, employee_no, national_id, job_title, department_id, company_id, employment_date, status, last_login_at, last_ip, last_device, created_at, branch_id, tenant_id",
         )
         .in("id", ids);
-      const roleMap = new Map((roles ?? []).map((r) => [r.user_id, r.role] as const));
-      return (profiles ?? []).map((p) => ({ ...p, role: roleMap.get(p.id) ?? null })) as EnterpriseUser[];
+      const customIds = Array.from(new Set((roles ?? []).map((r) => r.custom_role_id).filter(Boolean))) as string[];
+      const { data: customRoles, error: customRolesError } = customIds.length
+        ? await supabase.from("custom_roles").select("id, name").eq("tenant_id", tenantId).in("id", customIds)
+        : { data: [], error: null };
+      if (customRolesError) throw customRolesError;
+      const customMap = new Map((customRoles ?? []).map((r) => [r.id, r.name] as const));
+      const roleMap = new Map((roles ?? []).map((r) => [r.user_id, r] as const));
+      return (profiles ?? []).map((p) => {
+        const assignment = roleMap.get(p.id);
+        return { ...p, role: assignment?.role ?? null, custom_role_id: assignment?.custom_role_id ?? null,
+          custom_role_name: assignment?.custom_role_id ? customMap.get(assignment.custom_role_id) ?? "دور مخصص" : null };
+      }) as EnterpriseUser[];
+    },
+    enabled: !!tenantId && canAccess,
+  });
+
+  const customRolesQ = useQuery({
+    queryKey: ["custom-roles", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("custom_roles").select("id, name").eq("tenant_id", tenantId!).order("name");
+      if (error) throw error;
+      return data ?? [];
     },
     enabled: !!tenantId && canAccess,
   });
@@ -279,7 +301,7 @@ function UsersAdminPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">{u.role ?? "—"}</Badge>
+                        <Badge variant="outline">{u.custom_role_name ?? u.role ?? "—"}</Badge>
                       </TableCell>
                       <TableCell dir="ltr">{u.employee_no ?? "—"}</TableCell>
                       <TableCell>
@@ -374,6 +396,7 @@ function UsersAdminPage() {
           branches={branchesQ.data ?? []}
           departments={departmentsQ.data ?? []}
           companies={companiesQ.data ?? []}
+          customRoles={customRolesQ.data ?? []}
           onClose={() => setEditing(null)}
           onSaved={() => {
             qc.invalidateQueries({ queryKey: ["users-admin", tenantId] });
@@ -395,6 +418,7 @@ function EditUserDialog(props: {
   branches: { id: string; name: string }[];
   departments: { id: string; name: string }[];
   companies: { id: string; name: string }[];
+  customRoles: { id: string; name: string }[];
   onClose: () => void;
   onSaved: () => void;
   updateProfileFn: ReturnType<typeof useServerFn<typeof updateUserEnterpriseProfile>>;
@@ -402,7 +426,7 @@ function EditUserDialog(props: {
   transferBranchFn: ReturnType<typeof useServerFn<typeof transferUserToBranch>>;
   setPwdFn: ReturnType<typeof useServerFn<typeof updateUserPassword>>;
 }) {
-  const { user, tenantId, branches, departments, companies } = props;
+  const { user, tenantId, branches, departments, companies, customRoles } = props;
   const [form, setForm] = useState({
     full_name: user.full_name ?? "",
     phone: user.phone ?? "",
@@ -413,7 +437,8 @@ function EditUserDialog(props: {
     department_id: user.department_id ?? "",
     company_id: user.company_id ?? "",
     branch_id: user.branch_id ?? "",
-    role: user.role ?? "cashier",
+    role: user.custom_role_id ? "waiter" : user.role ?? "cashier",
+    custom_role_id: user.custom_role_id ?? "",
     new_password: "",
   });
 
@@ -435,12 +460,13 @@ function EditUserDialog(props: {
           },
         },
       });
-      if (form.role && form.role !== user.role) {
+      if ((form.role && form.role !== user.role) || form.custom_role_id !== (user.custom_role_id ?? "")) {
         await props.changeRoleFn({
           data: {
             user_id: user.id,
             tenant_id: tenantId,
             role: form.role as any,
+            custom_role_id: form.custom_role_id || null,
             branch_id: form.branch_id || null,
           },
         });
@@ -508,8 +534,10 @@ function EditUserDialog(props: {
           />
           <SelectField
             label="الدور"
-            value={form.role}
-            onChange={(v) => setForm({ ...form, role: v })}
+            value={form.custom_role_id ? `custom:${form.custom_role_id}` : form.role}
+            onChange={(v) => v.startsWith("custom:")
+              ? setForm({ ...form, role: "waiter", custom_role_id: v.slice(7) })
+              : setForm({ ...form, role: v, custom_role_id: "" })}
             options={[
               { id: "owner", name: "owner" },
               { id: "manager", name: "manager" },
@@ -518,6 +546,7 @@ function EditUserDialog(props: {
               { id: "warehouse", name: "warehouse" },
               { id: "waiter", name: "waiter" },
               { id: "kitchen", name: "kitchen" },
+              ...customRoles.map((r) => ({ id: `custom:${r.id}`, name: `مخصص: ${r.name}` })),
             ]}
           />
           <Field
