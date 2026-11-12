@@ -94,4 +94,6 @@
 
 62. `supabase/migrations/20261112030000_supplier_payment_ledger.sql`
 
-**الإجمالي: 62 ترحيلاً.**
+63. `supabase/migrations/20261112033000_supplier_ledger_fk_indexes_and_marketing_rls.sql`
+
+**الإجمالي: 63 ترحيلاً.**
