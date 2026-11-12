@@ -22,7 +22,7 @@ test("supplier payment ledger is RLS protected and append-only", () => {
 });
 
 test("supplier balance includes received purchases, returns, and recorded payments", () => {
-  assert.match(suppliers, /eq\("status", "received"\)/);
+  assert.match(suppliers, /in\("status", \["received", "returned"\]\)/);
   assert.match(suppliers, /purchase_returns/);
   assert.match(suppliers, /supplier_payments/);
   assert.match(suppliers, /purchases - totals\.returns - totals\.paid/);
