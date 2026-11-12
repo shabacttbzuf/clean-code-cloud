@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
@@ -540,6 +540,12 @@ function RoleDialog({
   const [role, setRole] = useState<string>("cashier");
   const [customRoleId, setCustomRoleId] = useState<string>("");
   const [branchId, setBranchId] = useState<string>("none");
+  useEffect(() => {
+    if (!user) return;
+    setRole(user.role);
+    setCustomRoleId(user.custom_role_id ?? "");
+    setBranchId(user.branch_id ?? "none");
+  }, [user]);
   const changeFn = useServerFn(changeUserRole);
   const mut = useMutation({
     mutationFn: async () => {
