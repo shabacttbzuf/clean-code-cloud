@@ -118,7 +118,7 @@ test("inventory alerts can be filtered by negative, missing, and below-minimum s
 const settings = readFileSync(new URL("../src/routes/_authenticated/settings.tsx", import.meta.url), "utf8");
 const theme = readFileSync(new URL("../src/lib/theme.tsx", import.meta.url), "utf8");
 const appSidebar = readFileSync(new URL("../src/components/app-sidebar.tsx", import.meta.url), "utf8");
-const campaignMigration = readFileSync(new URL("../supabase/migrations/20261112020000_marketing_campaigns_management.sql", import.meta.url), "utf8");
+const campaignMigration = readFileSync(new URL("../supabase/migrations/20261111233538_marketing_campaigns_management.sql", import.meta.url), "utf8");
 
 test("owner design studio customizes workspace colors and background with a safe reset", () => {
   assert.match(settings, /استوديو تطوير وتخصيص النظام/);
