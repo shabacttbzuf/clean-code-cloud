@@ -2530,6 +2530,7 @@ export type Database = {
           id?: string
           tenant_id?: string
           branch_id?: string
+          cash_session_id?: string | null
           supplier_id?: string
           amount?: number
           payment_method?: string
