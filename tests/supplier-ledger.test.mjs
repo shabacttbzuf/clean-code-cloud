@@ -69,3 +69,9 @@ test("cash supplier payments require an open matching session and reduce expecte
   assert.match(cashIntegrationMigration, /sp\.cash_session_id = v_session\.id/i);
   assert.match(cashIntegrationMigration, /create trigger validate_supplier_payment_cash_session/i);
 });
+
+const cashIndexMigration = readFileSync(new URL("../supabase/migrations/20261112003745_supplier_cash_session_fk_index.sql", import.meta.url), "utf8");
+test("supplier cash-session composite foreign key has a covering index", () => {
+  assert.match(cashIndexMigration, /supplier_payments_cash_session_fk_idx/);
+  assert.match(cashIndexMigration, /cash_session_id, tenant_id, branch_id/);
+});
