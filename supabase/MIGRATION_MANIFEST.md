@@ -100,4 +100,6 @@
 
 65. `supabase/migrations/20261112003426_supplier_cash_session_integration.sql`
 
-**الإجمالي: 65 ترحيلاً.**
+66. `supabase/migrations/20261112003745_supplier_cash_session_fk_index.sql`
+
+**الإجمالي: 66 ترحيلاً.**
