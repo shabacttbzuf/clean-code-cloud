@@ -60,3 +60,12 @@ test("supplier payment ledger grants only select and insert to authenticated cli
   assert.match(privilegesMigration, /revoke all on table public\.supplier_payments from anon, authenticated/i);
   assert.match(privilegesMigration, /grant select, insert on table public\.supplier_payments to authenticated/i);
 });
+
+const cashIntegrationMigration = readFileSync(new URL("../supabase/migrations/20261112003426_supplier_cash_session_integration.sql", import.meta.url), "utf8");
+test("cash supplier payments require an open matching session and reduce expected drawer cash", () => {
+  assert.match(cashIntegrationMigration, /payment_method <> 'cash' or cash_session_id is not null/i);
+  assert.match(cashIntegrationMigration, /status <> 'open'/i);
+  assert.match(cashIntegrationMigration, /sum\(sp\.amount\)/i);
+  assert.match(cashIntegrationMigration, /sp\.cash_session_id = v_session\.id/i);
+  assert.match(cashIntegrationMigration, /create trigger validate_supplier_payment_cash_session/i);
+});
