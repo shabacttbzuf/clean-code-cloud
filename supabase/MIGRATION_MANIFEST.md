@@ -88,9 +88,9 @@
 58. `supabase/migrations/20261111035000_get_my_permissions_invoker.sql`
 59. `supabase/migrations/20261111040000_fix_cashier_pos_checkout_permissions.sql`
 
-60. `supabase/migrations/20261112010000_restaurant_image_storage_foundation.sql`
+60. `supabase/migrations/20261111232801_restaurant_image_storage_foundation.sql`
 
-61. `supabase/migrations/20261112020000_marketing_campaigns_management.sql`
+61. `supabase/migrations/20261111233538_marketing_campaigns_management.sql`
 
 62. `supabase/migrations/20261112002129_supplier_payment_ledger.sql`
 
