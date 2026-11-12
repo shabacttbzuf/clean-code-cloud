@@ -78,7 +78,7 @@
 
 ## ملف SQL الشامل
 
-`supabase/COMPLETE_DATABASE.sql` يجمع محتويات الترحيلات الأربع والخمسين بالترتيب، وهو Snapshot كامل لإعادة البناء من قاعدة فارغة.
+`supabase/COMPLETE_DATABASE.sql` يجمع محتويات جميع الترحيلات المتسلسلة بالترتيب، وهو Snapshot كامل لإعادة البناء من قاعدة فارغة.
 
 **المسار الموصى به:** `supabase db push` لأنه يحافظ على سجل الترحيلات. لا تشغّل Snapshot يدوياً ثم تشغّل `db push` على القاعدة نفسها؛ اختر طريقة واحدة فقط.
 
@@ -92,4 +92,6 @@
 
 61. `supabase/migrations/20261112020000_marketing_campaigns_management.sql`
 
-**الإجمالي: 61 ترحيلاً.**
+62. `supabase/migrations/20261112030000_supplier_payment_ledger.sql`
+
+**الإجمالي: 62 ترحيلاً.**
