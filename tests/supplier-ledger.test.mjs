@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const migration = readFileSync(new URL("../supabase/migrations/20261112030000_supplier_payment_ledger.sql", import.meta.url), "utf8");
+const migration = readFileSync(new URL("../supabase/migrations/20261112002129_supplier_payment_ledger.sql", import.meta.url), "utf8");
 const suppliers = readFileSync(new URL("../src/routes/_authenticated/suppliers.tsx", import.meta.url), "utf8");
 const types = readFileSync(new URL("../src/integrations/supabase/types.ts", import.meta.url), "utf8");
 
@@ -39,7 +39,7 @@ test("generated Supabase types include supplier_payments", () => {
   assert.match(types, /supplier_payments_supplier_tenant_fkey/);
 });
 
-const performanceMigration = readFileSync(new URL("../supabase/migrations/20261112033000_supplier_ledger_fk_indexes_and_marketing_rls.sql", import.meta.url), "utf8");
+const performanceMigration = readFileSync(new URL("../supabase/migrations/20261112002432_supplier_ledger_fk_indexes_and_marketing_rls.sql", import.meta.url), "utf8");
 
 test("supplier payment foreign keys are indexed and marketing RLS uses initplan-safe auth calls", () => {
   assert.match(performanceMigration, /supplier_payments_branch_tenant_fk_idx/);
