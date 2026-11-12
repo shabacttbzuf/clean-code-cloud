@@ -7309,7 +7309,7 @@ drop trigger if exists set_marketing_campaigns_updated_at on public.marketing_ca
 create trigger set_marketing_campaigns_updated_at before update on public.marketing_campaigns for each row execute function public.set_updated_at();
 
 
--- SOURCE MIGRATION: 20261112030000_supplier_payment_ledger.sql
+-- SOURCE MIGRATION: 20261112002129_supplier_payment_ledger.sql
 -- Supplier payment ledger: immutable, tenant- and branch-scoped records.
 -- Cash drawer balances are intentionally not modified by this ledger.
 begin;
@@ -7370,7 +7370,7 @@ comment on table public.supplier_payments is
 commit;
 
 
--- SOURCE MIGRATION: 20261112033000_supplier_ledger_fk_indexes_and_marketing_rls.sql
+-- SOURCE MIGRATION: 20261112002432_supplier_ledger_fk_indexes_and_marketing_rls.sql
 -- Cover all supplier ledger foreign keys and avoid per-row auth function evaluation in marketing RLS.
 begin;
 
