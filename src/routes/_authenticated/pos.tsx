@@ -519,6 +519,22 @@ function POSPage() {
             </Button>
           </CardContent>
         </Card>
+        {drafts.length > 0 && (
+          <Card>
+            <CardContent className="space-y-2 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div><h2 className="font-bold">لديك {drafts.length} فاتورة مسودة</h2><p className="text-xs text-muted-foreground">يمكنك استعادتها الآن أو بعد فتح الوردية.</p></div>
+                <Button type="button" size="sm" variant="outline" onClick={() => setDraftsOpen((value) => !value)}>{draftsOpen ? "إخفاء" : "عرض المسودات"}</Button>
+              </div>
+              {draftsOpen && drafts.map((draft, index) => (
+                <div key={draft.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-2">
+                  <div className="min-w-0"><div className="text-sm font-semibold">مسودة #{drafts.length - index}</div><div className="text-xs text-muted-foreground">{draft.cart.length} أصناف • {formatMoney(getDraftTotal(draft))} {tenant?.currency ?? ""}</div></div>
+                  <div className="flex gap-1"><Button type="button" size="sm" variant="ghost" className="text-destructive" onClick={() => deleteDraft(draft.id)}>حذف</Button><Button type="button" size="sm" onClick={() => restoreDraft(draft)}>استعادة وإكمال</Button></div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
       </div>
     );
   }
