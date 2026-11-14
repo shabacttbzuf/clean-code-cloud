@@ -72,7 +72,20 @@ type Draft = { id: string; cart: CartItem[]; discount: string; created_at: strin
 
 function loadDrafts(storageKey: string): Draft[] {
   try {
-    return JSON.parse(localStorage.getItem(storageKey) || "[]") as Draft[];
+    const value: unknown = JSON.parse(localStorage.getItem(storageKey) || "[]");
+    if (!Array.isArray(value)) return [];
+    return value.filter((draft): draft is Draft => {
+      if (!draft || typeof draft !== "object") return false;
+      const candidate = draft as Partial<Draft>;
+      if (typeof candidate.id !== "string" || typeof candidate.discount !== "string" ||
+          typeof candidate.created_at !== "string" || !Number.isFinite(Date.parse(candidate.created_at)) ||
+          !Array.isArray(candidate.cart) || candidate.cart.length === 0) return false;
+      return candidate.cart.every((item) =>
+        !!item && typeof item.product_id === "string" && typeof item.name === "string" &&
+        Number.isFinite(item.unit_price) && item.unit_price >= 0 &&
+        Number.isInteger(item.quantity) && item.quantity > 0
+      );
+    }).slice(0, 100);
   } catch {
     return [];
   }
