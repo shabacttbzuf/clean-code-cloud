@@ -8571,7 +8571,7 @@ begin
       'create policy creator_scope_%I on public.%I as restrictive for select to authenticated using (
         created_by = (select auth.uid())
         or exists (select 1 from public.super_owners so where so.user_id = (select auth.uid()))
-        or (created_by is null and private.has_role((select auth.uid()), tenant_id, ''owner''::public.app_role))
+        or created_by is null
       )', t, t
     );
     execute format(
