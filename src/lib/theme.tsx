@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 type Theme = "light" | "dark";
 export type DesignSettings = {
@@ -24,13 +25,27 @@ export const DEFAULT_DESIGN: DesignSettings = {
   backgroundImage: "",
 };
 
-function readDesign(): DesignSettings {
+// Personal appearance settings are namespaced by the authenticated account.
+// This prevents two people sharing the same browser/device from overwriting
+// each other's theme and design preferences.
+function scopedKey(base: string, userId: string | null) {
+  return `${base}:${userId ?? "guest"}`;
+}
+
+function readDesign(userId: string | null): DesignSettings {
   try {
-    const raw = window.localStorage.getItem(DESIGN_STORAGE_KEY);
+    const raw = window.localStorage.getItem(scopedKey(DESIGN_STORAGE_KEY, userId));
     if (!raw) return DEFAULT_DESIGN;
     const parsed = JSON.parse(raw) as Partial<DesignSettings>;
     return { ...DEFAULT_DESIGN, ...parsed };
   } catch { return DEFAULT_DESIGN; }
+}
+
+function readTheme(userId: string | null): Theme | null {
+  try {
+    const value = window.localStorage.getItem(scopedKey(STORAGE_KEY, userId));
+    return value === "dark" || value === "light" ? value : null;
+  } catch { return null; }
 }
 
 function applyDesign(design: DesignSettings, theme: Theme) {
@@ -48,46 +63,75 @@ function applyDesign(design: DesignSettings, theme: Theme) {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
+  const [userId, setUserId] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [theme, setTheme] = useState<Theme>("light");
   const [design, setDesign] = useState<DesignSettings>(DEFAULT_DESIGN);
 
   useEffect(() => {
-    const stored = window.localStorage.getItem(STORAGE_KEY) as Theme | null;
-    const initial: Theme = stored === "dark" || stored === "light"
-      ? stored
-      : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    setTheme(initial);
-    setDesign(readDesign());
+    let active = true;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      setUserId(session?.user?.id ?? null);
+      setAuthReady(true);
+    });
+    void supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      setUserId(data.session?.user?.id ?? null);
+      setAuthReady(true);
+    }).catch(() => {
+      if (active) setAuthReady(true);
+    });
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
+
+  useEffect(() => {
+    if (!authReady) return;
+    const storedTheme = readTheme(userId);
+    const initial: Theme = storedTheme ?? (
+      window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+    );
+    setTheme(initial);
+    setDesign(readDesign(userId));
+  }, [authReady, userId]);
 
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle("dark", theme === "dark");
-    try { window.localStorage.setItem(STORAGE_KEY, theme); } catch { /* ignore */ }
-  }, [theme]);
+    if (authReady) {
+      try { window.localStorage.setItem(scopedKey(STORAGE_KEY, userId), theme); } catch { /* ignore */ }
+    }
+  }, [theme, userId, authReady]);
 
   useEffect(() => {
     applyDesign(design, theme);
   }, [design, theme]);
 
   useEffect(() => {
-    const sync = () => setDesign(readDesign());
-    window.addEventListener(DESIGN_UPDATED_EVENT, sync);
-    window.addEventListener("storage", sync);
-    return () => {
-      window.removeEventListener(DESIGN_UPDATED_EVENT, sync);
-      window.removeEventListener("storage", sync);
+    const currentKey = scopedKey(DESIGN_STORAGE_KEY, userId);
+    const sync = (event?: StorageEvent) => {
+      if (!event || event.key === currentKey) setDesign(readDesign(userId));
     };
-  }, []);
+    window.addEventListener(DESIGN_UPDATED_EVENT, sync as EventListener);
+    const onStorage = (event: StorageEvent) => sync(event);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(DESIGN_UPDATED_EVENT, sync as EventListener);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [userId]);
 
   const saveDesign = (next: DesignSettings) => {
     setDesign(next);
-    try { window.localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+    try { window.localStorage.setItem(scopedKey(DESIGN_STORAGE_KEY, userId), JSON.stringify(next)); } catch { /* ignore */ }
     window.dispatchEvent(new Event(DESIGN_UPDATED_EVENT));
   };
   const resetDesign = () => {
     setDesign(DEFAULT_DESIGN);
-    try { window.localStorage.removeItem(DESIGN_STORAGE_KEY); } catch { /* ignore */ }
+    try { window.localStorage.removeItem(scopedKey(DESIGN_STORAGE_KEY, userId)); } catch { /* ignore */ }
     window.dispatchEvent(new Event(DESIGN_UPDATED_EVENT));
   };
 
