@@ -25,3 +25,12 @@ test("branch creation UI submits the selected company", () => {
   assert.match(branches, /company_id: companyId/);
   assert.match(hook, /company_id, custom_role_id/);
 });
+
+const cashScope = readFileSync(new URL("../supabase/migrations/20261115000007_scope_cash_sessions_to_company.sql", import.meta.url), "utf8");
+
+test("cash session writes and closes cannot cross company branches", () => {
+  assert.match(cashScope, /company_scope_cash_sessions_insert/);
+  assert.match(cashScope, /company_scope_cash_sessions_update/);
+  assert.match(cashScope, /company_scope_cash_sessions_delete/);
+  assert.match(cashScope, /private\.can_access_branch/);
+});
