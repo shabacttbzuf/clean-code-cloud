@@ -10,6 +10,7 @@ alter table public.customers
 
 alter table public.sales
   add column customer_id uuid,
+  add constraint sales_customer_id_customer_tenant_unique unique (id, customer_id, tenant_id),
   add constraint sales_customer_tenant_fkey
     foreign key (customer_id, tenant_id)
     references public.customers (id, tenant_id) on delete restrict;
