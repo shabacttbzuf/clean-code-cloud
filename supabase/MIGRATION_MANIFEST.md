@@ -111,3 +111,9 @@
 70. `supabase/migrations/20261112005412_protect_tenant_owner_from_custom_role_demotion.sql`
 
 **الإجمالي: 70 ترحيلاً.**
+
+71. `supabase/migrations/20261114141029_fix_atomic_stock_decrement_for_pos_checkout.sql`
+
+72. `supabase/migrations/20261114141500_grant_authenticated_marketing_campaign_reads.sql`
+
+**الإجمالي: 72 ترحيلاً.**
