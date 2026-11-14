@@ -70,15 +70,19 @@ const paymentToDb: Record<PaymentUI, "cash" | "card" | "transfer"> = {
 const DRAFTS_KEY = "pos-drafts-v1";
 type Draft = { id: string; cart: CartItem[]; discount: string; created_at: string };
 
-function loadDrafts(): Draft[] {
+function loadDrafts(storageKey: string): Draft[] {
   try {
-    return JSON.parse(localStorage.getItem(DRAFTS_KEY) || "[]") as Draft[];
+    return JSON.parse(localStorage.getItem(storageKey) || "[]") as Draft[];
   } catch {
     return [];
   }
 }
-function saveDrafts(list: Draft[]) {
-  localStorage.setItem(DRAFTS_KEY, JSON.stringify(list));
+function saveDrafts(list: Draft[], storageKey: string) {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(list));
+  } catch {
+    // Draft persistence is best-effort when browser storage is unavailable.
+  }
 }
 
 function POSPage() {
@@ -106,7 +110,12 @@ function POSPage() {
   const [discount, setDiscount] = useState("0");
   const [openSessionDialog, setOpenSessionDialog] = useState(false);
   const [openingBalance, setOpeningBalance] = useState("0");
-  const [drafts, setDrafts] = useState<Draft[]>(() => (typeof window !== "undefined" ? loadDrafts() : []));
+  // Keep paused invoices isolated per signed-in user, tenant, and branch on shared devices.
+  const draftsStorageKey = `${DRAFTS_KEY}:${tenantId ?? "none"}:${userId ?? "none"}:${branchId ?? "none"}`;
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  useEffect(() => {
+    setDrafts(loadDrafts(draftsStorageKey));
+  }, [draftsStorageKey]);
   const [paperSize, setPaperSize] = useState<"58mm" | "80mm" | "A4">("80mm");
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewMethod, setReviewMethod] = useState<PaymentUI>("cash");
@@ -419,10 +428,10 @@ function POSPage() {
 
   const holdOrDraft = (label: string) => {
     if (cart.length === 0) return toast.info("السلة فارغة");
-    const list = loadDrafts();
+    const list = loadDrafts(draftsStorageKey);
     const d: Draft = { id: crypto.randomUUID(), cart, discount, created_at: new Date().toISOString() };
     list.unshift(d);
-    saveDrafts(list);
+    saveDrafts(list, draftsStorageKey);
     setDrafts(list);
     setCart([]);
     setDiscount("0");
@@ -431,8 +440,8 @@ function POSPage() {
   const restoreDraft = (d: Draft) => {
     setCart(d.cart);
     setDiscount(d.discount);
-    const list = loadDrafts().filter((x) => x.id !== d.id);
-    saveDrafts(list);
+    const list = loadDrafts(draftsStorageKey).filter((x) => x.id !== d.id);
+    saveDrafts(list, draftsStorageKey);
     setDrafts(list);
   };
 
