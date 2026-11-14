@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { PageHeader } from "@/components/page-header";
 import { ImageUploader } from "@/components/image-uploader";
+import { formatMoney } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/customers")({
   component: CustomersPage,
@@ -24,7 +25,7 @@ type Customer = {
   id: string; tenant_id: string; name: string;
   phone: string | null; email: string | null;
   avatar_url: string | null; address: string | null;
-  notes: string | null; is_active: boolean;
+  notes: string | null; is_active: boolean; credit_limit: number;
 };
 
 const schema = z.object({
@@ -35,6 +36,7 @@ const schema = z.object({
   notes: z.string().trim().max(1000).optional().or(z.literal("")),
   avatar_url: z.string().url().nullable().optional(),
   is_active: z.boolean(),
+  credit_limit: z.number().finite().min(0).max(999999999999),
 });
 
 function CustomersPage() {
@@ -43,11 +45,22 @@ function CustomersPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Customer | null>(null);
   const [search, setSearch] = useState("");
+  const [accountCustomer, setAccountCustomer] = useState<Customer | null>(null);
+  const balances = useQuery({
+    queryKey: ["customer-account-balances", tenantId],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from("customer_account_balances" as any) as any).select("*").eq("tenant_id", tenantId!);
+      if (error) throw error;
+      return (data ?? []) as Array<{ customer_id: string; invoice_count: number; invoiced_total: number; paid_total: number; refunded_total: number; outstanding_balance: number }>;
+    },
+    enabled: !!tenantId,
+  });
+  const balanceByCustomer = useMemo(() => new Map((balances.data ?? []).map((row) => [row.customer_id, row])), [balances.data]);
 
   const q = useQuery({
     queryKey: ["customers", tenantId],
     queryFn: async (): Promise<Customer[]> => {
-      const { data, error } = await supabase.from("customers").select("*").eq("tenant_id", tenantId!).order("created_at", { ascending: false });
+      const { data, error } = await (supabase.from("customers" as any) as any).select("*").eq("tenant_id", tenantId!).order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as Customer[];
     },
@@ -72,13 +85,14 @@ function CustomersPage() {
         phone: v.phone || null, email: v.email || null,
         address: v.address || null, notes: v.notes || null,
         avatar_url: v.avatar_url ?? null,
+        credit_limit: v.credit_limit,
         tenant_id: tenantId!,
       };
       if (editing) {
-        const { error } = await supabase.from("customers").update(payload).eq("id", editing.id);
+        const { error } = await (supabase.from("customers" as any) as any).update(payload).eq("id", editing.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("customers").insert(payload);
+        const { error } = await (supabase.from("customers" as any) as any).insert(payload);
         if (error) throw error;
       }
     },
@@ -146,6 +160,11 @@ function CustomersPage() {
                 <div className="space-y-1 text-sm text-muted-foreground">
                   {c.email && <div dir="ltr">✉ {c.email}</div>}
                   {c.address && <div>📍 {c.address}</div>}
+                  <div className="mt-2 grid grid-cols-2 gap-2 rounded-md bg-muted/40 p-2 text-xs">
+                    <div><div className="text-muted-foreground">الرصيد المستحق</div><div className="font-bold text-destructive num">{formatMoney(Number(balanceByCustomer.get(c.id)?.outstanding_balance ?? 0))}</div></div>
+                    <div><div className="text-muted-foreground">سقف المديونية</div><div className="font-bold num">{formatMoney(Number(c.credit_limit ?? 0))}</div></div>
+                  </div>
+                  <Button size="sm" variant="outline" className="mt-2 w-full" onClick={() => setAccountCustomer(c)}>الحساب والفواتير</Button>
                   {c.notes && <div className="line-clamp-2 text-xs">📝 {c.notes}</div>}
                 </div>
                 {isAdmin && (
@@ -163,8 +182,97 @@ function CustomersPage() {
           ))}
         </div>
       )}
+      <Dialog open={!!accountCustomer} onOpenChange={(value) => { if (!value) setAccountCustomer(null); }}>
+        <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto" dir="rtl">
+          <DialogHeader><DialogTitle>حساب العميل: {accountCustomer?.name}</DialogTitle></DialogHeader>
+          {accountCustomer && <CustomerAccount customer={accountCustomer} tenantId={tenantId!} />}
+          <DialogFooter><Button variant="outline" onClick={() => setAccountCustomer(null)}>إغلاق</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
+}
+
+function CustomerAccount({ customer, tenantId }: { customer: Customer; tenantId: string }) {
+  const invoices = useQuery({
+    queryKey: ["customer-invoices", tenantId, customer.id],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from("sales" as any) as any).select("id,invoice_no,created_at,total,status,branch_id").eq("tenant_id", tenantId).eq("customer_id", customer.id).order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const [saleId, setSaleId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState<"cash" | "card" | "transfer">("cash");
+  const [reference, setReference] = useState("");
+  const [cashSessionId, setCashSessionId] = useState("");
+  const [pending, setPending] = useState(false);
+  const selectedSale = invoices.data?.find((sale: any) => sale.id === saleId);
+  const sessions = useQuery({
+    queryKey: ["customer-open-cash-sessions", tenantId, selectedSale?.branch_id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("cash_sessions").select("id,branch_id,cashier_id").eq("tenant_id", tenantId).eq("branch_id", selectedSale.branch_id).eq("status", "open");
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!selectedSale && method === "cash",
+  });
+  const payments = useQuery({
+    queryKey: ["customer-invoice-payment-details", tenantId, saleId],
+    queryFn: async () => {
+      const [initial, later, refunds] = await Promise.all([
+        (supabase.from("payments" as any) as any).select("amount").eq("sale_id", saleId),
+        (supabase.from("customer_payments" as any) as any).select("amount").eq("sale_id", saleId),
+        (supabase.from("sale_refunds" as any) as any).select("total").eq("sale_id", saleId),
+      ]);
+      if (initial.error) throw initial.error;
+      if (later.error) throw later.error;
+      if (refunds.error) throw refunds.error;
+      const paid = [...(initial.data ?? []), ...(later.data ?? [])].reduce((sum: number, row: any) => sum + Number(row.amount), 0);
+      const refunded = (refunds.data ?? []).reduce((sum: number, row: any) => sum + Number(row.total), 0);
+      return Math.max(0, Number(selectedSale?.total ?? 0) - paid - refunded);
+    },
+    enabled: !!selectedSale,
+  });
+  const collect = async () => {
+    if (!selectedSale || !Number.isFinite(Number(amount)) || Number(amount) <= 0) { toast.error("أدخل مبلغاً صحيحاً"); return; }
+    if (method === "cash" && !cashSessionId) { toast.error("اختر وردية نقدية مفتوحة"); return; }
+    setPending(true);
+    try {
+      const { error } = await (supabase.rpc as any)("record_customer_payment", {
+        _tenant_id: tenantId, _sale_id: saleId, _amount: Number(amount), _method: method,
+        _cash_session_id: method === "cash" ? cashSessionId : null,
+        _reference: reference || null, _notes: null, _idempotency_key: crypto.randomUUID(),
+      });
+      if (error) throw error;
+      toast.success("تم تسجيل التحصيل");
+      setAmount(""); setReference("");
+      await Promise.all([invoices.refetch(), payments.refetch()]);
+    } catch (error) { toast.error(error instanceof Error ? error.message : "تعذر تسجيل التحصيل"); }
+    finally { setPending(false); }
+  };
+  return <div className="space-y-3">
+    <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted/40 p-3 text-sm">
+      <div><div className="text-muted-foreground">سقف المديونية</div><b>{formatMoney(Number(customer.credit_limit))}</b></div>
+      <div><div className="text-muted-foreground">الفواتير</div><b>{invoices.data?.length ?? 0}</b></div>
+    </div>
+    <div className="space-y-2">
+      <Label>الفاتورة المراد تحصيلها</Label>
+      <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={saleId} onChange={(e) => { setSaleId(e.target.value); setAmount(""); }}>
+        <option value="">اختر فاتورة</option>
+        {(invoices.data ?? []).map((sale: any) => <option key={sale.id} value={sale.id}>#{sale.invoice_no} — {formatMoney(Number(sale.total))} — {sale.status}</option>)}
+      </select>
+      {selectedSale && <div className="rounded border p-2 text-sm">المتبقي حسب السجلات: <b className="text-destructive">{formatMoney(Number(payments.data ?? 0))}</b></div>}
+      <div className="grid grid-cols-2 gap-2">
+        <div><Label>مبلغ التحصيل</Label><Input type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
+        <div><Label>طريقة الدفع</Label><select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={method} onChange={(e) => setMethod(e.target.value as typeof method)}><option value="cash">نقدي</option><option value="transfer">محفظة / تحويل</option><option value="card">بطاقة</option></select></div>
+      </div>
+      {method === "cash" && <div><Label>الوردية النقدية المفتوحة</Label><select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={cashSessionId} onChange={(e) => setCashSessionId(e.target.value)}><option value="">اختر الوردية</option>{(sessions.data ?? []).map((session: any) => <option key={session.id} value={session.id}>وردية المستخدم {session.cashier_id.slice(0, 8)}</option>)}</select></div>}
+      <div><Label>مرجع التحويل / ملاحظات</Label><Input value={reference} onChange={(e) => setReference(e.target.value)} /></div>
+      <Button className="w-full" disabled={pending || !selectedSale || Number(payments.data ?? 0) <= 0} onClick={collect}>{pending ? "جارٍ التسجيل..." : "تسجيل التحصيل"}</Button>
+    </div>
+  </div>;
 }
 
 function CustomerDialog({ initial, tenantId, onSubmit, pending }: {
@@ -178,13 +286,14 @@ function CustomerDialog({ initial, tenantId, onSubmit, pending }: {
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(initial?.avatar_url ?? null);
   const [active, setActive] = useState(initial?.is_active ?? true);
+  const [creditLimit, setCreditLimit] = useState(String(initial?.credit_limit ?? 0));
 
   return (
     <DialogContent className="max-h-[90vh] overflow-y-auto">
       <DialogHeader><DialogTitle>{initial ? "تعديل عميل" : "عميل جديد"}</DialogTitle></DialogHeader>
       <form className="space-y-3" onSubmit={(e) => {
         e.preventDefault();
-        try { onSubmit(schema.parse({ name, phone, email, address, notes, avatar_url: avatarUrl, is_active: active })); }
+        try { onSubmit(schema.parse({ name, phone, email, address, notes, avatar_url: avatarUrl, is_active: active, credit_limit: Number(creditLimit) })); }
         catch (err) { if (err instanceof z.ZodError) toast.error(err.issues[0].message); }
       }}>
         <ImageUploader tenantId={tenantId} folder="customers" value={avatarUrl} onChange={setAvatarUrl} label="الصورة" />
@@ -194,6 +303,7 @@ function CustomerDialog({ initial, tenantId, onSubmit, pending }: {
           <div className="space-y-2"><Label>البريد</Label><Input dir="ltr" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
         </div>
         <div className="space-y-2"><Label>العنوان</Label><Input value={address} onChange={(e) => setAddress(e.target.value)} /></div>
+        <div className="space-y-2"><Label>سقف المديونية ({/* currency is displayed by account */}الحد الأقصى للبيع الآجل)</Label><Input type="number" min="0" step="0.01" value={creditLimit} onChange={(e) => setCreditLimit(e.target.value)} required /><p className="text-xs text-muted-foreground">الصفر يعني منع البيع الآجل لهذا العميل.</p></div>
         <div className="space-y-2"><Label>ملاحظات</Label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} /></div>
         <div className="flex items-center justify-between rounded-lg border p-3">
           <Label>العميل نشط</Label>
