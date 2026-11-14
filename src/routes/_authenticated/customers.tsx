@@ -216,6 +216,7 @@ function CustomerAccount({ customer, tenantId }: { customer: Customer; tenantId:
   const [method, setMethod] = useState<"cash" | "card" | "transfer">("cash");
   const [reference, setReference] = useState("");
   const [cashSessionId, setCashSessionId] = useState("");
+  const [paymentKey, setPaymentKey] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const selectedSale = invoices.data?.find((sale: any) => sale.id === saleId);
   const sessions = useQuery({
@@ -244,20 +245,41 @@ function CustomerAccount({ customer, tenantId }: { customer: Customer; tenantId:
     },
     enabled: !!selectedSale,
   });
+  const invoiceHistory = useQuery({
+    queryKey: ["customer-invoice-history", tenantId, saleId],
+    queryFn: async () => {
+      const [initial, later, refunds] = await Promise.all([
+        (supabase.from("payments" as any) as any).select("id,amount,method,created_at,reference").eq("sale_id", saleId).order("created_at", { ascending: true }),
+        (supabase.from("customer_payments" as any) as any).select("id,amount,method,created_at,reference").eq("sale_id", saleId).order("created_at", { ascending: true }),
+        (supabase.from("sale_refunds" as any) as any).select("id,total,refund_method,created_at,reason").eq("sale_id", saleId).order("created_at", { ascending: true }),
+      ]);
+      if (initial.error) throw initial.error;
+      if (later.error) throw later.error;
+      if (refunds.error) throw refunds.error;
+      return [
+        ...(initial.data ?? []).map((row: any) => ({ id: row.id, amount: Number(row.amount), method: row.method, created_at: row.created_at, reference: row.reference, kind: "payment" })),
+        ...(later.data ?? []).map((row: any) => ({ id: row.id, amount: Number(row.amount), method: row.method, created_at: row.created_at, reference: row.reference, kind: "collection" })),
+        ...(refunds.data ?? []).map((row: any) => ({ id: row.id, amount: Number(row.total), method: row.refund_method, created_at: row.created_at, reference: row.reason, kind: "refund" })),
+      ].sort((a, b) => a.created_at.localeCompare(b.created_at));
+    },
+    enabled: !!selectedSale,
+  });
   const collect = async () => {
     if (!selectedSale || !Number.isFinite(Number(amount)) || Number(amount) <= 0) { toast.error("أدخل مبلغاً صحيحاً"); return; }
     if (method === "cash" && !cashSessionId) { toast.error("اختر وردية نقدية مفتوحة"); return; }
     setPending(true);
+    const requestKey = paymentKey ?? crypto.randomUUID();
+    setPaymentKey(requestKey);
     try {
       const { error } = await (supabase.rpc as any)("record_customer_payment", {
         _tenant_id: tenantId, _sale_id: saleId, _amount: Number(amount), _method: method,
         _cash_session_id: method === "cash" ? cashSessionId : null,
-        _reference: reference || null, _notes: null, _idempotency_key: crypto.randomUUID(),
+        _reference: reference || null, _notes: null, _idempotency_key: requestKey,
       });
       if (error) throw error;
       toast.success("تم تسجيل التحصيل");
-      setAmount(""); setReference("");
-      await Promise.all([invoices.refetch(), payments.refetch()]);
+      setAmount(""); setReference(""); setPaymentKey(null);
+      await Promise.all([invoices.refetch(), payments.refetch(), invoiceHistory.refetch(), accountSummary.refetch()]);
     } catch (error) { toast.error(error instanceof Error ? error.message : "تعذر تسجيل التحصيل"); }
     finally { setPending(false); }
   };
@@ -277,6 +299,15 @@ function CustomerAccount({ customer, tenantId }: { customer: Customer; tenantId:
         {(invoices.data ?? []).map((sale: any) => <option key={sale.id} value={sale.id}>#{sale.invoice_no} — {formatMoney(Number(sale.total))} — {sale.status}</option>)}
       </select>
       {selectedSale && <div className="rounded border p-2 text-sm">المتبقي حسب السجلات: <b className="text-destructive">{formatMoney(Number(payments.data ?? 0))}</b></div>}
+      {selectedSale && <div className="space-y-2 rounded-lg border p-3">
+        <div className="font-semibold text-sm">كشف حركة الفاتورة</div>
+        {invoiceHistory.isLoading ? <div className="text-xs text-muted-foreground">جارٍ تحميل الحركات...</div> :
+          (invoiceHistory.data ?? []).length === 0 ? <div className="text-xs text-muted-foreground">لا توجد حركات مسجلة.</div> :
+          (invoiceHistory.data ?? []).map((row) => <div key={row.id} className="flex justify-between gap-2 border-b pb-1 text-xs last:border-0">
+            <div><div>{row.kind === "refund" ? "مرتجع" : row.kind === "collection" ? "تحصيل" : "دفعة عند البيع"}</div><div className="text-muted-foreground">{new Date(row.created_at).toLocaleString("ar-YE")} • {row.method}</div>{row.reference && <div className="text-muted-foreground">{row.reference}</div>}</div>
+            <b className={row.kind === "refund" ? "text-destructive" : "text-success"}>{row.kind === "refund" ? "-" : "+"}{formatMoney(row.amount)}</b>
+          </div>)}
+      </div>}
       <div className="grid grid-cols-2 gap-2">
         <div><Label>مبلغ التحصيل</Label><Input type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
         <div><Label>طريقة الدفع</Label><select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={method} onChange={(e) => setMethod(e.target.value as typeof method)}><option value="cash">نقدي</option><option value="transfer">محفظة / تحويل</option><option value="card">بطاقة</option></select></div>
