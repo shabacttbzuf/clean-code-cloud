@@ -117,3 +117,9 @@
 72. `supabase/migrations/20261114141500_grant_authenticated_marketing_campaign_reads.sql`
 
 **الإجمالي: 72 ترحيلاً.**
+
+73. `supabase/migrations/20261115000001_customer_credit_accounts_and_collections.sql`
+74. `supabase/migrations/20261115000002_customer_credit_sale_rpc.sql`
+75. `supabase/migrations/20261115000003_customer_cash_collection_reconciliation.sql`
+
+**الإجمالي: 75 ترحيلاً.**

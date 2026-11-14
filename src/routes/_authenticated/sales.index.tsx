@@ -43,7 +43,7 @@ type SaleRow = {
 };
 
 const methodLabels: Record<string, string> = {
-  cash: "نقدي", card: "بطاقة", transfer: "تحويل", mixed: "مختلط",
+  cash: "نقدي", card: "بطاقة", transfer: "محفظة / تحويل", mixed: "دفع جزئي", credit: "آجل",
 };
 const methodColors: Record<string, string> = {
   cash: "bg-success/15 text-success",

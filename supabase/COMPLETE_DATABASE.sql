@@ -7974,3 +7974,420 @@ $function$;
 
 -- Campaigns are tenant-filtered by RLS; allow authenticated POS clients to read them.
 GRANT SELECT ON TABLE public.marketing_campaigns TO authenticated;
+
+
+-- =====================================================================
+-- SOURCE MIGRATION: 20261115000001_customer_credit_accounts_and_collections.sql
+-- =====================================================================
+
+-- Customer credit accounts, per-customer credit ceilings, and append-only collections.
+begin;
+
+alter table public.customers
+  add column credit_limit numeric(14,2) not null default 0
+    check (credit_limit >= 0 and credit_limit <> 'NaN'::numeric);
+
+alter table public.customers
+  add constraint customers_id_tenant_unique unique (id, tenant_id);
+
+alter table public.sales
+  add column customer_id uuid,
+  add constraint sales_customer_id_customer_tenant_unique unique (id, customer_id, tenant_id),
+  add constraint sales_customer_tenant_fkey
+    foreign key (customer_id, tenant_id)
+    references public.customers (id, tenant_id) on delete restrict;
+
+alter type public.payment_method add value if not exists 'credit';
+
+create index sales_customer_account_idx
+  on public.sales (tenant_id, customer_id, created_at desc, id desc)
+  where customer_id is not null;
+
+create table public.customer_payments (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references public.tenants(id) on delete restrict,
+  branch_id uuid not null,
+  customer_id uuid not null,
+  sale_id uuid not null,
+  amount numeric(14,2) not null check (amount > 0 and amount <> 'NaN'::numeric),
+  method public.payment_method not null check (method in ('cash','card','transfer')),
+  cash_session_id uuid,
+  reference text,
+  notes text,
+  idempotency_key uuid not null,
+  created_by uuid not null default auth.uid() references auth.users(id) on delete restrict,
+  created_at timestamptz not null default now(),
+  constraint customer_payments_branch_tenant_fkey
+    foreign key (branch_id, tenant_id) references public.branches(id, tenant_id) on delete restrict,
+  constraint customer_payments_customer_tenant_fkey
+    foreign key (customer_id, tenant_id) references public.customers(id, tenant_id) on delete restrict,
+  constraint customer_payments_sale_customer_fkey
+    foreign key (sale_id, customer_id, tenant_id)
+    references public.sales(id, customer_id, tenant_id) on delete restrict,
+  constraint customer_payments_session_scope_fkey
+    foreign key (cash_session_id, tenant_id, branch_id)
+    references public.cash_sessions(id, tenant_id, branch_id) on delete restrict,
+  constraint customer_payments_cash_session_rule
+    check ((method = 'cash' and cash_session_id is not null) or (method <> 'cash' and cash_session_id is null)),
+  constraint customer_payments_reference_length check (reference is null or length(reference) <= 120),
+  constraint customer_payments_notes_length check (notes is null or length(notes) <= 1000),
+  constraint customer_payments_idempotency_unique unique (tenant_id, idempotency_key)
+);
+
+create index customer_payments_customer_date_idx
+  on public.customer_payments (tenant_id, customer_id, created_at desc, id desc);
+create index customer_payments_sale_idx
+  on public.customer_payments (sale_id, tenant_id);
+create index customer_payments_session_idx
+  on public.customer_payments (cash_session_id)
+  where cash_session_id is not null;
+
+alter table public.customer_payments enable row level security;
+create policy customer_payments_select
+  on public.customer_payments for select to authenticated
+  using (
+    public.has_permission((select auth.uid()), tenant_id, 'customers.view')
+    and private.can_access_branch((select auth.uid()), tenant_id, branch_id)
+  );
+
+revoke all on table public.customer_payments from anon, authenticated;
+grant select on table public.customer_payments to authenticated;
+
+create or replace function public.record_customer_payment(
+  _tenant_id uuid,
+  _sale_id uuid,
+  _amount numeric,
+  _method public.payment_method,
+  _cash_session_id uuid,
+  _reference text,
+  _notes text,
+  _idempotency_key uuid
+) returns public.customer_payments
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_sale public.sales%rowtype;
+  v_customer public.customers%rowtype;
+  v_existing public.customer_payments%rowtype;
+  v_paid numeric(14,2);
+  v_due numeric(14,2);
+  v_session public.cash_sessions%rowtype;
+  v_result public.customer_payments%rowtype;
+begin
+  if auth.uid() is null then raise exception 'Authentication required' using errcode='42501'; end if;
+  if _amount is null or _amount <= 0 or _amount = 'NaN'::numeric
+     or _idempotency_key is null or _method not in ('cash','card','transfer') then
+    raise exception 'Invalid customer payment data' using errcode='22023';
+  end if;
+  if not public.has_permission(auth.uid(), _tenant_id, 'customers.manage') then
+    raise exception 'Permission denied: customers.manage' using errcode='42501';
+  end if;
+
+  select * into v_existing from public.customer_payments
+   where tenant_id=_tenant_id and idempotency_key=_idempotency_key;
+  if found then return v_existing; end if;
+
+  select * into v_sale from public.sales
+   where id=_sale_id and tenant_id=_tenant_id for update;
+  if not found or v_sale.customer_id is null or v_sale.status <> 'completed' then
+    raise exception 'Customer invoice not found or not collectible' using errcode='P0002';
+  end if;
+  if not private.can_access_branch(auth.uid(), _tenant_id, v_sale.branch_id) then
+    raise exception 'Branch access denied' using errcode='42501';
+  end if;
+  select * into v_customer from public.customers
+   where id=v_sale.customer_id and tenant_id=_tenant_id for update;
+  if not found then raise exception 'Customer not found' using errcode='P0002'; end if;
+
+  select coalesce(sum(p.amount),0) into v_paid from public.payments p
+   where p.sale_id=_sale_id and p.tenant_id=_tenant_id;
+  select v_paid + coalesce(sum(cp.amount),0) into v_paid
+   from public.customer_payments cp where cp.sale_id=_sale_id and cp.tenant_id=_tenant_id;
+  select coalesce(sum(r.total),0) into v_due from public.sale_refunds r
+   where r.sale_id=_sale_id and r.tenant_id=_tenant_id;
+  v_due := greatest(round(v_sale.total - v_paid - v_due,2),0);
+  if _amount > v_due then raise exception 'Payment exceeds outstanding invoice balance' using errcode='22023'; end if;
+
+  if _method='cash' then
+    if _cash_session_id is null then raise exception 'Cash collection requires an open cashier session' using errcode='22023'; end if;
+    select * into v_session from public.cash_sessions
+     where id=_cash_session_id and tenant_id=_tenant_id and branch_id=v_sale.branch_id
+     for update;
+    if not found or v_session.status <> 'open' then
+      raise exception 'Cash session is not open for this branch' using errcode='55000';
+    end if;
+    if v_session.cashier_id <> auth.uid()
+       and not private.is_tenant_admin(auth.uid(),_tenant_id)
+       and not public.is_super_owner(auth.uid()) then
+      raise exception 'Cannot use another cashier session' using errcode='42501';
+    end if;
+  elsif _cash_session_id is not null then
+    raise exception 'Only cash collections can use a cash session' using errcode='22023';
+  end if;
+
+  insert into public.customer_payments(
+    tenant_id,branch_id,customer_id,sale_id,amount,method,cash_session_id,
+    reference,notes,idempotency_key,created_by
+  ) values (
+    _tenant_id,v_sale.branch_id,v_sale.customer_id,_sale_id,_amount,_method,
+    _cash_session_id,nullif(btrim(_reference),''),nullif(btrim(_notes),''),
+    _idempotency_key,auth.uid()
+  ) returning * into v_result;
+  return v_result;
+end;
+$function$;
+
+revoke all on function public.record_customer_payment(uuid,uuid,numeric,public.payment_method,uuid,text,text,uuid) from public, anon;
+grant execute on function public.record_customer_payment(uuid,uuid,numeric,public.payment_method,uuid,text,text,uuid) to authenticated, service_role;
+
+-- A single customer-facing account view: prior payments + new collections + refunds.
+create or replace view public.customer_account_balances
+with (security_invoker = true) as
+select
+  s.tenant_id,
+  s.customer_id,
+  count(*) filter (where s.status='completed')::bigint as invoice_count,
+  coalesce(sum(s.total) filter (where s.status='completed'),0)::numeric(14,2) as invoiced_total,
+  coalesce(sum(coalesce(p.paid,0) + coalesce(cp.collected,0)),0)::numeric(14,2) as paid_total,
+  coalesce(sum(coalesce(r.refunded,0)),0)::numeric(14,2) as refunded_total,
+  greatest(
+    coalesce(sum(s.total - coalesce(p.paid,0) - coalesce(cp.collected,0) - coalesce(r.refunded,0))
+      filter (where s.status='completed'),0),0
+  )::numeric(14,2) as outstanding_balance
+from public.sales s
+left join lateral (
+  select sum(amount) paid from public.payments where sale_id=s.id and tenant_id=s.tenant_id
+) p on true
+left join lateral (
+  select sum(amount) collected from public.customer_payments where sale_id=s.id and tenant_id=s.tenant_id
+) cp on true
+left join lateral (
+  select sum(total) refunded from public.sale_refunds where sale_id=s.id and tenant_id=s.tenant_id
+) r on true
+where s.customer_id is not null
+group by s.tenant_id,s.customer_id;
+
+grant select on public.customer_account_balances to authenticated;
+
+commit;
+
+
+
+-- =====================================================================
+-- SOURCE MIGRATION: 20261115000002_customer_credit_sale_rpc.sql
+-- =====================================================================
+
+begin;
+
+create or replace function public.create_sale_with_customer(
+  _tenant_id uuid,
+  _branch_id uuid,
+  _cashier_id uuid,
+  _session_id uuid,
+  _discount numeric,
+  _customer_id uuid,
+  _paid_amount numeric,
+  _paid_method public.payment_method,
+  _items jsonb
+) returns public.sales
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_tax_rate numeric(5,2);
+  v_subtotal numeric(12,2) := 0;
+  v_discount numeric(12,2);
+  v_taxable numeric(12,2);
+  v_tax_amount numeric(12,2);
+  v_total numeric(12,2);
+  v_paid numeric(12,2);
+  v_new_debt numeric(12,2);
+  v_existing_debt numeric(14,2);
+  v_customer public.customers%rowtype;
+  v_item jsonb;
+  v_product public.products%rowtype;
+  v_product_id uuid;
+  v_quantity numeric(12,3);
+  v_sale public.sales%rowtype;
+begin
+  if auth.uid() is null or auth.uid() <> _cashier_id then
+    raise exception 'Authenticated cashier identity mismatch' using errcode='42501';
+  end if;
+  if not public.has_permission(auth.uid(),_tenant_id,'pos.create_sale') then
+    raise exception 'Permission denied: pos.create_sale' using errcode='42501';
+  end if;
+  if not private.can_access_branch(auth.uid(),_tenant_id,_branch_id) then
+    raise exception 'You cannot create sales in this branch' using errcode='42501';
+  end if;
+  if not exists (
+    select 1 from public.cash_sessions cs
+     where cs.id=_session_id and cs.tenant_id=_tenant_id
+       and cs.branch_id=_branch_id and cs.cashier_id=_cashier_id and cs.status='open'
+     for update
+  ) then
+    raise exception 'An open cashier session for this branch is required' using errcode='55000';
+  end if;
+  if jsonb_typeof(_items)<>'array' or jsonb_array_length(_items)=0 or jsonb_array_length(_items)>300 then
+    raise exception 'Sale must contain between 1 and 300 items' using errcode='22023';
+  end if;
+  if _paid_amount is null or _paid_amount<0 or _paid_amount='NaN'::numeric
+     or _paid_method not in ('cash','card','transfer') then
+    raise exception 'Invalid initial payment' using errcode='22023';
+  end if;
+
+  if _customer_id is not null then
+    select * into v_customer from public.customers
+     where id=_customer_id and tenant_id=_tenant_id and is_active=true
+     for update;
+    if not found then raise exception 'Customer is unavailable or belongs to another tenant' using errcode='23503'; end if;
+  end if;
+
+  select tax_rate into v_tax_rate from public.tenants where id=_tenant_id;
+  if not found then raise exception 'Tenant not found' using errcode='P0002'; end if;
+
+  for v_item in
+    select value from jsonb_array_elements(_items) order by (value->>'product_id')::uuid
+  loop
+    v_product_id := (v_item->>'product_id')::uuid;
+    v_quantity := (v_item->>'quantity')::numeric;
+    if v_quantity is null or v_quantity<=0 or v_quantity>999999.999 then
+      raise exception 'Invalid item quantity' using errcode='22023';
+    end if;
+    select * into v_product from public.products
+     where id=v_product_id and tenant_id=_tenant_id and is_active=true for update;
+    if not found then raise exception 'Product is unavailable or belongs to another tenant' using errcode='23503'; end if;
+    v_subtotal := v_subtotal + round(v_product.sale_price*v_quantity,2);
+  end loop;
+
+  v_discount := coalesce(_discount,0);
+  if v_discount<0 or v_discount>v_subtotal then raise exception 'Discount must be between zero and subtotal' using errcode='22023'; end if;
+  v_taxable := greatest(v_subtotal-v_discount,0);
+  v_tax_amount := round(v_taxable*(v_tax_rate/100),2);
+  v_total := round(v_taxable+v_tax_amount,2);
+  if _paid_amount>v_total then raise exception 'Initial payment exceeds invoice total' using errcode='22023'; end if;
+  if _customer_id is null and _paid_amount<>v_total then
+    raise exception 'Select a customer for credit or partial payment' using errcode='22023';
+  end if;
+
+  v_paid := round(_paid_amount,2);
+  v_new_debt := greatest(v_total-v_paid,0);
+  if _customer_id is not null and v_new_debt>0 then
+    select coalesce(sum(
+      greatest(s.total
+        - coalesce((select sum(p.amount) from public.payments p where p.sale_id=s.id and p.tenant_id=s.tenant_id),0)
+        - coalesce((select sum(cp.amount) from public.customer_payments cp where cp.sale_id=s.id and cp.tenant_id=s.tenant_id),0)
+        - coalesce((select sum(r.total) from public.sale_refunds r where r.sale_id=s.id and r.tenant_id=s.tenant_id),0),0)
+    ),0)
+    into v_existing_debt
+    from public.sales s
+    where s.tenant_id=_tenant_id and s.customer_id=_customer_id and s.status='completed';
+
+    if v_existing_debt+v_new_debt>v_customer.credit_limit then
+      raise exception 'Customer credit limit exceeded. Available credit: %',
+        greatest(v_customer.credit_limit-v_existing_debt,0) using errcode='22023';
+    end if;
+  end if;
+
+  insert into public.sales(
+    tenant_id,branch_id,cashier_id,session_id,invoice_no,
+    subtotal,discount,tax_amount,total,payment_method,customer_id
+  ) values (
+    _tenant_id,_branch_id,_cashier_id,_session_id,0,
+    v_subtotal,v_discount,v_tax_amount,v_total,
+    case when v_paid=v_total then _paid_method when v_paid=0 then 'credit'::public.payment_method else 'mixed'::public.payment_method end,
+    _customer_id
+  ) returning * into v_sale;
+
+  for v_item in
+    select value from jsonb_array_elements(_items) order by (value->>'product_id')::uuid
+  loop
+    v_product_id := (v_item->>'product_id')::uuid;
+    v_quantity := (v_item->>'quantity')::numeric;
+    select * into v_product from public.products
+     where id=v_product_id and tenant_id=_tenant_id and is_active=true for update;
+    if not found then raise exception 'Product became unavailable during checkout' using errcode='23503'; end if;
+    insert into public.sale_items(tenant_id,sale_id,product_id,product_name,quantity,unit_price,tax_rate,line_total)
+    values(_tenant_id,v_sale.id,v_product.id,v_product.name,v_quantity,v_product.sale_price,v_tax_rate,
+      round(v_product.sale_price*v_quantity,2));
+  end loop;
+
+  if v_paid>0 then
+    insert into public.payments(tenant_id,sale_id,method,amount)
+    values(_tenant_id,v_sale.id,_paid_method,v_paid);
+  end if;
+  return v_sale;
+end;
+$function$;
+
+revoke all on function public.create_sale_with_customer(uuid,uuid,uuid,uuid,numeric,uuid,numeric,public.payment_method,jsonb) from public,anon;
+grant execute on function public.create_sale_with_customer(uuid,uuid,uuid,uuid,numeric,uuid,numeric,public.payment_method,jsonb) to authenticated,service_role;
+
+commit;
+
+
+
+-- =====================================================================
+-- SOURCE MIGRATION: 20261115000003_customer_cash_collection_reconciliation.sql
+-- =====================================================================
+
+-- Include cash collections from customer receivables in the cashier's expected drawer balance.
+begin;
+create or replace function public.close_cash_session(_session_id uuid, _closing_balance numeric)
+returns public.cash_sessions
+language plpgsql
+security definer
+set search_path to 'pg_catalog', 'public', 'private', 'pg_temp'
+as $function$
+declare
+  v_session public.cash_sessions%rowtype;
+  v_expected numeric(12,2);
+begin
+  if auth.uid() is null then raise exception 'Authentication required' using errcode = '42501'; end if;
+  if _closing_balance is null or _closing_balance < 0 or _closing_balance = 'NaN'::numeric then
+    raise exception 'Closing balance must be zero or greater' using errcode = '22023';
+  end if;
+  select * into v_session from public.cash_sessions where id = _session_id for update;
+  if not found then raise exception 'Cash session not found' using errcode = 'P0002'; end if;
+  if not public.has_permission(auth.uid(), v_session.tenant_id, 'cash.close') then
+    raise exception 'Permission denied: cash.close' using errcode = '42501';
+  end if;
+  if v_session.status <> 'open' then raise exception 'Cash session is already closed' using errcode = '55000'; end if;
+  if auth.uid() <> v_session.cashier_id and not private.is_tenant_admin(auth.uid(), v_session.tenant_id) then
+    raise exception 'You cannot close this cashier session' using errcode = '42501';
+  end if;
+  select round(
+      v_session.opening_balance
+      + coalesce((select sum(p.amount) from public.payments p
+        join public.sales s on s.id = p.sale_id
+        where s.session_id = v_session.id and s.tenant_id = v_session.tenant_id
+          and s.status in ('completed','refunded') and p.method = 'cash'), 0)
+      - coalesce((select sum(r.total) from public.sale_refunds r
+        where r.cash_session_id = v_session.id and r.tenant_id = v_session.tenant_id
+          and r.refund_method = 'cash'), 0)
+      - coalesce((select sum(sp.amount) from public.supplier_payments sp
+        where sp.cash_session_id = v_session.id and sp.tenant_id = v_session.tenant_id
+          and sp.branch_id = v_session.branch_id and sp.payment_method = 'cash'), 0)
+      - coalesce((select sum(cp.amount) from public.customer_payments cp
+        where cp.cash_session_id = v_session.id and cp.tenant_id = v_session.tenant_id
+          and cp.branch_id = v_session.branch_id and cp.method = 'cash'), 0),
+      2
+    ) into v_expected;
+  update public.cash_sessions
+     set status = 'closed',
+         closing_balance = _closing_balance,
+         expected_cash = v_expected,
+         cash_difference = round(_closing_balance - v_expected, 2),
+         closed_at = now(),
+         updated_at = now()
+   where id = v_session.id
+   returning * into v_session;
+  return v_session;
+end;
+$function$;
+revoke all on function public.close_cash_session(uuid, numeric) from public, anon;
+grant execute on function public.close_cash_session(uuid, numeric) to authenticated, service_role;
+commit;
+
