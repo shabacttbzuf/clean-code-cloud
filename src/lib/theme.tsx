@@ -75,13 +75,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       setUserId(session?.user?.id ?? null);
       setAuthReady(true);
     });
-    void supabase.auth.getSession().then(({ data }) => {
-      if (!active) return;
-      setUserId(data.session?.user?.id ?? null);
-      setAuthReady(true);
-    }).catch(() => {
-      if (active) setAuthReady(true);
-    });
+    // Supabase emits INITIAL_SESSION through onAuthStateChange. Use that single
+    // ordered source of truth instead of racing getSession() against later
+    // SIGNED_IN / SIGNED_OUT events and potentially restoring a stale account.
     return () => {
       active = false;
       subscription.unsubscribe();
