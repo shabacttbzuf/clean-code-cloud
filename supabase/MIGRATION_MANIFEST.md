@@ -135,3 +135,7 @@
 78. `supabase/migrations/20261115000006_enforce_company_branch_rls.sql`
 
 **الإجمالي: 78 ترحيلاً.**
+
+79. `supabase/migrations/20261115000007_scope_cash_sessions_to_company.sql`
+
+**الإجمالي: 79 ترحيلاً.**
