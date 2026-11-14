@@ -250,6 +250,7 @@ export type Database = {
       }
       branches: {
         Row: {
+          company_id: string | null
           address: string | null
           created_at: string
           currency: string
@@ -269,6 +270,7 @@ export type Database = {
           working_hours: Json | null
         }
         Insert: {
+          company_id?: string | null
           address?: string | null
           created_at?: string
           currency?: string
@@ -288,6 +290,7 @@ export type Database = {
           working_hours?: Json | null
         }
         Update: {
+          company_id?: string | null
           address?: string | null
           created_at?: string
           currency?: string
@@ -307,6 +310,13 @@ export type Database = {
           working_hours?: Json | null
         }
         Relationships: [
+          {
+            foreignKeyName: "branches_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "branches_manager_id_fkey"
             columns: ["manager_id"]
