@@ -113,6 +113,7 @@ function POSPage() {
   // Keep paused invoices isolated per signed-in user, tenant, and branch on shared devices.
   const draftsStorageKey = `${DRAFTS_KEY}:${tenantId ?? "none"}:${userId ?? "none"}:${branchId ?? "none"}`;
   const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [draftsOpen, setDraftsOpen] = useState(false);
   useEffect(() => {
     setDrafts(loadDrafts(draftsStorageKey));
   }, [draftsStorageKey]);
@@ -438,11 +439,25 @@ function POSPage() {
     toast.success(label);
   };
   const restoreDraft = (d: Draft) => {
-    setCart(d.cart);
-    setDiscount(d.discount);
     const list = loadDrafts(draftsStorageKey).filter((x) => x.id !== d.id);
+    if (cart.length > 0) list.unshift({ id: crypto.randomUUID(), cart, discount, created_at: new Date().toISOString() });
     saveDrafts(list, draftsStorageKey);
     setDrafts(list);
+    setCart(d.cart);
+    setDiscount(d.discount);
+    setDraftsOpen(false);
+    if (cart.length > 0) toast.info("حُفظت الفاتورة الحالية كمسودة قبل استعادة المختارة");
+  };
+  const deleteDraft = (id: string) => {
+    const list = loadDrafts(draftsStorageKey).filter((draft) => draft.id !== id);
+    saveDrafts(list, draftsStorageKey);
+    setDrafts(list);
+    toast.success("تم حذف المسودة من هذا الجهاز");
+  };
+  const getDraftTotal = (draft: Draft) => {
+    const subtotal = draft.cart.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
+    const discountValue = Math.min(subtotal, Math.max(0, Number(draft.discount) || 0));
+    return subtotal - discountValue + (subtotal - discountValue) * (taxRate / 100);
   };
 
   const printPreview = () => {
@@ -525,6 +540,7 @@ function POSPage() {
                 <SelectItem value="A4">ورق A4</SelectItem>
               </SelectContent>
             </Select>
+            <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => setDraftsOpen(true)}>المسودات ({drafts.length})</Button>
             <span className="rounded-full bg-success/15 px-3 py-1 text-xs font-medium text-success">وردية مفتوحة</span>
           </div>
         }
@@ -624,16 +640,7 @@ function POSPage() {
             <div className="mb-1.5 flex flex-wrap items-center gap-2 border-b pb-1">
               <h2 className="text-xs font-bold">الفاتورة الحالية</h2>
               <span className="text-xs text-muted-foreground">{cart.length} صنف • {totalQty} قطعة</span>
-              {drafts.length > 0 && (
-                <div className="mr-auto flex flex-wrap items-center gap-1">
-                  <span className="text-[10px] text-muted-foreground">مسودات:</span>
-                  {drafts.slice(0, 3).map((draft, index) => (
-                    <Button key={draft.id} size="sm" variant="outline" className="h-6 px-1.5 text-[10px]" onClick={() => restoreDraft(draft)}>
-                      #{index + 1} ({draft.cart.length})
-                    </Button>
-                  ))}
-                </div>
-              )}
+              {drafts.length > 0 && <Button type="button" size="sm" variant="ghost" className="mr-auto h-6 text-[10px]" onClick={() => setDraftsOpen(true)}>عرض جميع المسودات ({drafts.length})</Button>}
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto rounded-md border">
               <table className="w-full text-xs">
@@ -688,12 +695,31 @@ function POSPage() {
               <div className="text-[11px] text-muted-foreground">الفاتورة • {cart.length} أصناف / {totalQty} قطع</div>
               <div className="text-lg font-black text-primary num">{formatMoney(total)} <span className="text-xs font-normal text-muted-foreground">{currency}</span></div>
             </div>
+            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 px-2" onClick={() => setDraftsOpen(true)}>المسودات ({drafts.length})</Button>
             <Button size="sm" className="h-10 shrink-0 font-bold" onClick={() => beginCheckout("cash")} disabled={checkoutMut.isPending || cart.length === 0}>مراجعة الفاتورة</Button>
             <Button size="icon" variant="outline" className="h-10 w-10 shrink-0" aria-label="حفظ مسودة" onClick={() => holdOrDraft("تم حفظ المسودة")} disabled={cart.length === 0}><Save className="h-4 w-4" /></Button>
             <Button size="icon" variant="outline" className="h-10 w-10 shrink-0" aria-label="معاينة وطباعة الفاتورة" onClick={printPreview} disabled={cart.length === 0}><Printer className="h-4 w-4" /></Button>
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={draftsOpen} onOpenChange={setDraftsOpen}>
+        <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto" dir="rtl">
+          <DialogHeader><DialogTitle>الفواتير المسودة والمعلقة</DialogTitle><DialogDescription>مسودات محفوظة على هذا الجهاز لهذا المستخدم والفرع، وليست فواتير بيع صادرة.</DialogDescription></DialogHeader>
+          {drafts.length === 0 ? <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">لا توجد مسودات. احفظ فاتورة من نقطة البيع لتظهر هنا وتكملها لاحقاً.</div> : (
+            <div className="space-y-2">
+              {drafts.map((draft, index) => (
+                <div key={draft.id} className="rounded-lg border p-3">
+                  <div className="flex flex-wrap justify-between gap-2"><div><div className="font-bold">مسودة #{drafts.length - index}</div><div className="text-xs text-muted-foreground">{new Intl.DateTimeFormat("ar-YE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(draft.created_at))}</div></div><div className="text-left"><div className="font-bold text-primary num">{formatMoney(getDraftTotal(draft))} {currency}</div><div className="text-xs text-muted-foreground">{draft.cart.length} أصناف • {draft.cart.reduce((sum, item) => sum + item.quantity, 0)} قطعة</div></div></div>
+                  <div className="mt-2 rounded bg-muted/40 p-2">{draft.cart.slice(0, 5).map(item => <div key={item.product_id} className="flex justify-between gap-2 text-xs"><span className="truncate">{item.name} × {item.quantity}</span><span className="shrink-0 num">{formatMoney(item.unit_price * item.quantity)}</span></div>)}{draft.cart.length > 5 && <div className="text-xs text-muted-foreground">و{draft.cart.length - 5} أصناف أخرى</div>}</div>
+                  <div className="mt-2 flex justify-end gap-2"><Button type="button" size="sm" variant="ghost" className="text-destructive" onClick={() => deleteDraft(draft.id)}>حذف المسودة</Button><Button type="button" size="sm" onClick={() => restoreDraft(draft)}>فتح وإكمال الفاتورة</Button></div>
+                </div>
+              ))}
+            </div>
+          )}
+          <DialogFooter><Button type="button" variant="outline" onClick={() => setDraftsOpen(false)}>إغلاق</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={reviewOpen} onOpenChange={(open) => { if (!checkoutMut.isPending) setReviewOpen(open); }}>
         <DialogContent className="max-h-[92dvh] max-w-2xl overflow-y-auto" dir="rtl">
