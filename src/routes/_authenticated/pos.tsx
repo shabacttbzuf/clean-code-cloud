@@ -57,6 +57,7 @@ type Product = {
 type Category = { id: string; name: string };
 type Branch = { id: string; name: string; tax_number: string | null; address: string | null; phone: string | null };
 type Session = { id: string; branch_id: string; status: string };
+type CustomerOption = { id: string; name: string; phone: string | null; credit_limit: number };
 
 type CartItem = { product_id: string; name: string; unit_price: number; quantity: number };
 
@@ -121,6 +122,8 @@ function POSPage() {
   const [catFilter, setCatFilter] = useState<string>("all");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [discount, setDiscount] = useState("0");
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>("none");
+  const [paidAmount, setPaidAmount] = useState("");
   const [openSessionDialog, setOpenSessionDialog] = useState(false);
   const [openingBalance, setOpeningBalance] = useState("0");
   // Keep paused invoices isolated per signed-in user, tenant, and branch on shared devices.
@@ -169,6 +172,18 @@ function POSPage() {
     () => branches.data?.find((b) => b.id === branchId) ?? null,
     [branches.data, branchId],
   );
+
+  const customers = useQuery({
+    queryKey: ["pos-customers", tenantId],
+    queryFn: async (): Promise<CustomerOption[]> => {
+      const { data, error } = await (supabase.from("customers" as any) as any)
+        .select("id,name,phone,credit_limit").eq("tenant_id", tenantId!).eq("is_active", true).order("name");
+      if (error) throw error;
+      return (data ?? []) as CustomerOption[];
+    },
+    enabled: !!tenantId,
+    staleTime: 60_000,
+  });
 
   const categories = useQuery({
     queryKey: ["categories-min", tenantId],
@@ -334,6 +349,7 @@ function POSPage() {
     },
     items: Array<{ name: string; unit_price: number; quantity: number }>,
     method: PaymentUI,
+    paymentMethod?: string,
   ): InvoiceData & {
     address?: string | null; phone?: string | null; tenant_name?: string | null; logo_url?: string | null;
   } => ({
@@ -351,7 +367,7 @@ function POSPage() {
     discount: Number(sale.discount),
     tax_amount: Number(sale.tax_amount),
     total: Number(sale.total),
-    payment_method: paymentToDb[method],
+    payment_method: paymentMethod ?? paymentToDb[method],
     items: items.map((i) => ({
       product_name: i.name,
       quantity: i.quantity,
@@ -367,13 +383,19 @@ function POSPage() {
       if (!openSession.data) throw new Error("يجب فتح وردية أولاً");
 
       const dbMethod = paymentToDb[method];
-      const { data: sale, error: saleErr } = await supabase.rpc("create_sale_with_items", {
+      const initialPaid = paidAmount.trim() === "" ? total : Number(paidAmount);
+      if (!Number.isFinite(initialPaid) || initialPaid < 0 || initialPaid > total) {
+        throw new Error("مبلغ المدفوع يجب أن يكون بين صفر وإجمالي الفاتورة");
+      }
+      const { data: sale, error: saleErr } = await (supabase.rpc as any)("create_sale_with_customer", {
         _tenant_id: tenantId,
         _branch_id: branchId,
         _cashier_id: userId,
         _session_id: openSession.data.id,
         _discount: disc,
-        _payment_method: dbMethod,
+        _customer_id: selectedCustomerId === "none" ? null : selectedCustomerId,
+        _paid_amount: initialPaid,
+        _paid_method: dbMethod,
         _items: cart.map((item) => ({
           product_id: item.product_id,
           quantity: item.quantity,
@@ -405,7 +427,7 @@ function POSPage() {
     onSuccess: ({ sale, method, items }) => {
       setReviewOpen(false);
       toast.success(`تم إصدار فاتورة #${sale.invoice_no}`);
-      const inv = buildInvoice(sale, items, method);
+      const inv = buildInvoice(sale, items, method, sale.payment_method);
       try {
         const printed = printInvoiceHTML(inv, paperSize, printWindowRef.current);
         if (!printed) toast.warning("تم إصدار الفاتورة، لكن نافذة الطباعة لم تفتح. استخدم زر معاينة الفاتورة.");
@@ -417,6 +439,8 @@ function POSPage() {
       }
       setCart([]);
       setDiscount("0");
+      setSelectedCustomerId("none");
+      setPaidAmount("");
       qc.invalidateQueries({ queryKey: ["sales"] });
       qc.invalidateQueries({ queryKey: ["inventory"] });
       qc.invalidateQueries({ queryKey: ["pos-inventory", tenantId, branchId] });
@@ -780,7 +804,19 @@ function POSPage() {
             </div>
             <div className="grid gap-2 rounded-lg border bg-muted/30 p-3 sm:grid-cols-2">
               <div className="space-y-1"><Label className="text-xs">الخصم</Label><Input type="number" min="0" max={subtotal} step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} disabled={checkoutMut.isPending} /></div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label className="text-xs">العميل (اختياري للبيع النقدي، وإلزامي للبيع الآجل)</Label>
+                <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId} disabled={checkoutMut.isPending}>
+                  <SelectTrigger><SelectValue placeholder="بيع نقدي بدون عميل" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">بيع نقدي بدون عميل</SelectItem>
+                    {(customers.data ?? []).map((customer) => <SelectItem key={customer.id} value={customer.id}>{customer.name} — سقف {formatMoney(Number(customer.credit_limit))}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-1"><Label className="text-xs">طريقة الدفع</Label><Select value={reviewMethod} onValueChange={(value) => setReviewMethod(value as PaymentUI)} disabled={checkoutMut.isPending}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">نقداً</SelectItem><SelectItem value="wallet">محفظة / تحويل</SelectItem><SelectItem value="card">بطاقة</SelectItem></SelectContent></Select></div>
+              <div className="space-y-1"><Label className="text-xs">المبلغ المدفوع الآن</Label><Input type="number" min="0" max={total} step="0.01" placeholder={String(total)} value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} disabled={checkoutMut.isPending} /><p className="text-[10px] text-muted-foreground">اتركه فارغاً لسداد كامل الفاتورة. المتبقي يصبح مديونية على العميل.</p></div>
+              <div className="flex justify-between text-sm font-semibold text-destructive sm:col-span-2"><span>المتبقي على العميل</span><span className="num">{formatMoney(Math.max(0, total - (paidAmount.trim() === "" ? total : Number(paidAmount) || 0)))} {currency}</span></div>
               <div className="flex justify-between text-sm text-muted-foreground"><span>المجموع الفرعي</span><span className="num">{formatMoney(subtotal)}</span></div>
               <div className="flex justify-between text-sm text-muted-foreground"><span>الخصم</span><span className="num">-{formatMoney(disc)}</span></div>
               <div className="flex justify-between text-sm text-muted-foreground"><span>الضريبة ({taxRate}%)</span><span className="num">{formatMoney(taxAmount)}</span></div>
@@ -789,7 +825,7 @@ function POSPage() {
           </div>
           <DialogFooter className="gap-2 sm:justify-between">
             <Button variant="outline" onClick={() => setReviewOpen(false)} disabled={checkoutMut.isPending}>العودة للتعديل</Button>
-            <Button className="bg-success font-bold text-success-foreground hover:bg-success/90" disabled={checkoutMut.isPending || cart.length === 0 || disc > subtotal}
+            <Button className="bg-success font-bold text-success-foreground hover:bg-success/90" disabled={checkoutMut.isPending || cart.length === 0 || disc > subtotal || (selectedCustomerId === "none" && paidAmount.trim() !== "" && Number(paidAmount) !== total) || (paidAmount.trim() !== "" && (!Number.isFinite(Number(paidAmount)) || Number(paidAmount) < 0 || Number(paidAmount) > total))}
               onClick={confirmCheckout}>
               {checkoutMut.isPending ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="ml-2 h-4 w-4" />}
               تأكيد وإصدار الفاتورة
