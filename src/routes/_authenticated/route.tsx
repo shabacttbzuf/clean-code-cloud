@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, redirect, useNavigate, useRouterState } from "
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppSidebar } from "@/components/app-sidebar";
-import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
+import { SidebarProvider, SidebarTrigger, SidebarInset, useSidebar } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -15,7 +15,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Moon, Sun, LogOut, User as UserIcon, Loader2 } from "lucide-react";
 import { useTheme } from "@/lib/theme";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthSession } from "@/hooks/use-auth-session";
 import { useMemberships } from "@/hooks/use-tenant";
 import { toast } from "sonner";
@@ -72,10 +72,11 @@ function AuthShell() {
   return (
     <SidebarProvider open={open} onOpenChange={setOpen}>
       <div className="flex min-h-screen w-full">
+        <SidebarRouteSync />
         <AppSidebar />
-        <SidebarInset>
+        <SidebarInset className="workspace-surface">
           <TopBar />
-          <main className="flex-1 p-4 md:p-6">
+          <main className="min-w-0 flex-1 p-4 md:p-6">
             <Outlet />
           </main>
         </SidebarInset>
@@ -84,9 +85,33 @@ function AuthShell() {
   );
 }
 
+function SidebarRouteSync() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const { setOpen, setOpenMobile } = useSidebar();
+  useEffect(() => {
+    setOpen(false);
+    setOpenMobile(false);
+  }, [pathname, setOpen, setOpenMobile]);
+  return null;
+}
+
 function TopBar() {
   const { theme, toggle } = useTheme();
   const { user } = useAuthSession();
+  const { data: currentProfile } = useQuery({
+    queryKey: ["topbar-profile-name", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null;
+      const { data, error } = await supabase.from("profiles").select("full_name, username").eq("id", user.id).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id,
+    staleTime: 60_000,
+  });
+  const displayName = user?.email?.toLowerCase() === "shafiqalwatiry@gmail.com"
+    ? "شفيق الوتيري"
+    : currentProfile?.full_name?.trim() || user?.user_metadata?.full_name?.trim() || currentProfile?.username?.trim() || "مستخدم";
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [signingOut, setSigningOut] = useState(false);
@@ -116,7 +141,7 @@ function TopBar() {
     }
   }
 
-  const initial = user?.email?.[0]?.toUpperCase() ?? "?";
+  const initial = displayName.charAt(0) || "?";
 
   return (
     <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-2 border-b bg-background/95 px-4 backdrop-blur">
@@ -137,7 +162,7 @@ function TopBar() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuLabel className="text-xs text-muted-foreground">{user?.email}</DropdownMenuLabel>
+            <DropdownMenuLabel className="text-sm font-semibold">{displayName}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => navigate({ to: "/profile" })}>
               <UserIcon className="ml-2 h-4 w-4" />

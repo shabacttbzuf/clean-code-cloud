@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { useSuperOwner } from "@/hooks/use-super-owner";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
 import { Loader2, TrendingUp, TrendingDown, Receipt, Wallet, Package, Crown, Building2, Users as UsersIcon } from "lucide-react";
 import { formatMoney } from "@/lib/format";
@@ -26,6 +27,45 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 function Dashboard() {
   const { tenantId, tenant, user } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
+  const profileQuery = useQuery({
+    queryKey: ["dashboard-profile-name", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null;
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("full_name, username")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id,
+    staleTime: 60_000,
+  });
+  const displayName = user?.email?.toLowerCase() === "shafiqalwatiry@gmail.com"
+    ? "شفيق الوتيري"
+    : profileQuery.data?.full_name?.trim() || user?.user_metadata?.full_name?.trim() || profileQuery.data?.username?.trim() || "مستخدم";
+
+  const campaignsQuery = useQuery({
+    queryKey: ["dashboard-marketing-campaigns", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("marketing_campaigns")
+        .select("id,title,description,image_url,target_url,starts_at,ends_at,sort_order")
+        .eq("tenant_id", tenantId!)
+        .eq("status", "active")
+        .in("placement", ["dashboard_banner", "dashboard_card"])
+        .order("sort_order")
+        .limit(6);
+      if (error) throw error;
+      const now = Date.now();
+      return (data ?? []).filter((campaign) =>
+        (!campaign.starts_at || new Date(campaign.starts_at).getTime() <= now) &&
+        (!campaign.ends_at || new Date(campaign.ends_at).getTime() > now)
+      );
+    },
+    enabled: !!tenantId,
+    staleTime: 60_000,
+  });
 
   const superStats = useQuery({
     queryKey: ["super-owner-stats"],
@@ -39,6 +79,9 @@ function Dashboard() {
         supabase.from("sale_refunds").select("total").gte("created_at", startOfMonth),
         supabase.from("expenses").select("amount").gte("paid_at", startOfMonth.slice(0, 10)),
       ]);
+      for (const result of [tenants, branches, users, sales, refunds, expenses]) {
+        if (result.error) throw result.error;
+      }
       const salesGross = (sales.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
       const refundsTotal = (refunds.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
       const salesTotal = salesGross - refundsTotal;
@@ -76,6 +119,9 @@ function Dashboard() {
         supabase.from("inventory").select("quantity, product_id").eq("tenant_id", tenantId),
         supabase.from("cash_sessions").select("id").eq("tenant_id", tenantId).eq("status", "open"),
       ]);
+      for (const result of [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions]) {
+        if (result.error) throw result.error;
+      }
 
       const saleIdsMonth = (salesMonth.data ?? []).map((sale) => sale.id);
       const refundIdsMonth = (refundsMonth.data ?? []).map((refund) => refund.id);
@@ -90,6 +136,7 @@ function Dashboard() {
       if (saleCostRows.error) throw saleCostRows.error;
       if (refundCostRows.error) throw refundCostRows.error;
       const catsRes = await supabase.from("expense_categories").select("id, name, color").eq("tenant_id", tenantId);
+      if (catsRes.error) throw catsRes.error;
       const catMap = new Map((catsRes.data ?? []).map((c) => [(c as { id: string }).id, c as { name: string; color: string | null }]));
 
       const totalToday = (salesToday.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0)
@@ -162,7 +209,25 @@ function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={`أهلاً، ${user?.email ?? ""}`} subtitle={tenant?.name} />
+      <PageHeader title={`مرحبا ${displayName}`} subtitle={tenant?.name} />
+
+      {campaignsQuery.data && campaignsQuery.data.length > 0 && (
+        <div className="grid gap-3">
+          {campaignsQuery.data.map((campaign) => {
+            const content = (
+              <div className="relative flex min-h-28 overflow-hidden rounded-xl border bg-card shadow-sm">
+                {campaign.image_url && <img src={campaign.image_url} alt="" className="absolute inset-0 h-full w-full object-cover opacity-20" />}
+                <div className="relative z-[1] flex w-full flex-col justify-center gap-1 bg-gradient-to-l from-background/95 via-background/85 to-background/40 p-4">
+                  <div className="text-base font-bold">{campaign.title}</div>
+                  {campaign.description && <p className="max-w-2xl text-sm text-muted-foreground">{campaign.description}</p>}
+                  {campaign.target_url && <span className="mt-1 text-xs font-semibold text-primary">عرض التفاصيل ←</span>}
+                </div>
+              </div>
+            );
+            return campaign.target_url ? <a key={campaign.id} href={campaign.target_url} target="_blank" rel="noopener noreferrer" className="block">{content}</a> : <div key={campaign.id}>{content}</div>;
+          })}
+        </div>
+      )}
 
       {isSuperOwner && superStats.data && (
         <Card className="border-primary/40 bg-primary/5">
@@ -181,8 +246,23 @@ function Dashboard() {
         </Card>
       )}
 
-      {stats.isLoading || !stats.data ? (
-        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+      {stats.isLoading ? (
+        <div className="flex justify-center py-12" role="status" aria-live="polite"><Loader2 className="h-6 w-6 animate-spin text-primary" /><span className="sr-only">جارٍ تحميل مؤشرات لوحة التحكم</span></div>
+      ) : stats.error ? (
+        <Card role="alert" className="border-destructive/40">
+          <CardContent className="flex flex-col items-start gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold text-destructive">تعذر تحميل بيانات لوحة التحكم</p>
+              <p className="mt-1 text-sm text-muted-foreground">تحقق من الاتصال والصلاحيات، ثم أعد المحاولة. لم يتم عرض أرقام جزئية أو مضللة.</p>
+            </div>
+            <Button onClick={() => void stats.refetch()} disabled={stats.isFetching}>
+              {stats.isFetching && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
+              إعادة المحاولة
+            </Button>
+          </CardContent>
+        </Card>
+      ) : !stats.data ? (
+        <Card><CardContent className="p-6 text-center text-sm text-muted-foreground">لا توجد مؤسسة نشطة مرتبطة بهذا الحساب لعرض المؤشرات.</CardContent></Card>
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

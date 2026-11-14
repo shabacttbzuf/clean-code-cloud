@@ -67,7 +67,7 @@
 53. `supabase/migrations/20261111000032_mark_fully_returned_purchases.sql`
 54. `supabase/migrations/20261111000033_require_active_branch_for_sales_and_sessions.sql`
 
-**الإجمالي: 54 ترحيلاً.**
+
 
 ## ترحيل Drizzle القديم
 
@@ -78,7 +78,42 @@
 
 ## ملف SQL الشامل
 
-`supabase/COMPLETE_DATABASE.sql` يجمع محتويات الترحيلات الأربع والخمسين بالترتيب، وهو Snapshot كامل لإعادة البناء من قاعدة فارغة.
+`supabase/COMPLETE_DATABASE.sql` يجمع محتويات جميع الترحيلات المتسلسلة بالترتيب، وهو Snapshot كامل لإعادة البناء من قاعدة فارغة.
 
 **المسار الموصى به:** `supabase db push` لأنه يحافظ على سجل الترحيلات. لا تشغّل Snapshot يدوياً ثم تشغّل `db push` على القاعدة نفسها؛ اختر طريقة واحدة فقط.
 
+55. `supabase/migrations/20261111000034_allow_super_owners_tenant_admin_rls.sql`
+56. `supabase/migrations/20261111030810_prevent_negative_inventory_bootstrap.sql`
+57. `supabase/migrations/20261111033000_enforce_role_permissions.sql`
+58. `supabase/migrations/20261111035000_get_my_permissions_invoker.sql`
+59. `supabase/migrations/20261111040000_fix_cashier_pos_checkout_permissions.sql`
+
+60. `supabase/migrations/20261111232801_restaurant_image_storage_foundation.sql`
+
+61. `supabase/migrations/20261111233538_marketing_campaigns_management.sql`
+
+62. `supabase/migrations/20261112002129_supplier_payment_ledger.sql`
+
+63. `supabase/migrations/20261112002432_supplier_ledger_fk_indexes_and_marketing_rls.sql`
+
+64. `supabase/migrations/20261112002832_restrict_supplier_payment_mutations.sql`
+
+65. `supabase/migrations/20261112003426_supplier_cash_session_integration.sql`
+
+66. `supabase/migrations/20261112003745_supplier_cash_session_fk_index.sql`
+
+67. `supabase/migrations/20261112004325_assignable_custom_roles.sql`
+
+68. `supabase/migrations/20261112005125_owner_only_custom_role_management.sql`
+
+69. `supabase/migrations/20261112005250_owner_only_custom_role_mutations.sql`
+
+70. `supabase/migrations/20261112005412_protect_tenant_owner_from_custom_role_demotion.sql`
+
+**الإجمالي: 70 ترحيلاً.**
+
+71. `supabase/migrations/20261114141029_fix_atomic_stock_decrement_for_pos_checkout.sql`
+
+72. `supabase/migrations/20261114141500_grant_authenticated_marketing_campaign_reads.sql`
+
+**الإجمالي: 72 ترحيلاً.**

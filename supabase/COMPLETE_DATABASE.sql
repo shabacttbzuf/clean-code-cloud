@@ -6231,3 +6231,1746 @@ FOR EACH ROW EXECUTE FUNCTION private.enforce_active_branch_for_operation();
 
 COMMIT;
 
+-- =====================================================================
+-- SOURCE MIGRATION: 20261111000034_allow_super_owners_tenant_admin_rls.sql
+-- =====================================================================
+
+CREATE OR REPLACE FUNCTION private.is_tenant_admin(_user_id uuid, _tenant_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'pg_catalog', 'public', 'private', 'pg_temp'
+AS $function$
+  SELECT
+    EXISTS (
+      SELECT 1
+      FROM public.super_owners so
+      WHERE so.user_id = _user_id
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.user_roles ur
+      WHERE ur.user_id = _user_id
+        AND ur.tenant_id = _tenant_id
+        AND ur.role IN ('owner', 'manager')
+    );
+$function$;
+
+-- =====================================================================
+-- SOURCE MIGRATION: 20261111030810_prevent_negative_inventory_bootstrap.sql
+-- =====================================================================
+
+-- Prevent negative stock from being created when a product has no inventory row.
+-- Existing negative balances are preserved for physical reconciliation; NOT VALID
+-- enforces the constraint for every new or updated row without rewriting history.
+
+DO $migration$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'inventory_quantity_nonnegative'
+      AND conrelid = 'public.inventory'::regclass
+  ) THEN
+    ALTER TABLE public.inventory
+      ADD CONSTRAINT inventory_quantity_nonnegative
+      CHECK (quantity >= 0 AND quantity <> 'NaN'::numeric) NOT VALID;
+  END IF;
+END
+$migration$;
+
+CREATE OR REPLACE FUNCTION public.apply_stock_change(
+  _tenant_id uuid,
+  _product_id uuid,
+  _branch_id uuid,
+  _delta numeric
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'pg_catalog', 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_rows integer;
+  v_current_quantity numeric(14,3);
+BEGIN
+  IF _tenant_id IS NULL OR _product_id IS NULL OR _branch_id IS NULL OR _delta IS NULL
+     OR _delta = 'NaN'::numeric OR abs(_delta) > 999999999 THEN
+    RAISE EXCEPTION 'Invalid stock change request' USING ERRCODE = '22023';
+  END IF;
+
+  PERFORM 1
+  FROM public.products
+  WHERE id = _product_id AND tenant_id = _tenant_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Product does not belong to the requested tenant' USING ERRCODE = '23503';
+  END IF;
+
+  PERFORM 1
+  FROM public.branches
+  WHERE id = _branch_id AND tenant_id = _tenant_id
+  FOR KEY SHARE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Branch does not belong to the requested tenant' USING ERRCODE = '23503';
+  END IF;
+
+  IF _delta < 0 THEN
+    SELECT quantity
+    INTO v_current_quantity
+    FROM public.inventory
+    WHERE tenant_id = _tenant_id
+      AND product_id = _product_id
+      AND branch_id = _branch_id
+    FOR UPDATE;
+
+    IF NOT FOUND OR v_current_quantity + _delta < 0 THEN
+      RAISE EXCEPTION 'Insufficient stock or inventory record missing' USING ERRCODE = '23514';
+    END IF;
+  END IF;
+
+  INSERT INTO public.inventory (tenant_id, product_id, branch_id, quantity, updated_at)
+  VALUES (_tenant_id, _product_id, _branch_id, _delta, now())
+  ON CONFLICT (product_id, branch_id) DO UPDATE
+    SET quantity = public.inventory.quantity + EXCLUDED.quantity,
+        updated_at = now()
+    WHERE public.inventory.tenant_id = EXCLUDED.tenant_id
+      AND public.inventory.quantity + EXCLUDED.quantity >= 0;
+
+  GET DIAGNOSTICS v_rows = ROW_COUNT;
+  IF v_rows = 0 THEN
+    RAISE EXCEPTION 'Insufficient stock or inventory tenant mismatch' USING ERRCODE = '23514';
+  END IF;
+END;
+$function$;
+
+-- SOURCE MIGRATION: 20261111033000_enforce_role_permissions.sql
+-- Enforce the permission catalogue at the database boundary.
+-- Restrictive policies are ANDed with existing tenant/branch isolation policies.
+BEGIN;
+
+DO $permission_gates$
+DECLARE
+  r record;
+  v_cmd text;
+  v_key text;
+  v_policy text;
+BEGIN
+  FOR r IN SELECT * FROM (VALUES
+    ('attendance', 'hr.attendance.view', 'hr.attendance.manage', 'hr.attendance.manage', 'hr.attendance.manage'),
+    ('audit_logs', 'audit.view', NULL, NULL, NULL),
+    ('bonuses', 'hr.compensation.view', 'hr.compensation.manage', 'hr.compensation.manage', 'hr.compensation.manage'),
+    ('branches', 'branches.view', 'branches.create', 'branches.edit', 'branches.delete'),
+    ('cash_sessions', 'cash.view', 'cash.open', 'cash.close', NULL),
+    ('categories', 'categories.view', 'categories.manage', 'categories.manage', 'categories.manage'),
+    ('companies', 'companies.view', 'companies.manage', 'companies.manage', 'companies.manage'),
+    ('custom_roles', 'roles.view', 'roles.manage', 'roles.manage', 'roles.manage'),
+    ('customers', 'customers.view', 'customers.manage', 'customers.manage', 'customers.manage'),
+    ('deductions', 'hr.compensation.view', 'hr.compensation.manage', 'hr.compensation.manage', 'hr.compensation.manage'),
+    ('departments', 'departments.view', 'departments.manage', 'departments.manage', 'departments.manage'),
+    ('employees', 'hr.employees.view', 'hr.employees.manage', 'hr.employees.manage', 'hr.employees.manage'),
+    ('employment_types', 'employment_types.view', 'employment_types.manage', 'employment_types.manage', 'employment_types.manage'),
+    ('expense_categories', 'expenses.view', 'expense_categories.manage', 'expense_categories.manage', 'expense_categories.manage'),
+    ('expenses', 'expenses.view', 'expenses.manage', 'expenses.manage', 'expenses.manage'),
+    ('inventory', 'inventory.view', 'inventory.adjust', 'inventory.adjust', 'inventory.adjust'),
+    ('inventory_transactions', 'inventory.movements.view', 'inventory.adjust', NULL, NULL),
+    ('job_titles', 'job_titles.view', 'job_titles.manage', 'job_titles.manage', 'job_titles.manage'),
+    ('leave_requests', 'hr.leaves.view', NULL, NULL, NULL),
+    ('leave_types', 'hr.leaves.view', 'hr.manage', 'hr.manage', 'hr.manage'),
+    ('login_history', 'login_history.view', NULL, NULL, NULL),
+    ('notifications', 'notifications.view', 'notifications.manage', 'notifications.manage', 'notifications.manage'),
+    ('payments', 'sales.view', 'pos.create_sale', 'sales.approve', 'sales.delete'),
+    ('payroll_items', 'hr.payroll.view', 'payroll.run', 'payroll.approve', 'payroll.approve'),
+    ('payroll_runs', 'hr.payroll.view', 'payroll.run', 'payroll.approve', 'payroll.approve'),
+    ('products', 'products.view', 'products.create', 'products.edit', 'products.delete'),
+    ('purchase_items', 'purchases.view', 'purchases.create', 'purchases.edit', 'purchases.delete'),
+    ('purchase_return_items', 'purchases.view', 'purchases.manage', 'purchases.manage', 'purchases.manage'),
+    ('purchase_returns', 'purchases.view', 'purchases.manage', 'purchases.manage', 'purchases.manage'),
+    ('purchases', 'purchases.view', 'purchases.create', 'purchases.edit', 'purchases.delete'),
+    ('role_permissions', 'roles.view', 'roles.manage', 'roles.manage', 'roles.manage'),
+    ('sale_items', 'sales.view', 'pos.create_sale', 'sales.approve', 'sales.delete'),
+    ('sale_refund_items', 'sales.view', 'sales.refund', 'sales.refund', 'sales.refund'),
+    ('sale_refunds', 'sales.view', 'sales.refund', 'sales.refund', 'sales.refund'),
+    ('sales', 'sales.view', 'pos.create_sale', 'sales.approve', 'sales.delete'),
+    ('suppliers', 'suppliers.view', 'suppliers.manage', 'suppliers.manage', 'suppliers.manage'),
+    ('user_permission_overrides', 'permissions.view', 'permissions.manage', 'permissions.manage', 'permissions.manage')
+  ) AS m(table_name, select_key, insert_key, update_key, delete_key)
+  LOOP
+    IF to_regclass(format('public.%I', r.table_name)) IS NULL THEN CONTINUE; END IF;
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema='public' AND table_name=r.table_name AND column_name='tenant_id'
+    ) THEN CONTINUE; END IF;
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', r.table_name);
+    FOREACH v_cmd IN ARRAY ARRAY['select','insert','update','delete'] LOOP
+      v_key := CASE v_cmd
+        WHEN 'select' THEN r.select_key
+        WHEN 'insert' THEN r.insert_key
+        WHEN 'update' THEN r.update_key
+        ELSE r.delete_key
+      END;
+      IF v_key IS NULL THEN CONTINUE; END IF;
+      v_policy := 'permission_gate_' || r.table_name || '_' || v_cmd;
+      EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', v_policy, r.table_name);
+      IF v_cmd='select' THEN
+        IF r.table_name='role_permissions' THEN
+          EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (tenant_id IS NULL OR public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, v_key);
+        ELSIF r.table_name='employees' THEN
+          EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (user_id = (select auth.uid()) OR public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, v_key);
+        ELSIF r.table_name IN ('attendance','bonuses','deductions','leave_requests','payroll_items') THEN
+          EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM public.employees e WHERE e.id = %I.employee_id AND e.tenant_id = %I.tenant_id AND e.user_id = (select auth.uid())) OR public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, r.table_name, r.table_name, v_key);
+        ELSIF r.table_name='login_history' THEN
+          EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (user_id = (select auth.uid()) OR public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, v_key);
+        ELSIF r.table_name='user_permission_overrides' THEN
+          EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (user_id = (select auth.uid()) OR public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, v_key);
+        ELSE
+          EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, v_key);
+        END IF;
+      ELSIF v_cmd='insert' THEN
+        EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR INSERT TO authenticated WITH CHECK (public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, v_key);
+      ELSIF v_cmd='update' THEN
+        EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR UPDATE TO authenticated USING (public.has_permission((select auth.uid()), tenant_id, %L)) WITH CHECK (public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, v_key, v_key);
+      ELSE
+        EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR DELETE TO authenticated USING (public.has_permission((select auth.uid()), tenant_id, %L))', v_policy, r.table_name, v_key);
+      END IF;
+    END LOOP;
+  END LOOP;
+END
+$permission_gates$;
+
+
+-- Broaden only tenant/branch-scoped permissive access; restrictive permission gates above remain authoritative.
+DO $permission_scopes$
+DECLARE
+  r record;
+  v_cmd text;
+  v_expr text;
+  v_policy text;
+BEGIN
+  FOR r IN SELECT * FROM (VALUES
+    ('audit_logs', 'private.is_tenant_member((select auth.uid()), tenant_id)', NULL, NULL, NULL),
+    ('branches', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)'),
+    ('categories', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)'),
+    ('companies', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)'),
+    ('customers', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)'),
+    ('custom_roles', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)'),
+    ('departments', 'private.is_tenant_member((select auth.uid()), tenant_id) AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))', 'private.is_tenant_member((select auth.uid()), tenant_id) AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))', 'private.is_tenant_member((select auth.uid()), tenant_id) AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))', 'private.is_tenant_member((select auth.uid()), tenant_id) AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))'),
+    ('employment_types', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)'),
+    ('expense_categories', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)'),
+    ('expenses', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'user_id = (select auth.uid()) AND private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)'),
+    ('inventory', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)'),
+    ('inventory_transactions', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', NULL, NULL),
+    ('job_titles', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)'),
+    ('login_history', 'private.is_tenant_member((select auth.uid()), tenant_id)', NULL, NULL, NULL),
+    ('employees', 'private.is_tenant_member((select auth.uid()), tenant_id) AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))', 'private.is_tenant_member((select auth.uid()), tenant_id) AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))', 'private.is_tenant_member((select auth.uid()), tenant_id) AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))', 'private.is_tenant_member((select auth.uid()), tenant_id) AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))'),
+    ('attendance', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = attendance.employee_id AND e.tenant_id = attendance.tenant_id AND (e.user_id = (select auth.uid()) OR e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = attendance.employee_id AND e.tenant_id = attendance.tenant_id AND (e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = attendance.employee_id AND e.tenant_id = attendance.tenant_id AND (e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = attendance.employee_id AND e.tenant_id = attendance.tenant_id AND (e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))'),
+    ('bonuses', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = bonuses.employee_id AND e.tenant_id = bonuses.tenant_id AND (e.user_id = (select auth.uid()) OR e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = bonuses.employee_id AND e.tenant_id = bonuses.tenant_id AND (e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = bonuses.employee_id AND e.tenant_id = bonuses.tenant_id AND (e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = bonuses.employee_id AND e.tenant_id = bonuses.tenant_id AND (e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))'),
+    ('deductions', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = deductions.employee_id AND e.tenant_id = deductions.tenant_id AND (e.user_id = (select auth.uid()) OR e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = deductions.employee_id AND e.tenant_id = deductions.tenant_id AND (e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = deductions.employee_id AND e.tenant_id = deductions.tenant_id AND (e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = deductions.employee_id AND e.tenant_id = deductions.tenant_id AND (e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))'),
+    ('leave_types', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)'),
+    ('leave_requests', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = leave_requests.employee_id AND e.tenant_id = leave_requests.tenant_id AND (e.user_id = (select auth.uid()) OR e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = leave_requests.employee_id AND e.tenant_id = leave_requests.tenant_id AND e.user_id = (select auth.uid()))', 'EXISTS (SELECT 1 FROM public.employees e WHERE e.id = leave_requests.employee_id AND e.tenant_id = leave_requests.tenant_id AND (e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id)))', NULL),
+    ('payroll_runs', 'branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id)'),
+    ('payroll_items', 'EXISTS (SELECT 1 FROM public.payroll_runs r WHERE r.id = payroll_items.payroll_run_id AND r.tenant_id = payroll_items.tenant_id AND (r.branch_id IS NULL OR private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id))) OR EXISTS (SELECT 1 FROM public.employees e WHERE e.id = payroll_items.employee_id AND e.user_id = (select auth.uid()))', 'EXISTS (SELECT 1 FROM public.payroll_runs r WHERE r.id = payroll_items.payroll_run_id AND r.tenant_id = payroll_items.tenant_id AND (r.branch_id IS NULL OR private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id)))', 'EXISTS (SELECT 1 FROM public.payroll_runs r WHERE r.id = payroll_items.payroll_run_id AND r.tenant_id = payroll_items.tenant_id AND (r.branch_id IS NULL OR private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id)))', 'EXISTS (SELECT 1 FROM public.payroll_runs r WHERE r.id = payroll_items.payroll_run_id AND r.tenant_id = payroll_items.tenant_id AND (r.branch_id IS NULL OR private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id)))'),
+    ('products', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)'),
+    ('purchases', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'user_id = (select auth.uid()) AND private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)'),
+    ('purchase_items', 'EXISTS (SELECT 1 FROM public.purchases p WHERE p.id = purchase_items.purchase_id AND p.tenant_id = purchase_items.tenant_id AND private.can_access_branch((select auth.uid()), p.tenant_id, p.branch_id))', 'EXISTS (SELECT 1 FROM public.purchases p WHERE p.id = purchase_items.purchase_id AND p.tenant_id = purchase_items.tenant_id AND p.user_id = (select auth.uid()) AND private.can_access_branch((select auth.uid()), p.tenant_id, p.branch_id))', 'EXISTS (SELECT 1 FROM public.purchases p WHERE p.id = purchase_items.purchase_id AND p.tenant_id = purchase_items.tenant_id AND private.can_access_branch((select auth.uid()), p.tenant_id, p.branch_id))', 'EXISTS (SELECT 1 FROM public.purchases p WHERE p.id = purchase_items.purchase_id AND p.tenant_id = purchase_items.tenant_id AND private.can_access_branch((select auth.uid()), p.tenant_id, p.branch_id))'),
+    ('purchase_returns', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)'),
+    ('purchase_return_items', 'EXISTS (SELECT 1 FROM public.purchase_returns r WHERE r.id = purchase_return_items.purchase_return_id AND r.tenant_id = purchase_return_items.tenant_id AND private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id))', 'EXISTS (SELECT 1 FROM public.purchase_returns r WHERE r.id = purchase_return_items.purchase_return_id AND r.tenant_id = purchase_return_items.tenant_id AND private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id))', 'EXISTS (SELECT 1 FROM public.purchase_returns r WHERE r.id = purchase_return_items.purchase_return_id AND r.tenant_id = purchase_return_items.tenant_id AND private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id))', 'EXISTS (SELECT 1 FROM public.purchase_returns r WHERE r.id = purchase_return_items.purchase_return_id AND r.tenant_id = purchase_return_items.tenant_id AND private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id))'),
+    ('sales', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'cashier_id = (select auth.uid()) AND private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)'),
+    ('sale_items', 'EXISTS (SELECT 1 FROM public.sales s WHERE s.id = sale_items.sale_id AND s.tenant_id = sale_items.tenant_id AND private.can_access_branch((select auth.uid()), s.tenant_id, s.branch_id))', 'EXISTS (SELECT 1 FROM public.sales s WHERE s.id = sale_items.sale_id AND s.tenant_id = sale_items.tenant_id AND s.cashier_id = (select auth.uid()) AND private.can_access_branch((select auth.uid()), s.tenant_id, s.branch_id))', 'EXISTS (SELECT 1 FROM public.sales s WHERE s.id = sale_items.sale_id AND s.tenant_id = sale_items.tenant_id AND private.can_access_branch((select auth.uid()), s.tenant_id, s.branch_id))', 'EXISTS (SELECT 1 FROM public.sales s WHERE s.id = sale_items.sale_id AND s.tenant_id = sale_items.tenant_id AND private.can_access_branch((select auth.uid()), s.tenant_id, s.branch_id))'),
+    ('payments', 'EXISTS (SELECT 1 FROM public.sales s WHERE s.id = payments.sale_id AND s.tenant_id = payments.tenant_id AND private.can_access_branch((select auth.uid()), s.tenant_id, s.branch_id))', 'EXISTS (SELECT 1 FROM public.sales s WHERE s.id = payments.sale_id AND s.tenant_id = payments.tenant_id AND s.cashier_id = (select auth.uid()) AND private.can_access_branch((select auth.uid()), s.tenant_id, s.branch_id))', 'EXISTS (SELECT 1 FROM public.sales s WHERE s.id = payments.sale_id AND s.tenant_id = payments.tenant_id AND private.can_access_branch((select auth.uid()), s.tenant_id, s.branch_id))', 'EXISTS (SELECT 1 FROM public.sales s WHERE s.id = payments.sale_id AND s.tenant_id = payments.tenant_id AND private.can_access_branch((select auth.uid()), s.tenant_id, s.branch_id))'),
+    ('sale_refunds', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)', 'private.can_access_branch((select auth.uid()), tenant_id, branch_id)'),
+    ('sale_refund_items', 'EXISTS (SELECT 1 FROM public.sale_refunds r WHERE r.id = sale_refund_items.refund_id AND r.tenant_id = sale_refund_items.tenant_id AND private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id))', 'EXISTS (SELECT 1 FROM public.sale_refunds r WHERE r.id = sale_refund_items.refund_id AND r.tenant_id = sale_refund_items.tenant_id AND private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id))', 'EXISTS (SELECT 1 FROM public.sale_refunds r WHERE r.id = sale_refund_items.refund_id AND r.tenant_id = sale_refund_items.tenant_id AND private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id))', 'EXISTS (SELECT 1 FROM public.sale_refunds r WHERE r.id = sale_refund_items.refund_id AND r.tenant_id = sale_refund_items.tenant_id AND private.can_access_branch((select auth.uid()), r.tenant_id, r.branch_id))'),
+    ('suppliers', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)', 'private.is_tenant_member((select auth.uid()), tenant_id)')
+  ) AS m(table_name, select_scope, insert_scope, update_scope, delete_scope)
+  LOOP
+    IF to_regclass(format('public.%I', r.table_name)) IS NULL THEN CONTINUE; END IF;
+    FOREACH v_cmd IN ARRAY ARRAY['select','insert','update','delete'] LOOP
+      v_expr := CASE v_cmd
+        WHEN 'select' THEN r.select_scope
+        WHEN 'insert' THEN r.insert_scope
+        WHEN 'update' THEN r.update_scope
+        ELSE r.delete_scope
+      END;
+      IF v_expr IS NULL THEN CONTINUE; END IF;
+      v_policy := 'permission_scope_' || r.table_name || '_' || v_cmd;
+      EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', v_policy, r.table_name);
+      IF v_cmd='select' THEN
+        EXECUTE format('CREATE POLICY %I ON public.%I AS PERMISSIVE FOR SELECT TO authenticated USING (%s)', v_policy, r.table_name, v_expr);
+      ELSIF v_cmd='insert' THEN
+        EXECUTE format('CREATE POLICY %I ON public.%I AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (%s)', v_policy, r.table_name, v_expr);
+      ELSIF v_cmd='update' THEN
+        EXECUTE format('CREATE POLICY %I ON public.%I AS PERMISSIVE FOR UPDATE TO authenticated USING (%s) WITH CHECK (%s)', v_policy, r.table_name, v_expr, v_expr);
+      ELSE
+        EXECUTE format('CREATE POLICY %I ON public.%I AS PERMISSIVE FOR DELETE TO authenticated USING (%s)', v_policy, r.table_name, v_expr);
+      END IF;
+    END LOOP;
+  END LOOP;
+END
+$permission_scopes$;
+
+
+
+CREATE OR REPLACE FUNCTION public.adjust_inventory_balance(_tenant_id uuid, _product_id uuid, _branch_id uuid, _target_quantity numeric, _reason text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public', 'private', 'pg_temp'
+AS $function$
+DECLARE
+  v_current numeric(14,3);
+  v_delta numeric(14,3);
+BEGIN
+
+  IF NOT public.has_permission(auth.uid(), _tenant_id, 'inventory.adjust') THEN RAISE EXCEPTION 'Permission denied: inventory.adjust' USING ERRCODE = '42501'; END IF;
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Authentication required' USING ERRCODE = '42501';
+  END IF;
+
+  IF _tenant_id IS NULL OR _product_id IS NULL OR _branch_id IS NULL
+     OR _target_quantity IS NULL OR _target_quantity < 0
+     OR _target_quantity > 999999999 OR _target_quantity = 'NaN'::numeric THEN
+    RAISE EXCEPTION 'Target inventory quantity is invalid' USING ERRCODE = '22023';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.branches
+    WHERE id = _branch_id AND tenant_id = _tenant_id AND is_active = true
+  ) THEN
+    RAISE EXCEPTION 'Branch does not belong to the requested tenant or is inactive'
+      USING ERRCODE = '23503';
+  END IF;
+
+  IF NOT (
+    public.is_super_owner(auth.uid())
+    OR private.can_access_branch(auth.uid(), _tenant_id, _branch_id)
+  ) THEN
+    RAISE EXCEPTION 'You cannot adjust inventory in this branch'
+      USING ERRCODE = '42501';
+  END IF;
+
+  PERFORM 1
+  FROM public.products
+  WHERE id = _product_id AND tenant_id = _tenant_id AND is_active = true
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Product does not belong to the requested tenant or is inactive'
+      USING ERRCODE = '23503';
+  END IF;
+
+  SELECT quantity INTO v_current
+  FROM public.inventory
+  WHERE tenant_id = _tenant_id AND product_id = _product_id AND branch_id = _branch_id
+  FOR UPDATE;
+  IF NOT FOUND THEN v_current := 0; END IF;
+
+  v_delta := _target_quantity - v_current;
+  IF v_delta <> 0 THEN
+    PERFORM public.apply_stock_change(_tenant_id, _product_id, _branch_id, v_delta);
+    INSERT INTO public.inventory_transactions (
+      tenant_id, product_id, branch_id, user_id, txn_type, quantity, reason
+    ) VALUES (
+      _tenant_id, _product_id, _branch_id, auth.uid(), 'adjust', v_delta,
+      COALESCE(NULLIF(btrim(_reason), ''), 'تعديل يدوي')
+    );
+  END IF;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.close_cash_session(_session_id uuid, _closing_balance numeric)
+ RETURNS cash_sessions
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_session public.cash_sessions%ROWTYPE;
+  v_expected numeric(12,2);
+BEGIN
+  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'Authentication required' USING ERRCODE = '42501'; END IF;
+  IF _closing_balance IS NULL OR _closing_balance < 0 OR _closing_balance = 'NaN'::numeric THEN
+    RAISE EXCEPTION 'Closing balance must be zero or greater' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO v_session FROM public.cash_sessions WHERE id = _session_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Cash session not found' USING ERRCODE = 'P0002'; END IF;
+  IF NOT public.has_permission(auth.uid(), v_session.tenant_id, 'cash.close') THEN RAISE EXCEPTION 'Permission denied: cash.close' USING ERRCODE = '42501'; END IF;
+  IF v_session.status <> 'open' THEN RAISE EXCEPTION 'Cash session is already closed' USING ERRCODE = '55000'; END IF;
+  IF auth.uid() <> v_session.cashier_id AND NOT private.is_tenant_admin(auth.uid(), v_session.tenant_id) THEN
+    RAISE EXCEPTION 'You cannot close this cashier session' USING ERRCODE = '42501';
+  END IF;
+  SELECT round(v_session.opening_balance
+      + COALESCE((SELECT sum(p.amount) FROM public.payments p
+        JOIN public.sales s ON s.id=p.sale_id
+        WHERE s.session_id=v_session.id AND s.tenant_id=v_session.tenant_id
+          AND s.status IN ('completed','refunded') AND p.method='cash'),0)
+      - COALESCE((SELECT sum(r.total) FROM public.sale_refunds r
+        WHERE r.cash_session_id=v_session.id AND r.tenant_id=v_session.tenant_id
+          AND r.refund_method='cash'),0), 2)
+    INTO v_expected;
+  UPDATE public.cash_sessions SET status='closed', closing_balance=_closing_balance,
+    expected_cash=v_expected, cash_difference=round(_closing_balance-v_expected,2),
+    closed_at=now(), updated_at=now()
+  WHERE id=v_session.id RETURNING * INTO v_session;
+  RETURN v_session;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.create_purchase_return(_tenant_id uuid, _purchase_id uuid, _reason text, _items jsonb)
+ RETURNS purchase_returns
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_purchase public.purchases%ROWTYPE;
+  v_line public.purchase_items%ROWTYPE;
+  v_item jsonb;
+  v_return public.purchase_returns%ROWTYPE;
+  v_item_id uuid;
+  v_qty numeric(14,3);
+  v_prior_qty numeric(14,3);
+  v_total numeric(12,2) := 0;
+  v_line_total numeric(12,2);
+  v_last_product_id uuid;
+BEGIN
+
+  IF NOT public.has_permission(auth.uid(), _tenant_id, 'purchases.manage') THEN RAISE EXCEPTION 'Permission denied: purchases.manage' USING ERRCODE = '42501'; END IF;
+  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'Authentication required' USING ERRCODE = '42501'; END IF;
+  IF _tenant_id IS NULL OR _purchase_id IS NULL OR _reason IS NULL OR length(btrim(_reason)) NOT BETWEEN 2 AND 500 THEN
+    RAISE EXCEPTION 'Invalid supplier return details' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO v_purchase FROM public.purchases WHERE id = _purchase_id AND tenant_id = _tenant_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Purchase not found in this tenant' USING ERRCODE = 'P0002'; END IF;
+  IF v_purchase.status <> 'received' THEN RAISE EXCEPTION 'Only received purchases can be returned' USING ERRCODE = '55000'; END IF;
+  IF NOT (
+    public.is_super_owner(auth.uid())
+    OR private.can_access_branch(auth.uid(), _tenant_id, v_purchase.branch_id)
+  ) THEN RAISE EXCEPTION 'You cannot return purchases from this branch' USING ERRCODE = '42501'; END IF;
+  IF _items IS NULL OR jsonb_typeof(_items) <> 'array' OR jsonb_array_length(_items) = 0 OR jsonb_array_length(_items) > 300 THEN
+    RAISE EXCEPTION 'Return must contain between 1 and 300 items' USING ERRCODE = '22023';
+  END IF;
+  IF (SELECT count(*) FROM jsonb_array_elements(_items))
+     <> (SELECT count(DISTINCT value->>'purchase_item_id') FROM jsonb_array_elements(_items)) THEN
+    RAISE EXCEPTION 'A purchase item may appear only once in a return request' USING ERRCODE = '22023';
+  END IF;
+
+  FOR v_item IN SELECT value FROM jsonb_array_elements(_items) ORDER BY (value->>'purchase_item_id')::uuid LOOP
+    v_item_id := (v_item->>'purchase_item_id')::uuid;
+    v_qty := (v_item->>'quantity')::numeric;
+    IF v_item_id IS NULL OR v_qty IS NULL OR v_qty <= 0 OR v_qty > 999999.999 THEN
+      RAISE EXCEPTION 'Invalid purchase return item or quantity' USING ERRCODE = '22023';
+    END IF;
+    SELECT * INTO v_line FROM public.purchase_items
+    WHERE id = v_item_id AND purchase_id = _purchase_id AND tenant_id = _tenant_id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Return item does not belong to this purchase' USING ERRCODE = '23503'; END IF;
+    SELECT COALESCE(sum(ri.quantity),0) INTO v_prior_qty
+    FROM public.purchase_return_items ri
+    JOIN public.purchase_returns r ON r.id = ri.purchase_return_id
+    WHERE ri.purchase_item_id = v_item_id AND r.purchase_id = _purchase_id;
+    IF v_prior_qty + v_qty > v_line.quantity THEN
+      RAISE EXCEPTION 'Return quantity exceeds the remaining purchased quantity for %', v_line.id USING ERRCODE = '23514';
+    END IF;
+    v_total := v_total + round(v_line.cost_price * v_qty, 2);
+  END LOOP;
+
+  INSERT INTO public.purchase_returns (tenant_id, purchase_id, branch_id, processed_by, total, reason)
+  VALUES (_tenant_id, _purchase_id, v_purchase.branch_id, auth.uid(), round(v_total,2), btrim(_reason))
+  RETURNING * INTO v_return;
+
+  FOR v_item IN SELECT value FROM jsonb_array_elements(_items) ORDER BY (value->>'purchase_item_id')::uuid LOOP
+    v_item_id := (v_item->>'purchase_item_id')::uuid;
+    v_qty := (v_item->>'quantity')::numeric;
+    SELECT * INTO v_line FROM public.purchase_items WHERE id = v_item_id AND purchase_id = _purchase_id AND tenant_id = _tenant_id;
+    v_line_total := round(v_line.cost_price * v_qty, 2);
+
+    INSERT INTO public.purchase_return_items (
+      tenant_id, purchase_return_id, purchase_item_id, product_id,
+      product_name, quantity, cost_price, line_total
+    ) VALUES (
+      _tenant_id, v_return.id, v_line.id, v_line.product_id,
+      COALESCE((SELECT p.name FROM public.products p WHERE p.id=v_line.product_id), 'منتج محذوف'),
+      v_qty, v_line.cost_price, v_line_total
+    );
+
+    PERFORM public.apply_stock_change(_tenant_id, v_line.product_id, v_purchase.branch_id, -v_qty);
+    INSERT INTO public.inventory_transactions (
+      tenant_id, product_id, branch_id, user_id, txn_type, quantity,
+      reference_type, reference_id, reason
+    ) VALUES (
+      _tenant_id, v_line.product_id, v_purchase.branch_id, auth.uid(), 'out', -v_qty,
+      'purchase_return', v_return.id, 'إرجاع بضاعة إلى المورد'
+    );
+  END LOOP;
+  RETURN v_return;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.create_purchase_with_items(_tenant_id uuid, _branch_id uuid, _user_id uuid, _supplier_id uuid, _reference text, _notes text, _items jsonb)
+ RETURNS purchases
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public', 'pg_temp'
+AS $function$
+DECLARE v_item jsonb; v_product_id uuid; v_quantity numeric(14,3); v_cost_price numeric(12,2);
+  v_total numeric(12,2) := 0; v_purchase public.purchases%ROWTYPE;
+BEGIN
+
+  IF NOT public.has_permission(auth.uid(), _tenant_id, 'purchases.create') THEN RAISE EXCEPTION 'Permission denied: purchases.create' USING ERRCODE = '42501'; END IF;
+  IF auth.uid() IS NULL OR auth.uid() <> _user_id THEN RAISE EXCEPTION 'Authenticated purchaser identity mismatch' USING ERRCODE = '42501'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.branches WHERE id = _branch_id AND tenant_id = _tenant_id AND is_active = true) THEN
+    RAISE EXCEPTION 'Branch does not belong to the requested tenant or is inactive' USING ERRCODE = '23503';
+  END IF;
+  IF NOT (
+    public.is_super_owner(auth.uid())
+    OR private.can_access_branch(auth.uid(), _tenant_id, _branch_id)
+  ) THEN RAISE EXCEPTION 'You cannot receive purchases in this branch' USING ERRCODE = '42501'; END IF;
+  IF _supplier_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.suppliers WHERE id = _supplier_id AND tenant_id = _tenant_id) THEN
+    RAISE EXCEPTION 'Supplier does not belong to the requested tenant' USING ERRCODE = '23503';
+  END IF;
+  IF _items IS NULL OR jsonb_typeof(_items) <> 'array' OR jsonb_array_length(_items) = 0 OR jsonb_array_length(_items) > 300 THEN
+    RAISE EXCEPTION 'Purchase must contain between 1 and 300 items' USING ERRCODE = '22023';
+  END IF;
+  FOR v_item IN SELECT value FROM jsonb_array_elements(_items) ORDER BY (value->>'product_id')::uuid LOOP
+    v_product_id := (v_item->>'product_id')::uuid; v_quantity := (v_item->>'quantity')::numeric; v_cost_price := (v_item->>'cost_price')::numeric;
+    IF v_product_id IS NULL OR v_quantity IS NULL OR v_quantity <= 0 OR v_quantity > 999999.999
+       OR v_cost_price IS NULL OR v_cost_price < 0 OR v_cost_price = 'NaN'::numeric THEN
+      RAISE EXCEPTION 'Invalid purchase quantity or cost price' USING ERRCODE = '22023';
+    END IF;
+    PERFORM 1 FROM public.products WHERE id = v_product_id AND tenant_id = _tenant_id AND is_active = true FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Purchase product is unavailable or belongs to another tenant' USING ERRCODE = '23503'; END IF;
+    v_total := v_total + round(v_quantity * v_cost_price, 2);
+  END LOOP;
+  INSERT INTO public.purchases (tenant_id, branch_id, supplier_id, user_id, reference, notes, total, status)
+  VALUES (_tenant_id, _branch_id, _supplier_id, _user_id, NULLIF(btrim(_reference), ''), NULLIF(btrim(_notes), ''), round(v_total, 2), 'received')
+  RETURNING * INTO v_purchase;
+  FOR v_item IN SELECT value FROM jsonb_array_elements(_items) ORDER BY (value->>'product_id')::uuid LOOP
+    v_product_id := (v_item->>'product_id')::uuid; v_quantity := (v_item->>'quantity')::numeric; v_cost_price := (v_item->>'cost_price')::numeric;
+    INSERT INTO public.purchase_items (tenant_id, purchase_id, product_id, quantity, cost_price, line_total)
+    VALUES (_tenant_id, v_purchase.id, v_product_id, v_quantity, v_cost_price, round(v_quantity * v_cost_price, 2));
+  END LOOP;
+  RETURN v_purchase;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.create_sale_refund(_tenant_id uuid, _sale_id uuid, _reason text, _refund_method payment_method, _items jsonb)
+ RETURNS sale_refunds
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_sale public.sales%ROWTYPE;
+  v_line public.sale_items%ROWTYPE;
+  v_item jsonb;
+  v_refund public.sale_refunds%ROWTYPE;
+  v_sale_item_id uuid;
+  v_qty numeric(14,3);
+  v_prior_qty numeric(14,3);
+  v_prior_subtotal numeric(12,2);
+  v_prior_discount numeric(12,2);
+  v_prior_tax numeric(12,2);
+  v_target_discount numeric(12,2);
+  v_target_tax numeric(12,2);
+  v_line_subtotal numeric(12,2);
+  v_line_discount numeric(12,2);
+  v_line_tax numeric(12,2);
+  v_line_total numeric(12,2);
+  v_restock boolean;
+  v_session_id uuid;
+  v_is_full boolean := true;
+  v_last_item_id uuid;
+  v_prior_sale_subtotal numeric(12,2);
+  v_prior_sale_discount numeric(12,2);
+  v_prior_sale_tax numeric(12,2);
+  v_sum_subtotal numeric(12,2);
+  v_sum_discount numeric(12,2);
+  v_sum_tax numeric(12,2);
+BEGIN
+
+  IF NOT public.has_permission(auth.uid(), _tenant_id, 'sales.refund') THEN RAISE EXCEPTION 'Permission denied: sales.refund' USING ERRCODE = '42501'; END IF;
+  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'Authentication required' USING ERRCODE = '42501'; END IF;
+  IF _tenant_id IS NULL OR _sale_id IS NULL OR _reason IS NULL OR length(btrim(_reason)) NOT BETWEEN 2 AND 500
+     OR _refund_method IS NULL OR _refund_method NOT IN ('cash','card','transfer') THEN
+    RAISE EXCEPTION 'Invalid refund details or payment method' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT * INTO v_sale FROM public.sales
+  WHERE id = _sale_id AND tenant_id = _tenant_id
+  FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Sale not found in this tenant' USING ERRCODE = 'P0002'; END IF;
+  IF v_sale.status <> 'completed' THEN RAISE EXCEPTION 'Only completed sales can be refunded' USING ERRCODE = '55000'; END IF;
+  IF NOT (
+    public.is_super_owner(auth.uid())
+    OR private.can_access_branch(auth.uid(), _tenant_id, v_sale.branch_id)
+  ) THEN
+    RAISE EXCEPTION 'You cannot refund sales in this branch' USING ERRCODE = '42501';
+  END IF;
+  IF _items IS NULL OR jsonb_typeof(_items) <> 'array'
+     OR jsonb_array_length(_items) = 0 OR jsonb_array_length(_items) > 300 THEN
+    RAISE EXCEPTION 'Refund must contain between 1 and 300 items' USING ERRCODE = '22023';
+  END IF;
+  IF (SELECT count(*) FROM jsonb_array_elements(_items))
+     <> (SELECT count(DISTINCT value->>'sale_item_id') FROM jsonb_array_elements(_items)) THEN
+    RAISE EXCEPTION 'A sale item may appear only once in a refund request' USING ERRCODE = '22023';
+  END IF;
+
+  IF _refund_method = 'cash' THEN
+    SELECT id INTO v_session_id FROM public.cash_sessions
+    WHERE tenant_id = _tenant_id AND branch_id = v_sale.branch_id
+      AND cashier_id = auth.uid() AND status = 'open'
+    ORDER BY opened_at DESC LIMIT 1 FOR UPDATE;
+    IF v_session_id IS NULL THEN
+      RAISE EXCEPTION 'Open a cash session in this branch before issuing a cash refund' USING ERRCODE = '55000';
+    END IF;
+  END IF;
+
+  FOR v_item IN
+    SELECT value FROM jsonb_array_elements(_items)
+    ORDER BY (value->>'sale_item_id')::uuid
+  LOOP
+    v_sale_item_id := (v_item->>'sale_item_id')::uuid;
+    v_qty := (v_item->>'quantity')::numeric;
+    v_restock := COALESCE((v_item->>'restock')::boolean, true);
+    IF v_sale_item_id IS NULL OR v_qty IS NULL OR v_qty <= 0 OR v_qty > 999999.999 THEN
+      RAISE EXCEPTION 'Invalid refund item or quantity' USING ERRCODE = '22023';
+    END IF;
+    SELECT * INTO v_line FROM public.sale_items
+    WHERE id = v_sale_item_id AND sale_id = _sale_id AND tenant_id = _tenant_id
+    FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Refund item does not belong to this sale' USING ERRCODE = '23503'; END IF;
+    IF v_restock AND v_line.product_id IS NULL THEN
+      RAISE EXCEPTION 'A deleted product cannot be restocked; mark this returned item as not restocked' USING ERRCODE = '22023';
+    END IF;
+    SELECT COALESCE(sum(ri.quantity),0), COALESCE(sum(ri.subtotal_amount),0),
+           COALESCE(sum(ri.discount_amount),0), COALESCE(sum(ri.tax_amount),0)
+      INTO v_prior_qty, v_prior_subtotal, v_prior_discount, v_prior_tax
+    FROM public.sale_refund_items ri
+    JOIN public.sale_refunds r ON r.id = ri.refund_id
+    WHERE ri.sale_item_id = v_sale_item_id AND r.sale_id = _sale_id;
+    IF v_prior_qty + v_qty > v_line.quantity THEN
+      RAISE EXCEPTION 'Refund quantity exceeds the remaining quantity for product %', v_line.product_name
+        USING ERRCODE = '23514';
+    END IF;
+  END LOOP;
+
+  SELECT COALESCE(sum(subtotal),0), COALESCE(sum(discount),0), COALESCE(sum(tax_amount),0)
+    INTO v_prior_sale_subtotal, v_prior_sale_discount, v_prior_sale_tax
+  FROM public.sale_refunds WHERE sale_id = _sale_id;
+
+  IF EXISTS (
+    SELECT 1 FROM public.sale_items si
+    WHERE si.sale_id = _sale_id
+      AND COALESCE((SELECT sum(ri.quantity) FROM public.sale_refund_items ri
+        JOIN public.sale_refunds r ON r.id=ri.refund_id WHERE ri.sale_item_id=si.id AND r.sale_id=_sale_id),0)
+      + COALESCE((SELECT sum((req.value->>'quantity')::numeric) FROM jsonb_array_elements(_items) AS req(value)
+        WHERE req.value->>'sale_item_id'=si.id::text),0) < si.quantity
+  ) THEN v_is_full := false; END IF;
+
+  INSERT INTO public.sale_refunds (
+    tenant_id, sale_id, branch_id, cash_session_id, processed_by,
+    refund_method, subtotal, discount, tax_amount, total, reason
+  ) VALUES (
+    _tenant_id, _sale_id, v_sale.branch_id, v_session_id, auth.uid(),
+    _refund_method, 0, 0, 0, 0, btrim(_reason)
+  ) RETURNING * INTO v_refund;
+
+  FOR v_item IN
+    SELECT value FROM jsonb_array_elements(_items)
+    ORDER BY (value->>'sale_item_id')::uuid
+  LOOP
+    v_sale_item_id := (v_item->>'sale_item_id')::uuid;
+    v_qty := (v_item->>'quantity')::numeric;
+    v_restock := COALESCE((v_item->>'restock')::boolean, true);
+    SELECT * INTO v_line FROM public.sale_items
+    WHERE id = v_sale_item_id AND sale_id = _sale_id AND tenant_id = _tenant_id;
+
+    SELECT COALESCE(sum(ri.quantity),0), COALESCE(sum(ri.subtotal_amount),0),
+           COALESCE(sum(ri.discount_amount),0), COALESCE(sum(ri.tax_amount),0)
+      INTO v_prior_qty, v_prior_subtotal, v_prior_discount, v_prior_tax
+    FROM public.sale_refund_items ri
+    JOIN public.sale_refunds r ON r.id = ri.refund_id
+    WHERE ri.sale_item_id = v_sale_item_id AND r.sale_id = _sale_id;
+
+    v_target_discount := CASE WHEN v_sale.subtotal = 0 THEN 0
+      ELSE round(v_sale.discount * (v_line.line_total / v_sale.subtotal), 2) END;
+    v_target_tax := CASE WHEN (v_sale.subtotal - v_sale.discount) = 0 THEN 0
+      ELSE round(v_sale.tax_amount * ((v_line.line_total - v_target_discount) /
+        (v_sale.subtotal - v_sale.discount)), 2) END;
+
+    IF v_prior_qty + v_qty = v_line.quantity THEN
+      v_line_subtotal := v_line.line_total - v_prior_subtotal;
+      v_line_discount := v_target_discount - v_prior_discount;
+      v_line_tax := v_target_tax - v_prior_tax;
+    ELSE
+      v_line_subtotal := round(v_line.line_total * v_qty / v_line.quantity, 2);
+      v_line_discount := round(v_target_discount * v_qty / v_line.quantity, 2);
+      v_line_tax := round(v_target_tax * v_qty / v_line.quantity, 2);
+    END IF;
+    v_line_total := greatest(v_line_subtotal - v_line_discount + v_line_tax, 0);
+
+    INSERT INTO public.sale_refund_items (
+      tenant_id, refund_id, sale_item_id, product_id, product_name,
+      quantity, unit_price, cost_price_snapshot, subtotal_amount,
+      discount_amount, tax_amount, total_amount, restocked
+    ) VALUES (
+      _tenant_id, v_refund.id, v_line.id, v_line.product_id, v_line.product_name,
+      v_qty, v_line.unit_price, v_line.cost_price_snapshot, v_line_subtotal,
+      v_line_discount, v_line_tax, v_line_total, v_restock
+    ) RETURNING id INTO v_last_item_id;
+
+    IF v_restock THEN
+      PERFORM public.apply_stock_change(_tenant_id, v_line.product_id, v_sale.branch_id, v_qty);
+      INSERT INTO public.inventory_transactions (
+        tenant_id, product_id, branch_id, user_id, txn_type, quantity,
+        reference_type, reference_id, reason
+      ) VALUES (
+        _tenant_id, v_line.product_id, v_sale.branch_id, auth.uid(), 'refund', v_qty,
+        'sale_refund', v_refund.id, 'إرجاع صنف من فاتورة بيع'
+      );
+    END IF;
+  END LOOP;
+
+  IF v_is_full AND v_last_item_id IS NOT NULL THEN
+    SELECT COALESCE(sum(subtotal_amount),0), COALESCE(sum(discount_amount),0), COALESCE(sum(tax_amount),0)
+      INTO v_sum_subtotal, v_sum_discount, v_sum_tax
+    FROM public.sale_refund_items WHERE refund_id = v_refund.id;
+    UPDATE public.sale_refund_items
+       SET subtotal_amount = subtotal_amount + ((v_sale.subtotal - v_prior_sale_subtotal) - v_sum_subtotal),
+           discount_amount = discount_amount + ((v_sale.discount - v_prior_sale_discount) - v_sum_discount),
+           tax_amount = tax_amount + ((v_sale.tax_amount - v_prior_sale_tax) - v_sum_tax),
+           total_amount = total_amount
+             + ((v_sale.subtotal - v_prior_sale_subtotal) - v_sum_subtotal)
+             - ((v_sale.discount - v_prior_sale_discount) - v_sum_discount)
+             + ((v_sale.tax_amount - v_prior_sale_tax) - v_sum_tax)
+     WHERE id = v_last_item_id;
+  END IF;
+
+  UPDATE public.sale_refunds r
+     SET subtotal = x.subtotal, discount = x.discount, tax_amount = x.tax_amount,
+         total = x.subtotal - x.discount + x.tax_amount
+    FROM (
+      SELECT COALESCE(sum(subtotal_amount),0) subtotal,
+             COALESCE(sum(discount_amount),0) discount,
+             COALESCE(sum(tax_amount),0) tax_amount
+      FROM public.sale_refund_items WHERE refund_id = v_refund.id
+    ) x
+   WHERE r.id = v_refund.id
+  RETURNING * INTO v_refund;
+
+  IF v_refund.total <= 0 THEN RAISE EXCEPTION 'Refund total must be greater than zero' USING ERRCODE = '22023'; END IF;
+
+  IF v_is_full THEN
+    UPDATE public.sales SET status = 'refunded', updated_at = now()
+    WHERE id = _sale_id AND tenant_id = _tenant_id;
+  END IF;
+
+  RETURN v_refund;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.create_sale_with_items(_tenant_id uuid, _branch_id uuid, _cashier_id uuid, _session_id uuid, _discount numeric, _payment_method payment_method, _items jsonb)
+ RETURNS sales
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public', 'pg_temp'
+AS $function$
+DECLARE v_tax_rate numeric(5,2); v_subtotal numeric(12,2) := 0; v_discount numeric(12,2);
+  v_taxable numeric(12,2); v_tax_amount numeric(12,2); v_total numeric(12,2);
+  v_item jsonb; v_product public.products%ROWTYPE; v_product_id uuid; v_quantity numeric(12,3); v_sale public.sales%ROWTYPE;
+BEGIN
+
+  IF NOT public.has_permission(auth.uid(), _tenant_id, 'pos.create_sale') THEN RAISE EXCEPTION 'Permission denied: pos.create_sale' USING ERRCODE = '42501'; END IF;
+  IF auth.uid() IS NULL OR auth.uid() <> _cashier_id THEN RAISE EXCEPTION 'Authenticated cashier identity mismatch' USING ERRCODE = '42501'; END IF;
+  IF NOT private.can_access_branch(auth.uid(), _tenant_id, _branch_id) THEN RAISE EXCEPTION 'You cannot create sales in this branch' USING ERRCODE = '42501'; END IF;
+  PERFORM 1 FROM public.cash_sessions cs WHERE cs.id = _session_id AND cs.tenant_id = _tenant_id
+    AND cs.branch_id = _branch_id AND cs.cashier_id = _cashier_id AND cs.status = 'open' FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'An open cashier session for this branch is required' USING ERRCODE = '55000'; END IF;
+  IF _items IS NULL OR jsonb_typeof(_items) <> 'array' OR jsonb_array_length(_items) = 0 OR jsonb_array_length(_items) > 300 THEN
+    RAISE EXCEPTION 'Sale must contain between 1 and 300 items' USING ERRCODE = '22023';
+  END IF;
+  IF _payment_method IS NULL THEN RAISE EXCEPTION 'Payment method is required' USING ERRCODE = '22023'; END IF;
+  SELECT tax_rate INTO v_tax_rate FROM public.tenants WHERE id = _tenant_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Tenant not found' USING ERRCODE = 'P0002'; END IF;
+  FOR v_item IN SELECT value FROM jsonb_array_elements(_items) ORDER BY (value->>'product_id')::uuid LOOP
+    v_product_id := (v_item->>'product_id')::uuid; v_quantity := (v_item->>'quantity')::numeric;
+    IF v_product_id IS NULL OR v_quantity IS NULL OR v_quantity <= 0 OR v_quantity > 999999.999 THEN
+      RAISE EXCEPTION 'Invalid item quantity or product' USING ERRCODE = '22023';
+    END IF;
+    SELECT * INTO v_product FROM public.products WHERE id = v_product_id AND tenant_id = _tenant_id AND is_active = true FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Product is unavailable or belongs to another tenant' USING ERRCODE = '23503'; END IF;
+    IF v_product.cost_price < 0 OR v_product.sale_price < 0 OR v_product.cost_price = 'NaN'::numeric OR v_product.sale_price = 'NaN'::numeric THEN
+      RAISE EXCEPTION 'Product prices cannot be negative or invalid' USING ERRCODE = '22023';
+    END IF;
+    v_subtotal := v_subtotal + round(v_product.sale_price * v_quantity, 2);
+  END LOOP;
+  v_discount := COALESCE(_discount, 0);
+  IF v_discount < 0 OR v_discount > v_subtotal OR v_discount = 'NaN'::numeric THEN
+    RAISE EXCEPTION 'Discount must be between zero and the subtotal' USING ERRCODE = '22023';
+  END IF;
+  v_taxable := greatest(v_subtotal - v_discount, 0); v_tax_amount := round(v_taxable * (v_tax_rate / 100), 2); v_total := round(v_taxable + v_tax_amount, 2);
+  INSERT INTO public.sales (tenant_id, branch_id, cashier_id, session_id, invoice_no, subtotal, discount, tax_amount, total, payment_method)
+  VALUES (_tenant_id, _branch_id, _cashier_id, _session_id, 0, v_subtotal, v_discount, v_tax_amount, v_total, _payment_method)
+  RETURNING * INTO v_sale;
+  FOR v_item IN SELECT value FROM jsonb_array_elements(_items) ORDER BY (value->>'product_id')::uuid LOOP
+    v_product_id := (v_item->>'product_id')::uuid; v_quantity := (v_item->>'quantity')::numeric;
+    SELECT * INTO v_product FROM public.products WHERE id = v_product_id AND tenant_id = _tenant_id AND is_active = true FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Product became unavailable during checkout' USING ERRCODE = '23503'; END IF;
+    INSERT INTO public.sale_items (tenant_id, sale_id, product_id, product_name, quantity, unit_price, tax_rate, line_total, cost_price_snapshot)
+    VALUES (_tenant_id, v_sale.id, v_product.id, v_product.name, v_quantity, v_product.sale_price, v_tax_rate,
+      round(v_product.sale_price * v_quantity, 2), v_product.cost_price);
+  END LOOP;
+  INSERT INTO public.payments(tenant_id, sale_id, method, amount) VALUES (_tenant_id, v_sale.id, _payment_method, v_total);
+  RETURN v_sale;
+END;
+$function$;
+
+
+
+-- Leave decisions accept either the approval or rejection permission.
+DROP POLICY IF EXISTS permission_gate_leave_requests_update_decision ON public.leave_requests;
+CREATE POLICY permission_gate_leave_requests_update_decision
+ON public.leave_requests AS RESTRICTIVE FOR UPDATE TO authenticated
+USING (
+  public.has_permission((select auth.uid()), tenant_id, 'hr.leaves.approve')
+  OR public.has_permission((select auth.uid()), tenant_id, 'hr.leaves.reject')
+  OR (
+    status = 'pending'
+    AND EXISTS (SELECT 1 FROM public.employees e
+      WHERE e.id = leave_requests.employee_id
+        AND e.tenant_id = leave_requests.tenant_id
+        AND e.user_id = (select auth.uid()))
+  )
+)
+WITH CHECK (
+  public.has_permission((select auth.uid()), tenant_id, 'hr.leaves.approve')
+  OR public.has_permission((select auth.uid()), tenant_id, 'hr.leaves.reject')
+  OR (
+    status = 'pending'
+    AND EXISTS (SELECT 1 FROM public.employees e
+      WHERE e.id = leave_requests.employee_id
+        AND e.tenant_id = leave_requests.tenant_id
+        AND e.user_id = (select auth.uid()))
+  )
+);
+
+
+
+
+-- Identity and membership records remain self-readable while staff access is permission-gated.
+DROP POLICY IF EXISTS permission_gate_profiles_select ON public.profiles;
+CREATE POLICY permission_gate_profiles_select ON public.profiles
+AS RESTRICTIVE FOR SELECT TO authenticated
+USING (
+  id = (select auth.uid())
+  OR public.has_permission((select auth.uid()), tenant_id, 'users.view')
+);
+
+DROP POLICY IF EXISTS permission_gate_profiles_update ON public.profiles;
+CREATE POLICY permission_gate_profiles_update ON public.profiles
+AS RESTRICTIVE FOR UPDATE TO authenticated
+USING (
+  id = (select auth.uid())
+  OR public.has_permission((select auth.uid()), tenant_id, 'users.edit')
+)
+WITH CHECK (
+  id = (select auth.uid())
+  OR public.has_permission((select auth.uid()), tenant_id, 'users.edit')
+);
+
+DROP POLICY IF EXISTS permission_gate_user_roles_select ON public.user_roles;
+CREATE POLICY permission_gate_user_roles_select ON public.user_roles
+AS RESTRICTIVE FOR SELECT TO authenticated
+USING (
+  user_id = (select auth.uid())
+  OR public.has_permission((select auth.uid()), tenant_id, 'users.view')
+);
+
+DROP POLICY IF EXISTS permission_gate_user_roles_insert ON public.user_roles;
+CREATE POLICY permission_gate_user_roles_insert ON public.user_roles
+AS RESTRICTIVE FOR INSERT TO authenticated
+WITH CHECK (
+  public.has_permission((select auth.uid()), tenant_id, 'users.create')
+  OR public.has_permission((select auth.uid()), tenant_id, 'users.change_role')
+);
+
+DROP POLICY IF EXISTS permission_gate_user_roles_update ON public.user_roles;
+CREATE POLICY permission_gate_user_roles_update ON public.user_roles
+AS RESTRICTIVE FOR UPDATE TO authenticated
+USING (public.has_permission((select auth.uid()), tenant_id, 'users.change_role'))
+WITH CHECK (public.has_permission((select auth.uid()), tenant_id, 'users.change_role'));
+
+DROP POLICY IF EXISTS permission_gate_user_roles_delete ON public.user_roles;
+CREATE POLICY permission_gate_user_roles_delete ON public.user_roles
+AS RESTRICTIVE FOR DELETE TO authenticated
+USING (public.has_permission((select auth.uid()), tenant_id, 'users.delete'));
+
+DROP POLICY IF EXISTS permission_gate_tenants_select ON public.tenants;
+CREATE POLICY permission_gate_tenants_select ON public.tenants
+AS RESTRICTIVE FOR SELECT TO authenticated
+USING (
+  public.has_permission((select auth.uid()), id, 'dashboard.view')
+  OR public.is_super_owner((select auth.uid()))
+);
+
+DROP POLICY IF EXISTS permission_gate_tenants_update ON public.tenants;
+CREATE POLICY permission_gate_tenants_update ON public.tenants
+AS RESTRICTIVE FOR UPDATE TO authenticated
+USING (public.has_permission((select auth.uid()), id, 'settings.manage'))
+WITH CHECK (public.has_permission((select auth.uid()), id, 'settings.manage'));
+
+DROP POLICY IF EXISTS permission_gate_login_history_select ON public.login_history;
+CREATE POLICY permission_gate_login_history_select ON public.login_history
+AS RESTRICTIVE FOR SELECT TO authenticated
+USING (
+  user_id = (select auth.uid())
+  OR public.has_permission((select auth.uid()), tenant_id, 'login_history.view')
+);
+
+DROP POLICY IF EXISTS permission_gate_notification_reads_select ON public.notification_reads;
+CREATE POLICY permission_gate_notification_reads_select ON public.notification_reads
+AS RESTRICTIVE FOR SELECT TO authenticated
+USING (user_id = (select auth.uid()));
+
+DROP POLICY IF EXISTS permission_gate_notification_reads_insert ON public.notification_reads;
+CREATE POLICY permission_gate_notification_reads_insert ON public.notification_reads
+AS RESTRICTIVE FOR INSERT TO authenticated
+WITH CHECK (user_id = (select auth.uid()));
+
+DROP POLICY IF EXISTS permission_gate_notification_reads_update ON public.notification_reads;
+CREATE POLICY permission_gate_notification_reads_update ON public.notification_reads
+AS RESTRICTIVE FOR UPDATE TO authenticated
+USING (user_id = (select auth.uid()))
+WITH CHECK (user_id = (select auth.uid()));
+
+DROP POLICY IF EXISTS permission_gate_notification_reads_delete ON public.notification_reads;
+CREATE POLICY permission_gate_notification_reads_delete ON public.notification_reads
+AS RESTRICTIVE FOR DELETE TO authenticated
+USING (user_id = (select auth.uid()));
+
+
+-- Return the effective permission set for the signed-in member in one round trip.
+CREATE OR REPLACE FUNCTION public.get_my_permissions(_tenant_id uuid)
+RETURNS text[]
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'pg_catalog', 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_permissions text[];
+BEGIN
+  IF auth.uid() IS NULL OR _tenant_id IS NULL THEN
+    RAISE EXCEPTION 'Authentication and tenant are required' USING ERRCODE = '42501';
+  END IF;
+  IF NOT (
+    public.is_super_owner(auth.uid())
+    OR EXISTS (
+      SELECT 1 FROM public.user_roles
+      WHERE user_id = auth.uid() AND tenant_id = _tenant_id
+    )
+  ) THEN
+    RAISE EXCEPTION 'You are not a member of this tenant' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT COALESCE(array_agg(p.key ORDER BY p.key), ARRAY[]::text[])
+    INTO v_permissions
+  FROM public.permissions p
+  WHERE public.has_permission(auth.uid(), _tenant_id, p.key);
+
+  RETURN v_permissions;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.get_my_permissions(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.get_my_permissions(uuid) FROM anon;
+GRANT EXECUTE ON FUNCTION public.get_my_permissions(uuid) TO authenticated;
+
+
+
+-- POS staff need to see the catalog and available stock to prevent overselling.
+INSERT INTO public.role_permissions (tenant_id, role_kind, builtin_role, permission_key)
+VALUES
+  (NULL, 'builtin', 'cashier'::public.app_role, 'categories.view'),
+  (NULL, 'builtin', 'cashier'::public.app_role, 'inventory.view'),
+  (NULL, 'builtin', 'waiter'::public.app_role, 'categories.view'),
+  (NULL, 'builtin', 'waiter'::public.app_role, 'inventory.view'),
+  (NULL, 'builtin', 'warehouse'::public.app_role, 'categories.view'),
+  (NULL, 'builtin', 'manager'::public.app_role, 'permissions.manage'),
+  (NULL, 'builtin', 'accountant'::public.app_role, 'hr.employees.view'),
+  (NULL, 'builtin', 'accountant'::public.app_role, 'hr.compensation.view'),
+  (NULL, 'builtin', 'accountant'::public.app_role, 'hr.attendance.view')
+ON CONFLICT DO NOTHING;
+
+-- Waiters create table orders; they do not own cash sessions or finalize payments.
+DELETE FROM public.role_permissions
+WHERE tenant_id IS NULL
+  AND role_kind = 'builtin'
+  AND builtin_role = 'waiter'::public.app_role
+  AND permission_key = 'pos.create_sale';
+
+
+COMMIT;
+
+-- SOURCE MIGRATION: 20261111035000_get_my_permissions_invoker.sql
+-- The effective-permissions RPC only reads the caller's own membership and delegates
+-- protected permission checks to the narrowly scoped has_permission SECURITY DEFINER.
+ALTER FUNCTION public.get_my_permissions(uuid) SECURITY INVOKER;
+
+-- SOURCE MIGRATION: 20261111040000_fix_cashier_pos_checkout_permissions.sql
+-- Restore the minimum built-in cashier permissions required by the POS checkout flow.
+-- Idempotent: safe to apply more than once. Does not grant administrative permissions.
+BEGIN;
+
+INSERT INTO public.role_permissions (tenant_id, role_kind, builtin_role, permission_key)
+SELECT NULL, 'builtin', 'cashier'::public.app_role, p.permission_key
+FROM (VALUES
+  ('pos.view'),
+  ('pos.use'),
+  ('pos.create_sale'),
+  ('sales.view'),
+  ('sales.print'),
+  ('cash.view'),
+  ('cash.open'),
+  ('cash.close')
+) AS p(permission_key)
+WHERE EXISTS (
+  SELECT 1 FROM public.permissions catalogue WHERE catalogue.key = p.permission_key
+)
+ON CONFLICT DO NOTHING;
+
+COMMIT;
+
+
+-- =====================================================================
+-- SOURCE MIGRATION: 20261111232801_restaurant_image_storage_foundation.sql
+-- =====================================================================
+
+-- Shared image storage for restaurant products, profiles, branches and promotions.
+-- Public read is intentional for catalog/marketing imagery; writes remain tenant-scoped.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('restaurant-assets', 'restaurant-assets', true, 5242880, array['image/jpeg','image/png','image/webp','image/avif'])
+on conflict (id) do update set public = excluded.public, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+
+create policy "Restaurant assets public read" on storage.objects for select to public using (bucket_id = 'restaurant-assets');
+create policy "Restaurant assets tenant upload" on storage.objects for insert to authenticated with check (
+  bucket_id = 'restaurant-assets' and split_part(name, '/', 1) ~* '^[0-9a-f-]{36}$'
+  and (private.is_tenant_admin(auth.uid(), split_part(name, '/', 1)::uuid)
+    or (split_part(name, '/', 2) = 'profiles' and split_part(name, '/', 3) = auth.uid()::text and private.is_tenant_member(auth.uid(), split_part(name, '/', 1)::uuid))
+    or public.is_super_owner(auth.uid()))
+);
+create policy "Restaurant assets tenant update" on storage.objects for update to authenticated
+using (bucket_id = 'restaurant-assets' and split_part(name, '/', 1) ~* '^[0-9a-f-]{36}$'
+  and (private.is_tenant_admin(auth.uid(), split_part(name, '/', 1)::uuid)
+    or (split_part(name, '/', 2) = 'profiles' and split_part(name, '/', 3) = auth.uid()::text and private.is_tenant_member(auth.uid(), split_part(name, '/', 1)::uuid))
+    or public.is_super_owner(auth.uid())))
+with check (bucket_id = 'restaurant-assets' and split_part(name, '/', 1) ~* '^[0-9a-f-]{36}$'
+  and (private.is_tenant_admin(auth.uid(), split_part(name, '/', 1)::uuid)
+    or (split_part(name, '/', 2) = 'profiles' and split_part(name, '/', 3) = auth.uid()::text and private.is_tenant_member(auth.uid(), split_part(name, '/', 1)::uuid))
+    or public.is_super_owner(auth.uid())));
+create policy "Restaurant assets tenant delete" on storage.objects for delete to authenticated using (
+  bucket_id = 'restaurant-assets' and split_part(name, '/', 1) ~* '^[0-9a-f-]{36}$'
+  and (private.is_tenant_admin(auth.uid(), split_part(name, '/', 1)::uuid)
+    or (split_part(name, '/', 2) = 'profiles' and split_part(name, '/', 3) = auth.uid()::text and private.is_tenant_member(auth.uid(), split_part(name, '/', 1)::uuid))
+    or public.is_super_owner(auth.uid()))
+);
+
+
+-- =====================================================================
+-- SOURCE MIGRATION: 20261111233538_marketing_campaigns_management.sql
+-- =====================================================================
+
+-- Tenant-scoped promotional campaigns and in-app advertising placements.
+create table if not exists public.marketing_campaigns (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references public.tenants(id) on delete cascade,
+  title text not null check (char_length(btrim(title)) between 2 and 120),
+  description text not null default '' check (char_length(description) <= 500),
+  image_url text,
+  target_url text,
+  placement text not null default 'dashboard_banner' check (placement in ('dashboard_banner','dashboard_card','pos_promo')),
+  status text not null default 'draft' check (status in ('draft','active','paused','archived')),
+  starts_at timestamptz,
+  ends_at timestamptz,
+  sort_order integer not null default 0,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint marketing_campaign_dates_valid check (starts_at is null or ends_at is null or ends_at > starts_at)
+);
+create index if not exists marketing_campaigns_tenant_status_idx on public.marketing_campaigns (tenant_id, status, sort_order, created_at desc);
+alter table public.marketing_campaigns enable row level security;
+drop policy if exists "Tenant members read marketing campaigns" on public.marketing_campaigns;
+create policy "Tenant members read marketing campaigns" on public.marketing_campaigns for select to authenticated using (private.is_tenant_member(auth.uid(), tenant_id) or public.is_super_owner(auth.uid()));
+drop policy if exists "Tenant admins manage marketing campaigns" on public.marketing_campaigns;
+create policy "Tenant admins manage marketing campaigns" on public.marketing_campaigns for all to authenticated using (private.is_tenant_admin(auth.uid(), tenant_id) or public.is_super_owner(auth.uid())) with check (private.is_tenant_admin(auth.uid(), tenant_id) or public.is_super_owner(auth.uid()));
+drop trigger if exists set_marketing_campaigns_updated_at on public.marketing_campaigns;
+create trigger set_marketing_campaigns_updated_at before update on public.marketing_campaigns for each row execute function public.set_updated_at();
+
+
+-- SOURCE MIGRATION: 20261112002129_supplier_payment_ledger.sql
+-- Supplier payment ledger: immutable, tenant- and branch-scoped records.
+-- Cash drawer balances are intentionally not modified by this ledger.
+begin;
+
+alter table public.suppliers
+  add constraint suppliers_id_tenant_unique unique (id, tenant_id);
+
+alter table public.branches
+  add constraint branches_id_tenant_unique unique (id, tenant_id);
+
+create table public.supplier_payments (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null,
+  branch_id uuid not null,
+  supplier_id uuid not null,
+  amount numeric(14,2) not null check (amount > 0),
+  payment_method text not null check (payment_method in ('cash','card','transfer','cheque','other')),
+  reference text,
+  notes text,
+  paid_at timestamptz not null default now(),
+  created_by uuid not null default auth.uid(),
+  created_at timestamptz not null default now(),
+  constraint supplier_payments_tenant_fkey foreign key (tenant_id) references public.tenants(id) on delete restrict,
+  constraint supplier_payments_branch_tenant_fkey foreign key (branch_id, tenant_id) references public.branches(id, tenant_id) on delete restrict,
+  constraint supplier_payments_supplier_tenant_fkey foreign key (supplier_id, tenant_id) references public.suppliers(id, tenant_id) on delete restrict,
+  constraint supplier_payments_created_by_fkey foreign key (created_by) references auth.users(id) on delete restrict,
+  constraint supplier_payments_reference_length check (reference is null or length(reference) <= 120),
+  constraint supplier_payments_notes_length check (notes is null or length(notes) <= 1000)
+);
+
+create index supplier_payments_tenant_supplier_date_idx
+  on public.supplier_payments (tenant_id, supplier_id, paid_at desc, id desc);
+create index supplier_payments_branch_date_idx
+  on public.supplier_payments (tenant_id, branch_id, paid_at desc);
+
+alter table public.supplier_payments enable row level security;
+
+create policy supplier_payments_select
+  on public.supplier_payments for select to authenticated
+  using (
+    (public.is_super_owner((select auth.uid()))
+      or public.has_permission((select auth.uid()), tenant_id, 'suppliers.view'))
+    and private.can_access_branch((select auth.uid()), tenant_id, branch_id)
+  );
+
+create policy supplier_payments_insert
+  on public.supplier_payments for insert to authenticated
+  with check (
+    created_by = (select auth.uid())
+    and (public.is_super_owner((select auth.uid()))
+      or public.has_permission((select auth.uid()), tenant_id, 'suppliers.manage'))
+    and private.can_access_branch((select auth.uid()), tenant_id, branch_id)
+  );
+
+comment on table public.supplier_payments is
+  'Immutable supplier payment ledger. Does not mutate cash sessions or accounting cash balances.';
+
+commit;
+
+
+-- SOURCE MIGRATION: 20261112002432_supplier_ledger_fk_indexes_and_marketing_rls.sql
+-- Cover all supplier ledger foreign keys and avoid per-row auth function evaluation in marketing RLS.
+begin;
+
+create index supplier_payments_branch_tenant_fk_idx
+  on public.supplier_payments (branch_id, tenant_id);
+create index supplier_payments_supplier_tenant_fk_idx
+  on public.supplier_payments (supplier_id, tenant_id);
+create index supplier_payments_created_by_fk_idx
+  on public.supplier_payments (created_by);
+create index marketing_campaigns_created_by_fk_idx
+  on public.marketing_campaigns (created_by);
+
+drop policy if exists "Tenant members read marketing campaigns" on public.marketing_campaigns;
+create policy "Tenant members read marketing campaigns"
+  on public.marketing_campaigns for select to authenticated
+  using (
+    private.is_tenant_member((select auth.uid()), tenant_id)
+    or public.is_super_owner((select auth.uid()))
+  );
+
+drop policy if exists "Tenant admins manage marketing campaigns" on public.marketing_campaigns;
+create policy "Tenant admins manage marketing campaigns"
+  on public.marketing_campaigns for all to authenticated
+  using (
+    private.is_tenant_admin((select auth.uid()), tenant_id)
+    or public.is_super_owner((select auth.uid()))
+  )
+  with check (
+    private.is_tenant_admin((select auth.uid()), tenant_id)
+    or public.is_super_owner((select auth.uid()))
+  );
+
+commit;
+
+
+-- SOURCE MIGRATION: 20261112002832_restrict_supplier_payment_mutations.sql
+-- Supplier payment ledger is append-only at the SQL privilege layer as well as by RLS.
+begin;
+revoke all on table public.supplier_payments from anon, authenticated;
+grant select, insert on table public.supplier_payments to authenticated;
+commit;
+
+
+-- SOURCE MIGRATION: 20261112003426_supplier_cash_session_integration.sql
+-- Link supplier cash payouts to open cashier sessions and include them in closing balances.
+begin;
+
+alter table public.cash_sessions
+  add constraint cash_sessions_id_tenant_branch_unique unique (id, tenant_id, branch_id);
+
+alter table public.supplier_payments
+  add column cash_session_id uuid,
+  add constraint supplier_payments_cash_session_required
+    check (payment_method <> 'cash' or cash_session_id is not null),
+  add constraint supplier_payments_cash_session_scope_fkey
+    foreign key (cash_session_id, tenant_id, branch_id)
+    references public.cash_sessions (id, tenant_id, branch_id)
+    on delete restrict;
+
+create index supplier_payments_cash_session_idx
+  on public.supplier_payments (cash_session_id)
+  where cash_session_id is not null;
+
+create or replace function private.validate_supplier_payment_cash_session()
+returns trigger
+language plpgsql
+security definer
+set search_path to 'pg_catalog', 'public', 'private', 'pg_temp'
+as $function$
+declare
+  v_session public.cash_sessions%rowtype;
+begin
+  if new.payment_method = 'cash' then
+    if auth.uid() is null or new.created_by is distinct from auth.uid() then
+      raise exception 'Authenticated payment creator mismatch' using errcode = '42501';
+    end if;
+    if new.cash_session_id is null then
+      raise exception 'Cash supplier payments require an open cash session' using errcode = '22023';
+    end if;
+    select * into v_session
+      from public.cash_sessions
+     where id = new.cash_session_id
+       and tenant_id = new.tenant_id
+       and branch_id = new.branch_id
+     for update;
+    if not found or v_session.status <> 'open' then
+      raise exception 'Cash session is not open for this branch' using errcode = '55000';
+    end if;
+    if v_session.cashier_id <> auth.uid()
+       and not private.is_tenant_admin(auth.uid(), new.tenant_id)
+       and not public.is_super_owner(auth.uid()) then
+      raise exception 'You cannot use another cashier cash session' using errcode = '42501';
+    end if;
+    if not private.can_access_branch(auth.uid(), new.tenant_id, new.branch_id) then
+      raise exception 'You cannot record supplier payments in this branch' using errcode = '42501';
+    end if;
+  elsif new.cash_session_id is not null then
+    raise exception 'Only cash payments may be linked to a cash session' using errcode = '22023';
+  end if;
+  return new;
+end;
+$function$;
+
+revoke all on function private.validate_supplier_payment_cash_session() from public, anon, authenticated;
+drop trigger if exists validate_supplier_payment_cash_session on public.supplier_payments;
+create trigger validate_supplier_payment_cash_session
+before insert on public.supplier_payments
+for each row execute function private.validate_supplier_payment_cash_session();
+
+create or replace function public.close_cash_session(_session_id uuid, _closing_balance numeric)
+returns public.cash_sessions
+language plpgsql
+security definer
+set search_path to 'pg_catalog', 'public', 'private', 'pg_temp'
+as $function$
+declare
+  v_session public.cash_sessions%rowtype;
+  v_expected numeric(12,2);
+begin
+  if auth.uid() is null then raise exception 'Authentication required' using errcode = '42501'; end if;
+  if _closing_balance is null or _closing_balance < 0 or _closing_balance = 'NaN'::numeric then
+    raise exception 'Closing balance must be zero or greater' using errcode = '22023';
+  end if;
+  select * into v_session from public.cash_sessions where id = _session_id for update;
+  if not found then raise exception 'Cash session not found' using errcode = 'P0002'; end if;
+  if not public.has_permission(auth.uid(), v_session.tenant_id, 'cash.close') then
+    raise exception 'Permission denied: cash.close' using errcode = '42501';
+  end if;
+  if v_session.status <> 'open' then raise exception 'Cash session is already closed' using errcode = '55000'; end if;
+  if auth.uid() <> v_session.cashier_id and not private.is_tenant_admin(auth.uid(), v_session.tenant_id) then
+    raise exception 'You cannot close this cashier session' using errcode = '42501';
+  end if;
+  select round(
+      v_session.opening_balance
+      + coalesce((select sum(p.amount) from public.payments p
+        join public.sales s on s.id = p.sale_id
+        where s.session_id = v_session.id and s.tenant_id = v_session.tenant_id
+          and s.status in ('completed','refunded') and p.method = 'cash'), 0)
+      - coalesce((select sum(r.total) from public.sale_refunds r
+        where r.cash_session_id = v_session.id and r.tenant_id = v_session.tenant_id
+          and r.refund_method = 'cash'), 0)
+      - coalesce((select sum(sp.amount) from public.supplier_payments sp
+        where sp.cash_session_id = v_session.id and sp.tenant_id = v_session.tenant_id
+          and sp.branch_id = v_session.branch_id and sp.payment_method = 'cash'), 0),
+      2
+    ) into v_expected;
+  update public.cash_sessions
+     set status = 'closed',
+         closing_balance = _closing_balance,
+         expected_cash = v_expected,
+         cash_difference = round(_closing_balance - v_expected, 2),
+         closed_at = now(),
+         updated_at = now()
+   where id = v_session.id
+   returning * into v_session;
+  return v_session;
+end;
+$function$;
+
+revoke all on function public.close_cash_session(uuid, numeric) from public, anon;
+grant execute on function public.close_cash_session(uuid, numeric) to authenticated, service_role;
+
+commit;
+
+
+-- SOURCE MIGRATION: 20261112003745_supplier_cash_session_fk_index.sql
+-- Cover the complete composite supplier-payment to cash-session foreign key.
+begin;
+drop index if exists public.supplier_payments_cash_session_idx;
+create index supplier_payments_cash_session_fk_idx
+  on public.supplier_payments (cash_session_id, tenant_id, branch_id);
+commit;
+
+
+-- SOURCE MIGRATION: 20261112004325_assignable_custom_roles.sql
+-- Make tenant custom roles assignable to team members without inheriting builtin-role grants.
+begin;
+
+alter table public.custom_roles
+  add constraint custom_roles_id_tenant_unique unique (id, tenant_id);
+
+alter table public.user_roles
+  add column custom_role_id uuid,
+  add constraint user_roles_custom_role_tenant_fkey
+    foreign key (custom_role_id, tenant_id)
+    references public.custom_roles (id, tenant_id)
+    on delete restrict;
+
+create index user_roles_custom_role_tenant_idx
+  on public.user_roles (custom_role_id, tenant_id)
+  where custom_role_id is not null;
+
+create or replace function public.has_permission(_user_id uuid, _tenant_id uuid, _permission_key text)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path to 'pg_catalog', 'public', 'pg_temp'
+as $function$
+declare
+  v_override boolean;
+  v_custom_role_id uuid;
+begin
+  if auth.uid() is null or _user_id is distinct from auth.uid()
+     or _tenant_id is null or nullif(btrim(_permission_key), '') is null then
+    return false;
+  end if;
+  if public.is_super_owner(auth.uid()) then return true; end if;
+
+  select granted into v_override
+    from public.user_permission_overrides
+   where user_id = auth.uid() and tenant_id = _tenant_id
+     and permission_key = _permission_key
+   limit 1;
+  if v_override is not null then return v_override; end if;
+
+  select ur.custom_role_id into v_custom_role_id
+    from public.user_roles ur
+   where ur.user_id = auth.uid() and ur.tenant_id = _tenant_id
+   limit 1;
+
+  if v_custom_role_id is not null then
+    return exists (
+      select 1 from public.role_permissions rp
+       where rp.role_kind = 'custom'
+         and rp.custom_role_id = v_custom_role_id
+         and rp.tenant_id = _tenant_id
+         and rp.permission_key = _permission_key
+    );
+  end if;
+
+  return exists (
+    select 1 from public.user_roles ur
+    join public.role_permissions rp
+      on rp.builtin_role = ur.role and rp.role_kind = 'builtin'
+     and (rp.tenant_id = _tenant_id or rp.tenant_id is null)
+    where ur.user_id = auth.uid() and ur.tenant_id = _tenant_id
+      and rp.permission_key = _permission_key
+  );
+end;
+$function$;
+
+create or replace function public.assign_custom_role_to_user(
+  _user_id uuid, _tenant_id uuid, _custom_role_id uuid, _branch_id uuid, _actor_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path to 'pg_catalog', 'public', 'private', 'pg_temp'
+as $function$
+declare
+  v_target_role public.app_role;
+  v_has_target_role boolean := false;
+begin
+  if auth.uid() is null or _actor_id is distinct from auth.uid() then
+    raise exception 'Authenticated actor mismatch' using errcode = '42501';
+  end if;
+  if not public.has_permission(auth.uid(), _tenant_id, 'roles.manage')
+     or not public.has_permission(auth.uid(), _tenant_id, 'users.change_role') then
+    raise exception 'Permission denied: roles.manage' using errcode = '42501';
+  end if;
+
+  if not exists (select 1 from public.custom_roles where id = _custom_role_id and tenant_id = _tenant_id) then
+    raise exception 'Custom role does not belong to this tenant' using errcode = '23503';
+  end if;
+
+  select ur.role into v_target_role from public.user_roles ur
+   where ur.user_id = _user_id and ur.tenant_id = _tenant_id for update;
+  v_has_target_role := found;
+
+  if not v_has_target_role and not exists (
+    select 1 from public.profiles p where p.id = _user_id and p.tenant_id = _tenant_id
+  ) then
+    raise exception 'Target user does not belong to this tenant' using errcode = 'P0002';
+  end if;
+
+  if v_has_target_role and v_target_role in ('owner'::public.app_role, 'manager'::public.app_role)
+     and not exists (
+       select 1 from public.user_roles actor_role
+        where actor_role.user_id = auth.uid() and actor_role.tenant_id = _tenant_id
+          and actor_role.role = 'owner'::public.app_role
+     )
+     and not public.is_super_owner(auth.uid()) then
+    raise exception 'You cannot change the role of an owner or manager' using errcode = '42501';
+  end if;
+
+  if _branch_id is not null and not exists (
+    select 1 from public.branches
+     where id = _branch_id and tenant_id = _tenant_id and is_active = true
+  ) then
+    raise exception 'Branch does not belong to the requested tenant or is inactive' using errcode = '23503';
+  end if;
+
+  delete from public.user_roles where user_id = _user_id and tenant_id = _tenant_id;
+  insert into public.user_roles (user_id, tenant_id, role, branch_id, hired_by, custom_role_id)
+  values (_user_id, _tenant_id, 'waiter'::public.app_role, _branch_id, auth.uid(), _custom_role_id);
+  update public.profiles set branch_id = _branch_id where id = _user_id and tenant_id = _tenant_id;
+end;
+$function$;
+
+revoke all on function public.assign_custom_role_to_user(uuid, uuid, uuid, uuid, uuid) from public, anon;
+grant execute on function public.assign_custom_role_to_user(uuid, uuid, uuid, uuid, uuid) to authenticated, service_role;
+
+drop policy if exists user_roles_custom_role_insert_guard on public.user_roles;
+create policy user_roles_custom_role_insert_guard
+  on public.user_roles as restrictive for insert to authenticated
+  with check (custom_role_id is null or public.has_permission((select auth.uid()), tenant_id, 'roles.manage'));
+
+drop policy if exists user_roles_custom_role_update_guard on public.user_roles;
+create policy user_roles_custom_role_update_guard
+  on public.user_roles as restrictive for update to authenticated
+  using (custom_role_id is null or public.has_permission((select auth.uid()), tenant_id, 'roles.manage'))
+  with check (custom_role_id is null or public.has_permission((select auth.uid()), tenant_id, 'roles.manage'));
+
+commit;
+
+
+-- SOURCE MIGRATION: 20261112005125_owner_only_custom_role_management.sql
+-- Enforce tenant-owner-only custom role assignment even when permission overrides exist.
+begin;
+
+create or replace function public.assign_custom_role_to_user(
+  _user_id uuid, _tenant_id uuid, _custom_role_id uuid, _branch_id uuid, _actor_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path to 'pg_catalog', 'public', 'private', 'pg_temp'
+as $function$
+declare
+  v_target_role public.app_role;
+  v_has_target_role boolean := false;
+begin
+  if auth.uid() is null or _actor_id is distinct from auth.uid() then
+    raise exception 'Authenticated actor mismatch' using errcode = '42501';
+  end if;
+  if not public.is_super_owner(auth.uid()) and not exists (
+    select 1 from public.user_roles actor_role
+     where actor_role.user_id = auth.uid()
+       and actor_role.tenant_id = _tenant_id
+       and actor_role.role = 'owner'::public.app_role
+  ) then
+    raise exception 'Only the tenant owner or platform super owner may assign custom roles' using errcode = '42501';
+  end if;
+  if not public.has_permission(auth.uid(), _tenant_id, 'roles.manage')
+     or not public.has_permission(auth.uid(), _tenant_id, 'users.change_role') then
+    raise exception 'Permission denied: roles.manage' using errcode = '42501';
+  end if;
+  if not exists (select 1 from public.custom_roles where id = _custom_role_id and tenant_id = _tenant_id) then
+    raise exception 'Custom role does not belong to this tenant' using errcode = '23503';
+  end if;
+
+  select ur.role into v_target_role from public.user_roles ur
+   where ur.user_id = _user_id and ur.tenant_id = _tenant_id for update;
+  v_has_target_role := found;
+
+  if not v_has_target_role and not exists (
+    select 1 from public.profiles p where p.id = _user_id and p.tenant_id = _tenant_id
+  ) then
+    raise exception 'Target user does not belong to this tenant' using errcode = 'P0002';
+  end if;
+
+  if v_has_target_role and v_target_role in ('owner'::public.app_role, 'manager'::public.app_role)
+     and not exists (
+       select 1 from public.user_roles actor_role
+        where actor_role.user_id = auth.uid() and actor_role.tenant_id = _tenant_id
+          and actor_role.role = 'owner'::public.app_role
+     )
+     and not public.is_super_owner(auth.uid()) then
+    raise exception 'You cannot change the role of an owner or manager' using errcode = '42501';
+  end if;
+
+  if _branch_id is not null and not exists (
+    select 1 from public.branches
+     where id = _branch_id and tenant_id = _tenant_id and is_active = true
+  ) then
+    raise exception 'Branch does not belong to the requested tenant or is inactive' using errcode = '23503';
+  end if;
+
+  delete from public.user_roles where user_id = _user_id and tenant_id = _tenant_id;
+  insert into public.user_roles (user_id, tenant_id, role, branch_id, hired_by, custom_role_id)
+  values (_user_id, _tenant_id, 'waiter'::public.app_role, _branch_id, auth.uid(), _custom_role_id);
+  update public.profiles set branch_id = _branch_id where id = _user_id and tenant_id = _tenant_id;
+end;
+$function$;
+
+commit;
+
+
+-- SOURCE MIGRATION: 20261112005250_owner_only_custom_role_mutations.sql
+-- Ensure permission overrides cannot turn managers or staff into custom-role administrators.
+begin;
+
+drop policy if exists custom_roles_owner_only_insert_guard on public.custom_roles;
+create policy custom_roles_owner_only_insert_guard
+  on public.custom_roles as restrictive for insert to authenticated
+  with check (
+    public.is_super_owner((select auth.uid()))
+    or private.has_role((select auth.uid()), tenant_id, 'owner'::public.app_role)
+  );
+
+drop policy if exists custom_roles_owner_only_update_guard on public.custom_roles;
+create policy custom_roles_owner_only_update_guard
+  on public.custom_roles as restrictive for update to authenticated
+  using (
+    public.is_super_owner((select auth.uid()))
+    or private.has_role((select auth.uid()), tenant_id, 'owner'::public.app_role)
+  )
+  with check (
+    public.is_super_owner((select auth.uid()))
+    or private.has_role((select auth.uid()), tenant_id, 'owner'::public.app_role)
+  );
+
+drop policy if exists custom_roles_owner_only_delete_guard on public.custom_roles;
+create policy custom_roles_owner_only_delete_guard
+  on public.custom_roles as restrictive for delete to authenticated
+  using (
+    public.is_super_owner((select auth.uid()))
+    or private.has_role((select auth.uid()), tenant_id, 'owner'::public.app_role)
+  );
+
+drop policy if exists role_permissions_owner_only_insert_guard on public.role_permissions;
+create policy role_permissions_owner_only_insert_guard
+  on public.role_permissions as restrictive for insert to authenticated
+  with check (
+    public.is_super_owner((select auth.uid()))
+    or (tenant_id is not null and private.has_role((select auth.uid()), tenant_id, 'owner'::public.app_role))
+  );
+
+drop policy if exists role_permissions_owner_only_update_guard on public.role_permissions;
+create policy role_permissions_owner_only_update_guard
+  on public.role_permissions as restrictive for update to authenticated
+  using (
+    public.is_super_owner((select auth.uid()))
+    or (tenant_id is not null and private.has_role((select auth.uid()), tenant_id, 'owner'::public.app_role))
+  )
+  with check (
+    public.is_super_owner((select auth.uid()))
+    or (tenant_id is not null and private.has_role((select auth.uid()), tenant_id, 'owner'::public.app_role))
+  );
+
+drop policy if exists role_permissions_owner_only_delete_guard on public.role_permissions;
+create policy role_permissions_owner_only_delete_guard
+  on public.role_permissions as restrictive for delete to authenticated
+  using (
+    public.is_super_owner((select auth.uid()))
+    or (tenant_id is not null and private.has_role((select auth.uid()), tenant_id, 'owner'::public.app_role))
+  );
+
+commit;
+
+
+-- SOURCE MIGRATION: 20261112005412_protect_tenant_owner_from_custom_role_demotion.sql
+-- Prevent a custom staff role from ever replacing the tenant owner's owner role.
+begin;
+
+create or replace function public.assign_custom_role_to_user(
+  _user_id uuid, _tenant_id uuid, _custom_role_id uuid, _branch_id uuid, _actor_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path to 'pg_catalog', 'public', 'private', 'pg_temp'
+as $function$
+declare
+  v_target_role public.app_role;
+  v_has_target_role boolean := false;
+begin
+  if auth.uid() is null or _actor_id is distinct from auth.uid() then
+    raise exception 'Authenticated actor mismatch' using errcode = '42501';
+  end if;
+  if not public.is_super_owner(auth.uid()) and not exists (
+    select 1 from public.user_roles actor_role
+     where actor_role.user_id = auth.uid() and actor_role.tenant_id = _tenant_id
+       and actor_role.role = 'owner'::public.app_role
+  ) then
+    raise exception 'Only the tenant owner or platform super owner may assign custom roles' using errcode = '42501';
+  end if;
+  if not public.has_permission(auth.uid(), _tenant_id, 'roles.manage')
+     or not public.has_permission(auth.uid(), _tenant_id, 'users.change_role') then
+    raise exception 'Permission denied: roles.manage' using errcode = '42501';
+  end if;
+  if not exists (select 1 from public.custom_roles where id = _custom_role_id and tenant_id = _tenant_id) then
+    raise exception 'Custom role does not belong to this tenant' using errcode = '23503';
+  end if;
+
+  select ur.role into v_target_role from public.user_roles ur
+   where ur.user_id = _user_id and ur.tenant_id = _tenant_id for update;
+  v_has_target_role := found;
+
+  if v_has_target_role and v_target_role = 'owner'::public.app_role then
+    raise exception 'The tenant owner cannot be assigned a custom staff role' using errcode = '42501';
+  end if;
+  if not v_has_target_role and not exists (
+    select 1 from public.profiles p where p.id = _user_id and p.tenant_id = _tenant_id
+  ) then
+    raise exception 'Target user does not belong to this tenant' using errcode = 'P0002';
+  end if;
+
+  if v_has_target_role and v_target_role = 'manager'::public.app_role
+     and not public.is_super_owner(auth.uid())
+     and not exists (
+       select 1 from public.user_roles actor_role
+        where actor_role.user_id = auth.uid() and actor_role.tenant_id = _tenant_id
+          and actor_role.role = 'owner'::public.app_role
+     ) then
+    raise exception 'You cannot change the role of a manager' using errcode = '42501';
+  end if;
+
+  if _branch_id is not null and not exists (
+    select 1 from public.branches
+     where id = _branch_id and tenant_id = _tenant_id and is_active = true
+  ) then
+    raise exception 'Branch does not belong to the requested tenant or is inactive' using errcode = '23503';
+  end if;
+
+  delete from public.user_roles where user_id = _user_id and tenant_id = _tenant_id;
+  insert into public.user_roles (user_id, tenant_id, role, branch_id, hired_by, custom_role_id)
+  values (_user_id, _tenant_id, 'waiter'::public.app_role, _branch_id, auth.uid(), _custom_role_id);
+  update public.profiles set branch_id = _branch_id where id = _user_id and tenant_id = _tenant_id;
+end;
+$function$;
+
+commit;
+
+
+-- =====================================================================
+-- SOURCE MIGRATION: 20261114141029_fix_atomic_stock_decrement_for_pos_checkout.sql
+-- =====================================================================
+
+-- Fix POS checkout stock decrement with the nonnegative inventory constraint.
+-- Negative deltas must UPDATE the existing row directly: INSERT ... ON CONFLICT
+-- evaluates CHECK constraints on the proposed row before conflict resolution.
+CREATE OR REPLACE FUNCTION public.apply_stock_change(
+  _tenant_id uuid,
+  _product_id uuid,
+  _branch_id uuid,
+  _delta numeric
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'pg_catalog', 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_rows integer;
+BEGIN
+  IF _tenant_id IS NULL OR _product_id IS NULL OR _branch_id IS NULL
+     OR _delta IS NULL OR _delta = 'NaN'::numeric
+     OR abs(_delta) > 999999999 THEN
+    RAISE EXCEPTION 'Invalid stock change request' USING ERRCODE = '22023';
+  END IF;
+
+  PERFORM 1 FROM public.products
+   WHERE id = _product_id AND tenant_id = _tenant_id
+   FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Product does not belong to the requested tenant' USING ERRCODE = '23503';
+  END IF;
+
+  PERFORM 1 FROM public.branches
+   WHERE id = _branch_id AND tenant_id = _tenant_id
+   FOR KEY SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Branch does not belong to the requested tenant' USING ERRCODE = '23503';
+  END IF;
+
+  IF _delta < 0 THEN
+    UPDATE public.inventory
+       SET quantity = quantity + _delta,
+           updated_at = now()
+     WHERE tenant_id = _tenant_id
+       AND product_id = _product_id
+       AND branch_id = _branch_id
+       AND quantity + _delta >= 0;
+    GET DIAGNOSTICS v_rows = ROW_COUNT;
+    IF v_rows = 0 THEN
+      RAISE EXCEPTION 'Insufficient stock or inventory record missing'
+        USING ERRCODE = '23514';
+    END IF;
+    RETURN;
+  END IF;
+
+  INSERT INTO public.inventory (tenant_id, product_id, branch_id, quantity, updated_at)
+  VALUES (_tenant_id, _product_id, _branch_id, _delta, now())
+  ON CONFLICT (product_id, branch_id) DO UPDATE
+    SET quantity = public.inventory.quantity + EXCLUDED.quantity,
+        updated_at = now()
+    WHERE public.inventory.tenant_id = EXCLUDED.tenant_id;
+  GET DIAGNOSTICS v_rows = ROW_COUNT;
+  IF v_rows = 0 THEN
+    RAISE EXCEPTION 'Inventory tenant mismatch' USING ERRCODE = '23514';
+  END IF;
+END;
+$function$;
+
+
+-- =====================================================================
+-- SOURCE MIGRATION: 20261114141500_grant_authenticated_marketing_campaign_reads.sql
+-- =====================================================================
+
+-- Campaigns are tenant-filtered by RLS; allow authenticated POS clients to read them.
+GRANT SELECT ON TABLE public.marketing_campaigns TO authenticated;

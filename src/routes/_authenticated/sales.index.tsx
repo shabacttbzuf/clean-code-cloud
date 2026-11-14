@@ -14,6 +14,19 @@ export const Route = createFileRoute("/_authenticated/sales/")({
   component: SalesListPage,
 });
 
+// Read all matching rows in deterministic pages; never treat a server row cap as the full history.
+async function fetchAllRows<T>(query: any): Promise<T[]> {
+  const pageSize = 500;
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await query.range(from, from + pageSize - 1);
+    if (error) throw error;
+    const page = (data ?? []) as T[];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+}
+
 type SaleRow = {
   id: string;
   invoice_no: number;
@@ -47,23 +60,24 @@ function SalesListPage() {
   const sales = useQuery({
     queryKey: ["sales", tenantId],
     queryFn: async (): Promise<SaleRow[]> => {
-      const { data, error } = await supabase
-        .from("sales")
-        .select("id, invoice_no, created_at, total, discount, tax_amount, subtotal, payment_method, status, branch_id, cashier_id")
-        .eq("tenant_id", tenantId!)
-        .neq("status", "void")
-        .order("created_at", { ascending: false })
-        .limit(200);
-      if (error) throw error;
-      const list = (data ?? []) as Omit<SaleRow, "refund_total">[];
-      const saleIds = list.map((sale) => sale.id);
-      const refunds = saleIds.length
-        ? await supabase.from("sale_refunds").select("sale_id, total").in("sale_id", saleIds)
-        : { data: [], error: null };
-      if (refunds.error) throw refunds.error;
+      const list = await fetchAllRows<Omit<SaleRow, "refund_total">>(
+        supabase.from("sales")
+          .select("id, invoice_no, created_at, total, discount, tax_amount, subtotal, payment_method, status, branch_id, cashier_id")
+          .eq("tenant_id", tenantId!)
+          .neq("status", "void")
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false }),
+      );
       const refundTotals = new Map<string, number>();
-      for (const refund of refunds.data ?? []) {
-        refundTotals.set(refund.sale_id, (refundTotals.get(refund.sale_id) ?? 0) + Number(refund.total));
+      // Keep each IN filter comfortably below URL/request limits for large histories.
+      for (let i = 0; i < list.length; i += 200) {
+        const saleIds = list.slice(i, i + 200).map((sale) => sale.id);
+        const { data: refunds, error: refundsError } = await supabase
+          .from("sale_refunds").select("sale_id, total").in("sale_id", saleIds);
+        if (refundsError) throw refundsError;
+        for (const refund of refunds ?? []) {
+          refundTotals.set(refund.sale_id, (refundTotals.get(refund.sale_id) ?? 0) + Number(refund.total));
+        }
       }
       return list.map((sale) => ({ ...sale, refund_total: refundTotals.get(sale.id) ?? 0 }));
     },
@@ -103,6 +117,12 @@ function SalesListPage() {
 
       {sales.isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+      ) : sales.isError ? (
+        <Card><CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+          <Receipt className="h-8 w-8 text-destructive" />
+          <p className="text-sm text-destructive">تعذر تحميل سجل الفواتير. لم نعرض نتائج جزئية.</p>
+          <button type="button" onClick={() => sales.refetch()} className="text-sm text-primary underline">إعادة المحاولة</button>
+        </CardContent></Card>
       ) : filtered.length === 0 ? (
         <Card><CardContent className="flex flex-col items-center gap-3 py-16 text-center">
           <Receipt className="h-10 w-10 text-muted-foreground/50" />

@@ -9,6 +9,7 @@ export type Membership = {
   tenant_id: string;
   role: "owner" | "manager" | "accountant" | "cashier" | "warehouse" | "waiter";
   branch_id: string | null;
+  custom_role_id: string | null;
 };
 
 export type Tenant = {
@@ -22,7 +23,8 @@ export type Tenant = {
 
 /**
  * Central hook: resolves current user, their memberships, and the active tenant.
- * Used by every protected page.
+ * Super-owner status is resolved independently from tenant membership because
+ * the platform owner must not need a cashier/owner role to manage platform data.
  */
 export function useActiveTenant() {
   const { user, loading: sessionLoading } = useAuthSession();
@@ -32,12 +34,25 @@ export function useActiveTenant() {
     queryFn: async (): Promise<Membership[]> => {
       const { data, error } = await supabase
         .from("user_roles")
-        .select("tenant_id, role, branch_id")
+        .select("tenant_id, role, branch_id, custom_role_id")
         .eq("user_id", user!.id);
       if (error) throw error;
       return (data ?? []) as Membership[];
     },
     enabled: !!user?.id,
+  });
+
+  const superOwnerQuery = useQuery({
+    queryKey: ["is-super-owner", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("is_super_owner", {
+        _user_id: user!.id,
+      });
+      if (error) throw error;
+      return data === true;
+    },
+    enabled: !!user?.id,
+    staleTime: 60_000,
   });
 
   const [activeId, setActiveId] = useState<string | null>(() => {
@@ -74,17 +89,36 @@ export function useActiveTenant() {
 
   const role = membership?.role ?? null;
   const isAdmin = role === "owner" || role === "manager";
+  const isSuperOwner = superOwnerQuery.data === true;
+
+  const permissionsQuery = useQuery({
+    queryKey: ["effective-permissions", user?.id, activeId],
+    queryFn: async (): Promise<string[]> => {
+      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: activeId! });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!user?.id && !!activeId,
+    staleTime: 15_000,
+  });
+  const permissions = useMemo(() => new Set(permissionsQuery.data ?? []), [permissionsQuery.data]);
+  const hasPermission = (permission: string) => isSuperOwner || permissions.has(permission);
 
   return {
     user,
     userId: user?.id ?? null,
-    loading: sessionLoading || memQuery.isLoading || tenantQuery.isLoading,
+    loading: sessionLoading || memQuery.isLoading || tenantQuery.isLoading || superOwnerQuery.isLoading || permissionsQuery.isLoading,
     tenantId: activeId,
     tenant: tenantQuery.data ?? null,
     memberships: memQuery.data ?? [],
     membership,
     role,
     isAdmin,
+    isSuperOwner,
+    permissions,
+    hasPermission,
+    permissionsLoading: permissionsQuery.isLoading,
+    permissionsError: permissionsQuery.error,
     switchTenant: (id: string) => {
       setActiveId(id);
       if (typeof window !== "undefined") window.localStorage.setItem(ACTIVE_TENANT_KEY, id);

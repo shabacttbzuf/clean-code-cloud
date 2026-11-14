@@ -14,6 +14,65 @@ export type Database = {
   }
   public: {
     Tables: {
+      marketing_campaigns: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string
+          ends_at: string | null
+          id: string
+          image_url: string | null
+          placement: string
+          sort_order: number
+          starts_at: string | null
+          status: string
+          target_url: string | null
+          tenant_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          ends_at?: string | null
+          id?: string
+          image_url?: string | null
+          placement?: string
+          sort_order?: number
+          starts_at?: string | null
+          status?: string
+          target_url?: string | null
+          tenant_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          ends_at?: string | null
+          id?: string
+          image_url?: string | null
+          placement?: string
+          sort_order?: number
+          starts_at?: string | null
+          status?: string
+          target_url?: string | null
+          tenant_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_campaigns_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      },
       attendance: {
         Row: {
           biometric_ref: string | null
@@ -2438,6 +2497,74 @@ export type Database = {
           },
         ]
       }
+      supplier_payments: {
+        Row: {
+          id: string
+          tenant_id: string
+          branch_id: string
+          cash_session_id: string | null
+          supplier_id: string
+          amount: number
+          payment_method: string
+          reference: string | null
+          notes: string | null
+          paid_at: string
+          created_by: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          branch_id: string
+          cash_session_id?: string | null
+          supplier_id: string
+          amount: number
+          payment_method: string
+          reference?: string | null
+          notes?: string | null
+          paid_at?: string
+          created_by?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          branch_id?: string
+          cash_session_id?: string | null
+          supplier_id?: string
+          amount?: number
+          payment_method?: string
+          reference?: string | null
+          notes?: string | null
+          paid_at?: string
+          created_by?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_payments_cash_session_scope_fkey"
+            columns: ["cash_session_id", "tenant_id", "branch_id"]
+            isOneToOne: false
+            referencedRelation: "cash_sessions"
+            referencedColumns: ["id", "tenant_id", "branch_id"]
+          },
+
+          {
+            foreignKeyName: "supplier_payments_branch_tenant_fkey"
+            columns: ["branch_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_payments_supplier_tenant_fkey"
+            columns: ["supplier_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id", "tenant_id"]
+          }
+        ]
+      }
       tenants: {
         Row: {
           created_at: string
@@ -2515,6 +2642,7 @@ export type Database = {
           branch_id: string | null
           company_id: string | null
           created_at: string
+          custom_role_id: string | null
           department_id: string | null
           hired_by: string | null
           id: string
@@ -2526,6 +2654,7 @@ export type Database = {
           branch_id?: string | null
           company_id?: string | null
           created_at?: string
+          custom_role_id?: string | null
           department_id?: string | null
           hired_by?: string | null
           id?: string
@@ -2537,6 +2666,7 @@ export type Database = {
           branch_id?: string | null
           company_id?: string | null
           created_at?: string
+          custom_role_id?: string | null
           department_id?: string | null
           hired_by?: string | null
           id?: string
@@ -2545,6 +2675,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "user_roles_custom_role_tenant_fkey"
+            columns: ["custom_role_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "custom_roles"
+            referencedColumns: ["id", "tenant_id"]
+          },
           {
             foreignKeyName: "user_roles_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -2760,11 +2897,22 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      assign_custom_role_to_user: {
+        Args: {
+          _actor_id: string
+          _branch_id: string | null
+          _custom_role_id: string
+          _tenant_id: string
+          _user_id: string
+        }
+        Returns: undefined
+      }
       has_permission: {
         Args: { _permission_key: string; _tenant_id: string; _user_id: string }
         Returns: boolean
       }
       get_super_owner_status: { Args: never; Returns: Json }
+      get_my_permissions: { Args: { _tenant_id: string }; Returns: string[] }
       is_super_owner: { Args: { _user_id: string }; Returns: boolean }
       reject_payroll_run: {
         Args: {
@@ -2960,7 +3108,7 @@ export const Constants = {
       cash_session_status: ["open", "closed"],
       inventory_txn_type: ["in", "out", "adjust", "sale", "refund"],
       payment_method: ["cash", "card", "transfer", "mixed"],
-      purchase_status: ["draft", "received", "cancelled"],
+      purchase_status: ["draft", "received", "cancelled", "returned"],
       sale_status: ["completed", "refunded", "void"],
     },
   },

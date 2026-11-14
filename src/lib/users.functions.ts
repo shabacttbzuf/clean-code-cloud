@@ -12,25 +12,15 @@ const ROLE_ENUM = z.enum([
   "kitchen",
 ]);
 
-async function assertTenantAdmin(
-  supabase: any,
-  userId: string,
-  tenantId: string,
-) {
-  const { data: isSO } = await supabase.rpc("is_super_owner", { _user_id: userId });
-  if (isSO) return;
-  const { data, error } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("tenant_id", tenantId);
+async function assertPermission(supabase: any, userId: string, tenantId: string, permissionKey: string) {
+  const { data, error } = await supabase.rpc("has_permission", {
+    _user_id: userId,
+    _tenant_id: tenantId,
+    _permission_key: permissionKey,
+  });
   if (error) throw new Error(error.message);
-  const roles = (data ?? []).map((r: any) => r.role);
-  if (!roles.includes("owner") && !roles.includes("manager")) {
-    throw new Error("غير مصرح: هذا الإجراء للمالك أو المدير فقط.");
-  }
+  if (data !== true) throw new Error(`غير مصرح: الصلاحية المطلوبة ${permissionKey}.`);
 }
-
 async function assertTargetBelongsToTenant(
   supabaseAdmin: any,
   targetUserId: string,
@@ -140,15 +130,35 @@ export const createUser = createServerFn({ method: "POST" })
         username: z.string().min(2).max(60).optional().nullable(),
         phone: z.string().max(30).optional().nullable(),
         role: ROLE_ENUM,
+        custom_role_id: z.string().uuid().optional().nullable(),
         branch_id: z.string().uuid().optional().nullable(),
         avatar_url: z.string().url().optional().nullable(),
       })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
+    const { data: actorIsSuperOwner, error: actorRoleError } = await context.supabase.rpc(
+      "is_super_owner",
+      { _user_id: context.userId },
+    );
+    if (actorRoleError) throw new Error(actorRoleError.message);
+
+    // Platform Super Owner provisions only the institution's operational Manager.
+    // The Manager then creates and manages the restaurant's staff accounts.
+    if (actorIsSuperOwner && data.role !== "manager") {
+      throw new Error("المالك الأعلى ينشئ حساب مدير المؤسسة فقط. مدير المؤسسة هو من ينشئ حسابات الموظفين.");
+    }
+    if (!actorIsSuperOwner && data.role === "owner") {
+      throw new Error("لا يمكن إنشاء حساب مالك مؤسسة من خلال إدارة الموظفين.");
+    }
+
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "users.create");
     await assertCanAssignRole(context.supabase, context.userId, data.tenant_id, data.role);
+    if (["cashier", "warehouse", "waiter", "kitchen"].includes(data.role) && !data.branch_id) {
+      throw new Error("يجب إسناد الموظف إلى فرع محدد قبل إنشاء حسابه.");
+    }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
     await assertBranchBelongsToTenant(supabaseAdmin, data.branch_id, data.tenant_id);
 
     // Create auth user (auto-confirm so they can sign in immediately)
@@ -179,17 +189,37 @@ export const createUser = createServerFn({ method: "POST" })
       throw new Error(profErr.message);
     }
 
-    // Assign role
-    const { error: roleErr } = await supabaseAdmin.from("user_roles").insert({
-      user_id: newId,
-      tenant_id: data.tenant_id,
-      role: data.role as any,
-      branch_id: data.branch_id ?? null,
-      hired_by: context.userId,
-    });
-    if (roleErr) {
-      await supabaseAdmin.auth.admin.deleteUser(newId);
-      throw new Error(roleErr.message);
+    // Assign either a built-in role or a tenant-owned custom role.
+    if (data.custom_role_id) {
+      if (data.role !== "waiter") {
+        await supabaseAdmin.auth.admin.deleteUser(newId);
+        throw new Error("الدور المخصص يستخدم مستوى أساس محدوداً؛ امنح الصلاحيات المطلوبة من إعدادات الدور.");
+      }
+      await assertPermission(context.supabase, context.userId, data.tenant_id, "roles.manage");
+      const { data: customRole, error: customRoleError } = await supabaseAdmin
+        .from("custom_roles").select("id").eq("id", data.custom_role_id)
+        .eq("tenant_id", data.tenant_id).maybeSingle();
+      if (customRoleError || !customRole) {
+        await supabaseAdmin.auth.admin.deleteUser(newId);
+        throw new Error(customRoleError?.message ?? "الدور المخصص لا يتبع هذه المؤسسة.");
+      }
+      const { error: roleErr } = await context.supabase.rpc("assign_custom_role_to_user", {
+        _user_id: newId, _tenant_id: data.tenant_id, _custom_role_id: data.custom_role_id,
+        _branch_id: data.branch_id ?? null, _actor_id: context.userId,
+      });
+      if (roleErr) {
+        await supabaseAdmin.auth.admin.deleteUser(newId);
+        throw new Error(roleErr.message);
+      }
+    } else {
+      const { error: roleErr } = await supabaseAdmin.from("user_roles").insert({
+        user_id: newId, tenant_id: data.tenant_id, role: data.role as any,
+        branch_id: data.branch_id ?? null, hired_by: context.userId,
+      });
+      if (roleErr) {
+        await supabaseAdmin.auth.admin.deleteUser(newId);
+        throw new Error(roleErr.message);
+      }
     }
 
     // Also stamp hired_by on profile for quick lookups
@@ -223,7 +253,7 @@ export const updateUserPassword = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     if (data.user_id !== context.userId) {
       if (!data.tenant_id) throw new Error("tenant_id مطلوب لتغيير كلمة مرور مستخدم آخر.");
-      await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
+      await assertPermission(context.supabase, context.userId, data.tenant_id, "users.change_password");
     }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     if (data.user_id !== context.userId) {
@@ -252,7 +282,7 @@ export const toggleUserStatus = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, data.is_active ? "users.approve" : "users.suspend");
     if (data.user_id === context.userId && !data.is_active) {
       throw new Error("لا يمكنك إيقاف حسابك بنفسك.");
     }
@@ -303,7 +333,7 @@ export const transferUserToBranch = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "users.change_branch");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: roleTarget, error: roleTargetError } = await supabaseAdmin
       .from("user_roles")
@@ -334,24 +364,36 @@ export const changeUserRole = createServerFn({ method: "POST" })
         user_id: z.string().uuid(),
         tenant_id: z.string().uuid(),
         role: ROLE_ENUM,
+        custom_role_id: z.string().uuid().optional().nullable(),
         branch_id: z.string().uuid().optional().nullable(),
       })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertTenantAdmin(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "users.change_role");
     await assertCanAssignRole(context.supabase, context.userId, data.tenant_id, data.role);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await assertTargetBelongsToTenant(supabaseAdmin, data.user_id, data.tenant_id);
     await assertTargetRoleManageable(context.supabase, supabaseAdmin, context.userId, data.user_id, data.tenant_id);
-    const { error } = await supabaseAdmin.rpc("replace_user_role_in_tenant", {
-      _user_id: data.user_id,
-      _tenant_id: data.tenant_id,
-      _role: data.role,
-      _branch_id: data.branch_id ?? null,
-      _actor_id: context.userId,
-    });
-    if (error) throw new Error(error.message);
+    if (data.custom_role_id) {
+      if (data.role !== "waiter") throw new Error("الدور المخصص يستخدم مستوى أساس محدوداً.");
+      await assertPermission(context.supabase, context.userId, data.tenant_id, "roles.manage");
+      const { data: customRole, error: customRoleError } = await supabaseAdmin
+        .from("custom_roles").select("id").eq("id", data.custom_role_id)
+        .eq("tenant_id", data.tenant_id).maybeSingle();
+      if (customRoleError || !customRole) throw new Error(customRoleError?.message ?? "الدور المخصص لا يتبع هذه المؤسسة.");
+      const { error } = await context.supabase.rpc("assign_custom_role_to_user", {
+        _user_id: data.user_id, _tenant_id: data.tenant_id, _custom_role_id: data.custom_role_id,
+        _branch_id: data.branch_id ?? null, _actor_id: context.userId,
+      });
+      if (error) throw new Error(error.message);
+    } else {
+      const { error } = await supabaseAdmin.rpc("replace_user_role_in_tenant", {
+        _user_id: data.user_id, _tenant_id: data.tenant_id, _role: data.role,
+        _branch_id: data.branch_id ?? null, _actor_id: context.userId,
+      });
+      if (error) throw new Error(error.message);
+    }
     return { ok: true };
   });
 
