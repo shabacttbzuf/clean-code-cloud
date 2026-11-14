@@ -536,6 +536,7 @@ export type Database = {
           address: string | null
           avatar_url: string | null
           created_at: string
+          credit_limit: number
           email: string | null
           id: string
           is_active: boolean
@@ -549,6 +550,7 @@ export type Database = {
           address?: string | null
           avatar_url?: string | null
           created_at?: string
+          credit_limit?: number
           email?: string | null
           id?: string
           is_active?: boolean
@@ -562,6 +564,7 @@ export type Database = {
           address?: string | null
           avatar_url?: string | null
           created_at?: string
+          credit_limit?: number
           email?: string | null
           id?: string
           is_active?: boolean
@@ -2354,6 +2357,7 @@ export type Database = {
         Row: {
           branch_id: string
           cashier_id: string
+          customer_id: string | null
           created_at: string
           discount: number
           id: string
@@ -2371,6 +2375,7 @@ export type Database = {
         Insert: {
           branch_id: string
           cashier_id: string
+          customer_id?: string | null
           created_at?: string
           discount?: number
           id?: string
@@ -2388,6 +2393,7 @@ export type Database = {
         Update: {
           branch_id?: string
           cashier_id?: string
+          customer_id?: string | null
           created_at?: string
           discount?: number
           id?: string
@@ -2958,7 +2964,7 @@ export type Database = {
         | "kitchen"
       cash_session_status: "open" | "closed"
       inventory_txn_type: "in" | "out" | "adjust" | "sale" | "refund"
-      payment_method: "cash" | "card" | "transfer" | "mixed"
+      payment_method: "cash" | "card" | "transfer" | "mixed" | "credit"
       purchase_status: "draft" | "received" | "cancelled" | "returned"
       sale_status: "completed" | "refunded" | "void"
     }
