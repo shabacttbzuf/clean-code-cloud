@@ -123,3 +123,7 @@
 75. `supabase/migrations/20261115000003_customer_cash_collection_reconciliation.sql`
 
 **الإجمالي: 75 ترحيلاً.**
+
+76. `supabase/migrations/20261115000004_fix_customer_balance_aggregation.sql`
+
+**الإجمالي: 76 ترحيلاً.**

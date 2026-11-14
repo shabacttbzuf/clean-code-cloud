@@ -110,7 +110,7 @@ function CustomersPage() {
       const { error } = await (supabase.from("customers" as any) as any).update({ is_active: false }).eq("id", id).eq("tenant_id", tenantId!);
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["customers", tenantId] }); toast.success("تم الحذف"); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["customers", tenantId] }); toast.success("تم إيقاف العميل مع الاحتفاظ بسجلاته"); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشل الحذف"),
   });
 
