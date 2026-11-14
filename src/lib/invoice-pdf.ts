@@ -25,7 +25,8 @@ const paymentLabels: Record<string, string> = {
   cash: "Cash",
   card: "Card",
   transfer: "Transfer",
-  mixed: "Mixed",
+  mixed: "Partial payment",
+  credit: "Credit",
 };
 
 /**
