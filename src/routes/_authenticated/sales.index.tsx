@@ -110,7 +110,9 @@ function SalesListPage() {
             <SelectItem value="all">كل الطرق</SelectItem>
             <SelectItem value="cash">نقدي</SelectItem>
             <SelectItem value="card">بطاقة</SelectItem>
-            <SelectItem value="transfer">تحويل</SelectItem>
+            <SelectItem value="transfer">محفظة / تحويل</SelectItem>
+            <SelectItem value="credit">آجل</SelectItem>
+            <SelectItem value="mixed">دفع جزئي</SelectItem>
           </SelectContent>
         </Select>
       </div>
