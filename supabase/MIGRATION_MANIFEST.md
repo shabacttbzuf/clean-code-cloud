@@ -127,3 +127,7 @@
 76. `supabase/migrations/20261115000004_fix_customer_balance_aggregation.sql`
 
 **الإجمالي: 76 ترحيلاً.**
+
+77. `supabase/migrations/20261115000005_company_branch_creator_isolation.sql`
+
+**الإجمالي: 77 ترحيلاً.**
