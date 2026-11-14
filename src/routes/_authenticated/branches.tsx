@@ -57,6 +57,7 @@ const schema = z.object({
 
 function BranchesPage() {
   const { tenantId, isAdmin, isSuperOwner, membership } = useActiveTenant();
+  const canManageBranches = isAdmin || isSuperOwner;
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Branch | null>(null);
@@ -82,7 +83,7 @@ function BranchesPage() {
       if (error) throw error;
       return data ?? [];
     },
-    enabled: !!tenantId && isAdmin,
+    enabled: !!tenantId && canManageBranches,
   });
   const availableCompanies = (companies.data ?? []).filter((c) => isSuperOwner || !membership?.company_id || c.id === membership.company_id);
 
@@ -172,7 +173,7 @@ function BranchesPage() {
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
       ) : !branches || branches.length === 0 ? (
-        <EmptyState onAdd={isAdmin ? () => setOpen(true) : undefined} />
+        <EmptyState onAdd={canManageBranches ? () => setOpen(true) : undefined} />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {branches.map((b) => (
@@ -213,7 +214,7 @@ function BranchesPage() {
                     <div className="flex items-center gap-1"><UserIcon className="h-3 w-3" />{managerMap.get(b.manager_id) ?? "—"}</div>
                   )}
                 </div>
-                {isAdmin && (
+                {canManageBranches && (
                   <div className="mt-4 flex gap-2 border-t pt-3">
                     <Button
                       size="sm"
