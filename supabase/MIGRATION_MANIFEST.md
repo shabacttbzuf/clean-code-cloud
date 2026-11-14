@@ -131,3 +131,7 @@
 77. `supabase/migrations/20261115000005_company_branch_creator_isolation.sql`
 
 **الإجمالي: 77 ترحيلاً.**
+
+78. `supabase/migrations/20261115000006_enforce_company_branch_rls.sql`
+
+**الإجمالي: 78 ترحيلاً.**
