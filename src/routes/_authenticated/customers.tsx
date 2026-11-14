@@ -98,6 +98,7 @@ function CustomersPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["customers", tenantId] });
+      qc.invalidateQueries({ queryKey: ["customer-account-balances", tenantId] });
       toast.success("تم الحفظ");
       setOpen(false); setEditing(null);
     },
@@ -106,7 +107,7 @@ function CustomersPage() {
 
   const del = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("customers").delete().eq("id", id);
+      const { error } = await (supabase.from("customers" as any) as any).update({ is_active: false }).eq("id", id).eq("tenant_id", tenantId!);
       if (error) throw error;
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["customers", tenantId] }); toast.success("تم الحذف"); },
@@ -172,7 +173,7 @@ function CustomersPage() {
                     <Button size="sm" variant="ghost" className="flex-1" onClick={() => { setEditing(c); setOpen(true); }}>
                       <Edit className="ml-2 h-3 w-3" />تعديل
                     </Button>
-                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => { if (confirm(`حذف "${c.name}"؟`)) del.mutate(c.id); }}>
+                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => { if (confirm(`إيقاف العميل "${c.name}"؟ سيبقى سجل حسابه وفواتيره محفوظاً.`)) del.mutate(c.id); }}>
                       <Trash2 className="h-3 w-3" />
                     </Button>
                   </div>
@@ -194,6 +195,14 @@ function CustomersPage() {
 }
 
 function CustomerAccount({ customer, tenantId }: { customer: Customer; tenantId: string }) {
+  const accountSummary = useQuery({
+    queryKey: ["customer-account-summary", tenantId, customer.id],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from("customer_account_balances" as any) as any).select("*").eq("tenant_id", tenantId).eq("customer_id", customer.id).maybeSingle();
+      if (error) throw error;
+      return data as { invoice_count: number; invoiced_total: number; paid_total: number; refunded_total: number; outstanding_balance: number } | null;
+    },
+  });
   const invoices = useQuery({
     queryKey: ["customer-invoices", tenantId, customer.id],
     queryFn: async () => {
@@ -253,9 +262,13 @@ function CustomerAccount({ customer, tenantId }: { customer: Customer; tenantId:
     finally { setPending(false); }
   };
   return <div className="space-y-3">
-    <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted/40 p-3 text-sm">
+    <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted/40 p-3 text-sm sm:grid-cols-3">
+      <div><div className="text-muted-foreground">إجمالي الفواتير</div><b>{formatMoney(Number(accountSummary.data?.invoiced_total ?? 0))}</b></div>
+      <div><div className="text-muted-foreground">إجمالي المدفوع</div><b className="text-success">{formatMoney(Number(accountSummary.data?.paid_total ?? 0))}</b></div>
+      <div><div className="text-muted-foreground">الرصيد المستحق</div><b className="text-destructive">{formatMoney(Number(accountSummary.data?.outstanding_balance ?? 0))}</b></div>
       <div><div className="text-muted-foreground">سقف المديونية</div><b>{formatMoney(Number(customer.credit_limit))}</b></div>
-      <div><div className="text-muted-foreground">الفواتير</div><b>{invoices.data?.length ?? 0}</b></div>
+      <div><div className="text-muted-foreground">عدد الفواتير</div><b>{invoices.data?.length ?? 0}</b></div>
+      <div><div className="text-muted-foreground">المرتجعات</div><b>{formatMoney(Number(accountSummary.data?.refunded_total ?? 0))}</b></div>
     </div>
     <div className="space-y-2">
       <Label>الفاتورة المراد تحصيلها</Label>
