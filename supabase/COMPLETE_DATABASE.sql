@@ -8426,12 +8426,12 @@ begin;
 
 alter table public.branches
   add column if not exists company_id uuid;
-do $ begin
+do $$ begin
   if not exists (select 1 from pg_constraint where conname='branches_company_id_fkey' and conrelid='public.branches'::regclass) then
     alter table public.branches add constraint branches_company_id_fkey
       foreign key (company_id) references public.companies(id) on delete restrict;
   end if;
-end $;
+end $$;
 
 alter table public.customers add column if not exists created_by uuid references auth.users(id) on delete set null;
 alter table public.suppliers add column if not exists created_by uuid references auth.users(id) on delete set null;
