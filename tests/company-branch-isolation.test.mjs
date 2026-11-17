@@ -68,3 +68,11 @@ test("compound department and payroll references must remain in the same company
   assert.ok(compoundScope.includes("company_id is null or private.is_company_member"));
   assert.ok(compoundScope.includes("private.can_access_employee_record(tenant_id, employee_id)\n  and private.can_access_payroll_run_record"));
 });
+
+const fkIndexes = readFileSync(new URL("../supabase/migrations/20261118000005_index_company_creator_foreign_keys.sql", import.meta.url), "utf8");
+
+test("company and creator foreign keys have supporting indexes", () => {
+  for (const index of ["branches_company_id_idx", "customer_payments_branch_tenant_idx", "customer_payments_created_by_idx", "customer_payments_customer_tenant_idx", "customer_payments_sale_customer_tenant_idx", "customer_payments_session_tenant_branch_idx", "customers_created_by_idx", "products_created_by_idx", "sales_customer_tenant_idx", "suppliers_created_by_idx"]) {
+    assert.ok(fkIndexes.includes(index), index + " is missing");
+  }
+});
