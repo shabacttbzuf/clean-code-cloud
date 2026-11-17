@@ -9487,7 +9487,18 @@ create policy "users read own notification receipts"
 drop policy if exists "users create own notification receipts" on public.notification_reads;
 create policy "users create own notification receipts"
   on public.notification_reads for insert to authenticated
-  with check (user_id = (select auth.uid()));
+  with check (
+    user_id = (select auth.uid())
+    and exists (select 1 from public.notifications n where n.id = notification_id)
+  );
+drop policy if exists "users update own notification receipts" on public.notification_reads;
+create policy "users update own notification receipts"
+  on public.notification_reads for update to authenticated
+  using (user_id = (select auth.uid()))
+  with check (
+    user_id = (select auth.uid())
+    and exists (select 1 from public.notifications n where n.id = notification_id)
+  );
 drop policy if exists "users delete own notification receipts" on public.notification_reads;
 create policy "users delete own notification receipts"
   on public.notification_reads for delete to authenticated
@@ -9495,5 +9506,4 @@ create policy "users delete own notification receipts"
 
 grant select on public.platform_branding to authenticated;
 grant insert, update, delete on public.platform_branding to authenticated;
-grant select, insert, delete on public.notification_reads to authenticated;
-
+grant select, insert, update, delete on public.notification_reads to authenticated;
