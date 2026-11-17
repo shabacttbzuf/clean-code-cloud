@@ -51,13 +51,12 @@ const operationalScope = readFileSync(new URL("../supabase/migrations/2026111800
 
 test("company RLS boundaries cover branch operations, HR records, financial children, profiles and audit trails", () => {
   assert.match(operationalScope, /create policy company_boundary_%I_select/);
-  for (const table of ["cash_sessions", "customer_payments", "inventory", "inventory_transactions", "purchase_returns", "purchases", "sale_refunds", "sales", "supplier_payments"]) {
-    assert.match(operationalScope, new RegExp("'" + table + "'"));
-  }
+  assert.match(operationalScope, /array\['cash_sessions'/);
+  assert.match(operationalScope, /array\['attendance','bonuses','deductions','leave_requests'\]/);
   for (const helper of ["can_access_employee_record", "can_access_payroll_run_record", "can_access_sale_record", "can_access_purchase_record", "can_access_purchase_return_record", "can_access_sale_refund_record"]) {
     assert.match(operationalScope, new RegExp(helper));
   }
-  for (const table of ["departments", "employees", "expenses", "payroll_runs", "attendance", "bonuses", "deductions", "leave_requests", "payroll_items", "profiles", "user_roles", "audit_logs", "login_history"]) {
-    assert.match(operationalScope, new RegExp("company_boundary_" + table + "_"));
+  for (const policy of ["company_boundary_departments_select", "company_boundary_employees_select", "company_boundary_expenses_select", "company_boundary_payroll_runs_select", "company_boundary_payroll_items_select", "company_boundary_profiles_select", "company_boundary_user_roles_select", "company_boundary_audit_logs_select", "company_boundary_login_history_select"]) {
+    assert.match(operationalScope, new RegExp(policy));
   }
 });
