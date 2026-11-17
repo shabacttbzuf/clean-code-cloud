@@ -9004,151 +9004,305 @@ grant execute on function private.can_access_purchase_record(uuid, uuid) to auth
 grant execute on function private.can_access_purchase_return_record(uuid, uuid) to authenticated, service_role;
 grant execute on function private.can_access_sale_refund_record(uuid, uuid) to authenticated, service_role;
 
+-- Tables with a required branch_id.
 do $$
-declare t text;
+declare
+  t text;
 begin
-  foreach t in array array['cash_sessions','customer_payments','inventory','inventory_transactions','purchase_returns','purchases','sale_refunds','sales','supplier_payments'] loop
-    execute format('drop policy if exists company_boundary_%I_select on public.%I',t,t);
-    execute format('create policy company_boundary_%I_select on public.%I as restrictive for select to authenticated using (private.can_access_branch((select auth.uid()),tenant_id,branch_id))',t,t);
-    execute format('drop policy if exists company_boundary_%I_insert on public.%I',t,t);
-    execute format('create policy company_boundary_%I_insert on public.%I as restrictive for insert to authenticated with check (private.can_access_branch((select auth.uid()),tenant_id,branch_id))',t,t);
-    execute format('drop policy if exists company_boundary_%I_update on public.%I',t,t);
-    execute format('create policy company_boundary_%I_update on public.%I as restrictive for update to authenticated using (private.can_access_branch((select auth.uid()),tenant_id,branch_id)) with check (private.can_access_branch((select auth.uid()),tenant_id,branch_id))',t,t);
-    execute format('drop policy if exists company_boundary_%I_delete on public.%I',t,t);
-    execute format('create policy company_boundary_%I_delete on public.%I as restrictive for delete to authenticated using (private.can_access_branch((select auth.uid()),tenant_id,branch_id))',t,t);
+  foreach t in array array[
+    'cash_sessions',
+    'customer_payments',
+    'inventory',
+    'inventory_transactions',
+    'purchase_returns',
+    'purchases',
+    'sale_refunds',
+    'sales',
+    'supplier_payments'
+  ] loop
+    execute format('drop policy if exists company_boundary_%I_select on public.%I', t, t);
+    execute format('create policy company_boundary_%I_select on public.%I as restrictive for select to authenticated using (private.can_access_branch((select auth.uid()), tenant_id, branch_id))', t, t);
+
+    execute format('drop policy if exists company_boundary_%I_insert on public.%I', t, t);
+    execute format('create policy company_boundary_%I_insert on public.%I as restrictive for insert to authenticated with check (private.can_access_branch((select auth.uid()), tenant_id, branch_id))', t, t);
+
+    execute format('drop policy if exists company_boundary_%I_update on public.%I', t, t);
+    execute format('create policy company_boundary_%I_update on public.%I as restrictive for update to authenticated using (private.can_access_branch((select auth.uid()), tenant_id, branch_id)) with check (private.can_access_branch((select auth.uid()), tenant_id, branch_id))', t, t);
+
+    execute format('drop policy if exists company_boundary_%I_delete on public.%I', t, t);
+    execute format('create policy company_boundary_%I_delete on public.%I as restrictive for delete to authenticated using (private.can_access_branch((select auth.uid()), tenant_id, branch_id))', t, t);
   end loop;
 end $$;
 
+-- Tables whose branch is nullable or which also carry a company identifier.
 drop policy if exists company_boundary_departments_select on public.departments;
 create policy company_boundary_departments_select on public.departments as restrictive for select to authenticated
-using (private.can_access_branch((select auth.uid()),tenant_id,branch_id) or private.is_company_member(tenant_id,company_id) or public.is_super_owner((select auth.uid())));
+using (
+  private.can_access_branch((select auth.uid()), tenant_id, branch_id)
+  or private.is_company_member(tenant_id, company_id)
+  or public.is_super_owner((select auth.uid()))
+);
 drop policy if exists company_boundary_departments_insert on public.departments;
 create policy company_boundary_departments_insert on public.departments as restrictive for insert to authenticated
-with check (private.can_access_branch((select auth.uid()),tenant_id,branch_id) or private.is_company_member(tenant_id,company_id) or public.is_super_owner((select auth.uid())));
+with check (
+  private.can_access_branch((select auth.uid()), tenant_id, branch_id)
+  or private.is_company_member(tenant_id, company_id)
+  or public.is_super_owner((select auth.uid()))
+);
 drop policy if exists company_boundary_departments_update on public.departments;
 create policy company_boundary_departments_update on public.departments as restrictive for update to authenticated
-using (private.can_access_branch((select auth.uid()),tenant_id,branch_id) or private.is_company_member(tenant_id,company_id) or public.is_super_owner((select auth.uid())))
-with check (private.can_access_branch((select auth.uid()),tenant_id,branch_id) or private.is_company_member(tenant_id,company_id) or public.is_super_owner((select auth.uid())));
+using (
+  private.can_access_branch((select auth.uid()), tenant_id, branch_id)
+  or private.is_company_member(tenant_id, company_id)
+  or public.is_super_owner((select auth.uid()))
+)
+with check (
+  private.can_access_branch((select auth.uid()), tenant_id, branch_id)
+  or private.is_company_member(tenant_id, company_id)
+  or public.is_super_owner((select auth.uid()))
+);
 drop policy if exists company_boundary_departments_delete on public.departments;
 create policy company_boundary_departments_delete on public.departments as restrictive for delete to authenticated
-using (private.can_access_branch((select auth.uid()),tenant_id,branch_id) or private.is_company_member(tenant_id,company_id) or public.is_super_owner((select auth.uid())));
+using (
+  private.can_access_branch((select auth.uid()), tenant_id, branch_id)
+  or private.is_company_member(tenant_id, company_id)
+  or public.is_super_owner((select auth.uid()))
+);
 
 drop policy if exists company_boundary_employees_select on public.employees;
 create policy company_boundary_employees_select on public.employees as restrictive for select to authenticated
-using (user_id=(select auth.uid()) or (branch_id is not null and private.can_access_branch((select auth.uid()),tenant_id,branch_id)) or (branch_id is null and private.can_access_creator_company(tenant_id,created_by)) or public.is_super_owner((select auth.uid())));
+using (
+  user_id = (select auth.uid())
+  or (branch_id is not null and private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+  or (branch_id is null and private.can_access_creator_company(tenant_id, created_by))
+  or public.is_super_owner((select auth.uid()))
+);
 drop policy if exists company_boundary_employees_insert on public.employees;
 create policy company_boundary_employees_insert on public.employees as restrictive for insert to authenticated
-with check ((branch_id is not null and private.can_access_branch((select auth.uid()),tenant_id,branch_id)) or (branch_id is null and private.can_access_creator_company(tenant_id,created_by)) or public.is_super_owner((select auth.uid())));
+with check (
+  (branch_id is not null and private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+  or (branch_id is null and private.can_access_creator_company(tenant_id, created_by))
+  or public.is_super_owner((select auth.uid()))
+);
 drop policy if exists company_boundary_employees_update on public.employees;
 create policy company_boundary_employees_update on public.employees as restrictive for update to authenticated
-using (user_id=(select auth.uid()) or (branch_id is not null and private.can_access_branch((select auth.uid()),tenant_id,branch_id)) or (branch_id is null and private.can_access_creator_company(tenant_id,created_by)) or public.is_super_owner((select auth.uid())))
-with check (user_id=(select auth.uid()) or (branch_id is not null and private.can_access_branch((select auth.uid()),tenant_id,branch_id)) or (branch_id is null and private.can_access_creator_company(tenant_id,created_by)) or public.is_super_owner((select auth.uid())));
+using (
+  user_id = (select auth.uid())
+  or (branch_id is not null and private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+  or (branch_id is null and private.can_access_creator_company(tenant_id, created_by))
+  or public.is_super_owner((select auth.uid()))
+)
+with check (
+  user_id = (select auth.uid())
+  or (branch_id is not null and private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+  or (branch_id is null and private.can_access_creator_company(tenant_id, created_by))
+  or public.is_super_owner((select auth.uid()))
+);
 drop policy if exists company_boundary_employees_delete on public.employees;
 create policy company_boundary_employees_delete on public.employees as restrictive for delete to authenticated
-using ((branch_id is not null and private.can_access_branch((select auth.uid()),tenant_id,branch_id)) or (branch_id is null and private.can_access_creator_company(tenant_id,created_by)) or public.is_super_owner((select auth.uid())));
+using (
+  (branch_id is not null and private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+  or (branch_id is null and private.can_access_creator_company(tenant_id, created_by))
+  or public.is_super_owner((select auth.uid()))
+);
 
 drop policy if exists company_boundary_expenses_select on public.expenses;
 create policy company_boundary_expenses_select on public.expenses as restrictive for select to authenticated
-using ((branch_id is not null and private.can_access_branch((select auth.uid()),tenant_id,branch_id)) or (branch_id is null and private.can_access_creator_company(tenant_id,user_id)) or public.is_super_owner((select auth.uid())));
+using (
+  (branch_id is not null and private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+  or (branch_id is null and private.can_access_creator_company(tenant_id, user_id))
+  or public.is_super_owner((select auth.uid()))
+);
 drop policy if exists company_boundary_expenses_insert on public.expenses;
 create policy company_boundary_expenses_insert on public.expenses as restrictive for insert to authenticated
-with check ((branch_id is not null and private.can_access_branch((select auth.uid()),tenant_id,branch_id)) or (branch_id is null and private.can_access_creator_company(tenant_id,user_id)) or public.is_super_owner((select auth.uid())));
+with check (
+  (branch_id is not null and private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+  or (branch_id is null and private.can_access_creator_company(tenant_id, user_id))
+  or public.is_super_owner((select auth.uid()))
+);
 drop policy if exists company_boundary_expenses_update on public.expenses;
 create policy company_boundary_expenses_update on public.expenses as restrictive for update to authenticated
-using ((branch_id is not null and private.can_access_branch((select auth.uid()),tenant_id,branch_id)) or (branch_id is null and private.can_access_creator_company(tenant_id,user_id)) or public.is_super_owner((select auth.uid())))
-with check ((branch_id is not null and private.can_access_branch((select auth.uid()),tenant_id,branch_id)) or (branch_id is null and private.can_access_creator_company(tenant_id,user_id)) or public.is_super_owner((select auth.uid())));
+using (
+  (branch_id is not null and private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+  or (branch_id is null and private.can_access_creator_company(tenant_id, user_id))
+  or public.is_super_owner((select auth.uid()))
+)
+with check (
+  (branch_id is not null and private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+  or (branch_id is null and private.can_access_creator_company(tenant_id, user_id))
+  or public.is_super_owner((select auth.uid()))
+);
 drop policy if exists company_boundary_expenses_delete on public.expenses;
 create policy company_boundary_expenses_delete on public.expenses as restrictive for delete to authenticated
-using ((branch_id is not null and private.can_access_branch((select auth.uid()),tenant_id,branch_id)) or (branch_id is null and private.can_access_creator_company(tenant_id,user_id)) or public.is_super_owner((select auth.uid())));
+using (
+  (branch_id is not null and private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+  or (branch_id is null and private.can_access_creator_company(tenant_id, user_id))
+  or public.is_super_owner((select auth.uid()))
+);
 
 drop policy if exists company_boundary_payroll_runs_select on public.payroll_runs;
 create policy company_boundary_payroll_runs_select on public.payroll_runs as restrictive for select to authenticated
-using ((branch_id is not null and private.can_access_branch((select auth.uid()),tenant_id,branch_id)) or (branch_id is null and private.can_access_creator_company(tenant_id,created_by)) or public.is_super_owner((select auth.uid())));
+using (
+  (branch_id is not null and private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+  or (branch_id is null and private.can_access_creator_company(tenant_id, created_by))
+  or public.is_super_owner((select auth.uid()))
+);
 drop policy if exists company_boundary_payroll_runs_insert on public.payroll_runs;
 create policy company_boundary_payroll_runs_insert on public.payroll_runs as restrictive for insert to authenticated
-with check ((branch_id is not null and private.can_access_branch((select auth.uid()),tenant_id,branch_id)) or (branch_id is null and private.can_access_creator_company(tenant_id,created_by)) or public.is_super_owner((select auth.uid())));
+with check (
+  (branch_id is not null and private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+  or (branch_id is null and private.can_access_creator_company(tenant_id, created_by))
+  or public.is_super_owner((select auth.uid()))
+);
 drop policy if exists company_boundary_payroll_runs_update on public.payroll_runs;
 create policy company_boundary_payroll_runs_update on public.payroll_runs as restrictive for update to authenticated
-using ((branch_id is not null and private.can_access_branch((select auth.uid()),tenant_id,branch_id)) or (branch_id is null and private.can_access_creator_company(tenant_id,created_by)) or public.is_super_owner((select auth.uid())))
-with check ((branch_id is not null and private.can_access_branch((select auth.uid()),tenant_id,branch_id)) or (branch_id is null and private.can_access_creator_company(tenant_id,created_by)) or public.is_super_owner((select auth.uid())));
+using (
+  (branch_id is not null and private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+  or (branch_id is null and private.can_access_creator_company(tenant_id, created_by))
+  or public.is_super_owner((select auth.uid()))
+)
+with check (
+  (branch_id is not null and private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+  or (branch_id is null and private.can_access_creator_company(tenant_id, created_by))
+  or public.is_super_owner((select auth.uid()))
+);
 drop policy if exists company_boundary_payroll_runs_delete on public.payroll_runs;
 create policy company_boundary_payroll_runs_delete on public.payroll_runs as restrictive for delete to authenticated
-using ((branch_id is not null and private.can_access_branch((select auth.uid()),tenant_id,branch_id)) or (branch_id is null and private.can_access_creator_company(tenant_id,created_by)) or public.is_super_owner((select auth.uid())));
+using (
+  (branch_id is not null and private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+  or (branch_id is null and private.can_access_creator_company(tenant_id, created_by))
+  or public.is_super_owner((select auth.uid()))
+);
 
+-- HR records inherit the employee's company through the employee's branch.
 do $$
-declare t text;
+declare
+  t text;
 begin
-  foreach t in array array['attendance','bonuses','deductions','leave_requests'] loop
-    execute format('drop policy if exists company_boundary_%I_select on public.%I',t,t);
-    execute format('create policy company_boundary_%I_select on public.%I as restrictive for select to authenticated using (private.can_access_employee_record(tenant_id,employee_id))',t,t);
-    execute format('drop policy if exists company_boundary_%I_insert on public.%I',t,t);
-    execute format('create policy company_boundary_%I_insert on public.%I as restrictive for insert to authenticated with check (private.can_access_employee_record(tenant_id,employee_id))',t,t);
-    execute format('drop policy if exists company_boundary_%I_update on public.%I',t,t);
-    execute format('create policy company_boundary_%I_update on public.%I as restrictive for update to authenticated using (private.can_access_employee_record(tenant_id,employee_id)) with check (private.can_access_employee_record(tenant_id,employee_id))',t,t);
-    execute format('drop policy if exists company_boundary_%I_delete on public.%I',t,t);
-    execute format('create policy company_boundary_%I_delete on public.%I as restrictive for delete to authenticated using (private.can_access_employee_record(tenant_id,employee_id))',t,t);
+  foreach t in array array['attendance', 'bonuses', 'deductions', 'leave_requests'] loop
+    execute format('drop policy if exists company_boundary_%I_select on public.%I', t, t);
+    execute format('create policy company_boundary_%I_select on public.%I as restrictive for select to authenticated using (private.can_access_employee_record(tenant_id, employee_id))', t, t);
+
+    execute format('drop policy if exists company_boundary_%I_insert on public.%I', t, t);
+    execute format('create policy company_boundary_%I_insert on public.%I as restrictive for insert to authenticated with check (private.can_access_employee_record(tenant_id, employee_id))', t, t);
+
+    execute format('drop policy if exists company_boundary_%I_update on public.%I', t, t);
+    execute format('create policy company_boundary_%I_update on public.%I as restrictive for update to authenticated using (private.can_access_employee_record(tenant_id, employee_id)) with check (private.can_access_employee_record(tenant_id, employee_id))', t, t);
+
+    execute format('drop policy if exists company_boundary_%I_delete on public.%I', t, t);
+    execute format('create policy company_boundary_%I_delete on public.%I as restrictive for delete to authenticated using (private.can_access_employee_record(tenant_id, employee_id))', t, t);
   end loop;
 end $$;
 
 drop policy if exists company_boundary_payroll_items_select on public.payroll_items;
 create policy company_boundary_payroll_items_select on public.payroll_items as restrictive for select to authenticated
-using (private.can_access_employee_record(tenant_id,employee_id) or private.can_access_payroll_run_record(tenant_id,payroll_run_id));
+using (
+  private.can_access_employee_record(tenant_id, employee_id)
+  or private.can_access_payroll_run_record(tenant_id, payroll_run_id)
+);
 drop policy if exists company_boundary_payroll_items_insert on public.payroll_items;
 create policy company_boundary_payroll_items_insert on public.payroll_items as restrictive for insert to authenticated
-with check (private.can_access_employee_record(tenant_id,employee_id) or private.can_access_payroll_run_record(tenant_id,payroll_run_id));
+with check (
+  private.can_access_employee_record(tenant_id, employee_id)
+  or private.can_access_payroll_run_record(tenant_id, payroll_run_id)
+);
 drop policy if exists company_boundary_payroll_items_update on public.payroll_items;
 create policy company_boundary_payroll_items_update on public.payroll_items as restrictive for update to authenticated
-using (private.can_access_employee_record(tenant_id,employee_id) or private.can_access_payroll_run_record(tenant_id,payroll_run_id))
-with check (private.can_access_employee_record(tenant_id,employee_id) or private.can_access_payroll_run_record(tenant_id,payroll_run_id));
+using (
+  private.can_access_employee_record(tenant_id, employee_id)
+  or private.can_access_payroll_run_record(tenant_id, payroll_run_id)
+)
+with check (
+  private.can_access_employee_record(tenant_id, employee_id)
+  or private.can_access_payroll_run_record(tenant_id, payroll_run_id)
+);
 drop policy if exists company_boundary_payroll_items_delete on public.payroll_items;
 create policy company_boundary_payroll_items_delete on public.payroll_items as restrictive for delete to authenticated
-using (private.can_access_employee_record(tenant_id,employee_id) or private.can_access_payroll_run_record(tenant_id,payroll_run_id));
+using (
+  private.can_access_employee_record(tenant_id, employee_id)
+  or private.can_access_payroll_run_record(tenant_id, payroll_run_id)
+);
 
+-- Child rows inherit the company boundary of their parent transaction.
 do $$
-declare t text; fn text; parent_col text;
+declare
+  t text;
+  fn text;
+  parent_col text;
 begin
-  for t,fn,parent_col in
+  for t, fn, parent_col in
     select * from (values
-      ('payments','private.can_access_sale_record','sale_id'),
-      ('sale_items','private.can_access_sale_record','sale_id'),
-      ('purchase_items','private.can_access_purchase_record','purchase_id'),
-      ('purchase_return_items','private.can_access_purchase_return_record','purchase_return_id'),
-      ('sale_refund_items','private.can_access_sale_refund_record','refund_id')
-    ) as x(table_name,helper,parent_column)
+      ('payments', 'private.can_access_sale_record', 'sale_id'),
+      ('sale_items', 'private.can_access_sale_record', 'sale_id'),
+      ('purchase_items', 'private.can_access_purchase_record', 'purchase_id'),
+      ('purchase_return_items', 'private.can_access_purchase_return_record', 'purchase_return_id'),
+      ('sale_refund_items', 'private.can_access_sale_refund_record', 'refund_id')
+    ) as x(table_name, helper, parent_column)
   loop
-    execute format('drop policy if exists company_boundary_%I_select on public.%I',t,t);
-    execute format('create policy company_boundary_%I_select on public.%I as restrictive for select to authenticated using (%s(tenant_id,%I))',t,t,fn,parent_col);
-    execute format('drop policy if exists company_boundary_%I_insert on public.%I',t,t);
-    execute format('create policy company_boundary_%I_insert on public.%I as restrictive for insert to authenticated with check (%s(tenant_id,%I))',t,t,fn,parent_col);
-    execute format('drop policy if exists company_boundary_%I_update on public.%I',t,t);
-    execute format('create policy company_boundary_%I_update on public.%I as restrictive for update to authenticated using (%s(tenant_id,%I)) with check (%s(tenant_id,%I))',t,t,fn,parent_col,fn,parent_col);
-    execute format('drop policy if exists company_boundary_%I_delete on public.%I',t,t);
-    execute format('create policy company_boundary_%I_delete on public.%I as restrictive for delete to authenticated using (%s(tenant_id,%I))',t,t,fn,parent_col);
+    execute format('drop policy if exists company_boundary_%I_select on public.%I', t, t);
+    execute format('create policy company_boundary_%I_select on public.%I as restrictive for select to authenticated using (%s(tenant_id, %I))', t, t, fn, parent_col);
+
+    execute format('drop policy if exists company_boundary_%I_insert on public.%I', t, t);
+    execute format('create policy company_boundary_%I_insert on public.%I as restrictive for insert to authenticated with check (%s(tenant_id, %I))', t, t, fn, parent_col);
+
+    execute format('drop policy if exists company_boundary_%I_update on public.%I', t, t);
+    execute format('create policy company_boundary_%I_update on public.%I as restrictive for update to authenticated using (%s(tenant_id, %I)) with check (%s(tenant_id, %I))', t, t, fn, parent_col, fn, parent_col);
+
+    execute format('drop policy if exists company_boundary_%I_delete on public.%I', t, t);
+    execute format('create policy company_boundary_%I_delete on public.%I as restrictive for delete to authenticated using (%s(tenant_id, %I))', t, t, fn, parent_col);
   end loop;
 end $$;
 
+-- Company membership also bounds access to staff profiles, role memberships, audit logs, and login history.
 drop policy if exists company_boundary_profiles_select on public.profiles;
 create policy company_boundary_profiles_select on public.profiles as restrictive for select to authenticated
-using (id=(select auth.uid()) or private.can_access_creator_company(tenant_id,id) or public.is_super_owner((select auth.uid())));
+using (
+  id = (select auth.uid())
+  or private.can_access_creator_company(tenant_id, id)
+  or public.is_super_owner((select auth.uid()))
+);
 drop policy if exists company_boundary_profiles_update on public.profiles;
 create policy company_boundary_profiles_update on public.profiles as restrictive for update to authenticated
-using (id=(select auth.uid()) or private.can_access_creator_company(tenant_id,id) or public.is_super_owner((select auth.uid())))
-with check (id=(select auth.uid()) or private.can_access_creator_company(tenant_id,id) or public.is_super_owner((select auth.uid())));
+using (
+  id = (select auth.uid())
+  or private.can_access_creator_company(tenant_id, id)
+  or public.is_super_owner((select auth.uid()))
+)
+with check (
+  id = (select auth.uid())
+  or private.can_access_creator_company(tenant_id, id)
+  or public.is_super_owner((select auth.uid()))
+);
 
 drop policy if exists company_boundary_user_roles_select on public.user_roles;
 create policy company_boundary_user_roles_select on public.user_roles as restrictive for select to authenticated
-using (user_id=(select auth.uid()) or private.can_access_creator_company(tenant_id,user_id) or public.is_super_owner((select auth.uid())));
+using (
+  user_id = (select auth.uid())
+  or private.can_access_creator_company(tenant_id, user_id)
+  or public.is_super_owner((select auth.uid()))
+);
 
 drop policy if exists company_boundary_audit_logs_select on public.audit_logs;
 create policy company_boundary_audit_logs_select on public.audit_logs as restrictive for select to authenticated
-using (public.is_super_owner((select auth.uid())) or private.can_access_creator_company(tenant_id,user_id));
+using (
+  public.is_super_owner((select auth.uid()))
+  or private.can_access_creator_company(tenant_id, user_id)
+);
 
 drop policy if exists company_boundary_login_history_select on public.login_history;
 create policy company_boundary_login_history_select on public.login_history as restrictive for select to authenticated
-using (user_id=(select auth.uid()) or public.is_super_owner((select auth.uid())) or private.can_access_creator_company(tenant_id,user_id));
+using (
+  user_id = (select auth.uid())
+  or public.is_super_owner((select auth.uid()))
+  or private.can_access_creator_company(tenant_id, user_id)
+);
 
 drop policy if exists company_boundary_user_permission_overrides_select on public.user_permission_overrides;
 create policy company_boundary_user_permission_overrides_select on public.user_permission_overrides as restrictive for select to authenticated
-using (user_id=(select auth.uid()) or public.is_super_owner((select auth.uid())) or private.can_access_creator_company(tenant_id,user_id));
+using (
+  user_id = (select auth.uid())
+  or public.is_super_owner((select auth.uid()))
+  or private.can_access_creator_company(tenant_id, user_id)
+);
 
 commit;
