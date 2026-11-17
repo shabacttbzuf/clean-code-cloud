@@ -80,6 +80,6 @@ test("company and creator foreign keys have supporting indexes", () => {
 const companyBranchMigration = readFileSync(new URL("../supabase/migrations/20261115000005_company_branch_creator_isolation.sql", import.meta.url), "utf8");
 
 test("company branch migration uses valid PostgreSQL dollar quoting", () => {
-  assert.doesNotMatch(companyBranchMigration, /do \\$ begin/);
-  assert.match(companyBranchMigration, /do \\$\\$ begin/);
+  assert.ok(!companyBranchMigration.includes("do $ begin"));
+  assert.ok(companyBranchMigration.includes("do $ begin"));
 });
