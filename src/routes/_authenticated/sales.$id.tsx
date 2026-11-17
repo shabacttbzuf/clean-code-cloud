@@ -100,7 +100,7 @@ function SaleDetailPage() {
     queryKey: ["platform-branding"],
     queryFn: async () => {
       const { data, error } = await (supabase.from("platform_branding" as any) as any)
-        .select("brand_name, phone, promotional_text, website_url, enabled").eq("id", true).maybeSingle();
+        .select("brand_name, phone, promotional_text, website_url, enabled, placement").eq("id", true).maybeSingle();
       if (error) throw error;
       return data;
     },
@@ -200,6 +200,7 @@ function SaleDetailPage() {
               platform_phone: platform?.phone,
               platform_promotional_text: platform?.promotional_text,
               platform_website_url: platform?.website_url,
+              platform_brand_placement: platform?.placement,
               platform_brand_enabled: platform?.enabled === true,
             }, "80mm");
             if (!opened) toast.error("اسمح بفتح النوافذ المنبثقة لطباعة الفاتورة");
