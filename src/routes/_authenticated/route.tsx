@@ -20,6 +20,7 @@ import { useAuthSession } from "@/hooks/use-auth-session";
 import { useMemberships } from "@/hooks/use-tenant";
 import { toast } from "sonner";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
+import { useSuperOwner } from "@/hooks/use-super-owner";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -78,7 +79,7 @@ function AuthShell() {
         <SidebarInset className="workspace-surface">
           <TopBar />
           <main className="min-w-0 flex-1 p-4 md:p-6">
-            <Outlet />
+            <PermissionRouteGuard />
           </main>
         </SidebarInset>
       </div>
@@ -94,6 +95,90 @@ function SidebarRouteSync() {
     setOpenMobile(false);
   }, [pathname, setOpen, setOpenMobile]);
   return null;
+}
+
+
+/**
+ * UI route checks complement (never replace) the database RLS and server-action
+ * permission checks. Keep this map aligned with public.permissions and the sidebar.
+ */
+const ROUTE_PERMISSION_RULES: Array<{ prefix: string; permission: string }> = [
+  { prefix: "/dashboard", permission: "dashboard.view" },
+  { prefix: "/reports", permission: "reports.view" },
+  { prefix: "/pos", permission: "pos.use" },
+  { prefix: "/sales", permission: "sales.view" },
+  { prefix: "/cash-sessions", permission: "cash.view" },
+  { prefix: "/customers", permission: "customers.view" },
+  { prefix: "/inventory/movements", permission: "inventory.movements.view" },
+  { prefix: "/inventory", permission: "inventory.view" },
+  { prefix: "/suppliers", permission: "suppliers.view" },
+  { prefix: "/purchases", permission: "purchases.view" },
+  { prefix: "/expenses", permission: "expenses.view" },
+  { prefix: "/expense-categories", permission: "expense_categories.manage" },
+  { prefix: "/hr/employees", permission: "hr.employees.view" },
+  { prefix: "/hr/attendance", permission: "hr.attendance.view" },
+  { prefix: "/hr/leaves", permission: "hr.leaves.view" },
+  { prefix: "/hr/compensation", permission: "hr.compensation.view" },
+  { prefix: "/hr/payroll", permission: "hr.payroll.view" },
+  { prefix: "/branches", permission: "branches.view" },
+  { prefix: "/products", permission: "products.view" },
+  { prefix: "/categories", permission: "categories.view" },
+  { prefix: "/users", permission: "users.view" },
+  { prefix: "/users-admin", permission: "users.manage" },
+  { prefix: "/team-permissions", permission: "permissions.view" },
+  { prefix: "/roles", permission: "roles.view" },
+  { prefix: "/companies", permission: "companies.view" },
+  { prefix: "/departments", permission: "departments.view" },
+  { prefix: "/job-titles", permission: "job_titles.view" },
+  { prefix: "/employment-types", permission: "employment_types.view" },
+  { prefix: "/notifications", permission: "notifications.view" },
+  { prefix: "/login-history", permission: "login_history.view" },
+  { prefix: "/audit-logs", permission: "audit.view" },
+  { prefix: "/settings", permission: "settings.view" },
+];
+
+function permissionForPath(pathname: string): string | null {
+  const match = ROUTE_PERMISSION_RULES
+    .filter((rule) => pathname === rule.prefix || pathname.startsWith(rule.prefix + "/"))
+    .sort((a, b) => b.prefix.length - a.prefix.length)[0];
+  return match?.permission ?? null;
+}
+
+function PermissionRouteGuard() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const { tenantId, userId, loading: tenantLoading } = useActiveTenant();
+  const { isSuperOwner, loading: ownerLoading } = useSuperOwner();
+  const requiredPermission = permissionForPath(pathname);
+  const ownerOnly = pathname === "/admin" || pathname === "/owner-center";
+
+  const permissionsQuery = useQuery({
+    queryKey: ["route-effective-permissions", tenantId, userId],
+    queryFn: async () => {
+      if (!tenantId) return new Set<string>();
+      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId });
+      if (error) throw error;
+      return new Set<string>((data ?? []) as string[]);
+    },
+    enabled: !!tenantId && !!userId && !isSuperOwner && !!requiredPermission && !ownerOnly,
+    staleTime: 15_000,
+  });
+
+  if (tenantLoading || ownerLoading || (!!requiredPermission && !isSuperOwner && permissionsQuery.isLoading)) {
+    return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
+  }
+
+  if (ownerOnly && !isSuperOwner) {
+    return <div role="alert" className="mx-auto max-w-xl rounded-lg border border-destructive/30 p-6 text-center text-sm">هذه الصفحة متاحة لمالك النظام الرئيسي فقط.</div>;
+  }
+
+  if (requiredPermission && !isSuperOwner) {
+    const granted = !!permissionsQuery.data?.has(requiredPermission);
+    if (!granted) {
+      return <div role="alert" className="mx-auto max-w-xl rounded-lg border border-destructive/30 p-6 text-center text-sm">{permissionsQuery.isError ? "تعذر التحقق من الصلاحيات. أعد المحاولة لاحقاً." : "ليس لديك صلاحية الوصول إلى هذه الصفحة."}</div>;
+    }
+  }
+
+  return <Outlet />;
 }
 
 function TopBar() {
