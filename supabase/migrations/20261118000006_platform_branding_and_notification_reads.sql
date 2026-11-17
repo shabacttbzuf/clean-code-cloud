@@ -44,3 +44,7 @@ drop policy if exists "users delete own notification receipts" on public.notific
 create policy "users delete own notification receipts"
   on public.notification_reads for delete to authenticated
   using (user_id = (select auth.uid()));
+
+grant select on public.platform_branding to authenticated;
+grant insert, update, delete on public.platform_branding to authenticated;
+grant select, insert, delete on public.notification_reads to authenticated;
