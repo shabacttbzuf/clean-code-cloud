@@ -26,6 +26,8 @@ function ReportsPage() {
   });
   const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [groupBy, setGroupBy] = useState<"day" | "month" | "year">("day");
+  const [branchId, setBranchId] = useState("all");
+  const branchesQuery = useQuery({ queryKey: ["report-branches", tenantId], queryFn: async () => { const { data, error } = await supabase.from("branches").select("id,name").eq("tenant_id", tenantId!).order("name"); if (error) throw error; return data ?? []; }, enabled: !!tenantId });
 
   const report = useQuery({
     queryKey: ["reports", tenantId, from, to],
@@ -46,7 +48,7 @@ function ReportsPage() {
           .limit(5000),
         supabase
           .from("expenses")
-          .select("id, paid_at, amount, category_id, description")
+          .select("id, paid_at, amount, category_id, description, branch_id")
           .eq("tenant_id", tenantId)
           .gte("paid_at", from)
           .lte("paid_at", to)
@@ -61,7 +63,7 @@ function ReportsPage() {
           .limit(20000),
         supabase
           .from("cash_sessions")
-          .select("cashier_id, opening_balance, closing_balance, expected_cash, cash_difference, opened_at, closed_at, status")
+          .select("cashier_id, opening_balance, closing_balance, expected_cash, cash_difference, opened_at, closed_at, status, branch_id")
           .eq("tenant_id", tenantId)
           .gte("opened_at", fromDate)
           .lte("opened_at", toDate)
@@ -73,7 +75,7 @@ function ReportsPage() {
           .limit(10000),
         supabase
           .from("sale_refunds")
-          .select("id, sale_id, subtotal, discount, tax_amount, total, refund_method, created_at")
+          .select("id, sale_id, subtotal, discount, tax_amount, total, refund_method, created_at, branch_id")
           .eq("tenant_id", tenantId)
           .gte("created_at", fromDate)
           .lte("created_at", toDate)
