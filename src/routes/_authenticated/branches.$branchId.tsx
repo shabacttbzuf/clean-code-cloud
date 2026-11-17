@@ -75,7 +75,7 @@ function BranchDetailsPage() {
   if (query.isError || !query.data) return <Card><CardContent className="p-6 text-destructive">تعذر تحميل تفاصيل الفرع أو لا تملك صلاحية الوصول إليه.</CardContent></Card>;
   const d = query.data;
   return <div className="space-y-6">
-    <PageHeader title={d.branch.name} subtitle="لوحة تفاصيل الفرع وأداؤه التشغيلي والمالي" action={<div className="flex gap-2"><Button variant="outline" onClick={print}><Printer className="ml-2 h-4 w-4" />طباعة كشف الفرع</Button>{d.company && <Button variant="ghost" asChild><Link to="/companies/$companyId" params={{ companyId: d.company.id }}><ArrowRight className="ml-2 h-4 w-4" />الشركة</Link></Button>}</div>} />
+    <PageHeader title={d.branch.name} subtitle="لوحة تفاصيل الفرع وأداؤه التشغيلي والمالي" action={<div className="flex gap-2"><Button variant="outline" onClick={print}><Printer className="ml-2 h-4 w-4" />طباعة كشف الفرع</Button>{d.company && <Button variant="ghost" asChild><a href={"/companies/" + d.company.id}><ArrowRight className="ml-2 h-4 w-4" />الشركة</a></Button>}</div>} />
     <Card><CardContent className="flex flex-wrap items-center gap-4 p-4">
       {(d.branch.logo_url || d.branch.image_url) && <img src={d.branch.logo_url || d.branch.image_url || ""} alt={d.branch.name} className="h-16 w-16 rounded-lg object-contain" />}
       <div className="min-w-0 flex-1"><div className="text-lg font-bold">{d.branch.name}</div><div className="text-sm text-muted-foreground">{d.company?.name ?? "شركة غير محددة"}</div><div className="text-xs text-muted-foreground">{d.branch.address ?? "—"} · {d.branch.phone ?? "—"}</div></div>
