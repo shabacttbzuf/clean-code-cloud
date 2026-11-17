@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
-import { Play, Check, DollarSign, Loader2, ChevronDown, ChevronUp, X } from "lucide-react";
+import { Play, Check, DollarSign, Loader2, ChevronDown, ChevronUp, X, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { formatMoney, formatDate } from "@/lib/format";
@@ -140,6 +140,7 @@ function PayrollPage() {
         }
       />
 
+      <div className="flex justify-end print:hidden"><Button variant="outline" onClick={() => window.print()}><Printer className="ml-2 h-4 w-4" />طباعة كشف الرواتب</Button></div>
       {runsQ.isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
       ) : (runsQ.data ?? []).length === 0 ? (
