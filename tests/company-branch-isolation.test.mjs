@@ -60,3 +60,11 @@ test("company RLS boundaries cover branch operations, HR records, financial chil
     assert.match(operationalScope, new RegExp(policy));
   }
 });
+
+const compoundScope = readFileSync(new URL("../supabase/migrations/20261118000004_tighten_company_compound_scope_checks.sql", import.meta.url), "utf8");
+
+test("compound department and payroll references must remain in the same company", () => {
+  assert.match(compoundScope, /branch_id is null or private\\.can_access_branch/);
+  assert.match(compoundScope, /company_id is null or private\\.is_company_member/);
+  assert.match(compoundScope, /private\\.can_access_employee_record\\(tenant_id, employee_id\\)\\s+and private\\.can_access_payroll_run_record/);
+});
