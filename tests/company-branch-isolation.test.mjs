@@ -46,3 +46,17 @@ test("company managers can access coworkers' master records only through shared 
   assert.match(creatorScope, /creator_delete_%I/);
   assert.match(creatorScope, /user_roles_company_member_idx/);
 });
+
+const operationalScope = readFileSync(new URL("../supabase/migrations/20261118000003_enforce_company_scope_across_operational_data.sql", import.meta.url), "utf8");
+
+test("company RLS boundaries cover branch operations, HR records, financial children, profiles and audit trails", () => {
+  for (const table of ["inventory", "inventory_transactions", "sales", "purchases", "cash_sessions", "expenses", "departments", "employees", "payroll_runs"]) {
+    assert.match(operationalScope, new RegExp("company_boundary_" + table + "_select"));
+  }
+  for (const helper of ["can_access_employee_record", "can_access_payroll_run_record", "can_access_sale_record", "can_access_purchase_record", "can_access_purchase_return_record", "can_access_sale_refund_record"]) {
+    assert.match(operationalScope, new RegExp(helper));
+  }
+  for (const table of ["attendance", "bonuses", "deductions", "leave_requests", "payroll_items", "profiles", "user_roles", "audit_logs", "login_history"]) {
+    assert.match(operationalScope, new RegExp("company_boundary_" + table + "_select"));
+  }
+});
