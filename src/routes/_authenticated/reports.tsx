@@ -18,7 +18,19 @@ export const Route = createFileRoute("/_authenticated/reports")({
 });
 
 function ReportsPage() {
-  const { tenantId, tenant } = useActiveTenant();
+  const { tenantId, tenant, userId } = useActiveTenant();
+  const permissionsQuery = useQuery({
+    queryKey: ["reports-permissions", tenantId, userId],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId! });
+      if (error) throw error;
+      return new Set<string>((data ?? []) as string[]);
+    },
+    enabled: !!tenantId && !!userId,
+    staleTime: 15_000,
+  });
+  const canExportReports = permissionsQuery.data?.has("reports.export") === true;
+  const canFilterReports = permissionsQuery.data?.has("reports.filter") === true;
   const [from, setFrom] = useState(() => {
     const d = new Date();
     d.setMonth(d.getMonth() - 1);
@@ -258,7 +270,7 @@ function ReportsPage() {
       <PageHeader
         title="التقارير"
         subtitle="تقارير مبيعات، مصروفات، مخزون وموظفين"
-        action={<Button variant="outline" className="print:hidden" onClick={() => window.print()}><Printer className="ml-2 h-4 w-4" />طباعة التقرير</Button>}
+        action={canExportReports ? <Button variant="outline" className="print:hidden" onClick={() => window.print()}><Printer className="ml-2 h-4 w-4" />طباعة التقرير</Button> : undefined}
       />
 
       <Card>
@@ -269,20 +281,20 @@ function ReportsPage() {
                 <Label className="text-xs">من</Label>
                 <div className="relative">
                   <Calendar className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="pr-9" />
+                  <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="pr-9" disabled={!canFilterReports} />
                 </div>
               </div>
               <div className="space-y-2">
                 <Label className="text-xs">إلى</Label>
                 <div className="relative">
                   <Calendar className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="pr-9" />
+                  <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="pr-9" disabled={!canFilterReports} />
                 </div>
               </div>
             </div>
             <div className="space-y-2 sm:w-48">
               <Label className="text-xs">تصفية حسب الفرع</Label>
-              <Select value={branchId} onValueChange={setBranchId}>
+              <Select value={branchId} onValueChange={setBranchId} disabled={!canFilterReports}>
                 <SelectTrigger><SelectValue placeholder="كل الفروع" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">كل الفروع</SelectItem>
@@ -292,7 +304,7 @@ function ReportsPage() {
             </div>
             <div className="space-y-2 sm:w-40">
               <Label className="text-xs">تجميع المبيعات</Label>
-              <Select value={groupBy} onValueChange={(v) => setGroupBy(v as typeof groupBy)}>
+              <Select value={groupBy} onValueChange={(v) => setGroupBy(v as typeof groupBy)} disabled={!canFilterReports}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="day">يومي</SelectItem>
@@ -322,7 +334,7 @@ function ReportsPage() {
         <TabsContent value="sales" className="space-y-4 pt-2">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold">ملخص المبيعات والمصروفات</h3>
-            <Button
+            {canExportReports && <Button
               variant="outline"
               size="sm"
               onClick={() =>
@@ -339,7 +351,7 @@ function ReportsPage() {
               }
             >
               <Download className="ml-2 h-4 w-4" />تصدير CSV
-            </Button>
+            </Button>}
           </div>
           <Card>
             <CardContent className="p-0">
@@ -377,7 +389,7 @@ function ReportsPage() {
         <TabsContent value="products" className="space-y-4 pt-2">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold">أكثر 10 منتجات مبيعاً</h3>
-            <Button
+            {canExportReports && <Button
               variant="outline"
               size="sm"
               onClick={() =>
@@ -393,7 +405,7 @@ function ReportsPage() {
               }
             >
               <Download className="ml-2 h-4 w-4" />تصدير CSV
-            </Button>
+            </Button>}
           </div>
           <Card>
             <CardContent className="p-0">
@@ -429,7 +441,7 @@ function ReportsPage() {
         <TabsContent value="staff" className="space-y-4 pt-2">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold">أداء الكاشيرين</h3>
-            <Button
+            {canExportReports && <Button
               variant="outline"
               size="sm"
               onClick={() =>
@@ -445,7 +457,7 @@ function ReportsPage() {
               }
             >
               <Download className="ml-2 h-4 w-4" />تصدير CSV
-            </Button>
+            </Button>}
           </div>
           <Card>
             <CardContent className="p-0">
