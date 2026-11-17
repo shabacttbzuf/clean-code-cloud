@@ -946,6 +946,25 @@ export const routeTree = rootRouteImport
 
 import type { getRouter } from './router.tsx'
 import type { startInstance } from './start.ts'
+declare module '@tanstack/react-router' {
+  interface FileRoutesByPath {
+    '/_authenticated/branches/$branchId': {
+      id: '/_authenticated/branches/$branchId'
+      path: '/branches/$branchId'
+      fullPath: '/branches/$branchId'
+      preLoaderRoute: typeof AuthenticatedBranchesBranchIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/companies/$companyId': {
+      id: '/_authenticated/companies/$companyId'
+      path: '/companies/$companyId'
+      fullPath: '/companies/$companyId'
+      preLoaderRoute: typeof AuthenticatedCompaniesCompanyIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+  }
+}
+
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
