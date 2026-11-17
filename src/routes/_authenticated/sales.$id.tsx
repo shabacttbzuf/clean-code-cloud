@@ -40,8 +40,18 @@ const methodLabels: Record<string, string> = {
 
 function SaleDetailPage() {
   const { id } = Route.useParams();
-  const { tenant, tenantId, isAdmin } = useActiveTenant();
+  const { tenant, tenantId, userId } = useActiveTenant();
   const qc = useQueryClient();
+  const permissionsQuery = useQuery({
+    queryKey: ["sale-detail-permissions", tenantId, userId],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId! });
+      if (error) throw error;
+      return new Set<string>((data ?? []) as string[]);
+    },
+    enabled: !!tenantId && !!userId,
+    staleTime: 15_000,
+  });
   const [refundOpen, setRefundOpen] = useState(false);
   const [refundReason, setRefundReason] = useState("");
   const [refundMethod, setRefundMethod] = useState<"cash" | "card" | "transfer">("transfer");
@@ -170,7 +180,7 @@ function SaleDetailPage() {
       line_total: Number(i.line_total),
     })),
   };
-  const canRefund = Boolean(isAdmin && s.status === "completed" && items.some((i) => i.quantity - i.refunded_quantity > 0));
+  const canRefund = Boolean(permissionsQuery.data?.has("sales.refund") && s.status === "completed" && items.some((i) => i.quantity - i.refunded_quantity > 0));
 
   return (
     <div className="space-y-6">
@@ -184,10 +194,10 @@ function SaleDetailPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           {canRefund && <Button variant="destructive" onClick={() => setRefundOpen(true)}><RotateCcw className="ml-2 h-4 w-4" />تسجيل مرتجع</Button>}
-          <Button variant="outline" onClick={() => downloadInvoicePDF(invoiceData)}>
+          {permissionsQuery.data?.has("sales.export") && <Button variant="outline" onClick={() => downloadInvoicePDF(invoiceData)}>
             <Download className="ml-2 h-4 w-4" />تحميل PDF
-          </Button>
-          <Button onClick={() => {
+          </Button>}
+          {permissionsQuery.data?.has("sales.print") && <Button onClick={() => {
             const branchIdentity = sale.data?.branch;
             const platform = platformIdentity.data;
             const opened = printInvoiceHTML({
@@ -206,7 +216,7 @@ function SaleDetailPage() {
             if (!opened) toast.error("اسمح بفتح النوافذ المنبثقة لطباعة الفاتورة");
           }}>
             <Printer className="ml-2 h-4 w-4" />طباعة
-          </Button>
+          </Button>}
         </div>
       </div>
 
