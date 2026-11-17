@@ -139,3 +139,7 @@
 79. `supabase/migrations/20261115000007_scope_cash_sessions_to_company.sql`
 
 **الإجمالي: 79 ترحيلاً.**
+
+80. `supabase/migrations/20261118000001_allow_company_members_to_read_assigned_company.sql`
+
+**الإجمالي: 80 ترحيلاً.**
