@@ -161,6 +161,11 @@ export function printInvoiceHTML(
     phone?: string | null;
     tenant_name?: string | null;
     logo_url?: string | null;
+    platform_brand_name?: string | null;
+    platform_phone?: string | null;
+    platform_promotional_text?: string | null;
+    platform_website_url?: string | null;
+    platform_brand_enabled?: boolean;
   },
   paper: "58mm" | "80mm" | "A4" = "80mm",
   targetWindow?: Window | null,
@@ -184,6 +189,10 @@ export function printInvoiceHTML(
         </tr>`,
     )
     .join("");
+  const platformFooter = data.platform_brand_enabled
+    ? [data.platform_brand_name, data.platform_promotional_text, data.platform_phone ? "للتواصل: " + data.platform_phone : null, data.platform_website_url]
+        .filter(Boolean).map((value) => escapeHtml(String(value))).join("<br>")
+    : "";
   const html = `<!doctype html>
 <html lang="ar" dir="rtl">
 <head>
@@ -252,6 +261,7 @@ export function printInvoiceHTML(
     <div class="row"><span>طريقة الدفع</span><span>${escapeHtml(paymentAr[data.payment_method] ?? data.payment_method)}</span></div>
   </div>
   <div class="center thanks">شكراً لزيارتكم — نتشرف بخدمتكم مجدداً</div>
+  ${platformFooter ? `<div class="divider"></div><div class="center muted">${platformFooter}</div>` : ""}
 </div>
 <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 150); };</script>
 </body>
