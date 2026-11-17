@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Loader2, Clock } from "lucide-react";
+import { Plus, Loader2, Clock, Printer, LogIn, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { formatDate } from "@/lib/format";
@@ -61,7 +61,7 @@ const statusColors: Record<string, string> = {
 };
 
 function AttendancePage() {
-  const { tenantId, isAdmin } = useActiveTenant();
+  const { tenantId, tenant, isAdmin } = useActiveTenant();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -88,6 +88,39 @@ function AttendancePage() {
 
   const empName = (id: string) => employees.data?.find((e) => e.id === id)?.full_name ?? "—";
 
+  const quickPunch = useMutation({
+    mutationFn: async ({ employeeId, kind }: { employeeId: string; kind: "in" | "out" }) => {
+      const existing = (rows.data ?? []).find((r) => r.employee_id === employeeId);
+      const now = new Date().toISOString();
+      if (kind === "in" && existing?.check_in) throw new Error("تم تسجيل دخول هذا الموظف مسبقاً اليوم");
+      if (kind === "out" && !existing?.check_in) throw new Error("يجب تسجيل الدخول أولاً");
+      if (kind === "out" && existing?.check_out) throw new Error("تم تسجيل الانصراف مسبقاً اليوم");
+      const checkIn = kind === "in" ? now : existing!.check_in!;
+      const checkOut = kind === "out" ? now : existing?.check_out ?? null;
+      const hours = checkOut ? Math.max(0, (new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 3600000) : 0;
+      const { error } = await supabase.from("attendance").upsert({
+        tenant_id: tenantId!, employee_id: employeeId, date,
+        status: existing?.status ?? "present", check_in: checkIn, check_out: checkOut,
+        hours_worked: hours, notes: existing?.notes ?? null,
+      }, { onConflict: "employee_id,date" });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["attendance", tenantId, date] });
+      toast.success("تم تسجيل الحركة بنجاح");
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر تسجيل الحركة"),
+  });
+
+  const printAttendance = () => {
+    const list = rows.data ?? [];
+    const body = list.map((r, index) => "<tr><td>" + (index + 1) + "</td><td>" + empName(r.employee_id) + "</td><td>" + (statusLabels[r.status] ?? r.status) + "</td><td>" + (r.check_in ? new Date(r.check_in).toLocaleTimeString("ar-YE") : "—") + "</td><td>" + (r.check_out ? new Date(r.check_out).toLocaleTimeString("ar-YE") : "—") + "</td><td>" + Number(r.hours_worked).toFixed(2) + "</td><td>" + (r.notes ?? "") + "</td></tr>").join("");
+    const w = window.open("", "_blank", "width=1000,height=800");
+    if (!w) { toast.error("اسمح بفتح النوافذ المنبثقة للطباعة"); return; }
+    w.document.write('<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>كشف الحضور</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#172033}header{border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:18px}h1{margin:0 0 6px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #bbb;padding:8px;text-align:right}th{background:#eee}.foot{margin-top:24px;text-align:center;color:#666;font-size:11px}</style></head><body><header><h1>' + (tenant?.name ?? "النشاط التجاري") + '</h1><b>كشف الحضور والانصراف</b><div>التاريخ: ' + date + '</div></header><table><thead><tr><th>#</th><th>الموظف</th><th>الحالة</th><th>الدخول</th><th>الخروج</th><th>الساعات</th><th>ملاحظات</th></tr></thead><tbody>' + (body || '<tr><td colspan="7">لا توجد سجلات</td></tr>') + '</tbody></table><div class="foot">تم إنشاء الكشف من نظام إدارة الأعمال</div><script>window.onload=()=>window.print()</script></body></html>');
+    w.document.close();
+  };
+
   const create = useMutation({
     mutationFn: async (v: { employee_id: string; date: string; status: string; check_in: string; check_out: string; notes: string }) => {
       let hours = 0;
@@ -112,18 +145,37 @@ function AttendancePage() {
   return (
     <div className="space-y-6">
       <PageHeader title="سجل الحضور" subtitle={formatDate(date)}
-        action={isAdmin && (
+        action={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={printAttendance}><Printer className="ml-2 h-4 w-4" />طباعة الكشف</Button>{isAdmin && (
           <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild><Button><Plus className="ml-2 h-4 w-4" />تسجيل حضور</Button></DialogTrigger>
+            <DialogTrigger asChild><Button><Plus className="ml-2 h-4 w-4" />تسجيل يدوي</Button></DialogTrigger>
             <AttendanceDialog defaultDate={date} employees={employees.data ?? []} onSubmit={(v) => create.mutate(v)} pending={create.isPending} />
           </Dialog>
-        )}
+        )}</div>}
       />
 
       <div className="flex items-center gap-2">
         <Label>التاريخ</Label>
         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-44" />
       </div>
+
+      {isAdmin && (
+        <Card><CardContent className="space-y-3 p-4">
+          <div><h3 className="font-semibold">التسجيل السريع</h3><p className="text-xs text-muted-foreground">تسجيل دخول أو انصراف بنقرة واحدة، مع منع التكرار والانصراف قبل تسجيل الدخول.</p></div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {(employees.data ?? []).map((employee) => {
+              const record = (rows.data ?? []).find((r) => r.employee_id === employee.id);
+              const completed = !!record?.check_in && !!record?.check_out;
+              const next = !record?.check_in ? "in" : "out";
+              return <div key={employee.id} className="flex items-center justify-between gap-2 rounded-lg border p-3">
+                <div className="min-w-0"><div className="truncate text-sm font-medium">{employee.full_name}</div><div className="text-[11px] text-muted-foreground">{completed ? "اكتمل الدوام" : next === "in" ? "لم يسجل الدخول" : "تم الدخول — بانتظار الانصراف"}</div></div>
+                <Button size="sm" variant={completed ? "secondary" : "default"} disabled={completed || quickPunch.isPending || !rows.isFetched} onClick={() => quickPunch.mutate({ employeeId: employee.id, kind: next })}>
+                  {next === "in" ? <LogIn className="ml-1 h-4 w-4" /> : <LogOut className="ml-1 h-4 w-4" />}{next === "in" ? "دخول" : "انصراف"}
+                </Button>
+              </div>;
+            })}
+          </div>
+        </CardContent></Card>
+      )}
 
       {rows.isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
