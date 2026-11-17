@@ -30,7 +30,7 @@ function ReportsPage() {
   const branchesQuery = useQuery({ queryKey: ["report-branches", tenantId], queryFn: async () => { const { data, error } = await supabase.from("branches").select("id,name").eq("tenant_id", tenantId!).order("name"); if (error) throw error; return data ?? []; }, enabled: !!tenantId });
 
   const report = useQuery({
-    queryKey: ["reports", tenantId, from, to],
+    queryKey: ["reports", tenantId, from, to, branchId],
     queryFn: async () => {
       if (!tenantId) return null;
       const fromDate = `${from}T00:00:00.000Z`;
@@ -93,16 +93,16 @@ function ReportsPage() {
         id: string; created_at: string; total: number; subtotal: number; discount: number; tax_amount: number;
         payment_method: string; cashier_id: string; branch_id: string; status: string;
       }>;
-      const expenses = (expensesRes.data ?? []) as Array<{ id: string; paid_at: string; amount: number; category_id: string | null; description: string | null }>;
+      const expenses = (expensesRes.data ?? []) as Array<{ id: string; paid_at: string; amount: number; category_id: string | null; description: string | null; branch_id: string | null }>;
       const items = (itemsRes.data ?? []) as Array<{ product_name: string; quantity: number; line_total: number; sale_id: string; created_at: string }>;
       const sessions = (sessionsRes.data ?? []) as Array<{
         cashier_id: string; opening_balance: number; closing_balance: number | null;
-        expected_cash: number | null; cash_difference: number | null; opened_at: string; closed_at: string | null; status: string;
+        expected_cash: number | null; cash_difference: number | null; opened_at: string; closed_at: string | null; status: string; branch_id: string | null;
       }>;
       const inventory = (inventoryRes.data ?? []) as Array<{ quantity: number; product_id: string; branch_id: string }>;
       const refunds = (refundsRes.data ?? []) as Array<{
         id: string; sale_id: string; subtotal: number; discount: number;
-        tax_amount: number; total: number; refund_method: string; created_at: string;
+        tax_amount: number; total: number; refund_method: string; created_at: string; branch_id: string | null;
       }>;
       const refundIds = refunds.map((refund) => refund.id);
       const refundItemsRes = refundIds.length
@@ -124,10 +124,24 @@ function ReportsPage() {
   });
 
   const data = report.data;
-  const safe = useMemo(
-    () => data ?? { sales: [] as any[], expenses: [] as any[], items: [] as any[], sessions: [] as any[], inventory: [] as any[], refunds: [] as any[], refundItems: [] as any[] },
-    [data],
-  );
+  const safe = useMemo(() => {
+    const raw = data ?? { sales: [] as any[], expenses: [] as any[], items: [] as any[], sessions: [] as any[], inventory: [] as any[], refunds: [] as any[], refundItems: [] as any[] };
+    if (branchId === "all") return raw;
+    const sales = raw.sales.filter((row: any) => row.branch_id === branchId);
+    const refunds = raw.refunds.filter((row: any) => row.branch_id === branchId);
+    const saleIds = new Set(sales.map((row: any) => row.id));
+    const refundIds = new Set(refunds.map((row: any) => row.id));
+    return {
+      ...raw,
+      sales,
+      refunds,
+      expenses: raw.expenses.filter((row: any) => row.branch_id === branchId),
+      sessions: raw.sessions.filter((row: any) => row.branch_id === branchId),
+      inventory: raw.inventory.filter((row: any) => row.branch_id === branchId),
+      items: raw.items.filter((row: any) => saleIds.has(row.sale_id)),
+      refundItems: raw.refundItems.filter((row: any) => refundIds.has(row.refund_id)),
+    };
+  }, [data, branchId]);
 
   const totals = useMemo(() => {
     const grossSalesTotal = safe.sales.reduce((s: number, r: any) => s + Number(r.total), 0);
