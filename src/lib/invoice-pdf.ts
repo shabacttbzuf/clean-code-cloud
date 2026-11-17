@@ -160,6 +160,7 @@ export function printInvoiceHTML(
     address?: string | null;
     phone?: string | null;
     tenant_name?: string | null;
+    company_name?: string | null;
     logo_url?: string | null;
     platform_brand_name?: string | null;
     platform_phone?: string | null;
@@ -226,8 +227,8 @@ export function printInvoiceHTML(
 <div class="receipt">
   ${data.logo_url ? `<img src="${escapeAttr(data.logo_url)}" class="logo" alt="logo" />` : ""}
   <div class="center">
-    <h1>${escapeHtml(data.tenant_name || data.branch_name)}</h1>
-    <div class="muted">${escapeHtml(data.branch_name)}</div>
+    <h1>${escapeHtml(data.branch_name)}</h1>
+    <div class="muted">${escapeHtml(data.company_name || data.tenant_name || "")}</div>
     ${data.address ? `<div class="muted">${escapeHtml(data.address)}</div>` : ""}
     ${data.phone ? `<div class="muted">هاتف: ${escapeHtml(data.phone)}</div>` : ""}
     ${data.tax_number ? `<div class="muted">الرقم الضريبي: ${escapeHtml(data.tax_number)}</div>` : ""}
