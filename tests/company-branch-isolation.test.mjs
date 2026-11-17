@@ -38,9 +38,9 @@ test("cash session writes and closes cannot cross company branches", () => {
 const creatorScope = readFileSync(new URL("../supabase/migrations/20261118000002_company_creator_visibility_for_master_data.sql", import.meta.url), "utf8");
 
 test("company managers can access coworkers' master records only through shared company membership", () => {
-  assert.match(creatorScope, /private\\.can_access_creator_company/);
-  assert.match(creatorScope, /viewer\\.company_id = creator\\.company_id/);
-  assert.match(creatorScope, /viewer\\.user_id = \\(select auth\\.uid\\(\\)\\)/);
+  assert.match(creatorScope, /private\.can_access_creator_company/);
+  assert.match(creatorScope, /viewer\.company_id = creator\.company_id/);
+  assert.match(creatorScope, /viewer\.user_id = \(select auth\.uid\(\)\)/);
   assert.match(creatorScope, /creator_scope_%I/);
   assert.match(creatorScope, /creator_update_%I/);
   assert.match(creatorScope, /creator_delete_%I/);
@@ -51,7 +51,7 @@ const operationalScope = readFileSync(new URL("../supabase/migrations/2026111800
 
 test("company RLS boundaries cover branch operations, HR records, financial children, profiles and audit trails", () => {
   assert.match(operationalScope, /create policy company_boundary_%I_select/);
-  assert.match(operationalScope, /array\['cash_sessions'/);
+  assert.match(operationalScope, /array\[\s*'cash_sessions'/);
   assert.match(operationalScope, /array\['attendance','bonuses','deductions','leave_requests'\]/);
   for (const helper of ["can_access_employee_record", "can_access_payroll_run_record", "can_access_sale_record", "can_access_purchase_record", "can_access_purchase_return_record", "can_access_sale_refund_record"]) {
     assert.match(operationalScope, new RegExp(helper));
