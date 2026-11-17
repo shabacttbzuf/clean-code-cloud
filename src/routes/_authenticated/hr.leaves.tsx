@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Check, X, Loader2, CalendarDays } from "lucide-react";
+import { Plus, Check, X, Loader2, CalendarDays, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { formatDate } from "@/lib/format";
@@ -112,6 +112,7 @@ function LeavesPage() {
         }
       />
 
+      <div className="flex justify-end print:hidden"><Button variant="outline" onClick={() => window.print()}><Printer className="ml-2 h-4 w-4" />طباعة كشف الإجازات</Button></div>
       <Select value={filter} onValueChange={setFilter}>
         <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
         <SelectContent>
