@@ -464,6 +464,8 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/branches/$branchId'
+    | '/companies/$companyId'
     | '/auth'
     | '/onboarding'
     | '/bootstrap-owner'
