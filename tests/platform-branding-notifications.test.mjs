@@ -8,15 +8,15 @@ const settings = readFileSync(new URL("../src/routes/_authenticated/settings.tsx
 const sidebar = readFileSync(new URL("../src/components/app-sidebar.tsx", import.meta.url), "utf8");
 
 test("platform branding is owner-managed and remains separate from tenant branding", () => {
-  assert.match(migration, /create table if not exists public\\.platform_branding/);
-  assert.match(migration, /public\\.is_super_owner/);
+  assert.match(migration, /create table if not exists public\.platform_branding/);
+  assert.match(migration, /public\.is_super_owner/);
   assert.match(settings, /هوية النظام والتسويق/);
   assert.ok(settings.includes("...platformBrand"));
 });
 
 test("notification read receipts are isolated per authenticated user", () => {
-  assert.match(migration, /create table if not exists public\\.notification_reads/);
-  assert.match(migration, /user_id = \\(select auth\\.uid\\(\\)\\)/);
+  assert.match(migration, /create table if not exists public\.notification_reads/);
+  assert.match(migration, /user_id = \\(select auth\.uid\\(\\)\\)/);
   assert.match(layout, /topbar-notifications/);
   assert.match(layout, /bg-red-500/);
   assert.match(layout, /markAllNotificationsRead/);
