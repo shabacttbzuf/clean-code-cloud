@@ -155,3 +155,7 @@
 83. `supabase/migrations/20261118000004_tighten_company_compound_scope_checks.sql`
 
 **الإجمالي: 83 ترحيلاً.**
+
+84. `supabase/migrations/20261118000005_index_company_creator_foreign_keys.sql`
+
+**الإجمالي: 84 ترحيلاً.**
