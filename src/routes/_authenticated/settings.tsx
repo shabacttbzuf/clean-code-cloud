@@ -389,6 +389,29 @@ function SettingsPage() {
         </CardContent>
       </Card>
 
+      {isSuperOwner && (
+        <Card id="platform-branding">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Megaphone className="h-5 w-5 text-primary" /> هوية النظام والتسويق</CardTitle>
+            <CardDescription>هوية مالك المنصة مستقلة عن هوية الشركة والفرع.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2"><Label>اسم العلامة التجارية</Label><Input value={platformBrand.brand_name} onChange={(e) => setPlatformBrand({ ...platformBrand, brand_name: e.target.value })} /></div>
+              <div className="space-y-2"><Label>رقم التواصل</Label><Input dir="ltr" value={platformBrand.phone} onChange={(e) => setPlatformBrand({ ...platformBrand, phone: e.target.value })} /></div>
+              <div className="space-y-2"><Label>رابط الموقع</Label><Input dir="ltr" value={platformBrand.website_url} onChange={(e) => setPlatformBrand({ ...platformBrand, website_url: e.target.value })} placeholder="https://" /></div>
+              <div className="space-y-2"><Label>رابط شعار المنصة</Label><Input dir="ltr" value={platformBrand.logo_url} onChange={(e) => setPlatformBrand({ ...platformBrand, logo_url: e.target.value })} placeholder="https://" /></div>
+            </div>
+            <div className="space-y-2"><Label>النص الإعلاني</Label><Input value={platformBrand.promotional_text} onChange={(e) => setPlatformBrand({ ...platformBrand, promotional_text: e.target.value })} maxLength={240} /></div>
+            <div className="flex flex-wrap items-center gap-4">
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={platformBrand.enabled} onChange={(e) => setPlatformBrand({ ...platformBrand, enabled: e.target.checked })} /> تفعيل الظهور في المطبوعات</label>
+              <div className="flex items-center gap-2 text-sm"><Label>موضع الظهور</Label><select className="h-9 rounded-md border bg-background px-2" value={platformBrand.placement} onChange={(e) => setPlatformBrand({ ...platformBrand, placement: e.target.value })}><option value="footer">أسفل الصفحة</option><option value="header">أعلى الصفحة</option><option value="both">أعلى وأسفل الصفحة</option></select></div>
+            </div>
+            <Button onClick={() => savePlatformBrand.mutate()} disabled={savePlatformBrand.isPending}>{savePlatformBrand.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}حفظ هوية النظام</Button>
+          </CardContent>
+        </Card>
+      )}
+
       {canManageMarketing && (
         <Card id="marketing-campaigns"><CardHeader><CardTitle className="flex items-center gap-2"><Megaphone className="h-5 w-5 text-primary" /> إدارة العروض والإعلانات</CardTitle>
             <CardDescription>أنشئ حملات ترويجية بصور وروابط، وحدد مكان ظهورها وفترة تشغيلها. تحفظ الحملات كمسودات حتى تقوم بتفعيلها.</CardDescription>
