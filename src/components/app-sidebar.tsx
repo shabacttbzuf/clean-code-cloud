@@ -10,7 +10,6 @@ import {
   Users,
   UserSquare2,
   Settings,
-  Building2,
   ShoppingCart,
   Receipt,
   Wallet,
