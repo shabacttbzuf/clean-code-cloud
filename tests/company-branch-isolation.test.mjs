@@ -81,5 +81,5 @@ const companyBranchMigration = readFileSync(new URL("../supabase/migrations/2026
 
 test("company branch migration uses valid PostgreSQL dollar quoting", () => {
   assert.ok(!companyBranchMigration.includes("do $ begin"));
-  assert.ok(companyBranchMigration.includes("do " + "$" + " begin"));
+  assert.ok(companyBranchMigration.includes("do " + "$" + "$" + " begin"));
 });
