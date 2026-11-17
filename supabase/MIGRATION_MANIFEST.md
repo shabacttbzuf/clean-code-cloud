@@ -143,3 +143,7 @@
 80. `supabase/migrations/20261118000001_allow_company_members_to_read_assigned_company.sql`
 
 **الإجمالي: 80 ترحيلاً.**
+
+81. `supabase/migrations/20261118000002_company_creator_visibility_for_master_data.sql`
+
+**الإجمالي: 81 ترحيلاً.**
