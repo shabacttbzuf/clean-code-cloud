@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Loader2, Printer, Download, ArrowRight, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { formatMoney, formatDateTime } from "@/lib/format";
-import { printInvoicePDF, downloadInvoicePDF, type InvoiceData } from "@/lib/invoice-pdf";
+import { printInvoicePDF, printInvoiceHTML, downloadInvoicePDF, type InvoiceData } from "@/lib/invoice-pdf";
 
 export const Route = createFileRoute("/_authenticated/sales/$id")({
   component: SaleDetailPage,
@@ -29,7 +29,7 @@ type Item = {
   id: string; product_id: string | null; product_name: string;
   quantity: number; unit_price: number; line_total: number; refunded_quantity: number;
 };
-type Branch = { id: string; name: string; tax_number: string | null };
+type Branch = { id: string; name: string; tax_number: string | null; company_id: string | null; logo_url: string | null; image_url: string | null; address: string | null; phone: string | null };
 type Refund = {
   id: string; total: number; reason: string; refund_method: string; created_at: string;
 };
@@ -57,7 +57,7 @@ function SaleDetailPage() {
 
       const [itemsRes, branchRes, profileRes, refundsRes] = await Promise.all([
         supabase.from("sale_items").select("id, product_id, product_name, quantity, unit_price, line_total").eq("sale_id", id),
-        supabase.from("branches").select("id, name, tax_number").eq("id", s.branch_id).maybeSingle(),
+        supabase.from("branches").select("id, name, tax_number, company_id, logo_url, image_url, address, phone").eq("id", s.branch_id).maybeSingle(),
         supabase.from("profiles").select("full_name").eq("id", s.cashier_id).maybeSingle(),
         supabase.from("sale_refunds").select("id, total, reason, refund_method, created_at").eq("sale_id", id).order("created_at", { ascending: false }),
       ]);
@@ -84,6 +84,27 @@ function SaleDetailPage() {
         refunds: refundRows,
       };
     },
+  });
+
+  const companyIdentity = useQuery({
+    queryKey: ["sale-company-identity", sale.data?.branch?.company_id],
+    queryFn: async () => {
+      if (!sale.data?.branch?.company_id) return null;
+      const { data, error } = await supabase.from("companies").select("name, logo_url").eq("id", sale.data.branch.company_id).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!sale.data?.branch?.company_id,
+  });
+  const platformIdentity = useQuery({
+    queryKey: ["platform-branding"],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from("platform_branding" as any) as any)
+        .select("brand_name, phone, promotional_text, website_url, enabled").eq("id", true).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    staleTime: 60_000,
   });
 
   const refundMutation = useMutation({
@@ -166,7 +187,23 @@ function SaleDetailPage() {
           <Button variant="outline" onClick={() => downloadInvoicePDF(invoiceData)}>
             <Download className="ml-2 h-4 w-4" />تحميل PDF
           </Button>
-          <Button onClick={() => printInvoicePDF(invoiceData)}>
+          <Button onClick={() => {
+            const branchIdentity = sale.data?.branch;
+            const platform = platformIdentity.data;
+            const opened = printInvoiceHTML({
+              ...invoiceData,
+              address: branchIdentity?.address,
+              phone: branchIdentity?.phone,
+              company_name: companyIdentity.data?.name ?? tenant?.name ?? null,
+              logo_url: branchIdentity?.logo_url ?? branchIdentity?.image_url ?? companyIdentity.data?.logo_url ?? null,
+              platform_brand_name: platform?.brand_name,
+              platform_phone: platform?.phone,
+              platform_promotional_text: platform?.promotional_text,
+              platform_website_url: platform?.website_url,
+              platform_brand_enabled: platform?.enabled === true,
+            }, "80mm");
+            if (!opened) toast.error("اسمح بفتح النوافذ المنبثقة لطباعة الفاتورة");
+          }}>
             <Printer className="ml-2 h-4 w-4" />طباعة
           </Button>
         </div>
