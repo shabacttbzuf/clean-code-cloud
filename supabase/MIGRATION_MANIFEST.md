@@ -159,3 +159,7 @@
 84. `supabase/migrations/20261118000005_index_company_creator_foreign_keys.sql`
 
 **الإجمالي: 84 ترحيلاً.**
+
+85. `supabase/migrations/20261118000006_platform_branding_and_notification_reads.sql`
+
+**الإجمالي: 85 ترحيلاً.**
