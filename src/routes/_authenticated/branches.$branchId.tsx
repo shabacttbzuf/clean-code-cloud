@@ -30,7 +30,7 @@ function BranchDetailsPage() {
         supabase.from("expenses").select("amount,paid_at").eq("tenant_id", tenantId!).eq("branch_id", branchId).gte("paid_at", start.slice(0, 10)),
         supabase.from("inventory").select("quantity").eq("tenant_id", tenantId!).eq("branch_id", branchId),
         supabase.from("employees").select("id,status").eq("tenant_id", tenantId!).eq("branch_id", branchId),
-        supabase.from("attendance").select("id,date,status").eq("tenant_id", tenantId!).eq("branch_id", branchId).gte("date", start.slice(0, 10)),
+        supabase.from("attendance").select("id,employee_id,date,status").eq("tenant_id", tenantId!).gte("date", start.slice(0, 10)),
         supabase.from("cash_sessions").select("id,status,opened_at,closed_at,cash_difference").eq("tenant_id", tenantId!).eq("branch_id", branchId).gte("opened_at", start),
       ]);
       for (const result of [company, sales, expenses, inventory, employees, attendance, sessions]) if (result.error) throw result.error;
@@ -42,7 +42,7 @@ function BranchDetailsPage() {
         expensesTotal: (expenses.data ?? []).reduce((sum, row) => sum + Number(row.amount ?? 0), 0),
         stockUnits: (inventory.data ?? []).reduce((sum, row) => sum + Number(row.quantity ?? 0), 0),
         employeesCount: (employees.data ?? []).filter((row) => row.status === "active").length,
-        attendanceCount: (attendance.data ?? []).length,
+        attendanceCount: (attendance.data ?? []).filter((row) => (employees.data ?? []).some((employee) => employee.id === row.employee_id)).length,
         sessionsCount: (sessions.data ?? []).length,
         openSessions: (sessions.data ?? []).filter((row) => row.status === "open").length,
       };
