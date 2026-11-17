@@ -151,3 +151,7 @@
 82. `supabase/migrations/20261118000003_enforce_company_scope_across_operational_data.sql`
 
 **الإجمالي: 82 ترحيلاً.**
+
+83. `supabase/migrations/20261118000004_tighten_company_compound_scope_checks.sql`
+
+**الإجمالي: 83 ترحيلاً.**
