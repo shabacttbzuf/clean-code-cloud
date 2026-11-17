@@ -39,7 +39,7 @@ function CompanyDetailsPage() {
         supabase.from("sales").select("id,total,branch_id,status,created_at").eq("tenant_id", tenantId!).in("branch_id", branchIds).gte("created_at", start).neq("status", "void"),
         supabase.from("expenses").select("amount,branch_id,paid_at").eq("tenant_id", tenantId!).in("branch_id", branchIds).gte("paid_at", start.slice(0, 10)),
         supabase.from("employees").select("id,branch_id,status").eq("tenant_id", tenantId!).in("branch_id", branchIds),
-        supabase.from("attendance").select("id,branch_id,date").eq("tenant_id", tenantId!).in("branch_id", branchIds).gte("date", start.slice(0, 10)),
+        supabase.from("attendance").select("id,employee_id,date").eq("tenant_id", tenantId!).in("branch_id", branchIds).gte("date", start.slice(0, 10)),
         supabase.from("inventory").select("quantity,branch_id").eq("tenant_id", tenantId!).in("branch_id", branchIds),
       ]);
       for (const result of [sales, expenses, employees, attendance, inventory]) if (result.error) throw result.error;
@@ -51,7 +51,7 @@ function CompanyDetailsPage() {
           salesCount: branchSales.length,
           expenses: (expenses.data ?? []).filter((r) => r.branch_id === b.id).reduce((sum, row) => sum + Number(row.amount ?? 0), 0),
           employees: (employees.data ?? []).filter((r) => r.branch_id === b.id && r.status === "active").length,
-          attendance: (attendance.data ?? []).filter((r) => r.branch_id === b.id).length,
+          attendance: (attendance.data ?? []).filter((r) => (employees.data ?? []).some((employee) => employee.branch_id === b.id && employee.id === r.employee_id)).length,
           stockUnits: (inventory.data ?? []).filter((r) => r.branch_id === b.id).reduce((sum, row) => sum + Number(row.quantity ?? 0), 0),
         };
       });
