@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Loader2, Printer, Download, ArrowRight, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { formatMoney, formatDateTime } from "@/lib/format";
-import { printInvoicePDF, printInvoiceHTML, downloadInvoicePDF, type InvoiceData } from "@/lib/invoice-pdf";
+import { printInvoiceHTML, downloadInvoicePDF, type InvoiceData } from "@/lib/invoice-pdf";
 
 export const Route = createFileRoute("/_authenticated/sales/$id")({
   component: SaleDetailPage,
