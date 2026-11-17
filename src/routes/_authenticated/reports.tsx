@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, FileText, Download, Calendar, TrendingUp, Wallet, Package, Users, Printer } from "lucide-react";
+import { Loader2, FileText, Download, Calendar, TrendingUp, Wallet, Package, Users, Printer, Printer } from "lucide-react";
 import { formatMoney, formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 
