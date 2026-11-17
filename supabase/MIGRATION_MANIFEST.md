@@ -147,3 +147,7 @@
 81. `supabase/migrations/20261118000002_company_creator_visibility_for_master_data.sql`
 
 **الإجمالي: 81 ترحيلاً.**
+
+82. `supabase/migrations/20261118000003_enforce_company_scope_across_operational_data.sql`
+
+**الإجمالي: 82 ترحيلاً.**
