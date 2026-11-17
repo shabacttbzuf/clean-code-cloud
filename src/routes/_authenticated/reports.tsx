@@ -290,6 +290,16 @@ function ReportsPage() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2 sm:w-48">
+              <Label className="text-xs">تصفية حسب الفرع</Label>
+              <Select value={branchId} onValueChange={setBranchId}>
+                <SelectTrigger><SelectValue placeholder="كل الفروع" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل الفروع</SelectItem>
+                  {(branchesQuery.data ?? []).map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2 sm:w-40">
               <Label className="text-xs">تجميع المبيعات</Label>
               <Select value={groupBy} onValueChange={(v) => setGroupBy(v as typeof groupBy)}>
