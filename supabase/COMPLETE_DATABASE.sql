@@ -8722,3 +8722,38 @@ drop policy if exists company_scope_cash_sessions_delete on public.cash_sessions
 create policy company_scope_cash_sessions_delete on public.cash_sessions as restrictive for delete to authenticated
 using (private.can_access_branch((select auth.uid()),tenant_id,branch_id) and (exists(select 1 from public.super_owners so where so.user_id=(select auth.uid())) or exists(select 1 from public.user_roles ur where ur.user_id=(select auth.uid()) and ur.tenant_id=cash_sessions.tenant_id and ur.company_id=(select b.company_id from public.branches b where b.id=cash_sessions.branch_id) and ur.role in ('owner','manager'))));
 commit;
+
+
+-- =====================================================================
+-- SOURCE MIGRATION: 20261118000001_allow_company_members_to_read_assigned_company.sql
+-- =====================================================================
+
+-- Allow a company manager to read only the company assigned to their membership.
+-- Super owners retain global visibility; unassigned tenant owners retain tenant company visibility.
+begin;
+
+drop policy if exists permission_gate_companies_select on public.companies;
+create policy permission_gate_companies_select on public.companies
+as restrictive for select to authenticated
+using (
+  public.is_super_owner((select auth.uid()))
+  or has_permission((select auth.uid()), tenant_id, 'companies.view')
+  or exists (
+    select 1
+    from public.user_roles ur
+    where ur.user_id = (select auth.uid())
+      and ur.tenant_id = companies.tenant_id
+      and ur.company_id = companies.id
+      and ur.role in ('owner', 'manager')
+  )
+  or exists (
+    select 1
+    from public.user_roles ur
+    where ur.user_id = (select auth.uid())
+      and ur.tenant_id = companies.tenant_id
+      and ur.company_id is null
+      and ur.role = 'owner'
+  )
+);
+
+commit;
