@@ -97,7 +97,7 @@ function BranchesPage() {
       if (error) throw error;
       return (data ?? []) as ProfileLite[];
     },
-    enabled: !!tenantId && isAdmin,
+    enabled: !!tenantId && canManageBranches,
   });
   const managerMap = new Map((managers.data ?? []).map((p) => [p.id, p.full_name ?? "—"]));
 
@@ -151,7 +151,7 @@ function BranchesPage() {
         title="الفروع"
         subtitle="أدر فروع مطعمك — كل فرع لديه إعدادات وعملة ورقم ضريبي مستقلين."
         action={
-          isAdmin && (
+          canManageBranches && (
             <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditing(null); }}>
               <DialogTrigger asChild>
                 <Button><Plus className="ml-2 h-4 w-4" />إضافة فرع</Button>
