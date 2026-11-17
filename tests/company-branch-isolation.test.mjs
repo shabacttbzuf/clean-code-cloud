@@ -39,7 +39,7 @@ const creatorScope = readFileSync(new URL("../supabase/migrations/20261118000002
 
 test("company managers can access coworkers' master records only through shared company membership", () => {
   assert.match(creatorScope, /private\.can_access_creator_company/);
-  assert.match(creatorScope, /viewer\.company_id = creator\.company_id/);
+  assert.match(creatorScope, /creator\.company_id = viewer\.company_id/);
   assert.match(creatorScope, /viewer\.user_id = \(select auth\.uid\(\)\)/);
   assert.match(creatorScope, /creator_scope_%I/);
   assert.match(creatorScope, /creator_update_%I/);
