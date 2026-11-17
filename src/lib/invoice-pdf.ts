@@ -233,6 +233,7 @@ export function printInvoiceHTML(
 </head>
 <body>
 <div class="receipt">
+  ${platformHeader}
   ${data.logo_url ? `<img src="${escapeAttr(data.logo_url)}" class="logo" alt="logo" />` : ""}
   <div class="center">
     <h1>${escapeHtml(data.branch_name)}</h1>
