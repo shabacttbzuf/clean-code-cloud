@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -190,7 +190,7 @@ function BranchesPage() {
                       <Building2 className="h-5 w-5" />
                     </div>
                     <div>
-                      <div className="font-semibold">{b.name}</div>
+                      <div className="font-semibold"><Link to="/branches/$branchId" params={{ branchId: b.id }} className="text-primary hover:underline">{b.name}</Link></div>
                       <div className="text-xs text-muted-foreground">{b.currency}</div>
                     </div>
                   </div>
@@ -214,8 +214,10 @@ function BranchesPage() {
                     <div className="flex items-center gap-1"><UserIcon className="h-3 w-3" />{managerMap.get(b.manager_id) ?? "—"}</div>
                   )}
                 </div>
+                <div className="mt-4 flex gap-2 border-t pt-3">
+                  <Button size="sm" variant="outline" className="flex-1" asChild><Link to="/branches/$branchId" params={{ branchId: b.id }}>تفاصيل الفرع</Link></Button>
                 {canManageBranches && (
-                  <div className="mt-4 flex gap-2 border-t pt-3">
+                  <div className="flex flex-1 gap-2">
                     <Button
                       size="sm"
                       variant="ghost"
@@ -236,6 +238,7 @@ function BranchesPage() {
                     </Button>
                   </div>
                 )}
+                </div>
               </CardContent>
             </Card>
           ))}
