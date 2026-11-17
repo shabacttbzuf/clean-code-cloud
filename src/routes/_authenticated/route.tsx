@@ -147,9 +147,9 @@ function permissionForPath(pathname: string): string | null {
 function PermissionRouteGuard() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const { tenantId, userId, loading: tenantLoading } = useActiveTenant();
-  const { isSuperOwner, loading: ownerLoading } = useSuperOwner();
+  const { isSuperOwner, totalCount, loading: ownerLoading } = useSuperOwner();
   const requiredPermission = permissionForPath(pathname);
-  const ownerOnly = pathname === "/admin" || pathname === "/owner-center";
+  const ownerOnly = pathname === "/owner-center" || (pathname === "/admin" && totalCount > 0);
 
   const permissionsQuery = useQuery({
     queryKey: ["route-effective-permissions", tenantId, userId],
