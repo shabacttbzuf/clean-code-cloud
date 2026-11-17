@@ -10,7 +10,7 @@ import {
   Users,
   UserSquare2,
   Settings,
-  ChefHat,
+  Building2,
   ShoppingCart,
   Receipt,
   Wallet,
@@ -68,7 +68,7 @@ const groups: Group[] = [
   {
     label: "البيع",
     items: [
-      { title: "نقطة البيع", url: "/pos", icon: ShoppingCart, permission: "pos.use" },
+      { title: "المبيعات ونقطة البيع", url: "/pos", icon: ShoppingCart, permission: "pos.use" },
       { title: "الفواتير", url: "/sales", icon: Receipt, permission: "sales.view" },
       { title: "الورديات", url: "/cash-sessions", icon: Wallet, permission: "cash.view" },
       { title: "العملاء", url: "/customers", icon: UserSquare2, permission: "customers.view" },
@@ -212,12 +212,12 @@ export function AppSidebar() {
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-2 px-2 py-2">
           <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-            <ChefHat className="h-4 w-4" />
+            <Building2 className="h-4 w-4" />
           </div>
           {!collapsed && (
             <div className="flex flex-col overflow-hidden">
-              <span className="truncate text-sm font-bold text-sidebar-foreground">RAS</span>
-              <span className="truncate text-[10px] text-sidebar-foreground/60">محاسبة المطاعم</span>
+              <span className="truncate text-sm font-bold text-sidebar-foreground">إدارة الأعمال</span>
+              <span className="truncate text-[10px] text-sidebar-foreground/60">منصة الشركات والفروع</span>
             </div>
           )}
         </div>
