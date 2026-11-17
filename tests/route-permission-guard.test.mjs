@@ -53,10 +53,15 @@ test("direct URL access is guarded and denied when permission lookup fails", () 
   assert.match(source, /return <Outlet \/>/);
   assert.match(source, /permissionsQuery\.isError/);
   assert.match(source, /ليس لديك صلاحية الوصول إلى هذه الصفحة/);
-  assert.match(source, /pathname === "\/admin" \|\| pathname === "\/owner-center"/);
+  assert.match(source, /pathname === "\/owner-center" \|\| \(pathname === "\/admin" && totalCount > 0\)/);
 });
 
 test("nested routes use the most specific permission mapping", () => {
   assert.match(source, /\.sort\(\(a, b\) => b\.prefix\.length - a\.prefix\.length\)/);
   assert.match(source, /pathname\.startsWith\(rule\.prefix \+ "\/"\)/);
+});
+
+test("first-owner bootstrap remains reachable only while no Super Owner exists", () => {
+  assert.match(source, /pathname === "\/admin" && totalCount > 0/);
+  assert.match(source, /const \{ isSuperOwner, totalCount, loading: ownerLoading \} = useSuperOwner\(\)/);
 });
