@@ -34,3 +34,15 @@ test("cash session writes and closes cannot cross company branches", () => {
   assert.match(cashScope, /company_scope_cash_sessions_delete/);
   assert.match(cashScope, /private\.can_access_branch/);
 });
+
+const creatorScope = readFileSync(new URL("../supabase/migrations/20261118000002_company_creator_visibility_for_master_data.sql", import.meta.url), "utf8");
+
+test("company managers can access coworkers' master records only through shared company membership", () => {
+  assert.match(creatorScope, /private\\.can_access_creator_company/);
+  assert.match(creatorScope, /viewer\\.company_id = creator\\.company_id/);
+  assert.match(creatorScope, /viewer\\.user_id = \\(select auth\\.uid\\(\\)\\)/);
+  assert.match(creatorScope, /creator_scope_%I/);
+  assert.match(creatorScope, /creator_update_%I/);
+  assert.match(creatorScope, /creator_delete_%I/);
+  assert.match(creatorScope, /user_roles_company_member_idx/);
+});
