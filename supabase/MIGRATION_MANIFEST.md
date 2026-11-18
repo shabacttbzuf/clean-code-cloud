@@ -162,4 +162,6 @@
 
 85. `supabase/migrations/20261118000006_platform_branding_and_notification_reads.sql`
 
-**الإجمالي: 85 ترحيلاً.**
+86. `supabase/migrations/20261119000001_customer_credit_sale_cost_snapshot.sql`
+
+**الإجمالي: 86 ترحيلاً.**
