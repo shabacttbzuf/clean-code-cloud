@@ -87,24 +87,28 @@ async function getActorCompanyScope(
   }
 
   let companyId: string | null = companyIds[0] ?? null;
-  if (!companyId && !isSuperOwner && !isTenantOwner) {
+  if (!isSuperOwner && !isTenantOwner) {
     const branchIds = Array.from(
       new Set(actorRoles.map((r: any) => r.branch_id).filter(Boolean)),
     ) as string[];
     if (branchIds.length) {
       const { data: branches, error: branchesError } = await supabaseAdmin
         .from("branches")
-        .select("company_id")
+        .select("id,company_id")
         .eq("tenant_id", tenantId)
         .in("id", branchIds);
       if (branchesError) throw new Error(branchesError.message);
+      if ((branches ?? []).length !== branchIds.length) {
+        throw new Error("يوجد فرع غير صالح ضمن إسناد حسابك؛ راجع مسؤول النظام.");
+      }
       const branchCompanyIds = Array.from(
         new Set((branches ?? []).map((b: any) => b.company_id).filter(Boolean)),
       ) as string[];
-      if (branchCompanyIds.length > 1) {
-        throw new Error("فروع حسابك تتبع شركات متعددة؛ راجع إسناد الشركة.");
+      if (branchCompanyIds.length > 1 ||
+          (companyId && (branches ?? []).some((b: any) => b.company_id !== companyId))) {
+        throw new Error("فروع حسابك لا تتطابق مع الشركة المسندة إليك.");
       }
-      companyId = branchCompanyIds[0] ?? null;
+      companyId = companyId ?? branchCompanyIds[0] ?? null;
     }
   }
 
