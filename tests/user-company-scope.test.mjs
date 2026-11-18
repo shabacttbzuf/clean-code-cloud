@@ -72,3 +72,9 @@ test("security-definer helper actors are bound to the authenticated user", () =>
   assert.match(helperMigration, /create or replace function private\.user_has_role_in_tenant[\s\S]*_user_id=\(select auth\.uid\(\)\)/i);
   assert.match(helperMigration, /create or replace function private\.was_hired_by[\s\S]*_actor=\(select auth\.uid\(\)\)/i);
 });
+
+test("the platform Super Owner account cannot be modified through role RPCs or RLS", () => {
+  assert.match(migration, /protected_super_owner\.user_id=_target_user_id/i);
+  assert.match(migration, /The platform Super Owner account is protected/g);
+  assert.match(migration, /protected_super_owner\.user_id=\(select auth\.uid\(\)\)/i);
+});
