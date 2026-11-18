@@ -34,6 +34,12 @@ create index if not exists marketing_campaigns_tenant_company_status_idx
 create index if not exists notifications_tenant_company_created_idx
   on public.notifications(tenant_id, company_id, created_at desc)
   where company_id is not null;
+create index if not exists marketing_campaigns_company_id_idx
+  on public.marketing_campaigns(company_id)
+  where company_id is not null;
+create index if not exists notifications_company_id_idx
+  on public.notifications(company_id)
+  where company_id is not null;
 
 -- A tenant owner with no company assignment can access all companies in the tenant.
 -- Company managers and accountants remain limited to their assigned company.
