@@ -24,7 +24,7 @@ test("only tenant owners and the platform owner can administer protected roles",
   assert.match(migration, /company_scope_user_roles_update[\s\S]*private\.can_manage_user_role_row/i);
   assert.match(migration, /company_scope_user_roles_delete[\s\S]*private\.can_manage_user_role_row/i);
   assert.match(migration, /_row_role not in \('owner'::public\.app_role,'manager'::public\.app_role\)/i);
-  assert.match(migration, /user_id=\(select auth\.uid\(\)\) and role='owner'[\s\S]*t\.owner_id=\(select auth\.uid\(\)\)/i);
+  assert.match(migration, /user_id=\(select auth\.uid\(\)\) and role='owner'[\s\S]*company_id is null and branch_id is null[\s\S]*t\.owner_id=\(select auth\.uid\(\)\)/i);
 });
 
 test("tenant-wide custom role definitions are managed only by tenant owners", () => {
