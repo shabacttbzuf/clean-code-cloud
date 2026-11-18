@@ -20,12 +20,12 @@ export async function resolveAvatarUrl(
     !/^[0-9a-f-]{36}$/i.test(parts[2]) ||
     !/^[a-zA-Z0-9._-]+$/.test(parts[3])
   ) {
-    throw new Error("مسار الصورة الشخصية غير صالح");
+    return null;
   }
 
   const { data, error } = await supabase.storage
     .from("restaurant-private-assets")
     .createSignedUrl(path, 60 * 60 * 24);
-  if (error) throw error;
+  if (error) return null;
   return data.signedUrl;
 }
