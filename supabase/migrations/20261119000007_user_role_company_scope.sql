@@ -144,6 +144,7 @@ with check (
   )
   or (
     role <> 'owner'
+    and role <> 'manager'
     and company_id is not null
     and exists (
       select 1 from public.user_roles company_owner
@@ -185,6 +186,7 @@ using (
   )
   or (
     role <> 'owner'
+    and role <> 'manager'
     and company_id is not null
     and exists (
       select 1 from public.user_roles company_owner
@@ -222,6 +224,7 @@ with check (
   )
   or (
     role <> 'owner'
+    and role <> 'manager'
     and company_id is not null
     and exists (
       select 1 from public.user_roles company_owner
@@ -263,6 +266,7 @@ using (
   )
   or (
     role <> 'owner'
+    and role <> 'manager'
     and company_id is not null
     and exists (
       select 1 from public.user_roles company_owner
