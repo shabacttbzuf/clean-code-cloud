@@ -457,30 +457,45 @@ drop policy if exists company_scope_notifications_select on public.notifications
 create policy company_scope_notifications_select on public.notifications
 as restrictive for select to authenticated
 using (
-  company_id is null
-  or is_super_owner((select auth.uid()))
+  is_super_owner((select auth.uid()))
   or exists (
     select 1 from public.user_roles ur
     where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
       and ur.role='owner' and ur.company_id is null
   )
-  or exists (
+  or (company_id is not null and exists (
     select 1 from public.user_roles ur
     where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
       and ur.company_id=notifications.company_id
-  )
-  or (audience_type='branch' and exists (
-    select 1 from public.branches b
-    where b.id=notifications.audience_id and b.tenant_id=notifications.tenant_id
-      and private.can_access_branch((select auth.uid()), notifications.tenant_id, b.id)
   ))
-  or (audience_type='department' and exists (
-    select 1 from public.user_roles ur
-    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
-      and ur.department_id=notifications.audience_id
-      and (ur.company_id is null or ur.company_id=notifications.company_id)
+  or (company_id is null and (
+    (audience_type='branch' and exists (
+      select 1 from public.branches b
+      where b.id=notifications.audience_id and b.tenant_id=notifications.tenant_id
+        and private.can_access_branch((select auth.uid()), notifications.tenant_id, b.id)
+    ))
+    or (audience_type='department' and exists (
+      select 1 from public.departments d
+      join public.user_roles ur on ur.user_id=(select auth.uid())
+        and ur.tenant_id=notifications.tenant_id
+      where d.id=notifications.audience_id and d.tenant_id=notifications.tenant_id
+        and (
+          (ur.department_id=d.id and (ur.company_id is null or ur.company_id=d.company_id))
+          or (ur.role in ('owner','manager') and ur.company_id is not null and ur.company_id=d.company_id)
+        )
+    ))
+    or (audience_type='user' and audience_id=(select auth.uid()))
+    or (audience_type in ('all','owner','manager') and (
+      notifications.created_by is null
+      or exists (select 1 from public.super_owners so where so.user_id=notifications.created_by)
+      or exists (
+        select 1 from public.user_roles creator_role
+        where creator_role.user_id=notifications.created_by
+          and creator_role.tenant_id=notifications.tenant_id
+          and creator_role.role='owner' and creator_role.company_id is null
+      )
+    ))
   ))
-  or (audience_type='user' and audience_id=(select auth.uid()))
 );
 
 drop policy if exists company_scope_notifications_insert on public.notifications;
@@ -637,32 +652,46 @@ drop policy if exists company_scope_marketing_campaigns_select on public.marketi
 create policy company_scope_marketing_campaigns_select on public.marketing_campaigns
 as restrictive for select to authenticated
 using (
-  company_id is null
-  or is_super_owner((select auth.uid()))
+  is_super_owner((select auth.uid()))
   or exists (
     select 1 from public.user_roles ur
     where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
       and ur.role='owner' and ur.company_id is null
   )
-  or exists (
-    select 1 from public.user_roles ur
-    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
-      and ur.company_id=marketing_campaigns.company_id
-  )
-  or exists (
-    select 1 from public.user_roles ur
-    join public.branches b on b.id=ur.branch_id
-    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
-      and b.company_id=marketing_campaigns.company_id
-      and (ur.company_id is null or ur.company_id=b.company_id)
-  )
-  or exists (
-    select 1 from public.user_roles ur
-    join public.departments d on d.id=ur.department_id
-    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
-      and d.company_id=marketing_campaigns.company_id
-      and (ur.company_id is null or ur.company_id=d.company_id)
-  )
+  or (company_id is not null and (
+    exists (
+      select 1 from public.user_roles ur
+      where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+        and ur.company_id=marketing_campaigns.company_id
+    )
+    or exists (
+      select 1 from public.user_roles ur
+      join public.branches b on b.id=ur.branch_id and b.tenant_id=ur.tenant_id
+      where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+        and b.company_id=marketing_campaigns.company_id
+        and (ur.company_id is null or ur.company_id=b.company_id)
+    )
+    or exists (
+      select 1 from public.user_roles ur
+      join public.departments d on d.id=ur.department_id and d.tenant_id=ur.tenant_id
+      where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+        and d.company_id=marketing_campaigns.company_id
+        and (ur.company_id is null or ur.company_id=d.company_id)
+    )
+  ))
+  or (company_id is null and (
+    marketing_campaigns.created_by is null
+    or exists (
+      select 1 from public.super_owners so
+      where so.user_id=marketing_campaigns.created_by
+    )
+    or exists (
+      select 1 from public.user_roles creator_role
+      where creator_role.user_id=marketing_campaigns.created_by
+        and creator_role.tenant_id=marketing_campaigns.tenant_id
+        and creator_role.role='owner' and creator_role.company_id is null
+    )
+  ))
 );
 
 drop policy if exists company_scope_marketing_campaigns_insert on public.marketing_campaigns;
