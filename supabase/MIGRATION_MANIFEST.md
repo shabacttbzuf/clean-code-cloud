@@ -174,4 +174,6 @@
 
 89. `supabase/migrations/20261119000004_deduplicate_notification_read_policies_and_index.sql`
 
-**الإجمالي: 89 ترحيلاً.**
+90. `supabase/migrations/20261119000005_index_platform_branding_updated_by.sql`
+
+**الإجمالي: 90 ترحيلاً.**

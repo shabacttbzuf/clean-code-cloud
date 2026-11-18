@@ -9863,3 +9863,14 @@ drop policy if exists "users create own notification receipts" on public.notific
 drop policy if exists "users update own notification receipts" on public.notification_reads;
 drop index if exists public.notification_reads_user_read_at_idx;
 commit;
+
+ 
+-- =====================================================================
+-- SOURCE MIGRATION: 20261119000005_index_platform_branding_updated_by.sql
+-- =====================================================================
+
+-- Cover the optional updated_by foreign key for platform branding.
+-- This index supports efficient auth.users reference checks without indexing NULLs.
+create index if not exists platform_branding_updated_by_idx
+  on public.platform_branding(updated_by)
+  where updated_by is not null;
