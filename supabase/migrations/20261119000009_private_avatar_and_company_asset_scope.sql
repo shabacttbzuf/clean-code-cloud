@@ -125,7 +125,7 @@ with check (
     split_part(name,'/',1) ~* '^[0-9a-f-]{36}$'
     and (
       (
-        split_part(name,'/',2) in ('branding','marketing','products','branches')
+        split_part(name,'/',2) in ('branding','marketing','products','branches','categories')
         and (
           public.is_super_owner((select auth.uid()))
           or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
@@ -134,7 +134,7 @@ with check (
       or (
         split_part(name,'/',2)='companies'
         and split_part(name,'/',3) ~* '^[0-9a-f-]{36}$'
-        and split_part(name,'/',4) in ('branding','marketing','products','branches')
+        and split_part(name,'/',4) in ('branding','marketing','products','branches','categories')
         and (
           public.is_super_owner((select auth.uid()))
           or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
@@ -158,7 +158,7 @@ using (
     split_part(name,'/',1) ~* '^[0-9a-f-]{36}$'
     and (
       (
-        split_part(name,'/',2) in ('branding','marketing','products','branches')
+        split_part(name,'/',2) in ('branding','marketing','products','branches','categories')
         and (
           public.is_super_owner((select auth.uid()))
           or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
@@ -167,7 +167,7 @@ using (
       or (
         split_part(name,'/',2)='companies'
         and split_part(name,'/',3) ~* '^[0-9a-f-]{36}$'
-        and split_part(name,'/',4) in ('branding','marketing','products','branches')
+        and split_part(name,'/',4) in ('branding','marketing','products','branches','categories')
         and (
           public.is_super_owner((select auth.uid()))
           or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
@@ -187,7 +187,7 @@ with check (
     split_part(name,'/',1) ~* '^[0-9a-f-]{36}$'
     and (
       (
-        split_part(name,'/',2) in ('branding','marketing','products','branches')
+        split_part(name,'/',2) in ('branding','marketing','products','branches','categories')
         and (
           public.is_super_owner((select auth.uid()))
           or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
@@ -196,7 +196,7 @@ with check (
       or (
         split_part(name,'/',2)='companies'
         and split_part(name,'/',3) ~* '^[0-9a-f-]{36}$'
-        and split_part(name,'/',4) in ('branding','marketing','products','branches')
+        and split_part(name,'/',4) in ('branding','marketing','products','branches','categories')
         and (
           public.is_super_owner((select auth.uid()))
           or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
@@ -220,7 +220,7 @@ using (
     split_part(name,'/',1) ~* '^[0-9a-f-]{36}$'
     and (
       (
-        split_part(name,'/',2) in ('branding','marketing','products','branches')
+        split_part(name,'/',2) in ('branding','marketing','products','branches','categories')
         and (
           public.is_super_owner((select auth.uid()))
           or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
@@ -229,7 +229,7 @@ using (
       or (
         split_part(name,'/',2)='companies'
         and split_part(name,'/',3) ~* '^[0-9a-f-]{36}$'
-        and split_part(name,'/',4) in ('branding','marketing','products','branches')
+        and split_part(name,'/',4) in ('branding','marketing','products','branches','categories')
         and (
           public.is_super_owner((select auth.uid()))
           or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
