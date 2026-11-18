@@ -11390,6 +11390,10 @@ security definer
 set search_path = pg_catalog, public, private, pg_temp
 as $function$
   select _actor_id=(select auth.uid())
+    and not exists (
+      select 1 from public.super_owners protected_super_owner
+      where protected_super_owner.user_id=_target_user_id
+    )
     and (
       public.is_super_owner(_actor_id)
       or (
@@ -11458,6 +11462,10 @@ with check (
   or (
     user_id=(select auth.uid()) and role='owner'
     and company_id is null and branch_id is null
+    and not exists (
+      select 1 from public.super_owners protected_super_owner
+      where protected_super_owner.user_id=(select auth.uid())
+    )
     and exists (
       select 1 from public.tenants t
       where t.id=user_roles.tenant_id and t.owner_id=(select auth.uid())
@@ -11574,6 +11582,9 @@ declare
 begin
   if auth.uid() is null or _actor_id is distinct from auth.uid() then
     raise exception 'Authenticated actor mismatch' using errcode='42501';
+  end if;
+  if exists (select 1 from public.super_owners so where so.user_id=_user_id) then
+    raise exception 'The platform Super Owner account is protected' using errcode='42501';
   end if;
 
   v_is_super := public.is_super_owner(auth.uid());
@@ -11721,6 +11732,9 @@ begin
   if _actor_id is null then
     raise exception 'Actor is required' using errcode='42501';
   end if;
+  if exists (select 1 from public.super_owners so where so.user_id=_user_id) then
+    raise exception 'The platform Super Owner account is protected' using errcode='42501';
+  end if;
   v_is_super := public.is_super_owner(_actor_id);
   v_is_tenant_owner := exists (
     select 1 from public.user_roles ur
@@ -11856,6 +11870,9 @@ begin
   for update;
   if not found then
     raise exception 'Role assignment not found in the requested tenant' using errcode='P0002';
+  end if;
+  if exists (select 1 from public.super_owners so where so.user_id=v_target_user) then
+    raise exception 'The platform Super Owner account is protected' using errcode='42501';
   end if;
 
   select p.company_id into v_profile_company
