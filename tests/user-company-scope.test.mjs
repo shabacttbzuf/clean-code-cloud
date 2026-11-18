@@ -78,7 +78,7 @@ test("the platform Super Owner account cannot be modified through role RPCs or R
   assert.match(migration, /The platform Super Owner account is protected/g);
   assert.match(migration, /private\.is_super_owner_target[\s\S]*_actor_id=\(select auth\.uid\(\)\)/i);
   assert.match(migration, /not public\.is_super_owner\(\(select auth\.uid\(\)\)\)/i);
-  assert.match(migration, /company_scope_user_permission_overrides_insert[\\s\\S]*private\.is_super_owner_target/i);
-  assert.match(migration, /protect_super_owner_profile_update[\\s\\S]*private\.is_super_owner_target/i);
-  assert.match(migration, /protect_super_owner_profile_delete[\\s\\S]*private\.is_super_owner_target/i);
+  assert.match(migration, /company_scope_user_permission_overrides_insert[\s\S]*private\.is_super_owner_target/i);
+  assert.match(migration, /protect_super_owner_profile_update[\s\S]*private\.is_super_owner_target/i);
+  assert.match(migration, /protect_super_owner_profile_delete[\s\S]*private\.is_super_owner_target/i);
 });
