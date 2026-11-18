@@ -77,3 +77,12 @@ test("legacy unassigned notifications and campaigns are not exposed as tenant-wi
   assert.match(migration, /company_id is null and \([\s\S]*marketing_campaigns\.created_by is null/i);
   assert.doesNotMatch(migration, /using \(\s*company_id is null\s+or/i);
 });
+
+test("company-scoped notification and marketing writes enforce feature permissions", () => {
+  assert.match(migration, /company_scope_notifications_insert[\s\S]*notifications\.manage/i);
+  assert.match(migration, /company_scope_notifications_update[\s\S]*notifications\.manage/i);
+  assert.match(migration, /company_scope_notifications_delete[\s\S]*notifications\.manage/i);
+  assert.match(migration, /company_scope_marketing_campaigns_insert[\s\S]*settings\.manage/i);
+  assert.match(migration, /company_scope_marketing_campaigns_update[\s\S]*settings\.manage/i);
+  assert.match(migration, /company_scope_marketing_campaigns_delete[\s\S]*settings\.manage/i);
+});

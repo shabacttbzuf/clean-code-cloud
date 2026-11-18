@@ -512,6 +512,7 @@ with check (
     select 1 from public.user_roles ur
     where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
       and ur.company_id=notifications.company_id and ur.role in ('owner','manager')
+      and has_permission((select auth.uid()), notifications.tenant_id, 'notifications.manage')
   ))
 );
 
@@ -529,6 +530,7 @@ using (
     select 1 from public.user_roles ur
     where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
       and ur.company_id=notifications.company_id and ur.role in ('owner','manager')
+      and has_permission((select auth.uid()), notifications.tenant_id, 'notifications.manage')
   ))
 )
 with check (
@@ -542,6 +544,7 @@ with check (
     select 1 from public.user_roles ur
     where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
       and ur.company_id=notifications.company_id and ur.role in ('owner','manager')
+      and has_permission((select auth.uid()), notifications.tenant_id, 'notifications.manage')
   ))
 );
 
@@ -559,6 +562,7 @@ using (
     select 1 from public.user_roles ur
     where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
       and ur.company_id=notifications.company_id and ur.role in ('owner','manager')
+      and has_permission((select auth.uid()), notifications.tenant_id, 'notifications.manage')
   ))
 );
 
@@ -708,6 +712,7 @@ with check (
     select 1 from public.user_roles ur
     where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
       and ur.company_id=marketing_campaigns.company_id and ur.role in ('owner','manager')
+      and has_permission((select auth.uid()), marketing_campaigns.tenant_id, 'settings.manage')
   ))
 );
 
@@ -725,6 +730,7 @@ using (
     select 1 from public.user_roles ur
     where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
       and ur.company_id=marketing_campaigns.company_id and ur.role in ('owner','manager')
+      and has_permission((select auth.uid()), marketing_campaigns.tenant_id, 'settings.manage')
   ))
 )
 with check (
@@ -738,6 +744,7 @@ with check (
     select 1 from public.user_roles ur
     where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
       and ur.company_id=marketing_campaigns.company_id and ur.role in ('owner','manager')
+      and has_permission((select auth.uid()), marketing_campaigns.tenant_id, 'settings.manage')
   ))
 );
 
@@ -755,6 +762,7 @@ using (
     select 1 from public.user_roles ur
     where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
       and ur.company_id=marketing_campaigns.company_id and ur.role in ('owner','manager')
+      and has_permission((select auth.uid()), marketing_campaigns.tenant_id, 'settings.manage')
   ))
 );
 

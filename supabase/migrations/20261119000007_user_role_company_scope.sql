@@ -427,6 +427,7 @@ declare
   v_is_tenant_owner boolean;
   v_actor_company_count integer;
   v_actor_company uuid;
+  v_actor_company_wide boolean := false;
   v_profile_company uuid;
   v_profile_branch uuid;
   v_profile_hired_by uuid;
@@ -462,6 +463,12 @@ begin
     if v_actor_company_count <> 1 then
       raise exception 'Actor must be assigned to exactly one company' using errcode='42501';
     end if;
+    select exists (
+      select 1 from public.user_roles actor_role
+      where actor_role.user_id=auth.uid() and actor_role.tenant_id=_tenant_id
+        and actor_role.company_id=v_actor_company
+        and actor_role.role in ('owner','manager')
+    ) into v_actor_company_wide;
   end if;
 
   if not public.has_permission(auth.uid(),_tenant_id,'roles.manage')
@@ -538,6 +545,46 @@ begin
     where c.id=v_target_company and c.tenant_id=_tenant_id
   ) then
     raise exception 'Target company does not belong to this tenant' using errcode='23503';
+  end if;
+
+  -- Branch-only managers may administer only users and branches already assigned to them.
+  if not v_is_super and not v_is_tenant_owner and not v_actor_company_wide then
+    if v_profile_branch is null and not exists (
+      select 1 from public.user_roles target_role
+      where target_role.user_id=_user_id and target_role.tenant_id=_tenant_id
+        and target_role.branch_id is not null
+    ) then
+      raise exception 'Branch-scoped manager cannot manage an unassigned company user' using errcode='42501';
+    end if;
+    if v_profile_branch is not null and not exists (
+      select 1 from public.user_roles actor_role
+      where actor_role.user_id=auth.uid() and actor_role.tenant_id=_tenant_id
+        and actor_role.branch_id=v_profile_branch
+        and (actor_role.company_id is null or actor_role.company_id=v_target_company)
+    ) then
+      raise exception 'Target profile branch is outside the actor branch scope' using errcode='42501';
+    end if;
+    if exists (
+      select 1 from public.user_roles target_role
+      where target_role.user_id=_user_id and target_role.tenant_id=_tenant_id
+        and target_role.branch_id is not null
+        and not exists (
+          select 1 from public.user_roles actor_role
+          where actor_role.user_id=auth.uid() and actor_role.tenant_id=_tenant_id
+            and actor_role.branch_id=target_role.branch_id
+            and (actor_role.company_id is null or actor_role.company_id=v_target_company)
+        )
+    ) then
+      raise exception 'Target role branch is outside the actor branch scope' using errcode='42501';
+    end if;
+    if _branch_id is null or not exists (
+      select 1 from public.user_roles actor_role
+      where actor_role.user_id=auth.uid() and actor_role.tenant_id=_tenant_id
+        and actor_role.branch_id=_branch_id
+        and (actor_role.company_id is null or actor_role.company_id=v_target_company)
+    ) then
+      raise exception 'Branch-scoped manager may assign only to an assigned branch' using errcode='42501';
+    end if;
   end if;
   if not v_is_super and not v_is_tenant_owner
      and v_target_company is distinct from v_actor_company then

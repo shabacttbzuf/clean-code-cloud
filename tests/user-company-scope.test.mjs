@@ -90,3 +90,11 @@ test("branch-only managers cannot use an inferred company assignment to manage o
   assert.match(users, /const allowedBranchIds = new Set/);
   assert.match(users, /branchIds\.some\(\(id\) => !allowedBranchIds\.has\(id\)\)/);
 });
+
+test("branch-scoped managers cannot assign custom roles outside their assigned branches", () => {
+  assert.match(migration, /v_actor_company_wide boolean/i);
+  assert.match(migration, /actor_role\.company_id=v_actor_company[\s\S]*actor_role\.role in \('owner','manager'\)/i);
+  assert.match(migration, /Branch-scoped manager cannot manage an unassigned company user/i);
+  assert.match(migration, /Target role branch is outside the actor branch scope/i);
+  assert.match(migration, /Branch-scoped manager may assign only to an assigned branch/i);
+});
