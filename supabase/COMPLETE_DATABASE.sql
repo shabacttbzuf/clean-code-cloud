@@ -10545,6 +10545,102 @@ $function$;
 revoke all on function private.can_access_branch(uuid,uuid,uuid) from public, anon;
 grant execute on function private.can_access_branch(uuid,uuid,uuid) to authenticated, service_role;
 
+-- Tenant owners and the platform owner can see creator-owned records across companies;
+-- company managers can see only records created within their assigned company.
+create or replace function private.is_company_member(_tenant_id uuid, _company_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select (select auth.uid()) is not null
+    and _company_id is not null
+    and (
+      exists (select 1 from public.super_owners so where so.user_id=(select auth.uid()))
+      or exists (
+        select 1 from public.user_roles ur
+        where ur.user_id=(select auth.uid()) and ur.tenant_id=_tenant_id
+          and ur.company_id=_company_id
+      )
+      or exists (
+        select 1 from public.user_roles ur
+        where ur.user_id=(select auth.uid()) and ur.tenant_id=_tenant_id
+          and ur.role='owner' and ur.company_id is null
+      )
+    );
+$function$;
+revoke all on function private.is_company_member(uuid,uuid) from public, anon;
+grant execute on function private.is_company_member(uuid,uuid) to authenticated, service_role;
+
+create or replace function private.can_access_creator_company(_tenant_id uuid, _creator_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select (select auth.uid()) is not null
+    and _creator_id is not null
+    and (
+      exists (select 1 from public.super_owners so where so.user_id=(select auth.uid()))
+      or exists (
+        select 1 from public.user_roles owner_role
+        where owner_role.user_id=(select auth.uid()) and owner_role.tenant_id=_tenant_id
+          and owner_role.role='owner' and owner_role.company_id is null
+      )
+      or exists (
+        select 1
+        from public.user_roles viewer
+        join public.user_roles creator
+          on creator.tenant_id=viewer.tenant_id
+         and creator.company_id=viewer.company_id
+        where viewer.user_id=(select auth.uid())
+          and viewer.tenant_id=_tenant_id
+          and viewer.company_id is not null
+          and creator.user_id=_creator_id
+      )
+    );
+$function$;
+revoke all on function private.can_access_creator_company(uuid,uuid) from public, anon;
+grant execute on function private.can_access_creator_company(uuid,uuid) to authenticated, service_role;
+
+-- Tenant owners can manage branches across their tenant; company managers remain scoped.
+drop policy if exists company_scope_branches_insert on public.branches;
+create policy company_scope_branches_insert on public.branches
+as restrictive for insert to authenticated
+with check (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=branches.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=branches.tenant_id
+      and ur.company_id=branches.company_id and ur.role in ('owner','manager')
+  )
+);
+
+drop policy if exists company_scope_branches_update on public.branches;
+create policy company_scope_branches_update on public.branches
+as restrictive for update to authenticated
+using (private.can_access_branch((select auth.uid()), tenant_id, id))
+with check (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=branches.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=branches.tenant_id
+      and ur.company_id=branches.company_id and ur.role in ('owner','manager')
+  )
+);
+
 -- Infer and validate the company of every new notification. Existing NULL company_id
 -- notifications remain tenant-wide unless their branch/department audience identifies a company.
 create or replace function private.enforce_notification_company_scope()
