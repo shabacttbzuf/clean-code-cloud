@@ -9848,7 +9848,9 @@ grant execute on function public.close_cash_session(uuid,numeric) to authenticat
 
 commit;
 
-\n\n-- =====================================================================
+
+
+-- =====================================================================
 -- SOURCE MIGRATION: 20261119000004_deduplicate_notification_read_policies_and_index.sql
 -- =====================================================================
 
