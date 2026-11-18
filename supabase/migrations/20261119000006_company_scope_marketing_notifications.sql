@@ -194,7 +194,7 @@ begin
 end;
 $function$;
 revoke all on function private.enforce_notification_company_scope() from public, anon, authenticated;
-grant execute on function private.enforce_notification_company_scope() to service_role;
+grant execute on function private.enforce_notification_company_scope() to authenticated, service_role;
 
 drop trigger if exists notifications_enforce_company_scope on public.notifications;
 create trigger notifications_enforce_company_scope
@@ -435,7 +435,7 @@ begin
 end;
 $function$;
 revoke all on function private.enforce_marketing_campaign_company_scope() from public, anon, authenticated;
-grant execute on function private.enforce_marketing_campaign_company_scope() to service_role;
+grant execute on function private.enforce_marketing_campaign_company_scope() to authenticated, service_role;
 
 drop trigger if exists marketing_campaigns_enforce_company_scope on public.marketing_campaigns;
 create trigger marketing_campaigns_enforce_company_scope
