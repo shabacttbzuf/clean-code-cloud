@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
+import { resolveAvatarUrl } from "@/lib/storage";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -162,7 +163,7 @@ function UsersPage() {
       if (customError) throw customError;
       const customMap = new Map((customRows ?? []).map((r) => [r.id, r.name]));
       const map = new Map((profiles ?? []).map((p) => [p.id, p]));
-      return (roles ?? []).map((r) => {
+      return await Promise.all((roles ?? []).map(async (r) => {
         const p = map.get(r.user_id);
         return {
           role_id: r.id,
@@ -174,11 +175,11 @@ function UsersPage() {
           full_name: p?.full_name ?? null,
           username: p?.username ?? null,
           phone: p?.phone ?? null,
-          avatar_url: p?.avatar_url ?? null,
+          avatar_url: await resolveAvatarUrl(p?.avatar_url ?? null),
           is_active: p?.is_active ?? true,
           last_login_at: p?.last_login_at ?? null,
         };
-      });
+      }));
     },
     enabled: !!tenantId,
   });
