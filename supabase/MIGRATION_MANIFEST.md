@@ -183,4 +183,6 @@
 
 93. `supabase/migrations/20261119000008_bind_branch_access_and_helper_actors.sql`
 
-**الإجمالي: 93 ترحيلاً.**
+94. `supabase/migrations/20261119000009_private_avatar_and_company_asset_scope.sql`
+
+**الإجمالي: 94 ترحيلاً.**
