@@ -298,7 +298,7 @@ export const createUser = createServerFn({ method: "POST" })
     const selectedBranch = await assertBranchInActorScope(
       supabaseAdmin, data.branch_id, data.tenant_id, actorScope,
     );
-    let targetCompanyId = selectedBranch?.company_id ?? actorScope.companyId;
+    let targetCompanyId: string | null = selectedBranch?.company_id ?? actorScope.companyId;
     if (actorScope.isTenantOwner || actorScope.isSuperOwner) {
       targetCompanyId = selectedBranch?.company_id ?? null;
     } else if (!targetCompanyId) {
