@@ -55,6 +55,8 @@ test("notification server function accepts only an explicit company scope that t
 
 test("migration is backward-compatible and does not delete business data", () => {
   assert.match(migration, /begin;[\s\S]*commit;/i);
-  assert.doesNotMatch(migration, /drop table|truncate|delete from|update public\.(notifications|marketing_campaigns)/i);
+  assert.doesNotMatch(migration, /drop table|truncate|delete from/i);
+  assert.match(migration, /update public\.marketing_campaigns[\s\S]*set company_id=/i);
+  assert.match(migration, /update public\.notifications[\s\S]*set company_id=/i);
   assert.match(migration, /set search_path = pg_catalog, public, private, pg_temp/i);
 });
