@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Loader2, Printer, Download, ArrowRight, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { formatMoney, formatDateTime } from "@/lib/format";
-import { printInvoicePDF, downloadInvoicePDF, type InvoiceData } from "@/lib/invoice-pdf";
+import { printInvoiceHTML, downloadInvoicePDF, type InvoiceData } from "@/lib/invoice-pdf";
 
 export const Route = createFileRoute("/_authenticated/sales/$id")({
   component: SaleDetailPage,
@@ -29,7 +29,7 @@ type Item = {
   id: string; product_id: string | null; product_name: string;
   quantity: number; unit_price: number; line_total: number; refunded_quantity: number;
 };
-type Branch = { id: string; name: string; tax_number: string | null };
+type Branch = { id: string; name: string; tax_number: string | null; company_id: string | null; logo_url: string | null; image_url: string | null; address: string | null; phone: string | null };
 type Refund = {
   id: string; total: number; reason: string; refund_method: string; created_at: string;
 };
@@ -40,8 +40,18 @@ const methodLabels: Record<string, string> = {
 
 function SaleDetailPage() {
   const { id } = Route.useParams();
-  const { tenant, tenantId, isAdmin } = useActiveTenant();
+  const { tenant, tenantId, userId } = useActiveTenant();
   const qc = useQueryClient();
+  const permissionsQuery = useQuery({
+    queryKey: ["sale-detail-permissions", tenantId, userId],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId! });
+      if (error) throw error;
+      return new Set<string>((data ?? []) as string[]);
+    },
+    enabled: !!tenantId && !!userId,
+    staleTime: 15_000,
+  });
   const [refundOpen, setRefundOpen] = useState(false);
   const [refundReason, setRefundReason] = useState("");
   const [refundMethod, setRefundMethod] = useState<"cash" | "card" | "transfer">("transfer");
@@ -57,7 +67,7 @@ function SaleDetailPage() {
 
       const [itemsRes, branchRes, profileRes, refundsRes] = await Promise.all([
         supabase.from("sale_items").select("id, product_id, product_name, quantity, unit_price, line_total").eq("sale_id", id),
-        supabase.from("branches").select("id, name, tax_number").eq("id", s.branch_id).maybeSingle(),
+        supabase.from("branches").select("id, name, tax_number, company_id, logo_url, image_url, address, phone").eq("id", s.branch_id).maybeSingle(),
         supabase.from("profiles").select("full_name").eq("id", s.cashier_id).maybeSingle(),
         supabase.from("sale_refunds").select("id, total, reason, refund_method, created_at").eq("sale_id", id).order("created_at", { ascending: false }),
       ]);
@@ -84,6 +94,27 @@ function SaleDetailPage() {
         refunds: refundRows,
       };
     },
+  });
+
+  const companyIdentity = useQuery({
+    queryKey: ["sale-company-identity", sale.data?.branch?.company_id],
+    queryFn: async () => {
+      if (!sale.data?.branch?.company_id) return null;
+      const { data, error } = await supabase.from("companies").select("name, logo_url").eq("id", sale.data.branch.company_id).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!sale.data?.branch?.company_id,
+  });
+  const platformIdentity = useQuery({
+    queryKey: ["platform-branding"],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from("platform_branding" as any) as any)
+        .select("brand_name, phone, promotional_text, website_url, enabled, placement").eq("id", true).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    staleTime: 60_000,
   });
 
   const refundMutation = useMutation({
@@ -149,7 +180,7 @@ function SaleDetailPage() {
       line_total: Number(i.line_total),
     })),
   };
-  const canRefund = Boolean(isAdmin && s.status === "completed" && items.some((i) => i.quantity - i.refunded_quantity > 0));
+  const canRefund = Boolean(permissionsQuery.data?.has("sales.refund") && s.status === "completed" && items.some((i) => i.quantity - i.refunded_quantity > 0));
 
   return (
     <div className="space-y-6">
@@ -163,12 +194,29 @@ function SaleDetailPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           {canRefund && <Button variant="destructive" onClick={() => setRefundOpen(true)}><RotateCcw className="ml-2 h-4 w-4" />تسجيل مرتجع</Button>}
-          <Button variant="outline" onClick={() => downloadInvoicePDF(invoiceData)}>
+          {permissionsQuery.data?.has("sales.export") && <Button variant="outline" onClick={() => downloadInvoicePDF(invoiceData)}>
             <Download className="ml-2 h-4 w-4" />تحميل PDF
-          </Button>
-          <Button onClick={() => printInvoicePDF(invoiceData)}>
+          </Button>}
+          {permissionsQuery.data?.has("sales.print") && <Button onClick={() => {
+            const branchIdentity = sale.data?.branch;
+            const platform = platformIdentity.data;
+            const opened = printInvoiceHTML({
+              ...invoiceData,
+              address: branchIdentity?.address,
+              phone: branchIdentity?.phone,
+              company_name: companyIdentity.data?.name ?? tenant?.name ?? null,
+              logo_url: branchIdentity?.logo_url ?? branchIdentity?.image_url ?? companyIdentity.data?.logo_url ?? null,
+              platform_brand_name: platform?.brand_name,
+              platform_phone: platform?.phone,
+              platform_promotional_text: platform?.promotional_text,
+              platform_website_url: platform?.website_url,
+              platform_brand_placement: platform?.placement,
+              platform_brand_enabled: platform?.enabled === true,
+            }, "80mm");
+            if (!opened) toast.error("اسمح بفتح النوافذ المنبثقة لطباعة الفاتورة");
+          }}>
             <Printer className="ml-2 h-4 w-4" />طباعة
-          </Button>
+          </Button>}
         </div>
       </div>
 

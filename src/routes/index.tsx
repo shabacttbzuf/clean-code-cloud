@@ -17,7 +17,7 @@ const features = [
   { icon: Package, title: "إدارة المنتجات", desc: "أقسام ومنتجات مع صور وأسعار وحد أدنى للمخزون" },
   { icon: Users, title: "صلاحيات دقيقة", desc: "6 أدوار (مالك، مدير، محاسب، كاشير، مخزن، نادل)" },
   { icon: BarChart3, title: "تقارير احترافية", desc: "مبيعات، أرباح، مخزون، أداء الموظفين" },
-  { icon: ShieldCheck, title: "أمان مؤسسي", desc: "عزل كامل بين المطاعم مع تشفير كامل للبيانات" },
+  { icon: ShieldCheck, title: "أمان مؤسسي", desc: "عزل كامل بين الشركات مع تشفير كامل للبيانات" },
   { icon: ChefHat, title: "مصمم للمطاعم", desc: "POS، صندوق، ورديات، فواتير، وموردون" },
 ];
 
@@ -30,7 +30,7 @@ function Landing() {
             <div className="grid h-9 w-9 place-items-center rounded-lg bg-primary text-primary-foreground">
               <ChefHat className="h-5 w-5" />
             </div>
-            <span className="font-bold">نظام محاسبة المطاعم</span>
+            <span className="font-bold">نظام إدارة الأعمال</span>
           </div>
           <Button asChild>
             <Link to="/auth">تسجيل الدخول</Link>
@@ -50,7 +50,7 @@ function Landing() {
             <span className="text-primary">لإدارة مطاعمك</span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground">
-            حل متكامل لإدارة المطاعم والفروع والمنتجات والموظفين، مع أمان مؤسسي وواجهة عربية أصيلة.
+            حل متكامل لإدارة الشركات والفروع والمنتجات والموظفين، مع أمان مؤسسي وواجهة عربية أصيلة.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <Button size="lg" asChild>
@@ -73,7 +73,7 @@ function Landing() {
       </main>
 
       <footer className="border-t py-8 text-center text-sm text-muted-foreground">
-        © {new Date().getFullYear()} Restaurant Accounting System — نظام محاسبة المطاعم
+        © {new Date().getFullYear()} Business Management System — نظام إدارة الأعمال
       </footer>
     </div>
   );

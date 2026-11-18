@@ -114,7 +114,7 @@ function AuthPage() {
           <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-lg">
             <ChefHat className="h-7 w-7" />
           </div>
-          <h1 className="text-xl font-bold">نظام محاسبة المطاعم</h1>
+          <h1 className="text-xl font-bold">نظام إدارة الأعمال</h1>
         </div>
 
         <Card>
