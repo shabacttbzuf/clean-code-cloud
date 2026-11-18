@@ -59,14 +59,18 @@ as restrictive for select to authenticated
 using (
   user_id=(select auth.uid())
   or is_super_owner((select auth.uid()))
-  or exists (
-    select 1 from public.user_roles tenant_owner
-    where tenant_owner.user_id=(select auth.uid())
-      and tenant_owner.tenant_id=user_roles.tenant_id
-      and tenant_owner.role='owner' and tenant_owner.company_id is null
+  or (
+    role <> 'owner'
+    and exists (
+      select 1 from public.user_roles tenant_owner
+      where tenant_owner.user_id=(select auth.uid())
+        and tenant_owner.tenant_id=user_roles.tenant_id
+        and tenant_owner.role='owner' and tenant_owner.company_id is null
+    )
   )
   or (
-    company_id is not null
+    role <> 'owner'
+    and company_id is not null
     and exists (
       select 1 from public.user_roles viewer
       where viewer.user_id=(select auth.uid())
@@ -78,6 +82,7 @@ using (
       where target_profile.id=user_roles.user_id and target_profile.tenant_id=user_roles.tenant_id
         and (target_profile.company_id is null or target_profile.company_id=user_roles.company_id)
     )
+    and role <> 'owner'
     and (branch_id is null or private.can_access_branch((select auth.uid()),tenant_id,branch_id))
     and exists (
       select 1 from public.profiles target_profile
@@ -103,11 +108,14 @@ create policy company_scope_user_roles_insert on public.user_roles
 as restrictive for insert to authenticated
 with check (
   is_super_owner((select auth.uid()))
-  or exists (
-    select 1 from public.user_roles tenant_owner
-    where tenant_owner.user_id=(select auth.uid())
-      and tenant_owner.tenant_id=user_roles.tenant_id
-      and tenant_owner.role='owner' and tenant_owner.company_id is null
+  or (
+    exists (
+      select 1 from public.user_roles tenant_owner
+      where tenant_owner.user_id=(select auth.uid())
+        and tenant_owner.tenant_id=user_roles.tenant_id
+        and tenant_owner.role='owner' and tenant_owner.company_id is null
+    )
+    and role <> 'owner'
   )
   or (
     user_id=(select auth.uid()) and role='owner'
@@ -139,14 +147,18 @@ create policy company_scope_user_roles_update on public.user_roles
 as restrictive for update to authenticated
 using (
   is_super_owner((select auth.uid()))
-  or exists (
-    select 1 from public.user_roles tenant_owner
-    where tenant_owner.user_id=(select auth.uid())
-      and tenant_owner.tenant_id=user_roles.tenant_id
-      and tenant_owner.role='owner' and tenant_owner.company_id is null
+  or (
+    role <> 'owner'
+    and exists (
+      select 1 from public.user_roles tenant_owner
+      where tenant_owner.user_id=(select auth.uid())
+        and tenant_owner.tenant_id=user_roles.tenant_id
+        and tenant_owner.role='owner' and tenant_owner.company_id is null
+    )
   )
   or (
-    company_id is not null
+    role <> 'owner'
+    and company_id is not null
     and exists (
       select 1 from public.user_roles company_owner
       where company_owner.user_id=(select auth.uid())
@@ -164,14 +176,18 @@ using (
 )
 with check (
   is_super_owner((select auth.uid()))
-  or exists (
-    select 1 from public.user_roles tenant_owner
-    where tenant_owner.user_id=(select auth.uid())
-      and tenant_owner.tenant_id=user_roles.tenant_id
-      and tenant_owner.role='owner' and tenant_owner.company_id is null
+  or (
+    role <> 'owner'
+    and exists (
+      select 1 from public.user_roles tenant_owner
+      where tenant_owner.user_id=(select auth.uid())
+        and tenant_owner.tenant_id=user_roles.tenant_id
+        and tenant_owner.role='owner' and tenant_owner.company_id is null
+    )
   )
   or (
-    company_id is not null
+    role <> 'owner'
+    and company_id is not null
     and exists (
       select 1 from public.user_roles company_owner
       where company_owner.user_id=(select auth.uid())
@@ -193,14 +209,18 @@ create policy company_scope_user_roles_delete on public.user_roles
 as restrictive for delete to authenticated
 using (
   is_super_owner((select auth.uid()))
-  or exists (
-    select 1 from public.user_roles tenant_owner
-    where tenant_owner.user_id=(select auth.uid())
-      and tenant_owner.tenant_id=user_roles.tenant_id
-      and tenant_owner.role='owner' and tenant_owner.company_id is null
+  or (
+    role <> 'owner'
+    and exists (
+      select 1 from public.user_roles tenant_owner
+      where tenant_owner.user_id=(select auth.uid())
+        and tenant_owner.tenant_id=user_roles.tenant_id
+        and tenant_owner.role='owner' and tenant_owner.company_id is null
+    )
   )
   or (
-    company_id is not null
+    role <> 'owner'
+    and company_id is not null
     and exists (
       select 1 from public.user_roles company_owner
       where company_owner.user_id=(select auth.uid())
