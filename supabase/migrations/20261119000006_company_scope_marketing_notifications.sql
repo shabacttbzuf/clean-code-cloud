@@ -47,6 +47,11 @@ with creator_company as (
   select ur.user_id, ur.tenant_id, min(ur.company_id::text)::uuid as company_id
   from public.user_roles ur
   where ur.company_id is not null and ur.role in ('owner','manager')
+    and not exists (
+      select 1 from public.user_roles owner_role
+      where owner_role.user_id=ur.user_id and owner_role.tenant_id=ur.tenant_id
+        and owner_role.role='owner' and owner_role.company_id is null
+    )
   group by ur.user_id, ur.tenant_id
   having count(distinct ur.company_id)=1
 )
@@ -84,6 +89,11 @@ with creator_company as (
   select ur.user_id, ur.tenant_id, min(ur.company_id::text)::uuid as company_id
   from public.user_roles ur
   where ur.company_id is not null and ur.role in ('owner','manager')
+    and not exists (
+      select 1 from public.user_roles owner_role
+      where owner_role.user_id=ur.user_id and owner_role.tenant_id=ur.tenant_id
+        and owner_role.role='owner' and owner_role.company_id is null
+    )
   group by ur.user_id, ur.tenant_id
   having count(distinct ur.company_id)=1
 )
