@@ -60,3 +60,10 @@ test("migration is backward-compatible and does not delete business data", () =>
   assert.match(migration, /update public\.notifications[\s\S]*set company_id=/i);
   assert.match(migration, /set search_path = pg_catalog, public, private, pg_temp/i);
 });
+
+test("tenant owners retain tenant-wide company and branch administration", () => {
+  assert.match(migration, /create or replace function private\.is_company_member/i);
+  assert.match(migration, /create or replace function private\.can_access_creator_company/i);
+  assert.match(migration, /drop policy if exists company_scope_branches_insert/i);
+  assert.match(migration, /company_scope_branches_update[\s\S]*ur\.role='owner' and ur\.company_id is null/i);
+});
