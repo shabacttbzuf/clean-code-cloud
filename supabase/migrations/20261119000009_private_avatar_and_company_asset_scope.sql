@@ -2,7 +2,9 @@
 -- scope public asset writes to the owning company.
 begin;
 
-create or replace function private.can_manage_company_assets(_actor_id uuid,_tenant_id uuid,_company_id uuid)
+create or replace function private.can_manage_company_assets(
+  _actor_id uuid,_tenant_id uuid,_company_id uuid,_asset_folder text
+)
 returns boolean
 language sql
 stable
@@ -19,10 +21,19 @@ as $function$
         and ur.tenant_id=_tenant_id
         and ur.company_id=_company_id
         and ur.role in ('owner','manager')
-    );
+    )
+    and case _asset_folder
+      when 'branding' then public.has_permission(_actor_id,_tenant_id,'settings.manage')
+      when 'marketing' then public.has_permission(_actor_id,_tenant_id,'settings.manage')
+      when 'products' then public.has_permission(_actor_id,_tenant_id,'products.manage')
+      when 'branches' then public.has_permission(_actor_id,_tenant_id,'branches.manage')
+      when 'categories' then public.has_permission(_actor_id,_tenant_id,'categories.manage')
+      when 'avatars' then public.has_permission(_actor_id,_tenant_id,'hr.employees.manage')
+      else false
+    end;
 $function$;
-revoke all on function private.can_manage_company_assets(uuid,uuid,uuid) from public, anon;
-grant execute on function private.can_manage_company_assets(uuid,uuid,uuid) to authenticated, service_role;
+revoke all on function private.can_manage_company_assets(uuid,uuid,uuid,text) from public, anon;
+grant execute on function private.can_manage_company_assets(uuid,uuid,uuid,text) to authenticated, service_role;
 
 insert into storage.buckets (id,name,public,file_size_limit,allowed_mime_types)
 values (
@@ -125,7 +136,7 @@ with check (
     split_part(name,'/',1) ~* '^[0-9a-f-]{36}$'
     and (
       (
-        split_part(name,'/',2) in ('branding','marketing','products','branches','categories')
+        split_part(name,'/',2) in ('branding','marketing','products','branches','categories','avatars')
         and (
           public.is_super_owner((select auth.uid()))
           or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
@@ -134,14 +145,15 @@ with check (
       or (
         split_part(name,'/',2)='companies'
         and split_part(name,'/',3) ~* '^[0-9a-f-]{36}$'
-        and split_part(name,'/',4) in ('branding','marketing','products','branches','categories')
+        and split_part(name,'/',4) in ('branding','marketing','products','branches','categories','avatars')
         and (
           public.is_super_owner((select auth.uid()))
           or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
           or private.can_manage_company_assets(
             (select auth.uid()),
             split_part(name,'/',1)::uuid,
-            split_part(name,'/',3)::uuid
+            split_part(name,'/',3)::uuid,
+            split_part(name,'/',4)
           )
         )
       )
@@ -158,7 +170,7 @@ using (
     split_part(name,'/',1) ~* '^[0-9a-f-]{36}$'
     and (
       (
-        split_part(name,'/',2) in ('branding','marketing','products','branches','categories')
+        split_part(name,'/',2) in ('branding','marketing','products','branches','categories','avatars')
         and (
           public.is_super_owner((select auth.uid()))
           or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
@@ -167,14 +179,15 @@ using (
       or (
         split_part(name,'/',2)='companies'
         and split_part(name,'/',3) ~* '^[0-9a-f-]{36}$'
-        and split_part(name,'/',4) in ('branding','marketing','products','branches','categories')
+        and split_part(name,'/',4) in ('branding','marketing','products','branches','categories','avatars')
         and (
           public.is_super_owner((select auth.uid()))
           or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
           or private.can_manage_company_assets(
             (select auth.uid()),
             split_part(name,'/',1)::uuid,
-            split_part(name,'/',3)::uuid
+            split_part(name,'/',3)::uuid,
+            split_part(name,'/',4)
           )
         )
       )
@@ -187,7 +200,7 @@ with check (
     split_part(name,'/',1) ~* '^[0-9a-f-]{36}$'
     and (
       (
-        split_part(name,'/',2) in ('branding','marketing','products','branches','categories')
+        split_part(name,'/',2) in ('branding','marketing','products','branches','categories','avatars')
         and (
           public.is_super_owner((select auth.uid()))
           or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
@@ -196,14 +209,15 @@ with check (
       or (
         split_part(name,'/',2)='companies'
         and split_part(name,'/',3) ~* '^[0-9a-f-]{36}$'
-        and split_part(name,'/',4) in ('branding','marketing','products','branches','categories')
+        and split_part(name,'/',4) in ('branding','marketing','products','branches','categories','avatars')
         and (
           public.is_super_owner((select auth.uid()))
           or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
           or private.can_manage_company_assets(
             (select auth.uid()),
             split_part(name,'/',1)::uuid,
-            split_part(name,'/',3)::uuid
+            split_part(name,'/',3)::uuid,
+            split_part(name,'/',4)
           )
         )
       )
@@ -220,7 +234,7 @@ using (
     split_part(name,'/',1) ~* '^[0-9a-f-]{36}$'
     and (
       (
-        split_part(name,'/',2) in ('branding','marketing','products','branches','categories')
+        split_part(name,'/',2) in ('branding','marketing','products','branches','categories','avatars')
         and (
           public.is_super_owner((select auth.uid()))
           or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
@@ -229,14 +243,15 @@ using (
       or (
         split_part(name,'/',2)='companies'
         and split_part(name,'/',3) ~* '^[0-9a-f-]{36}$'
-        and split_part(name,'/',4) in ('branding','marketing','products','branches','categories')
+        and split_part(name,'/',4) in ('branding','marketing','products','branches','categories','avatars')
         and (
           public.is_super_owner((select auth.uid()))
           or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
           or private.can_manage_company_assets(
             (select auth.uid()),
             split_part(name,'/',1)::uuid,
-            split_part(name,'/',3)::uuid
+            split_part(name,'/',3)::uuid,
+            split_part(name,'/',4)
           )
         )
       )

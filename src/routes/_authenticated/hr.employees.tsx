@@ -71,7 +71,7 @@ const statusColors: Record<string, string> = {
 const statusLabels: Record<string, string> = { active: "نشط", suspended: "موقوف", terminated: "منتهي" };
 
 function EmployeesPage() {
-  const { tenantId, tenant, isAdmin } = useActiveTenant();
+  const { tenantId, tenant, isAdmin, membership } = useActiveTenant();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Employee | null>(null);
@@ -165,7 +165,7 @@ function EmployeesPage() {
         action={isAdmin && (
           <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditing(null); }}>
             <DialogTrigger asChild><Button><Plus className="ml-2 h-4 w-4" />موظف جديد</Button></DialogTrigger>
-            <EmployeeDialog initial={editing} tenantId={tenantId!} branches={branches.data ?? []} onSubmit={(v) => upsert.mutate(v)} pending={upsert.isPending} />
+            <EmployeeDialog initial={editing} tenantId={tenantId!} companyId={membership?.company_id ?? null} branches={branches.data ?? []} onSubmit={(v) => upsert.mutate(v)} pending={upsert.isPending} />
           </Dialog>
         )}
       />
@@ -247,8 +247,8 @@ function EmployeesPage() {
   );
 }
 
-function EmployeeDialog({ initial, tenantId, branches, onSubmit, pending }: {
-  initial: Employee | null; tenantId: string; branches: Branch[];
+function EmployeeDialog({ initial, tenantId, companyId, branches, onSubmit, pending }: {
+  initial: Employee | null; tenantId: string; companyId: string | null; branches: Branch[];
   onSubmit: (v: z.infer<typeof schema>) => void; pending: boolean;
 }) {
   const [fullName, setFullName] = useState(initial?.full_name ?? "");
@@ -303,7 +303,7 @@ function EmployeeDialog({ initial, tenantId, branches, onSubmit, pending }: {
           }));
         } catch (err) { if (err instanceof z.ZodError) toast.error(err.issues[0].message); }
       }}>
-        <ImageUploader tenantId={tenantId} folder="avatars" value={avatarUrl} onChange={setAvatarUrl} label="الصورة الشخصية" />
+        <ImageUploader tenantId={tenantId} companyId={companyId} folder="avatars" value={avatarUrl} onChange={setAvatarUrl} label="الصورة الشخصية" />
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2"><Label>الاسم الكامل *</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} required /></div>
           <div className="space-y-2"><Label>الرقم الوظيفي</Label><Input value={empNo} onChange={(e) => setEmpNo(e.target.value)} /></div>

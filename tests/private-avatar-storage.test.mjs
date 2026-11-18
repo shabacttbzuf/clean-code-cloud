@@ -22,6 +22,14 @@ const storageHelper = readFileSync(
   new URL("../src/lib/storage.ts", import.meta.url),
   "utf8",
 );
+const settingsPage = readFileSync(
+  new URL("../src/routes/_authenticated/settings.tsx", import.meta.url),
+  "utf8",
+);
+const hrEmployeesPage = readFileSync(
+  new URL("../src/routes/_authenticated/hr.employees.tsx", import.meta.url),
+  "utf8",
+);
 
 test("profile avatars are stored in a private bucket and served with signed URLs", () => {
   assert.match(migration, /'restaurant-private-assets',[\s\S]*false/i);
@@ -49,4 +57,18 @@ test("public asset writes are restricted to tenant owner or the matching company
 
 test("public category images are included in the scoped asset folders", () => {
   assert.match(migration, /'branches','categories'/);
+});
+
+test("company asset writes require the matching feature permission and include employee avatars", () => {
+  assert.match(migration, /when 'products' then public\.has_permission\(_actor_id,_tenant_id,'products\.manage'\)/i);
+  assert.match(migration, /when 'branches' then public\.has_permission\(_actor_id,_tenant_id,'branches\.manage'\)/i);
+  assert.match(migration, /when 'categories' then public\.has_permission\(_actor_id,_tenant_id,'categories\.manage'\)/i);
+  assert.match(migration, /when 'avatars' then public\.has_permission\(_actor_id,_tenant_id,'hr\.employees\.manage'\)/i);
+  assert.match(migration, /'branches','categories','avatars'/i);
+  assert.match(hrEmployeesPage, /companyId=\{companyId\} folder="avatars"/);
+});
+
+test("company campaign images use the company asset namespace", () => {
+  assert.match(settingsPage, /companies\/\$\{membership\.company_id\}\/marketing/);
+  assert.match(settingsPage, /role === "manager" && !!membership\?\.company_id/);
 });

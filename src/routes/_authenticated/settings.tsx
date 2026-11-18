@@ -148,7 +148,7 @@ function SettingsPage() {
     }
   }, []);
 
-  const canManageMarketing = role === "owner" || role === "manager" || isSuperOwner;
+  const canManageMarketing = isSuperOwner || role === "owner" || (role === "manager" && !!membership?.company_id);
   const canManageCampaign = (campaign: MarketingCampaign) =>
     isSuperOwner ||
     (role === "owner" && !membership?.company_id) ||
@@ -221,7 +221,9 @@ function SettingsPage() {
     setUploadingCampaignImage(true);
     try {
       const ext = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif" } as Record<string, string>)[file.type];
-      const path = `${tenantId}/marketing/${crypto.randomUUID()}.${ext}`;
+      const path = membership?.company_id
+        ? `${tenantId}/companies/${membership.company_id}/marketing/${crypto.randomUUID()}.${ext}`
+        : `${tenantId}/marketing/${crypto.randomUUID()}.${ext}`;
       const { error } = await supabase.storage.from("restaurant-assets").upload(path, file, { upsert: false, contentType: file.type, cacheControl: "31536000" });
       if (error) throw error;
       const { data } = supabase.storage.from("restaurant-assets").getPublicUrl(path);
@@ -247,7 +249,7 @@ function SettingsPage() {
     },
   });
 
-  const canEdit = role === "owner";
+  const canEdit = isSuperOwner || (role === "owner" && !membership?.company_id);
 
   async function uploadBackground(file?: File) {
     if (!file || !tenantId || !isSuperOwner) return;
