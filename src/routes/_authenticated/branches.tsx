@@ -320,7 +320,7 @@ function BranchDialog({
         }}
         className="space-y-4"
       >
-        <ImageUploader tenantId={tenantId} folder="branches" value={imageUrl} onChange={setImageUrl} aspect="wide" />
+        <ImageUploader tenantId={tenantId} companyId={companyId || null} folder="branches" value={imageUrl} onChange={setImageUrl} aspect="wide" />
         <div className="space-y-2">
           <Label>الشركة التابعة للفرع</Label>
           <Select value={companyId} onValueChange={setCompanyId}>
