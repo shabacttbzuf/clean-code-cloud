@@ -165,3 +165,7 @@
 86. `supabase/migrations/20261119000001_customer_credit_sale_cost_snapshot.sql`
 
 **الإجمالي: 86 ترحيلاً.**
+
+87. `supabase/migrations/20261119000002_scope_customer_payment_idempotency.sql`
+
+**الإجمالي: 87 ترحيلاً.**
