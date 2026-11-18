@@ -25,6 +25,12 @@ test("only tenant owners and the platform owner can administer tenant-wide roles
   assert.match(migration, /user_id=\(select auth\.uid\(\)\) and role='owner'[\s\S]*t\.owner_id=\(select auth\.uid\(\)\)/i);
 });
 
+test("tenant-wide custom role definitions are managed only by tenant owners", () => {
+  assert.match(migration, /company_scope_custom_roles_insert[\\s\\S]*as restrictive/i);
+  assert.match(migration, /company_scope_custom_roles_update[\\s\\S]*as restrictive/i);
+  assert.match(migration, /company_scope_custom_roles_delete[\\s\\S]*as restrictive/i);
+});
+
 test("permission overrides cannot cross the employee company boundary", () => {
   assert.match(migration, /company_scope_user_permission_overrides_insert[\s\S]*as restrictive/i);
   assert.match(migration, /company_scope_user_permission_overrides_update[\s\S]*as restrictive/i);
