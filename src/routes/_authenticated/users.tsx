@@ -125,7 +125,7 @@ function UsersPage() {
       if (error) throw error;
       return data ?? [];
     },
-    enabled: !!tenantId && canAssignManager && !isSuperOwner,
+    enabled: !!tenantId && canAssignManager,
   });
 
   const { data: branches } = useQuery({
@@ -330,7 +330,7 @@ function UsersPage() {
         onOpenChange={setCreateOpen}
         tenantId={tenantId}
         branches={branches ?? []}
-        customRoles={customRoles ?? []}
+        customRoles={isSuperOwner ? [] : customRoles ?? []}
         canAssignManager={canAssignManager}
         isSuperOwner={isSuperOwner}
       />
