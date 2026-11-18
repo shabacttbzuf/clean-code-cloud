@@ -17,9 +17,11 @@ import { Route as BootstrapOwnerRouteImport } from './routes/bootstrap-owner'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedAuditLogsRouteImport } from './routes/_authenticated/audit-logs'
 import { Route as AuthenticatedBranchesRouteImport } from './routes/_authenticated/branches'
+import { Route as AuthenticatedBranchesBranchIdRouteImport } from './routes/_authenticated/branches.$branchId'
 import { Route as AuthenticatedCashSessionsRouteImport } from './routes/_authenticated/cash-sessions'
 import { Route as AuthenticatedCategoriesRouteImport } from './routes/_authenticated/categories'
 import { Route as AuthenticatedCompaniesRouteImport } from './routes/_authenticated/companies'
+import { Route as AuthenticatedCompaniesCompanyIdRouteImport } from './routes/_authenticated/companies.$companyId'
 import { Route as AuthenticatedCustomersRouteImport } from './routes/_authenticated/customers'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedDepartmentsRouteImport } from './routes/_authenticated/departments'
@@ -90,6 +92,11 @@ const AuthenticatedBranchesRoute = AuthenticatedBranchesRouteImport.update({
   path: '/branches',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedBranchesBranchIdRoute = AuthenticatedBranchesBranchIdRouteImport.update({
+  id: '/branches/$branchId',
+  path: '/branches/$branchId',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedCashSessionsRoute =
   AuthenticatedCashSessionsRouteImport.update({
     id: '/cash-sessions',
@@ -104,6 +111,11 @@ const AuthenticatedCategoriesRoute = AuthenticatedCategoriesRouteImport.update({
 const AuthenticatedCompaniesRoute = AuthenticatedCompaniesRouteImport.update({
   id: '/companies',
   path: '/companies',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedCompaniesCompanyIdRoute = AuthenticatedCompaniesCompanyIdRouteImport.update({
+  id: '/companies/$companyId',
+  path: '/companies/$companyId',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedCustomersRoute = AuthenticatedCustomersRouteImport.update({
@@ -278,9 +290,11 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AuthenticatedAdminRoute
   '/audit-logs': typeof AuthenticatedAuditLogsRoute
   '/branches': typeof AuthenticatedBranchesRoute
+  '/branches/$branchId': typeof AuthenticatedBranchesBranchIdRoute
   '/cash-sessions': typeof AuthenticatedCashSessionsRoute
   '/categories': typeof AuthenticatedCategoriesRoute
   '/companies': typeof AuthenticatedCompaniesRoute
+  '/companies/$companyId': typeof AuthenticatedCompaniesCompanyIdRoute
   '/customers': typeof AuthenticatedCustomersRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/departments': typeof AuthenticatedDepartmentsRoute
@@ -366,9 +380,11 @@ export interface FileRoutesById {
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/audit-logs': typeof AuthenticatedAuditLogsRoute
   '/_authenticated/branches': typeof AuthenticatedBranchesRoute
+  '/_authenticated/branches/$branchId': typeof AuthenticatedBranchesBranchIdRoute
   '/_authenticated/cash-sessions': typeof AuthenticatedCashSessionsRoute
   '/_authenticated/categories': typeof AuthenticatedCategoriesRoute
   '/_authenticated/companies': typeof AuthenticatedCompaniesRoute
+  '/_authenticated/companies/$companyId': typeof AuthenticatedCompaniesCompanyIdRoute
   '/_authenticated/customers': typeof AuthenticatedCustomersRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/departments': typeof AuthenticatedDepartmentsRoute
@@ -410,9 +426,11 @@ export interface FileRouteTypes {
     | '/admin'
     | '/audit-logs'
     | '/branches'
+    | '/branches/$branchId'
     | '/cash-sessions'
     | '/categories'
     | '/companies'
+    | '/companies/$companyId'
     | '/customers'
     | '/dashboard'
     | '/departments'
@@ -446,6 +464,8 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/branches/$branchId'
+    | '/companies/$companyId'
     | '/auth'
     | '/onboarding'
     | '/bootstrap-owner'
@@ -495,9 +515,11 @@ export interface FileRouteTypes {
     | '/_authenticated/admin'
     | '/_authenticated/audit-logs'
     | '/_authenticated/branches'
+    | '/_authenticated/branches/$branchId'
     | '/_authenticated/cash-sessions'
     | '/_authenticated/categories'
     | '/_authenticated/companies'
+    | '/_authenticated/companies/$companyId'
     | '/_authenticated/customers'
     | '/_authenticated/dashboard'
     | '/_authenticated/departments'
@@ -873,9 +895,11 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAdminRoute: AuthenticatedAdminRoute,
   AuthenticatedAuditLogsRoute: AuthenticatedAuditLogsRoute,
   AuthenticatedBranchesRoute: AuthenticatedBranchesRoute,
+  AuthenticatedBranchesBranchIdRoute: AuthenticatedBranchesBranchIdRoute,
   AuthenticatedCashSessionsRoute: AuthenticatedCashSessionsRoute,
   AuthenticatedCategoriesRoute: AuthenticatedCategoriesRoute,
   AuthenticatedCompaniesRoute: AuthenticatedCompaniesRoute,
+  AuthenticatedCompaniesCompanyIdRoute: AuthenticatedCompaniesCompanyIdRoute,
   AuthenticatedCustomersRoute: AuthenticatedCustomersRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDepartmentsRoute: AuthenticatedDepartmentsRoute,
@@ -924,6 +948,25 @@ export const routeTree = rootRouteImport
 
 import type { getRouter } from './router.tsx'
 import type { startInstance } from './start.ts'
+declare module '@tanstack/react-router' {
+  interface FileRoutesByPath {
+    '/_authenticated/branches/$branchId': {
+      id: '/_authenticated/branches/$branchId'
+      path: '/branches/$branchId'
+      fullPath: '/branches/$branchId'
+      preLoaderRoute: typeof AuthenticatedBranchesBranchIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/companies/$companyId': {
+      id: '/_authenticated/companies/$companyId'
+      path: '/companies/$companyId'
+      fullPath: '/companies/$companyId'
+      preLoaderRoute: typeof AuthenticatedCompaniesCompanyIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+  }
+}
+
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true

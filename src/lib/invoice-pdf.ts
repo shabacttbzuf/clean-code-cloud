@@ -160,7 +160,14 @@ export function printInvoiceHTML(
     address?: string | null;
     phone?: string | null;
     tenant_name?: string | null;
+    company_name?: string | null;
     logo_url?: string | null;
+    platform_brand_name?: string | null;
+    platform_phone?: string | null;
+    platform_promotional_text?: string | null;
+    platform_website_url?: string | null;
+    platform_brand_placement?: "header" | "footer" | "both" | null;
+    platform_brand_enabled?: boolean;
   },
   paper: "58mm" | "80mm" | "A4" = "80mm",
   targetWindow?: Window | null,
@@ -184,6 +191,17 @@ export function printInvoiceHTML(
         </tr>`,
     )
     .join("");
+  const platformMarkup = data.platform_brand_enabled
+    ? '<div class="center muted">' + [
+        data.platform_brand_name,
+        data.platform_promotional_text,
+        data.platform_phone ? "للتواصل: " + data.platform_phone : null,
+        data.platform_website_url,
+      ].filter(Boolean).map((value) => escapeHtml(String(value))).join("<br>") + "</div>"
+    : "";
+  const platformPlacement = data.platform_brand_placement || "footer";
+  const platformHeader = platformMarkup && (platformPlacement === "header" || platformPlacement === "both") ? platformMarkup + '<div class="divider"></div>' : "";
+  const platformFooter = platformMarkup && (platformPlacement === "footer" || platformPlacement === "both") ? '<div class="divider"></div>' + platformMarkup : "";
   const html = `<!doctype html>
 <html lang="ar" dir="rtl">
 <head>
@@ -215,10 +233,11 @@ export function printInvoiceHTML(
 </head>
 <body>
 <div class="receipt">
+  ${platformHeader}
   ${data.logo_url ? `<img src="${escapeAttr(data.logo_url)}" class="logo" alt="logo" />` : ""}
   <div class="center">
-    <h1>${escapeHtml(data.tenant_name || data.branch_name)}</h1>
-    <div class="muted">${escapeHtml(data.branch_name)}</div>
+    <h1>${escapeHtml(data.branch_name)}</h1>
+    <div class="muted">${escapeHtml(data.company_name || data.tenant_name || "")}</div>
     ${data.address ? `<div class="muted">${escapeHtml(data.address)}</div>` : ""}
     ${data.phone ? `<div class="muted">هاتف: ${escapeHtml(data.phone)}</div>` : ""}
     ${data.tax_number ? `<div class="muted">الرقم الضريبي: ${escapeHtml(data.tax_number)}</div>` : ""}
@@ -252,6 +271,7 @@ export function printInvoiceHTML(
     <div class="row"><span>طريقة الدفع</span><span>${escapeHtml(paymentAr[data.payment_method] ?? data.payment_method)}</span></div>
   </div>
   <div class="center thanks">شكراً لزيارتكم — نتشرف بخدمتكم مجدداً</div>
+  ${platformFooter}
 </div>
 <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 150); };</script>
 </body>

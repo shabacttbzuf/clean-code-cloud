@@ -97,14 +97,14 @@ function CompaniesPage() {
             <CardContent className="space-y-2 p-4">
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="font-semibold">{c.name}</div>
+                  <a href={"/companies/" + c.id} className="font-semibold text-primary hover:underline">{c.name}</a>
                   {c.legal_name && <div className="text-xs text-muted-foreground">{c.legal_name}</div>}
                 </div>
                 <Badge variant={c.is_active ? "default" : "secondary"}>{c.is_active ? "نشطة" : "موقوفة"}</Badge>
               </div>
               {c.tax_number && <div className="text-xs" dir="ltr">RN: {c.tax_number}</div>}
               {c.description && <div className="text-xs text-muted-foreground line-clamp-2">{c.description}</div>}
-              <div className="flex justify-end gap-1">
+              <div className="flex justify-end gap-1"><Button size="sm" variant="outline" asChild><a href={"/companies/" + c.id}>عرض التفاصيل</a></Button>
                 <Button size="sm" variant="ghost" onClick={() => { setEditing(c); setOpen(true); }}>
                   <Pencil className="h-3 w-3" />
                 </Button>

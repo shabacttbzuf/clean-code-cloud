@@ -18,7 +18,7 @@ import { useState } from "react";
 export const Route = createFileRoute("/_authenticated/team-permissions")({ component: TeamPermissionsPage });
 
 const CATEGORY_LABELS: Record<string, string> = {
-  branches: "الفروع", users: "المستخدمون", catalog: "الكتالوج",
+  branches: "الفروع", users: "المستخدمون", catalog: "الكتالوج", dashboard: "لوحة التحكم", payroll: "الرواتب",
   sales: "المبيعات", inventory: "المخزون", crm: "العملاء",
   finance: "المالية", reports: "التقارير", system: "النظام", operations: "العمليات",
 };

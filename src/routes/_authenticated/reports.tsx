@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, FileText, Download, Calendar, TrendingUp, Wallet, Package, Users } from "lucide-react";
+import { Loader2, FileText, Download, Calendar, TrendingUp, Wallet, Package, Users, Printer } from "lucide-react";
 import { formatMoney, formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 
@@ -18,7 +18,19 @@ export const Route = createFileRoute("/_authenticated/reports")({
 });
 
 function ReportsPage() {
-  const { tenantId, tenant } = useActiveTenant();
+  const { tenantId, tenant, userId } = useActiveTenant();
+  const permissionsQuery = useQuery({
+    queryKey: ["reports-permissions", tenantId, userId],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId! });
+      if (error) throw error;
+      return new Set<string>((data ?? []) as string[]);
+    },
+    enabled: !!tenantId && !!userId,
+    staleTime: 15_000,
+  });
+  const canExportReports = permissionsQuery.data?.has("reports.export") === true;
+  const canFilterReports = permissionsQuery.data?.has("reports.filter") === true;
   const [from, setFrom] = useState(() => {
     const d = new Date();
     d.setMonth(d.getMonth() - 1);
@@ -26,9 +38,11 @@ function ReportsPage() {
   });
   const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [groupBy, setGroupBy] = useState<"day" | "month" | "year">("day");
+  const [branchId, setBranchId] = useState("all");
+  const branchesQuery = useQuery({ queryKey: ["report-branches", tenantId], queryFn: async () => { const { data, error } = await supabase.from("branches").select("id,name").eq("tenant_id", tenantId!).order("name"); if (error) throw error; return data ?? []; }, enabled: !!tenantId });
 
   const report = useQuery({
-    queryKey: ["reports", tenantId, from, to],
+    queryKey: ["reports", tenantId, from, to, branchId],
     queryFn: async () => {
       if (!tenantId) return null;
       const fromDate = `${from}T00:00:00.000Z`;
@@ -46,7 +60,7 @@ function ReportsPage() {
           .limit(5000),
         supabase
           .from("expenses")
-          .select("id, paid_at, amount, category_id, description")
+          .select("id, paid_at, amount, category_id, description, branch_id")
           .eq("tenant_id", tenantId)
           .gte("paid_at", from)
           .lte("paid_at", to)
@@ -61,7 +75,7 @@ function ReportsPage() {
           .limit(20000),
         supabase
           .from("cash_sessions")
-          .select("cashier_id, opening_balance, closing_balance, expected_cash, cash_difference, opened_at, closed_at, status")
+          .select("cashier_id, opening_balance, closing_balance, expected_cash, cash_difference, opened_at, closed_at, status, branch_id")
           .eq("tenant_id", tenantId)
           .gte("opened_at", fromDate)
           .lte("opened_at", toDate)
@@ -73,7 +87,7 @@ function ReportsPage() {
           .limit(10000),
         supabase
           .from("sale_refunds")
-          .select("id, sale_id, subtotal, discount, tax_amount, total, refund_method, created_at")
+          .select("id, sale_id, subtotal, discount, tax_amount, total, refund_method, created_at, branch_id")
           .eq("tenant_id", tenantId)
           .gte("created_at", fromDate)
           .lte("created_at", toDate)
@@ -91,16 +105,16 @@ function ReportsPage() {
         id: string; created_at: string; total: number; subtotal: number; discount: number; tax_amount: number;
         payment_method: string; cashier_id: string; branch_id: string; status: string;
       }>;
-      const expenses = (expensesRes.data ?? []) as Array<{ id: string; paid_at: string; amount: number; category_id: string | null; description: string | null }>;
+      const expenses = (expensesRes.data ?? []) as Array<{ id: string; paid_at: string; amount: number; category_id: string | null; description: string | null; branch_id: string | null }>;
       const items = (itemsRes.data ?? []) as Array<{ product_name: string; quantity: number; line_total: number; sale_id: string; created_at: string }>;
       const sessions = (sessionsRes.data ?? []) as Array<{
         cashier_id: string; opening_balance: number; closing_balance: number | null;
-        expected_cash: number | null; cash_difference: number | null; opened_at: string; closed_at: string | null; status: string;
+        expected_cash: number | null; cash_difference: number | null; opened_at: string; closed_at: string | null; status: string; branch_id: string | null;
       }>;
       const inventory = (inventoryRes.data ?? []) as Array<{ quantity: number; product_id: string; branch_id: string }>;
       const refunds = (refundsRes.data ?? []) as Array<{
         id: string; sale_id: string; subtotal: number; discount: number;
-        tax_amount: number; total: number; refund_method: string; created_at: string;
+        tax_amount: number; total: number; refund_method: string; created_at: string; branch_id: string | null;
       }>;
       const refundIds = refunds.map((refund) => refund.id);
       const refundItemsRes = refundIds.length
@@ -122,10 +136,24 @@ function ReportsPage() {
   });
 
   const data = report.data;
-  const safe = useMemo(
-    () => data ?? { sales: [] as any[], expenses: [] as any[], items: [] as any[], sessions: [] as any[], inventory: [] as any[], refunds: [] as any[], refundItems: [] as any[] },
-    [data],
-  );
+  const safe = useMemo(() => {
+    const raw = data ?? { sales: [] as any[], expenses: [] as any[], items: [] as any[], sessions: [] as any[], inventory: [] as any[], refunds: [] as any[], refundItems: [] as any[] };
+    if (branchId === "all") return raw;
+    const sales = raw.sales.filter((row: any) => row.branch_id === branchId);
+    const refunds = raw.refunds.filter((row: any) => row.branch_id === branchId);
+    const saleIds = new Set(sales.map((row: any) => row.id));
+    const refundIds = new Set(refunds.map((row: any) => row.id));
+    return {
+      ...raw,
+      sales,
+      refunds,
+      expenses: raw.expenses.filter((row: any) => row.branch_id === branchId),
+      sessions: raw.sessions.filter((row: any) => row.branch_id === branchId),
+      inventory: raw.inventory.filter((row: any) => row.branch_id === branchId),
+      items: raw.items.filter((row: any) => saleIds.has(row.sale_id)),
+      refundItems: raw.refundItems.filter((row: any) => refundIds.has(row.refund_id)),
+    };
+  }, [data, branchId]);
 
   const totals = useMemo(() => {
     const grossSalesTotal = safe.sales.reduce((s: number, r: any) => s + Number(r.total), 0);
@@ -242,6 +270,7 @@ function ReportsPage() {
       <PageHeader
         title="التقارير"
         subtitle="تقارير مبيعات، مصروفات، مخزون وموظفين"
+        action={canExportReports ? <Button variant="outline" className="print:hidden" onClick={() => window.print()}><Printer className="ml-2 h-4 w-4" />طباعة التقرير</Button> : undefined}
       />
 
       <Card>
@@ -252,20 +281,30 @@ function ReportsPage() {
                 <Label className="text-xs">من</Label>
                 <div className="relative">
                   <Calendar className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="pr-9" />
+                  <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="pr-9" disabled={!canFilterReports} />
                 </div>
               </div>
               <div className="space-y-2">
                 <Label className="text-xs">إلى</Label>
                 <div className="relative">
                   <Calendar className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="pr-9" />
+                  <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="pr-9" disabled={!canFilterReports} />
                 </div>
               </div>
             </div>
+            <div className="space-y-2 sm:w-48">
+              <Label className="text-xs">تصفية حسب الفرع</Label>
+              <Select value={branchId} onValueChange={setBranchId} disabled={!canFilterReports}>
+                <SelectTrigger><SelectValue placeholder="كل الفروع" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل الفروع</SelectItem>
+                  {(branchesQuery.data ?? []).map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2 sm:w-40">
               <Label className="text-xs">تجميع المبيعات</Label>
-              <Select value={groupBy} onValueChange={(v) => setGroupBy(v as typeof groupBy)}>
+              <Select value={groupBy} onValueChange={(v) => setGroupBy(v as typeof groupBy)} disabled={!canFilterReports}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="day">يومي</SelectItem>
@@ -295,7 +334,7 @@ function ReportsPage() {
         <TabsContent value="sales" className="space-y-4 pt-2">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold">ملخص المبيعات والمصروفات</h3>
-            <Button
+            {canExportReports && <Button
               variant="outline"
               size="sm"
               onClick={() =>
@@ -312,7 +351,7 @@ function ReportsPage() {
               }
             >
               <Download className="ml-2 h-4 w-4" />تصدير CSV
-            </Button>
+            </Button>}
           </div>
           <Card>
             <CardContent className="p-0">
@@ -350,7 +389,7 @@ function ReportsPage() {
         <TabsContent value="products" className="space-y-4 pt-2">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold">أكثر 10 منتجات مبيعاً</h3>
-            <Button
+            {canExportReports && <Button
               variant="outline"
               size="sm"
               onClick={() =>
@@ -366,7 +405,7 @@ function ReportsPage() {
               }
             >
               <Download className="ml-2 h-4 w-4" />تصدير CSV
-            </Button>
+            </Button>}
           </div>
           <Card>
             <CardContent className="p-0">
@@ -402,7 +441,7 @@ function ReportsPage() {
         <TabsContent value="staff" className="space-y-4 pt-2">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold">أداء الكاشيرين</h3>
-            <Button
+            {canExportReports && <Button
               variant="outline"
               size="sm"
               onClick={() =>
@@ -418,7 +457,7 @@ function ReportsPage() {
               }
             >
               <Download className="ml-2 h-4 w-4" />تصدير CSV
-            </Button>
+            </Button>}
           </div>
           <Card>
             <CardContent className="p-0">

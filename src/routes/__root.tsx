@@ -79,21 +79,21 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "نظام محاسبة المطاعم — Restaurant Accounting System" },
+      { title: "نظام إدارة الأعمال — Business Management System" },
       {
         name: "description",
         content:
           "نظام محاسبي احترافي متكامل لإدارة المطاعم: الفروع، المنتجات، المخزون، المبيعات، والتقارير المالية.",
       },
-      { name: "author", content: "Restaurant Accounting System" },
-      { property: "og:title", content: "نظام محاسبة المطاعم — Restaurant Accounting System" },
+      { name: "author", content: "Business Management System" },
+      { property: "og:title", content: "نظام إدارة الأعمال — Business Management System" },
       {
         property: "og:description",
         content: "نظام محاسبي احترافي متكامل لإدارة المطاعم: الفروع، المنتجات، المخزون، المبيعات، والتقارير المالية.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: "نظام محاسبة المطاعم — Restaurant Accounting System" },
+      { name: "twitter:title", content: "نظام إدارة الأعمال — Business Management System" },
       { name: "twitter:description", content: "نظام محاسبي احترافي متكامل لإدارة المطاعم: الفروع، المنتجات، المخزون، المبيعات، والتقارير المالية." },
       { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/2546aa3a-4544-4f9b-9918-fa74af3babf6/id-preview-bf981b62--2a66f0d7-6e7a-44db-a0b3-b5233ce90fc1.lovable.app-1783506986801.png" },
       { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/2546aa3a-4544-4f9b-9918-fa74af3babf6/id-preview-bf981b62--2a66f0d7-6e7a-44db-a0b3-b5233ce90fc1.lovable.app-1783506986801.png" },

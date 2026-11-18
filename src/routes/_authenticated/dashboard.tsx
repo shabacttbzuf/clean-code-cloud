@@ -14,10 +14,10 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
   head: () => ({
     meta: [
-      { title: "لوحة التحكم — نظام محاسبة المطاعم" },
-      { name: "description", content: "تابع مبيعات المطعم والمصروفات وصافي الربح والمخزون والورديات من لوحة التحكم." },
-      { property: "og:title", content: "لوحة التحكم — نظام محاسبة المطاعم" },
-      { property: "og:description", content: "تابع مبيعات المطعم والمصروفات وصافي الربح والمخزون والورديات من لوحة التحكم." },
+      { title: "لوحة التحكم — نظام إدارة الأعمال" },
+      { name: "description", content: "تابع أداء الشركات والفروع والمبيعات والمصروفات والمخزون والموارد البشرية من لوحة التحكم." },
+      { property: "og:title", content: "لوحة التحكم — نظام إدارة الأعمال" },
+      { property: "og:description", content: "تابع أداء الشركات والفروع والمبيعات والمصروفات والمخزون والموارد البشرية من لوحة التحكم." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
