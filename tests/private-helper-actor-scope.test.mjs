@@ -28,3 +28,8 @@ test("tenant owners can create and update branches across companies", () => {
   assert.match(migration, /company_scope_branches_insert[\s\S]*private\.is_tenant_owner_user/i);
   assert.match(migration, /company_scope_branches_update[\s\S]*private\.is_tenant_owner_user/i);
 });
+
+test("trigger-only security functions are not executable by API roles", () => {
+  assert.match(migration, /revoke all on function private\.enforce_inventory_reference_tenant\(\) from public, anon, authenticated, service_role/i);
+  assert.match(migration, /revoke all on function private\.prevent_cash_refund_overdraw\(\) from public, anon, authenticated, service_role/i);
+});
