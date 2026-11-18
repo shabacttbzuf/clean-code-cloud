@@ -182,3 +182,6 @@
 92. `supabase/migrations/20261119000007_user_role_company_scope.sql`
 
 **الإجمالي: 92 ترحيلاً.**
+93. `supabase/migrations/20261119000008_bind_branch_access_and_helper_actors.sql`
+
+**الإجمالي: 93 ترحيلاً.**
