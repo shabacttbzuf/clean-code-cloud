@@ -51,7 +51,7 @@ const MANAGEABLE_NAV_ITEMS = [
   { title: "سجل التدقيق", url: "/audit-logs", protected: true },
 ] as const;
 
-type MarketingCampaign = { id: string; title: string; description: string; image_url: string | null; target_url: string | null; placement: string; status: string; starts_at: string | null; ends_at: string | null; sort_order: number };
+type MarketingCampaign = { id: string; company_id: string | null; title: string; description: string; image_url: string | null; target_url: string | null; placement: string; status: string; starts_at: string | null; ends_at: string | null; sort_order: number };
 
 const schema = z.object({
   name: z.string().trim().min(2, "الاسم قصير").max(100),
@@ -61,7 +61,7 @@ const schema = z.object({
 });
 
 function SettingsPage() {
-  const { tenant, tenantId, isAdmin, role } = useActiveTenant();
+  const { tenant, tenantId, isAdmin, role, membership } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
   const { design, saveDesign, resetDesign } = useTheme();
   const qc = useQueryClient();
@@ -77,6 +77,7 @@ function SettingsPage() {
   const [newTabTitle, setNewTabTitle] = useState("");
   const [newTabUrl, setNewTabUrl] = useState("/dashboard");
   const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
+  const [editingCampaignCompanyId, setEditingCampaignCompanyId] = useState<string | null>(null);
   const [campaignTitle, setCampaignTitle] = useState("");
   const [campaignDescription, setCampaignDescription] = useState("");
   const [campaignImage, setCampaignImage] = useState("");
@@ -147,11 +148,15 @@ function SettingsPage() {
     }
   }, []);
 
-  const canManageMarketing = role === "owner" || role === "manager" || isSuperOwner;
+  const canManageMarketing = isSuperOwner || role === "owner" || (role === "manager" && !!membership?.company_id);
+  const canManageCampaign = (campaign: MarketingCampaign) =>
+    isSuperOwner ||
+    (role === "owner" && !membership?.company_id) ||
+    (!!membership?.company_id && membership.company_id === campaign.company_id && (role === "owner" || role === "manager"));
   const campaignsQuery = useQuery({
     queryKey: ["marketing-campaigns", tenantId],
     queryFn: async (): Promise<MarketingCampaign[]> => {
-      const { data, error } = await supabase.from("marketing_campaigns").select("id,title,description,image_url,target_url,placement,status,starts_at,ends_at,sort_order").eq("tenant_id", tenantId!).order("sort_order").order("created_at", { ascending: false });
+      const { data, error } = await supabase.from("marketing_campaigns").select("id,company_id,title,description,image_url,target_url,placement,status,starts_at,ends_at,sort_order").eq("tenant_id", tenantId!).order("sort_order").order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as MarketingCampaign[];
     },
@@ -166,6 +171,7 @@ function SettingsPage() {
       if (campaignTarget && !/^https?:\/\//i.test(campaignTarget)) throw new Error("رابط الوجهة يجب أن يبدأ بـ https:// أو http://");
       if (campaignStart && campaignEnd && new Date(campaignEnd) <= new Date(campaignStart)) throw new Error("تاريخ النهاية يجب أن يكون بعد البداية");
       const payload = {
+        company_id: editingCampaignId ? editingCampaignCompanyId : (membership?.company_id ?? null),
         title,
         description: campaignDescription.trim(),
         image_url: campaignImage || null,
@@ -182,6 +188,7 @@ function SettingsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["marketing-campaigns", tenantId] });
       setEditingCampaignId(null);
+      setEditingCampaignCompanyId(null);
       setCampaignTitle(""); setCampaignDescription(""); setCampaignImage(""); setCampaignTarget(""); setCampaignStart(""); setCampaignEnd("");
       toast.success("تم حفظ بيانات العرض.");
     },
@@ -214,7 +221,9 @@ function SettingsPage() {
     setUploadingCampaignImage(true);
     try {
       const ext = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif" } as Record<string, string>)[file.type];
-      const path = `${tenantId}/marketing/${crypto.randomUUID()}.${ext}`;
+      const path = membership?.company_id
+        ? `${tenantId}/companies/${membership.company_id}/marketing/${crypto.randomUUID()}.${ext}`
+        : `${tenantId}/marketing/${crypto.randomUUID()}.${ext}`;
       const { error } = await supabase.storage.from("restaurant-assets").upload(path, file, { upsert: false, contentType: file.type, cacheControl: "31536000" });
       if (error) throw error;
       const { data } = supabase.storage.from("restaurant-assets").getPublicUrl(path);
@@ -240,7 +249,7 @@ function SettingsPage() {
     },
   });
 
-  const canEdit = role === "owner";
+  const canEdit = isSuperOwner || (role === "owner" && !membership?.company_id);
 
   async function uploadBackground(file?: File) {
     if (!file || !tenantId || !isSuperOwner) return;
@@ -445,8 +454,9 @@ function SettingsPage() {
                 <div key={campaign.id} className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
                   {campaign.image_url && <img src={campaign.image_url} alt="" className="h-14 w-20 rounded object-cover" />}
                   <div className="min-w-0 flex-1"><div className="font-medium">{campaign.title}</div><div className="text-xs text-muted-foreground">{campaign.placement === "dashboard_banner" ? "شريط لوحة التحكم" : campaign.placement === "dashboard_card" ? "بطاقة لوحة التحكم" : "نقطة البيع"} · {campaign.status === "active" ? "نشط" : campaign.status === "paused" ? "متوقف" : campaign.status === "archived" ? "مؤرشف" : "مسودة"}</div></div>
-                  <Button type="button" size="sm" variant="ghost" onClick={() => {
+                  <Button type="button" size="sm" variant="ghost" disabled={!canManageCampaign(campaign)} onClick={() => {
                     setEditingCampaignId(campaign.id);
+                    setEditingCampaignCompanyId(campaign.company_id ?? null);
                     setCampaignTitle(campaign.title);
                     setCampaignDescription(campaign.description);
                     setCampaignImage(campaign.image_url ?? "");
@@ -460,8 +470,8 @@ function SettingsPage() {
                     setCampaignStart(toLocalInput(campaign.starts_at));
                     setCampaignEnd(toLocalInput(campaign.ends_at));
                   }}>تعديل</Button>
-                  <Button type="button" size="sm" variant="outline" disabled={campaignUpdate.isPending} onClick={() => campaignUpdate.mutate({ id: campaign.id, status: campaign.status === "active" ? "paused" : "active" })}>{campaign.status === "active" ? "إيقاف" : "تفعيل"}</Button>
-                  <Button type="button" size="icon" variant="ghost" aria-label={`حذف ${campaign.title}`} disabled={campaignDelete.isPending} onClick={() => { if (window.confirm("هل تريد حذف هذا العرض؟")) campaignDelete.mutate(campaign.id); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                  <Button type="button" size="sm" variant="outline" disabled={!canManageCampaign(campaign) || campaignUpdate.isPending} onClick={() => campaignUpdate.mutate({ id: campaign.id, status: campaign.status === "active" ? "paused" : "active" })}>{campaign.status === "active" ? "إيقاف" : "تفعيل"}</Button>
+                  <Button type="button" size="icon" variant="ghost" aria-label={`حذف ${campaign.title}`} disabled={!canManageCampaign(campaign) || campaignDelete.isPending} onClick={() => { if (window.confirm("هل تريد حذف هذا العرض؟")) campaignDelete.mutate(campaign.id); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                 </div>
               )) : <p className="text-sm text-muted-foreground">لا توجد حملات بعد.</p>}
             </div>

@@ -48,7 +48,7 @@ const schema = z.object({
 });
 
 function ProductsPage() {
-  const { tenantId, isAdmin, tenant } = useActiveTenant();
+  const { tenantId, isAdmin, tenant, membership } = useActiveTenant();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
@@ -133,6 +133,7 @@ function ProductsPage() {
                 initial={editing}
                 categories={cats.data ?? []}
                 tenantId={tenantId!}
+                companyId={membership?.company_id ?? null}
                 onSubmit={(v) => upsert.mutate(v)}
                 pending={upsert.isPending}
               />
@@ -216,12 +217,14 @@ function ProductDialog({
   initial,
   categories,
   tenantId,
+  companyId,
   onSubmit,
   pending,
 }: {
   initial: Product | null;
   categories: Category[];
   tenantId: string;
+  companyId: string | null;
   onSubmit: (v: z.infer<typeof schema>) => void;
   pending: boolean;
 }) {
@@ -253,7 +256,9 @@ function ProductDialog({
     setUploading(true);
     try {
       const ext = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif" } as Record<string, string>)[file.type];
-      const path = `${tenantId}/products/${crypto.randomUUID()}.${ext}`;
+      const path = companyId
+        ? `${tenantId}/companies/${companyId}/products/${crypto.randomUUID()}.${ext}`
+        : `${tenantId}/products/${crypto.randomUUID()}.${ext}`;
       const { error } = await supabase.storage.from("restaurant-assets").upload(path, file, { upsert: false, contentType: file.type, cacheControl: "31536000" });
       if (error) throw error;
       const { data } = supabase.storage.from("restaurant-assets").getPublicUrl(path);

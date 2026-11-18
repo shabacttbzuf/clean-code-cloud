@@ -14,6 +14,7 @@ import { Loader2, Save, KeyRound, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { updateMyProfile, updateUserPassword } from "@/lib/users.functions";
+import { resolveAvatarUrl } from "@/lib/storage";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   component: ProfilePage,
@@ -42,6 +43,7 @@ function ProfilePage() {
 
   const [form, setForm] = useState({ full_name: "", username: "", phone: "", avatar_url: "" });
   const [pwd, setPwd] = useState({ next: "", confirm: "" });
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   async function uploadAvatar(file?: File) {
@@ -53,17 +55,20 @@ function ProfilePage() {
     try {
       const ext = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif" } as Record<string, string>)[file.type];
       const path = `${tenantId}/profiles/${user.id}/${crypto.randomUUID()}.${ext}`;
-      const { error } = await supabase.storage.from("restaurant-assets").upload(path, file, { upsert: false, contentType: file.type, cacheControl: "31536000" });
+      const { error } = await supabase.storage.from("restaurant-private-assets").upload(path, file, { upsert: false, contentType: file.type, cacheControl: "3600" });
       if (error) throw error;
-      const { data } = supabase.storage.from("restaurant-assets").getPublicUrl(path);
-      setForm((current) => ({ ...current, avatar_url: data.publicUrl }));
-      toast.success("تم رفع الصورة. احفظ التغييرات لتثبيتها في ملفك.");
+      const { data, error: signedError } = await supabase.storage.from("restaurant-private-assets").createSignedUrl(path, 60 * 60 * 24);
+      if (signedError) throw signedError;
+      setForm((current) => ({ ...current, avatar_url: `private://${path}` }));
+      setAvatarPreviewUrl(data.signedUrl);
+      toast.success("تم رفع الصورة بشكل خاص. احفظ التغييرات لتثبيتها في ملفك.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "تعذر رفع الصورة");
     } finally { setUploadingAvatar(false); }
   }
 
   useEffect(() => {
+    let cancelled = false;
     if (profile) {
       setForm({
         full_name: profile.full_name ?? "",
@@ -71,7 +76,15 @@ function ProfilePage() {
         phone: profile.phone ?? "",
         avatar_url: profile.avatar_url ?? "",
       });
+      void resolveAvatarUrl(profile.avatar_url).then((url) => {
+        if (!cancelled) setAvatarPreviewUrl(url);
+      }).catch(() => {
+        if (!cancelled) setAvatarPreviewUrl(null);
+      });
+    } else {
+      setAvatarPreviewUrl(null);
     }
+    return () => { cancelled = true; };
   }, [profile]);
 
   const saveMut = useMutation({
@@ -126,7 +139,7 @@ function ProfilePage() {
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-center gap-4">
             <Avatar className="h-20 w-20">
-              {form.avatar_url && <AvatarImage src={form.avatar_url} alt={form.full_name} />}
+              {avatarPreviewUrl && <AvatarImage src={avatarPreviewUrl} alt={form.full_name} />}
               <AvatarFallback className="text-2xl">{initial}</AvatarFallback>
             </Avatar>
             <div className="min-w-0 flex-1 space-y-2">

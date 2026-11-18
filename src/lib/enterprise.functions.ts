@@ -571,6 +571,7 @@ export const createNotification = createServerFn({ method: "POST" })
         tenant_id: uuid,
         audience_type: z.enum(["owner", "manager", "branch", "department", "user", "all"]),
         audience_id: uuid.nullable().optional(),
+        company_id: uuid.nullable().optional(),
         kind: z.string().max(80),
         urgency: z.enum(["low", "normal", "urgent", "critical"]).default("normal"),
         title: z.string().min(1).max(200),
@@ -585,6 +586,7 @@ export const createNotification = createServerFn({ method: "POST" })
     const { error } = await context.supabase.from("notifications").insert({
       ...data,
       audience_id: data.audience_id ?? null,
+      company_id: data.company_id ?? null,
       body: data.body ?? null,
       scheduled_for: data.scheduled_for ?? null,
       payload: (data.payload ?? {}) as any,

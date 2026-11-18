@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
+import { resolveAvatarUrl } from "@/lib/storage";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -93,12 +94,30 @@ type Row = {
 };
 
 function UsersPage() {
-  const { tenantId, isAdmin, userId, role, isSuperOwner } = useActiveTenant();
+  const { tenantId, isAdmin, userId, isSuperOwner } = useActiveTenant();
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [pwdUser, setPwdUser] = useState<Row | null>(null);
   const [roleUser, setRoleUser] = useState<Row | null>(null);
   const [transferUser, setTransferUser] = useState<Row | null>(null);
+
+  const { data: canAssignManager = false } = useQuery({
+    queryKey: ["can-assign-manager", tenantId, userId, isSuperOwner],
+    queryFn: async () => {
+      if (isSuperOwner) return true;
+      const { data, error } = await supabase
+        .from("user_roles")
+        .select("id")
+        .eq("user_id", userId!)
+        .eq("tenant_id", tenantId!)
+        .eq("role", "owner")
+        .is("company_id", null)
+        .limit(1);
+      if (error) throw error;
+      return !!data?.length;
+    },
+    enabled: !!tenantId && !!userId,
+  });
 
   const { data: customRoles } = useQuery({
     queryKey: ["custom-roles", tenantId],
@@ -107,7 +126,7 @@ function UsersPage() {
       if (error) throw error;
       return data ?? [];
     },
-    enabled: !!tenantId && (role === "owner" || isSuperOwner),
+    enabled: !!tenantId && canAssignManager,
   });
 
   const { data: branches } = useQuery({
@@ -144,7 +163,7 @@ function UsersPage() {
       if (customError) throw customError;
       const customMap = new Map((customRows ?? []).map((r) => [r.id, r.name]));
       const map = new Map((profiles ?? []).map((p) => [p.id, p]));
-      return (roles ?? []).map((r) => {
+      return await Promise.all((roles ?? []).map(async (r) => {
         const p = map.get(r.user_id);
         return {
           role_id: r.id,
@@ -156,11 +175,11 @@ function UsersPage() {
           full_name: p?.full_name ?? null,
           username: p?.username ?? null,
           phone: p?.phone ?? null,
-          avatar_url: p?.avatar_url ?? null,
+          avatar_url: await resolveAvatarUrl(p?.avatar_url ?? null),
           is_active: p?.is_active ?? true,
           last_login_at: p?.last_login_at ?? null,
         };
-      });
+      }));
     },
     enabled: !!tenantId,
   });
@@ -312,7 +331,9 @@ function UsersPage() {
         onOpenChange={setCreateOpen}
         tenantId={tenantId}
         branches={branches ?? []}
-        customRoles={customRoles ?? []}
+        customRoles={isSuperOwner ? [] : customRoles ?? []}
+        canAssignManager={canAssignManager}
+        isSuperOwner={isSuperOwner}
       />
       <PasswordDialog user={pwdUser} onClose={() => setPwdUser(null)} tenantId={tenantId} />
       <RoleDialog
@@ -321,6 +342,7 @@ function UsersPage() {
         tenantId={tenantId}
         branches={branches ?? []}
         customRoles={customRoles ?? []}
+        canAssignManager={canAssignManager}
       />
       <TransferDialog
         user={transferUser}
@@ -350,22 +372,27 @@ function CreateUserDialog({
   tenantId,
   branches,
   customRoles,
+  canAssignManager,
+  isSuperOwner,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   tenantId: string | null;
   branches: Array<{ id: string; name: string }>;
   customRoles: Array<{ id: string; name: string }>;
+  canAssignManager: boolean;
+  isSuperOwner: boolean;
 }) {
   const qc = useQueryClient();
   const createFn = useServerFn(createUser);
+  const defaultRole = isSuperOwner ? "manager" : "cashier";
   const [form, setForm] = useState({
     email: "",
     password: "",
     full_name: "",
     username: "",
     phone: "",
-    role: "cashier" as (typeof ROLES)[number]["value"],
+    role: defaultRole as (typeof ROLES)[number]["value"],
     custom_role_id: "",
     branch_id: "none",
   });
@@ -397,7 +424,7 @@ function CreateUserDialog({
         full_name: "",
         username: "",
         phone: "",
-        role: "cashier",
+        role: defaultRole as (typeof ROLES)[number]["value"],
         custom_role_id: "",
         branch_id: "none",
       });
@@ -443,7 +470,7 @@ function CreateUserDialog({
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__builtin_header" disabled>الأدوار الأساسية</SelectItem>
-                  {ROLES.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                  {ROLES.filter((r) => r.value !== "owner" && (r.value !== "manager" || canAssignManager) && (!isSuperOwner || r.value === "manager")).map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
                   {customRoles.length > 0 && <SelectItem value="__custom_header" disabled>الأدوار المخصصة</SelectItem>}
                   {customRoles.map((r) => <SelectItem key={r.id} value={`custom:${r.id}`}>مخصص: {r.name}</SelectItem>)}
                 </SelectContent>
@@ -529,12 +556,14 @@ function RoleDialog({
   tenantId,
   branches,
   customRoles,
+  canAssignManager,
 }: {
   user: Row | null;
   onClose: () => void;
   tenantId: string | null;
   branches: Array<{ id: string; name: string }>;
   customRoles: Array<{ id: string; name: string }>;
+  canAssignManager: boolean;
 }) {
   const qc = useQueryClient();
   const [role, setRole] = useState<string>("cashier");
@@ -589,7 +618,7 @@ function RoleDialog({
             <Select value={customRoleId ? `custom:${customRoleId}` : role} onValueChange={(v) => v.startsWith("custom:") ? (setRole("waiter"), setCustomRoleId(v.slice(7))) : (setRole(v), setCustomRoleId(""))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {ROLES.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                {ROLES.filter((r) => r.value !== "owner" && (r.value !== "manager" || canAssignManager)).map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
                 {customRoles.map((r) => <SelectItem key={r.id} value={`custom:${r.id}`}>مخصص: {r.name}</SelectItem>)}
               </SelectContent>
             </Select>

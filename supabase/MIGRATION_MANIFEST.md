@@ -176,4 +176,13 @@
 
 90. `supabase/migrations/20261119000005_index_platform_branding_updated_by.sql`
 
-**الإجمالي: 90 ترحيلاً.**
+91. `supabase/migrations/20261119000006_company_scope_marketing_notifications.sql`
+
+**الإجمالي: 91 ترحيلاً.**
+92. `supabase/migrations/20261119000007_user_role_company_scope.sql`
+
+93. `supabase/migrations/20261119000008_bind_branch_access_and_helper_actors.sql`
+
+94. `supabase/migrations/20261119000009_private_avatar_and_company_asset_scope.sql`
+
+**الإجمالي: 94 ترحيلاً.**

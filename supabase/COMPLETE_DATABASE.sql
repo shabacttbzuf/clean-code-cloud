@@ -9874,3 +9874,2623 @@ commit;
 create index if not exists platform_branding_updated_by_idx
   on public.platform_branding(updated_by)
   where updated_by is not null;
+
+
+
+-- =====================================================================
+-- Enforce company boundaries for marketing campaigns and notifications.
+-- Also make tenant owners company-wide for branch access while keeping company managers scoped.
+begin;
+
+alter table public.marketing_campaigns
+  add column if not exists company_id uuid;
+alter table public.notifications
+  add column if not exists company_id uuid;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname='marketing_campaigns_company_id_fkey'
+      and conrelid='public.marketing_campaigns'::regclass
+  ) then
+    alter table public.marketing_campaigns
+      add constraint marketing_campaigns_company_id_fkey
+      foreign key (company_id) references public.companies(id) on delete restrict;
+  end if;
+  if not exists (
+    select 1 from pg_constraint
+    where conname='notifications_company_id_fkey'
+      and conrelid='public.notifications'::regclass
+  ) then
+    alter table public.notifications
+      add constraint notifications_company_id_fkey
+      foreign key (company_id) references public.companies(id) on delete restrict;
+  end if;
+end $$;
+
+create index if not exists marketing_campaigns_tenant_company_status_idx
+  on public.marketing_campaigns(tenant_id, company_id, status, sort_order, created_at desc);
+create index if not exists notifications_tenant_company_created_idx
+  on public.notifications(tenant_id, company_id, created_at desc)
+  where company_id is not null;
+
+-- A tenant owner with no company assignment can access all companies in the tenant.
+-- Company managers and accountants remain limited to their assigned company.
+create or replace function private.can_access_branch(_user_id uuid, _tenant_id uuid, _branch_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select
+    exists (select 1 from public.super_owners so where so.user_id = _user_id)
+    or exists (
+      select 1
+      from public.user_roles ur
+      join public.branches b on b.id = _branch_id and b.tenant_id = _tenant_id
+      where ur.user_id = _user_id
+        and ur.tenant_id = _tenant_id
+        and (
+          (ur.role = 'owner' and ur.company_id is null)
+          or (ur.role in ('owner','manager','accountant')
+              and ur.company_id is not null and ur.company_id = b.company_id)
+          or (ur.role in ('manager','accountant')
+              and ur.company_id is null and b.company_id is null)
+          or (ur.branch_id = _branch_id
+              and (ur.company_id is null or ur.company_id = b.company_id))
+        )
+    );
+$function$;
+revoke all on function private.can_access_branch(uuid,uuid,uuid) from public, anon;
+grant execute on function private.can_access_branch(uuid,uuid,uuid) to authenticated, service_role;
+
+-- Infer and validate the company of every new notification. Existing NULL company_id
+-- notifications remain tenant-wide unless their branch/department audience identifies a company.
+create or replace function private.enforce_notification_company_scope()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_uid uuid := auth.uid();
+  v_is_super boolean;
+  v_is_tenant_owner boolean;
+  v_company_count integer;
+  v_actor_company uuid;
+  v_target_company uuid;
+begin
+  if v_uid is null then
+    raise exception 'Authentication required' using errcode='42501';
+  end if;
+
+  v_is_super := exists (select 1 from public.super_owners so where so.user_id=v_uid);
+
+  if tg_op='INSERT' then
+    if new.created_by is null then
+      new.created_by := v_uid;
+    elsif new.created_by is distinct from v_uid and not v_is_super then
+      raise exception 'Notification creator must be the authenticated user' using errcode='42501';
+    end if;
+  elsif new.created_by is distinct from old.created_by and not v_is_super then
+    raise exception 'Notification creator is immutable' using errcode='42501';
+  end if;
+
+  if new.tenant_id is null then
+    if not v_is_super then
+      raise exception 'Only the platform owner can create global notifications' using errcode='42501';
+    end if;
+    return new;
+  end if;
+
+  v_is_tenant_owner := exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=v_uid and ur.tenant_id=new.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  );
+
+  select count(distinct ur.company_id), min(ur.company_id::text)::uuid
+    into v_company_count, v_actor_company
+  from public.user_roles ur
+  where ur.user_id=v_uid and ur.tenant_id=new.tenant_id
+    and ur.role in ('owner','manager') and ur.company_id is not null;
+
+  if not v_is_super and not v_is_tenant_owner then
+    if new.company_id is null then
+      if v_company_count <> 1 then
+        raise exception 'Select a company for this notification' using errcode='42501';
+      end if;
+      new.company_id := v_actor_company;
+    end if;
+    if not exists (
+      select 1 from public.user_roles ur
+      where ur.user_id=v_uid and ur.tenant_id=new.tenant_id
+        and ur.company_id=new.company_id and ur.role in ('owner','manager')
+    ) then
+      raise exception 'You cannot create notifications for another company' using errcode='42501';
+    end if;
+  end if;
+
+  if new.company_id is not null and not exists (
+    select 1 from public.companies c
+    where c.id=new.company_id and c.tenant_id=new.tenant_id
+  ) then
+    raise exception 'Notification company must belong to the same tenant' using errcode='23514';
+  end if;
+
+  if new.audience_type='branch' then
+    if new.audience_id is null then
+      raise exception 'Branch audience requires an audience_id' using errcode='22023';
+    end if;
+    select b.company_id into v_target_company
+    from public.branches b
+    where b.id=new.audience_id and b.tenant_id=new.tenant_id;
+    if not found then
+      raise exception 'Notification branch audience was not found in this tenant' using errcode='23503';
+    end if;
+    if new.company_id is null then
+      new.company_id := v_target_company;
+    elsif new.company_id is distinct from v_target_company then
+      raise exception 'Notification branch audience belongs to another company' using errcode='42501';
+    end if;
+  elsif new.audience_type='department' then
+    if new.audience_id is null then
+      raise exception 'Department audience requires an audience_id' using errcode='22023';
+    end if;
+    select d.company_id into v_target_company
+    from public.departments d
+    where d.id=new.audience_id and d.tenant_id=new.tenant_id;
+    if not found then
+      raise exception 'Notification department audience was not found in this tenant' using errcode='23503';
+    end if;
+    if new.company_id is null then
+      new.company_id := v_target_company;
+    elsif new.company_id is distinct from v_target_company then
+      raise exception 'Notification department audience belongs to another company' using errcode='42501';
+    end if;
+  elsif new.audience_type='user' then
+    if new.audience_id is null then
+      raise exception 'User audience requires an audience_id' using errcode='22023';
+    end if;
+    if new.company_id is not null and not exists (
+      select 1 from public.user_roles ur
+      where ur.user_id=new.audience_id and ur.tenant_id=new.tenant_id
+        and ur.company_id=new.company_id
+    ) then
+      raise exception 'Notification user audience belongs to another company' using errcode='42501';
+    elsif new.company_id is null and not exists (
+      select 1 from public.user_roles ur
+      where ur.user_id=new.audience_id and ur.tenant_id=new.tenant_id
+    ) and not exists (
+      select 1 from public.super_owners so where so.user_id=new.audience_id
+    ) then
+      raise exception 'Notification user audience is not a member of this tenant' using errcode='23503';
+    end if;
+  end if;
+
+  return new;
+end;
+$function$;
+revoke all on function private.enforce_notification_company_scope() from public, anon, authenticated;
+grant execute on function private.enforce_notification_company_scope() to authenticated, service_role;
+
+drop trigger if exists notifications_enforce_company_scope on public.notifications;
+create trigger notifications_enforce_company_scope
+before insert or update of tenant_id, company_id, audience_type, audience_id, created_by
+on public.notifications
+for each row execute function private.enforce_notification_company_scope();
+
+-- Company managers may create/edit notifications only for their company.
+-- Tenant owners and the platform owner retain broader management.
+drop policy if exists notifications_admin_write on public.notifications;
+drop policy if exists notifications_admin_insert on public.notifications;
+drop policy if exists notifications_admin_update on public.notifications;
+drop policy if exists notifications_admin_delete on public.notifications;
+
+create policy notifications_admin_insert on public.notifications
+for insert to authenticated
+with check (
+  is_super_owner((select auth.uid()))
+  or private.user_has_role_in_tenant((select auth.uid()), tenant_id, array['owner','manager'])
+);
+create policy notifications_admin_update on public.notifications
+for update to authenticated
+using (
+  is_super_owner((select auth.uid()))
+  or private.user_has_role_in_tenant((select auth.uid()), tenant_id, array['owner','manager'])
+)
+with check (
+  is_super_owner((select auth.uid()))
+  or private.user_has_role_in_tenant((select auth.uid()), tenant_id, array['owner','manager'])
+);
+create policy notifications_admin_delete on public.notifications
+for delete to authenticated
+using (
+  is_super_owner((select auth.uid()))
+  or private.user_has_role_in_tenant((select auth.uid()), tenant_id, array['owner','manager'])
+);
+
+drop policy if exists notifications_read on public.notifications;
+create policy notifications_read on public.notifications
+for select to authenticated
+using (
+  is_super_owner((select auth.uid()))
+  or (
+    tenant_id is not null
+    and private.is_tenant_member((select auth.uid()), tenant_id)
+    and (
+      company_id is null
+      or exists (
+        select 1 from public.user_roles ur
+        where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+          and ur.role='owner' and ur.company_id is null
+      )
+      or exists (
+        select 1 from public.user_roles ur
+        where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+          and ur.company_id=notifications.company_id
+      )
+    )
+    and (
+      audience_type='all'
+      or (audience_type in ('owner','manager')
+          and private.user_has_role_in_tenant((select auth.uid()), tenant_id, array[audience_type]))
+      or (audience_type='user' and audience_id=(select auth.uid()))
+      or (audience_type='branch' and exists (
+        select 1 from public.branches b
+        where b.id=notifications.audience_id and b.tenant_id=notifications.tenant_id
+          and private.can_access_branch((select auth.uid()), notifications.tenant_id, b.id)
+      ))
+      or (audience_type='department' and exists (
+        select 1 from public.departments d
+        where d.id=notifications.audience_id and d.tenant_id=notifications.tenant_id
+          and (
+            exists (
+              select 1 from public.user_roles ur
+              where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+                and ur.department_id=d.id
+                and (ur.company_id is null or ur.company_id=d.company_id)
+            )
+            or exists (
+              select 1 from public.user_roles ur
+              where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+                and (
+                  (ur.role in ('owner','manager') and ur.company_id is not null and ur.company_id=d.company_id)
+                  or (ur.role='owner' and ur.company_id is null)
+                )
+            )
+          )
+      ))
+    )
+  )
+);
+
+drop policy if exists company_scope_notifications_select on public.notifications;
+create policy company_scope_notifications_select on public.notifications
+as restrictive for select to authenticated
+using (
+  company_id is null
+  or is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+      and ur.company_id=notifications.company_id
+  )
+);
+
+drop policy if exists company_scope_notifications_insert on public.notifications;
+create policy company_scope_notifications_insert on public.notifications
+as restrictive for insert to authenticated
+with check (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or (company_id is not null and exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+      and ur.company_id=notifications.company_id and ur.role in ('owner','manager')
+  ))
+);
+
+drop policy if exists company_scope_notifications_update on public.notifications;
+create policy company_scope_notifications_update on public.notifications
+as restrictive for update to authenticated
+using (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or (company_id is not null and exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+      and ur.company_id=notifications.company_id and ur.role in ('owner','manager')
+  ))
+)
+with check (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or (company_id is not null and exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+      and ur.company_id=notifications.company_id and ur.role in ('owner','manager')
+  ))
+);
+
+drop policy if exists company_scope_notifications_delete on public.notifications;
+create policy company_scope_notifications_delete on public.notifications
+as restrictive for delete to authenticated
+using (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or (company_id is not null and exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+      and ur.company_id=notifications.company_id and ur.role in ('owner','manager')
+  ))
+);
+
+-- Marketing campaigns are company-scoped; NULL company_id is a tenant-wide campaign.
+create or replace function private.enforce_marketing_campaign_company_scope()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_uid uuid := auth.uid();
+  v_is_super boolean;
+  v_is_tenant_owner boolean;
+  v_company_count integer;
+  v_actor_company uuid;
+begin
+  if v_uid is null then
+    raise exception 'Authentication required' using errcode='42501';
+  end if;
+  v_is_super := exists (select 1 from public.super_owners so where so.user_id=v_uid);
+
+  if tg_op='INSERT' then
+    if new.created_by is null then
+      new.created_by := v_uid;
+    elsif new.created_by is distinct from v_uid and not v_is_super then
+      raise exception 'Campaign creator must be the authenticated user' using errcode='42501';
+    end if;
+  elsif new.created_by is distinct from old.created_by and not v_is_super then
+    raise exception 'Campaign creator is immutable' using errcode='42501';
+  end if;
+
+  v_is_tenant_owner := exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=v_uid and ur.tenant_id=new.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  );
+  select count(distinct ur.company_id), min(ur.company_id::text)::uuid
+    into v_company_count, v_actor_company
+  from public.user_roles ur
+  where ur.user_id=v_uid and ur.tenant_id=new.tenant_id
+    and ur.role in ('owner','manager') and ur.company_id is not null;
+
+  if not v_is_super and not v_is_tenant_owner then
+    if new.company_id is null then
+      if v_company_count <> 1 then
+        raise exception 'Select a company for this campaign' using errcode='42501';
+      end if;
+      new.company_id := v_actor_company;
+    end if;
+    if not exists (
+      select 1 from public.user_roles ur
+      where ur.user_id=v_uid and ur.tenant_id=new.tenant_id
+        and ur.company_id=new.company_id and ur.role in ('owner','manager')
+    ) then
+      raise exception 'You cannot manage campaigns for another company' using errcode='42501';
+    end if;
+  end if;
+
+  if new.company_id is not null and not exists (
+    select 1 from public.companies c
+    where c.id=new.company_id and c.tenant_id=new.tenant_id
+  ) then
+    raise exception 'Campaign company must belong to the same tenant' using errcode='23514';
+  end if;
+  return new;
+end;
+$function$;
+revoke all on function private.enforce_marketing_campaign_company_scope() from public, anon, authenticated;
+grant execute on function private.enforce_marketing_campaign_company_scope() to authenticated, service_role;
+
+drop trigger if exists marketing_campaigns_enforce_company_scope on public.marketing_campaigns;
+create trigger marketing_campaigns_enforce_company_scope
+before insert or update of tenant_id, company_id, created_by
+on public.marketing_campaigns
+for each row execute function private.enforce_marketing_campaign_company_scope();
+
+drop policy if exists "Tenant admins manage marketing campaigns" on public.marketing_campaigns;
+create policy "Tenant admins insert marketing campaigns" on public.marketing_campaigns
+for insert to authenticated
+with check (private.is_tenant_admin((select auth.uid()), tenant_id) or is_super_owner((select auth.uid())));
+create policy "Tenant admins update marketing campaigns" on public.marketing_campaigns
+for update to authenticated
+using (private.is_tenant_admin((select auth.uid()), tenant_id) or is_super_owner((select auth.uid())))
+with check (private.is_tenant_admin((select auth.uid()), tenant_id) or is_super_owner((select auth.uid())));
+create policy "Tenant admins delete marketing campaigns" on public.marketing_campaigns
+for delete to authenticated
+using (private.is_tenant_admin((select auth.uid()), tenant_id) or is_super_owner((select auth.uid())));
+
+drop policy if exists company_scope_marketing_campaigns_select on public.marketing_campaigns;
+create policy company_scope_marketing_campaigns_select on public.marketing_campaigns
+as restrictive for select to authenticated
+using (
+  company_id is null
+  or is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+      and ur.company_id=marketing_campaigns.company_id
+  )
+);
+
+drop policy if exists company_scope_marketing_campaigns_insert on public.marketing_campaigns;
+create policy company_scope_marketing_campaigns_insert on public.marketing_campaigns
+as restrictive for insert to authenticated
+with check (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or (company_id is not null and exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+      and ur.company_id=marketing_campaigns.company_id and ur.role in ('owner','manager')
+  ))
+);
+
+drop policy if exists company_scope_marketing_campaigns_update on public.marketing_campaigns;
+create policy company_scope_marketing_campaigns_update on public.marketing_campaigns
+as restrictive for update to authenticated
+using (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or (company_id is not null and exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+      and ur.company_id=marketing_campaigns.company_id and ur.role in ('owner','manager')
+  ))
+)
+with check (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or (company_id is not null and exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+      and ur.company_id=marketing_campaigns.company_id and ur.role in ('owner','manager')
+  ))
+);
+
+drop policy if exists company_scope_marketing_campaigns_delete on public.marketing_campaigns;
+create policy company_scope_marketing_campaigns_delete on public.marketing_campaigns
+as restrictive for delete to authenticated
+using (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or (company_id is not null and exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+      and ur.company_id=marketing_campaigns.company_id and ur.role in ('owner','manager')
+  ))
+);
+
+commit;
+-- =====================================================================
+-- SOURCE MIGRATION: 20261119000006_company_scope_marketing_notifications.sql
+
+-- Enforce company boundaries for marketing campaigns and notifications.
+-- Also make tenant owners company-wide for branch access while keeping company managers scoped.
+begin;
+
+alter table public.marketing_campaigns
+  add column if not exists company_id uuid;
+alter table public.notifications
+  add column if not exists company_id uuid;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname='marketing_campaigns_company_id_fkey'
+      and conrelid='public.marketing_campaigns'::regclass
+  ) then
+    alter table public.marketing_campaigns
+      add constraint marketing_campaigns_company_id_fkey
+      foreign key (company_id) references public.companies(id) on delete restrict;
+  end if;
+  if not exists (
+    select 1 from pg_constraint
+    where conname='notifications_company_id_fkey'
+      and conrelid='public.notifications'::regclass
+  ) then
+    alter table public.notifications
+      add constraint notifications_company_id_fkey
+      foreign key (company_id) references public.companies(id) on delete restrict;
+  end if;
+end $$;
+
+create index if not exists marketing_campaigns_tenant_company_status_idx
+  on public.marketing_campaigns(tenant_id, company_id, status, sort_order, created_at desc);
+create index if not exists notifications_tenant_company_created_idx
+  on public.notifications(tenant_id, company_id, created_at desc)
+  where company_id is not null;
+create index if not exists marketing_campaigns_company_id_idx
+  on public.marketing_campaigns(company_id)
+  where company_id is not null;
+create index if not exists notifications_company_id_idx
+  on public.notifications(company_id)
+  where company_id is not null;
+
+-- Backfill only unambiguous historical ownership into the new scope columns.
+-- Financial, HR, notification content, and campaign content are not rewritten.
+with creator_company as (
+  select ur.user_id, ur.tenant_id, min(ur.company_id::text)::uuid as company_id
+  from public.user_roles ur
+  where ur.company_id is not null and ur.role in ('owner','manager')
+    and not exists (
+      select 1 from public.user_roles owner_role
+      where owner_role.user_id=ur.user_id and owner_role.tenant_id=ur.tenant_id
+        and owner_role.role='owner' and owner_role.company_id is null
+    )
+  group by ur.user_id, ur.tenant_id
+  having count(distinct ur.company_id)=1
+)
+update public.marketing_campaigns mc
+set company_id=cc.company_id
+from creator_company cc
+where mc.company_id is null and mc.created_by=cc.user_id and mc.tenant_id=cc.tenant_id;
+
+update public.notifications n
+set company_id=b.company_id
+from public.branches b
+where n.company_id is null and n.audience_type='branch'
+  and n.audience_id=b.id and n.tenant_id=b.tenant_id and b.company_id is not null;
+
+update public.notifications n
+set company_id=d.company_id
+from public.departments d
+where n.company_id is null and n.audience_type='department'
+  and n.audience_id=d.id and n.tenant_id=d.tenant_id and d.company_id is not null;
+
+with target_company as (
+  select ur.user_id, ur.tenant_id, min(ur.company_id::text)::uuid as company_id
+  from public.user_roles ur
+  where ur.company_id is not null
+  group by ur.user_id, ur.tenant_id
+  having count(distinct ur.company_id)=1
+)
+update public.notifications n
+set company_id=tc.company_id
+from target_company tc
+where n.company_id is null and n.audience_type='user'
+  and n.audience_id=tc.user_id and n.tenant_id=tc.tenant_id;
+
+with creator_company as (
+  select ur.user_id, ur.tenant_id, min(ur.company_id::text)::uuid as company_id
+  from public.user_roles ur
+  where ur.company_id is not null and ur.role in ('owner','manager')
+    and not exists (
+      select 1 from public.user_roles owner_role
+      where owner_role.user_id=ur.user_id and owner_role.tenant_id=ur.tenant_id
+        and owner_role.role='owner' and owner_role.company_id is null
+    )
+  group by ur.user_id, ur.tenant_id
+  having count(distinct ur.company_id)=1
+)
+update public.notifications n
+set company_id=cc.company_id
+from creator_company cc
+where n.company_id is null and n.audience_type in ('all','owner','manager')
+  and n.created_by=cc.user_id and n.tenant_id=cc.tenant_id;
+
+-- A tenant owner with no company assignment can access all companies in the tenant.
+-- Company managers and accountants remain limited to their assigned company.
+create or replace function private.can_access_branch(_user_id uuid, _tenant_id uuid, _branch_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select
+    (select auth.uid()) is not null
+    and _user_id = (select auth.uid())
+    and (
+    exists (select 1 from public.super_owners so where so.user_id = _user_id)
+    or exists (
+      select 1
+      from public.user_roles ur
+      join public.branches b on b.id = _branch_id and b.tenant_id = _tenant_id
+      where ur.user_id = _user_id
+        and ur.tenant_id = _tenant_id
+        and (
+          (ur.role = 'owner' and ur.company_id is null)
+          or (ur.role in ('owner','manager','accountant')
+              and ur.company_id is not null and ur.company_id = b.company_id)
+          or (ur.branch_id = _branch_id
+              and (ur.company_id is null or ur.company_id = b.company_id))
+        )
+    )
+    );
+$function$;
+revoke all on function private.can_access_branch(uuid,uuid,uuid) from public, anon;
+grant execute on function private.can_access_branch(uuid,uuid,uuid) to authenticated, service_role;
+
+-- Tenant owners and the platform owner can see creator-owned records across companies;
+-- company managers can see only records created within their assigned company.
+create or replace function private.is_company_member(_tenant_id uuid, _company_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select (select auth.uid()) is not null
+    and _company_id is not null
+    and (
+      exists (select 1 from public.super_owners so where so.user_id=(select auth.uid()))
+      or exists (
+        select 1 from public.user_roles ur
+        where ur.user_id=(select auth.uid()) and ur.tenant_id=_tenant_id
+          and ur.company_id=_company_id
+      )
+      or exists (
+        select 1 from public.user_roles ur
+        where ur.user_id=(select auth.uid()) and ur.tenant_id=_tenant_id
+          and ur.role='owner' and ur.company_id is null
+      )
+    );
+$function$;
+revoke all on function private.is_company_member(uuid,uuid) from public, anon;
+grant execute on function private.is_company_member(uuid,uuid) to authenticated, service_role;
+
+create or replace function private.can_access_creator_company(_tenant_id uuid, _creator_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select (select auth.uid()) is not null
+    and _creator_id is not null
+    and (
+      exists (select 1 from public.super_owners so where so.user_id=(select auth.uid()))
+      or exists (
+        select 1 from public.user_roles owner_role
+        where owner_role.user_id=(select auth.uid()) and owner_role.tenant_id=_tenant_id
+          and owner_role.role='owner' and owner_role.company_id is null
+      )
+      or exists (
+        select 1
+        from public.user_roles viewer
+        join public.user_roles creator
+          on creator.tenant_id=viewer.tenant_id
+         and creator.company_id=viewer.company_id
+        where viewer.user_id=(select auth.uid())
+          and viewer.tenant_id=_tenant_id
+          and viewer.company_id is not null
+          and creator.user_id=_creator_id
+      )
+    );
+$function$;
+revoke all on function private.can_access_creator_company(uuid,uuid) from public, anon;
+grant execute on function private.can_access_creator_company(uuid,uuid) to authenticated, service_role;
+
+-- Tenant owners can manage branches across their tenant; company managers remain scoped.
+drop policy if exists company_scope_branches_insert on public.branches;
+create policy company_scope_branches_insert on public.branches
+as restrictive for insert to authenticated
+with check (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=branches.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=branches.tenant_id
+      and ur.company_id=branches.company_id and ur.role in ('owner','manager')
+  )
+);
+
+drop policy if exists company_scope_branches_update on public.branches;
+create policy company_scope_branches_update on public.branches
+as restrictive for update to authenticated
+using (private.can_access_branch((select auth.uid()), tenant_id, id))
+with check (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=branches.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=branches.tenant_id
+      and ur.company_id=branches.company_id and ur.role in ('owner','manager')
+  )
+);
+
+-- Infer and validate the company of every new notification. Existing NULL company_id
+-- notifications remain tenant-wide unless their branch/department audience identifies a company.
+create or replace function private.enforce_notification_company_scope()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_uid uuid := auth.uid();
+  v_is_super boolean;
+  v_is_tenant_owner boolean;
+  v_company_count integer;
+  v_actor_company uuid;
+  v_target_company uuid;
+begin
+  if v_uid is null then
+    raise exception 'Authentication required' using errcode='42501';
+  end if;
+
+  v_is_super := exists (select 1 from public.super_owners so where so.user_id=v_uid);
+
+  if tg_op='INSERT' then
+    if new.created_by is null then
+      new.created_by := v_uid;
+    elsif new.created_by is distinct from v_uid and not v_is_super then
+      raise exception 'Notification creator must be the authenticated user' using errcode='42501';
+    end if;
+  elsif new.created_by is distinct from old.created_by and not v_is_super then
+    raise exception 'Notification creator is immutable' using errcode='42501';
+  end if;
+
+  if new.tenant_id is null then
+    if not v_is_super then
+      raise exception 'Only the platform owner can create global notifications' using errcode='42501';
+    end if;
+    return new;
+  end if;
+
+  v_is_tenant_owner := exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=v_uid and ur.tenant_id=new.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  );
+
+  select count(distinct ur.company_id), min(ur.company_id::text)::uuid
+    into v_company_count, v_actor_company
+  from public.user_roles ur
+  where ur.user_id=v_uid and ur.tenant_id=new.tenant_id
+    and ur.role in ('owner','manager') and ur.company_id is not null;
+
+  if not v_is_super and not v_is_tenant_owner then
+    if new.company_id is null then
+      if v_company_count <> 1 then
+        raise exception 'Select a company for this notification' using errcode='42501';
+      end if;
+      new.company_id := v_actor_company;
+    end if;
+    if not exists (
+      select 1 from public.user_roles ur
+      where ur.user_id=v_uid and ur.tenant_id=new.tenant_id
+        and ur.company_id=new.company_id and ur.role in ('owner','manager')
+    ) then
+      raise exception 'You cannot create notifications for another company' using errcode='42501';
+    end if;
+  end if;
+
+  if new.company_id is not null and not exists (
+    select 1 from public.companies c
+    where c.id=new.company_id and c.tenant_id=new.tenant_id
+  ) then
+    raise exception 'Notification company must belong to the same tenant' using errcode='23514';
+  end if;
+
+  if new.audience_type='branch' then
+    if new.audience_id is null then
+      raise exception 'Branch audience requires an audience_id' using errcode='22023';
+    end if;
+    select b.company_id into v_target_company
+    from public.branches b
+    where b.id=new.audience_id and b.tenant_id=new.tenant_id;
+    if not found then
+      raise exception 'Notification branch audience was not found in this tenant' using errcode='23503';
+    end if;
+    if new.company_id is null then
+      new.company_id := v_target_company;
+    elsif new.company_id is distinct from v_target_company then
+      raise exception 'Notification branch audience belongs to another company' using errcode='42501';
+    end if;
+  elsif new.audience_type='department' then
+    if new.audience_id is null then
+      raise exception 'Department audience requires an audience_id' using errcode='22023';
+    end if;
+    select d.company_id into v_target_company
+    from public.departments d
+    where d.id=new.audience_id and d.tenant_id=new.tenant_id;
+    if not found then
+      raise exception 'Notification department audience was not found in this tenant' using errcode='23503';
+    end if;
+    if new.company_id is null then
+      new.company_id := v_target_company;
+    elsif new.company_id is distinct from v_target_company then
+      raise exception 'Notification department audience belongs to another company' using errcode='42501';
+    end if;
+  elsif new.audience_type='user' then
+    if new.audience_id is null then
+      raise exception 'User audience requires an audience_id' using errcode='22023';
+    end if;
+    if new.company_id is not null and not exists (
+      select 1 from public.user_roles ur
+      where ur.user_id=new.audience_id and ur.tenant_id=new.tenant_id
+        and ur.company_id=new.company_id
+    ) then
+      raise exception 'Notification user audience belongs to another company' using errcode='42501';
+    elsif new.company_id is null and not exists (
+      select 1 from public.user_roles ur
+      where ur.user_id=new.audience_id and ur.tenant_id=new.tenant_id
+    ) and not exists (
+      select 1 from public.super_owners so where so.user_id=new.audience_id
+    ) then
+      raise exception 'Notification user audience is not a member of this tenant' using errcode='23503';
+    end if;
+  end if;
+
+  return new;
+end;
+$function$;
+revoke all on function private.enforce_notification_company_scope() from public, anon, authenticated;
+grant execute on function private.enforce_notification_company_scope() to authenticated, service_role;
+
+drop trigger if exists notifications_enforce_company_scope on public.notifications;
+create trigger notifications_enforce_company_scope
+before insert or update of tenant_id, company_id, audience_type, audience_id, created_by
+on public.notifications
+for each row execute function private.enforce_notification_company_scope();
+
+-- Company managers may create/edit notifications only for their company.
+-- Tenant owners and the platform owner retain broader management.
+drop policy if exists notifications_admin_write on public.notifications;
+drop policy if exists notifications_admin_insert on public.notifications;
+drop policy if exists notifications_admin_update on public.notifications;
+drop policy if exists notifications_admin_delete on public.notifications;
+
+create policy notifications_admin_insert on public.notifications
+for insert to authenticated
+with check (
+  is_super_owner((select auth.uid()))
+  or private.user_has_role_in_tenant((select auth.uid()), tenant_id, array['owner','manager'])
+);
+create policy notifications_admin_update on public.notifications
+for update to authenticated
+using (
+  is_super_owner((select auth.uid()))
+  or private.user_has_role_in_tenant((select auth.uid()), tenant_id, array['owner','manager'])
+)
+with check (
+  is_super_owner((select auth.uid()))
+  or private.user_has_role_in_tenant((select auth.uid()), tenant_id, array['owner','manager'])
+);
+create policy notifications_admin_delete on public.notifications
+for delete to authenticated
+using (
+  is_super_owner((select auth.uid()))
+  or private.user_has_role_in_tenant((select auth.uid()), tenant_id, array['owner','manager'])
+);
+
+drop policy if exists notifications_read on public.notifications;
+create policy notifications_read on public.notifications
+for select to authenticated
+using (
+  is_super_owner((select auth.uid()))
+  or (
+    tenant_id is not null
+    and private.is_tenant_member((select auth.uid()), tenant_id)
+    and (
+      company_id is null
+      or exists (
+        select 1 from public.user_roles ur
+        where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+          and ur.role='owner' and ur.company_id is null
+      )
+      or exists (
+        select 1 from public.user_roles ur
+        where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+          and ur.company_id=notifications.company_id
+      )
+    )
+    and (
+      audience_type='all'
+      or (audience_type in ('owner','manager')
+          and private.user_has_role_in_tenant((select auth.uid()), tenant_id, array[audience_type]))
+      or (audience_type='user' and audience_id=(select auth.uid()))
+      or (audience_type='branch' and exists (
+        select 1 from public.branches b
+        where b.id=notifications.audience_id and b.tenant_id=notifications.tenant_id
+          and private.can_access_branch((select auth.uid()), notifications.tenant_id, b.id)
+      ))
+      or (audience_type='department' and exists (
+        select 1 from public.departments d
+        where d.id=notifications.audience_id and d.tenant_id=notifications.tenant_id
+          and (
+            exists (
+              select 1 from public.user_roles ur
+              where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+                and ur.department_id=d.id
+                and (ur.company_id is null or ur.company_id=d.company_id)
+            )
+            or exists (
+              select 1 from public.user_roles ur
+              where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+                and (
+                  (ur.role in ('owner','manager') and ur.company_id is not null and ur.company_id=d.company_id)
+                  or (ur.role='owner' and ur.company_id is null)
+                )
+            )
+          )
+      ))
+    )
+  )
+);
+
+drop policy if exists company_scope_notifications_select on public.notifications;
+create policy company_scope_notifications_select on public.notifications
+as restrictive for select to authenticated
+using (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or (company_id is not null and exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+      and ur.company_id=notifications.company_id
+  ))
+  or (company_id is null and (
+    (audience_type='branch' and exists (
+      select 1 from public.branches b
+      where b.id=notifications.audience_id and b.tenant_id=notifications.tenant_id
+        and private.can_access_branch((select auth.uid()), notifications.tenant_id, b.id)
+    ))
+    or (audience_type='department' and exists (
+      select 1 from public.departments d
+      join public.user_roles ur on ur.user_id=(select auth.uid())
+        and ur.tenant_id=notifications.tenant_id
+      where d.id=notifications.audience_id and d.tenant_id=notifications.tenant_id
+        and (
+          (ur.department_id=d.id and (ur.company_id is null or ur.company_id=d.company_id))
+          or (ur.role in ('owner','manager') and ur.company_id is not null and ur.company_id=d.company_id)
+        )
+    ))
+    or (audience_type='user' and audience_id=(select auth.uid()))
+    or (audience_type in ('all','owner','manager') and (
+      notifications.created_by is null
+      or exists (select 1 from public.super_owners so where so.user_id=notifications.created_by)
+      or exists (
+        select 1 from public.user_roles creator_role
+        where creator_role.user_id=notifications.created_by
+          and creator_role.tenant_id=notifications.tenant_id
+          and creator_role.role='owner' and creator_role.company_id is null
+      )
+    ))
+  ))
+);
+
+drop policy if exists company_scope_notifications_insert on public.notifications;
+create policy company_scope_notifications_insert on public.notifications
+as restrictive for insert to authenticated
+with check (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or (company_id is not null and exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+      and ur.company_id=notifications.company_id and ur.role in ('owner','manager')
+      and has_permission((select auth.uid()), notifications.tenant_id, 'notifications.manage')
+  ))
+);
+
+drop policy if exists company_scope_notifications_update on public.notifications;
+create policy company_scope_notifications_update on public.notifications
+as restrictive for update to authenticated
+using (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or (company_id is not null and exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+      and ur.company_id=notifications.company_id and ur.role in ('owner','manager')
+      and has_permission((select auth.uid()), notifications.tenant_id, 'notifications.manage')
+  ))
+)
+with check (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or (company_id is not null and exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+      and ur.company_id=notifications.company_id and ur.role in ('owner','manager')
+      and has_permission((select auth.uid()), notifications.tenant_id, 'notifications.manage')
+  ))
+);
+
+drop policy if exists company_scope_notifications_delete on public.notifications;
+create policy company_scope_notifications_delete on public.notifications
+as restrictive for delete to authenticated
+using (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or (company_id is not null and exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+      and ur.company_id=notifications.company_id and ur.role in ('owner','manager')
+      and has_permission((select auth.uid()), notifications.tenant_id, 'notifications.manage')
+  ))
+);
+
+-- Marketing campaigns are company-scoped; NULL company_id is a tenant-wide campaign.
+create or replace function private.enforce_marketing_campaign_company_scope()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_uid uuid := auth.uid();
+  v_is_super boolean;
+  v_is_tenant_owner boolean;
+  v_company_count integer;
+  v_actor_company uuid;
+begin
+  if v_uid is null then
+    raise exception 'Authentication required' using errcode='42501';
+  end if;
+  v_is_super := exists (select 1 from public.super_owners so where so.user_id=v_uid);
+
+  if tg_op='INSERT' then
+    if new.created_by is null then
+      new.created_by := v_uid;
+    elsif new.created_by is distinct from v_uid and not v_is_super then
+      raise exception 'Campaign creator must be the authenticated user' using errcode='42501';
+    end if;
+  elsif new.created_by is distinct from old.created_by and not v_is_super then
+    raise exception 'Campaign creator is immutable' using errcode='42501';
+  end if;
+
+  v_is_tenant_owner := exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=v_uid and ur.tenant_id=new.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  );
+  select count(distinct ur.company_id), min(ur.company_id::text)::uuid
+    into v_company_count, v_actor_company
+  from public.user_roles ur
+  where ur.user_id=v_uid and ur.tenant_id=new.tenant_id
+    and ur.role in ('owner','manager') and ur.company_id is not null;
+
+  if not v_is_super and not v_is_tenant_owner then
+    if new.company_id is null then
+      if v_company_count <> 1 then
+        raise exception 'Select a company for this campaign' using errcode='42501';
+      end if;
+      new.company_id := v_actor_company;
+    end if;
+    if not exists (
+      select 1 from public.user_roles ur
+      where ur.user_id=v_uid and ur.tenant_id=new.tenant_id
+        and ur.company_id=new.company_id and ur.role in ('owner','manager')
+    ) then
+      raise exception 'You cannot manage campaigns for another company' using errcode='42501';
+    end if;
+  end if;
+
+  if new.company_id is not null and not exists (
+    select 1 from public.companies c
+    where c.id=new.company_id and c.tenant_id=new.tenant_id
+  ) then
+    raise exception 'Campaign company must belong to the same tenant' using errcode='23514';
+  end if;
+  return new;
+end;
+$function$;
+revoke all on function private.enforce_marketing_campaign_company_scope() from public, anon, authenticated;
+grant execute on function private.enforce_marketing_campaign_company_scope() to authenticated, service_role;
+
+drop trigger if exists marketing_campaigns_enforce_company_scope on public.marketing_campaigns;
+create trigger marketing_campaigns_enforce_company_scope
+before insert or update of tenant_id, company_id, created_by
+on public.marketing_campaigns
+for each row execute function private.enforce_marketing_campaign_company_scope();
+
+drop policy if exists "Tenant admins manage marketing campaigns" on public.marketing_campaigns;
+create policy "Tenant admins insert marketing campaigns" on public.marketing_campaigns
+for insert to authenticated
+with check (private.is_tenant_admin((select auth.uid()), tenant_id) or is_super_owner((select auth.uid())));
+create policy "Tenant admins update marketing campaigns" on public.marketing_campaigns
+for update to authenticated
+using (private.is_tenant_admin((select auth.uid()), tenant_id) or is_super_owner((select auth.uid())))
+with check (private.is_tenant_admin((select auth.uid()), tenant_id) or is_super_owner((select auth.uid())));
+create policy "Tenant admins delete marketing campaigns" on public.marketing_campaigns
+for delete to authenticated
+using (private.is_tenant_admin((select auth.uid()), tenant_id) or is_super_owner((select auth.uid())));
+
+drop policy if exists company_scope_marketing_campaigns_select on public.marketing_campaigns;
+create policy company_scope_marketing_campaigns_select on public.marketing_campaigns
+as restrictive for select to authenticated
+using (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or (company_id is not null and (
+    exists (
+      select 1 from public.user_roles ur
+      where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+        and ur.company_id=marketing_campaigns.company_id
+    )
+    or exists (
+      select 1 from public.user_roles ur
+      join public.branches b on b.id=ur.branch_id and b.tenant_id=ur.tenant_id
+      where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+        and b.company_id=marketing_campaigns.company_id
+        and (ur.company_id is null or ur.company_id=b.company_id)
+    )
+    or exists (
+      select 1 from public.user_roles ur
+      join public.departments d on d.id=ur.department_id and d.tenant_id=ur.tenant_id
+      where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+        and d.company_id=marketing_campaigns.company_id
+        and (ur.company_id is null or ur.company_id=d.company_id)
+    )
+  ))
+  or (company_id is null and (
+    marketing_campaigns.created_by is null
+    or exists (
+      select 1 from public.super_owners so
+      where so.user_id=marketing_campaigns.created_by
+    )
+    or exists (
+      select 1 from public.user_roles creator_role
+      where creator_role.user_id=marketing_campaigns.created_by
+        and creator_role.tenant_id=marketing_campaigns.tenant_id
+        and creator_role.role='owner' and creator_role.company_id is null
+    )
+  ))
+);
+
+drop policy if exists company_scope_marketing_campaigns_insert on public.marketing_campaigns;
+create policy company_scope_marketing_campaigns_insert on public.marketing_campaigns
+as restrictive for insert to authenticated
+with check (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or (company_id is not null and exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+      and ur.company_id=marketing_campaigns.company_id and ur.role in ('owner','manager')
+      and has_permission((select auth.uid()), marketing_campaigns.tenant_id, 'settings.manage')
+  ))
+);
+
+drop policy if exists company_scope_marketing_campaigns_update on public.marketing_campaigns;
+create policy company_scope_marketing_campaigns_update on public.marketing_campaigns
+as restrictive for update to authenticated
+using (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or (company_id is not null and exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+      and ur.company_id=marketing_campaigns.company_id and ur.role in ('owner','manager')
+      and has_permission((select auth.uid()), marketing_campaigns.tenant_id, 'settings.manage')
+  ))
+)
+with check (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or (company_id is not null and exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+      and ur.company_id=marketing_campaigns.company_id and ur.role in ('owner','manager')
+      and has_permission((select auth.uid()), marketing_campaigns.tenant_id, 'settings.manage')
+  ))
+);
+
+drop policy if exists company_scope_marketing_campaigns_delete on public.marketing_campaigns;
+create policy company_scope_marketing_campaigns_delete on public.marketing_campaigns
+as restrictive for delete to authenticated
+using (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+      and ur.role='owner' and ur.company_id is null
+  )
+  or (company_id is not null and exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+      and ur.company_id=marketing_campaigns.company_id and ur.role in ('owner','manager')
+      and has_permission((select auth.uid()), marketing_campaigns.tenant_id, 'settings.manage')
+  ))
+);
+
+commit;
+
+
+-- =====================================================================
+-- SOURCE MIGRATION: 20261119000007_user_role_company_scope.sql
+
+-- Scope role assignments and permission overrides to the employee's company.
+-- Tenant owners and the platform owner retain tenant-wide administration.
+begin;
+
+create or replace function private.can_access_creator_company(_tenant_id uuid, _creator_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select (select auth.uid()) is not null
+    and _creator_id is not null
+    and (
+      exists (select 1 from public.super_owners so where so.user_id=(select auth.uid()))
+      or exists (
+        select 1 from public.user_roles owner_role
+        where owner_role.user_id=(select auth.uid()) and owner_role.tenant_id=_tenant_id
+          and owner_role.role='owner' and owner_role.company_id is null
+      )
+      or exists (
+        select 1
+        from public.user_roles viewer
+        join public.profiles creator_profile
+          on creator_profile.id=_creator_id and creator_profile.tenant_id=_tenant_id
+        where viewer.user_id=(select auth.uid())
+          and viewer.tenant_id=_tenant_id
+          and viewer.company_id is not null
+          and creator_profile.company_id=viewer.company_id
+          and (creator_profile.branch_id is null
+               or private.can_access_branch((select auth.uid()),_tenant_id,creator_profile.branch_id))
+          and not exists (
+            select 1 from public.user_roles conflicting_role
+            left join public.branches conflicting_branch
+              on conflicting_branch.id=conflicting_role.branch_id
+             and conflicting_branch.tenant_id=conflicting_role.tenant_id
+            where conflicting_role.user_id=_creator_id
+              and conflicting_role.tenant_id=_tenant_id
+              and (
+                (conflicting_role.company_id is not null
+                 and conflicting_role.company_id<>creator_profile.company_id)
+                or (conflicting_role.company_id is not null
+                    and conflicting_branch.company_id is not null
+                    and conflicting_role.company_id<>conflicting_branch.company_id)
+              )
+          )
+      )
+      or exists (
+        select 1
+        from public.user_roles viewer
+        join public.user_roles creator
+          on creator.tenant_id=viewer.tenant_id
+         and creator.company_id=viewer.company_id
+        where viewer.user_id=(select auth.uid())
+          and viewer.tenant_id=_tenant_id
+          and viewer.company_id is not null
+          and creator.user_id=_creator_id
+          and not exists (
+            select 1 from public.profiles p
+            where p.id=_creator_id and p.tenant_id=_tenant_id
+              and (p.company_id is not null or p.branch_id is not null)
+          )
+          and (
+            select count(distinct coalesce(creator_scope.company_id,creator_branch.company_id))
+            from public.user_roles creator_scope
+            left join public.branches creator_branch
+              on creator_branch.id=creator_scope.branch_id and creator_branch.tenant_id=creator_scope.tenant_id
+            where creator_scope.user_id=_creator_id and creator_scope.tenant_id=_tenant_id
+              and coalesce(creator_scope.company_id,creator_branch.company_id) is not null
+          )=1
+          and not exists (
+            select 1
+            from public.user_roles conflicting_role
+            join public.branches conflicting_branch
+              on conflicting_branch.id=conflicting_role.branch_id
+             and conflicting_branch.tenant_id=conflicting_role.tenant_id
+            where conflicting_role.user_id=_creator_id
+              and conflicting_role.tenant_id=_tenant_id
+              and conflicting_role.company_id is not null
+              and conflicting_branch.company_id is not null
+              and conflicting_role.company_id<>conflicting_branch.company_id
+          )
+          and not exists (
+            select 1 from public.user_roles creator_owner
+            where creator_owner.user_id=_creator_id and creator_owner.tenant_id=_tenant_id
+              and creator_owner.role='owner' and creator_owner.company_id is null
+          )
+      )
+    );
+$function$;
+revoke all on function private.can_access_creator_company(uuid,uuid) from public, anon;
+grant execute on function private.can_access_creator_company(uuid,uuid) to authenticated, service_role;
+
+create or replace function private.is_super_owner_target(_actor_id uuid,_target_user_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select _actor_id=(select auth.uid())
+    and exists (
+      select 1 from public.super_owners so where so.user_id=_target_user_id
+    );
+$function$;
+revoke all on function private.is_super_owner_target(uuid,uuid) from public, anon;
+grant execute on function private.is_super_owner_target(uuid,uuid) to authenticated, service_role;
+
+-- SECURITY DEFINER helpers avoid recursive RLS evaluation while checking
+-- the actor's and target user's role assignments.
+create or replace function private.is_tenant_owner_user(_user_id uuid,_tenant_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select _user_id=(select auth.uid())
+    and exists (
+      select 1 from public.user_roles ur
+      where ur.user_id=_user_id and ur.tenant_id=_tenant_id
+        and ur.role='owner' and ur.company_id is null
+    );
+$function$;
+revoke all on function private.is_tenant_owner_user(uuid,uuid) from public, anon;
+grant execute on function private.is_tenant_owner_user(uuid,uuid) to authenticated, service_role;
+
+create or replace function private.can_view_user_role_row(
+  _viewer_id uuid,_tenant_id uuid,_target_user_id uuid,
+  _row_company_id uuid,_row_branch_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select _viewer_id=(select auth.uid())
+    and (
+      _viewer_id=_target_user_id
+      or public.is_super_owner(_viewer_id)
+      or private.is_tenant_owner_user(_viewer_id,_tenant_id)
+      or (
+        _row_company_id is not null
+        and exists (
+          select 1 from public.user_roles viewer
+          where viewer.user_id=_viewer_id and viewer.tenant_id=_tenant_id
+            and viewer.company_id=_row_company_id
+        )
+        and exists (
+          select 1 from public.profiles target_profile
+          where target_profile.id=_target_user_id and target_profile.tenant_id=_tenant_id
+            and (target_profile.company_id is null or target_profile.company_id=_row_company_id)
+            and (target_profile.branch_id is null
+                 or private.can_access_branch(_viewer_id,_tenant_id,target_profile.branch_id))
+        )
+        and not exists (
+          select 1
+          from public.user_roles conflicting_role
+          left join public.branches conflicting_branch
+            on conflicting_branch.id=conflicting_role.branch_id
+           and conflicting_branch.tenant_id=conflicting_role.tenant_id
+          where conflicting_role.user_id=_target_user_id
+            and conflicting_role.tenant_id=_tenant_id
+            and (
+              (conflicting_role.company_id is not null
+               and conflicting_role.company_id<>_row_company_id)
+              or (conflicting_role.company_id is not null
+                  and conflicting_branch.company_id is not null
+                  and conflicting_role.company_id<>conflicting_branch.company_id)
+            )
+        )
+        and (_row_branch_id is null or private.can_access_branch(_viewer_id,_tenant_id,_row_branch_id))
+      )
+      or (
+        _row_company_id is null and _row_branch_id is not null
+        and private.can_access_branch(_viewer_id,_tenant_id,_row_branch_id)
+        and exists (
+          select 1 from public.profiles target_profile
+          where target_profile.id=_target_user_id and target_profile.tenant_id=_tenant_id
+            and (target_profile.company_id is null or target_profile.company_id=(
+              select b.company_id from public.branches b
+              where b.id=_row_branch_id and b.tenant_id=_tenant_id
+            ))
+            and (target_profile.branch_id is null
+                 or private.can_access_branch(_viewer_id,_tenant_id,target_profile.branch_id))
+        )
+        and not exists (
+          select 1
+          from public.user_roles conflicting_role
+          left join public.branches conflicting_branch
+            on conflicting_branch.id=conflicting_role.branch_id
+           and conflicting_branch.tenant_id=conflicting_role.tenant_id
+          where conflicting_role.user_id=_target_user_id
+            and conflicting_role.tenant_id=_tenant_id
+            and conflicting_role.company_id is not null
+            and conflicting_role.company_id is distinct from (
+              select b.company_id from public.branches b
+              where b.id=_row_branch_id and b.tenant_id=_tenant_id
+            )
+        )
+      )
+    );
+$function$;
+revoke all on function private.can_view_user_role_row(uuid,uuid,uuid,uuid,uuid) from public, anon;
+grant execute on function private.can_view_user_role_row(uuid,uuid,uuid,uuid,uuid) to authenticated, service_role;
+
+create or replace function private.can_manage_user_role_row(
+  _actor_id uuid,_tenant_id uuid,_target_user_id uuid,
+  _row_company_id uuid,_row_branch_id uuid,_row_role public.app_role
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select _actor_id=(select auth.uid())
+    and not exists (
+      select 1 from public.super_owners protected_super_owner
+      where protected_super_owner.user_id=_target_user_id
+    )
+    and (
+      public.is_super_owner(_actor_id)
+      or (
+        _row_role<>'owner'::public.app_role
+        and private.is_tenant_owner_user(_actor_id,_tenant_id)
+      )
+      or (
+        _row_role not in ('owner'::public.app_role,'manager'::public.app_role)
+        and _row_company_id is not null
+        and exists (
+          select 1 from public.user_roles company_admin
+          where company_admin.user_id=_actor_id
+            and company_admin.tenant_id=_tenant_id
+            and company_admin.role in ('owner','manager')
+            and company_admin.company_id=_row_company_id
+        )
+        and public.has_permission(_actor_id,_tenant_id,'users.change_role')
+        and (_row_branch_id is null or private.can_access_branch(_actor_id,_tenant_id,_row_branch_id))
+        and exists (
+          select 1 from public.profiles target_profile
+          where target_profile.id=_target_user_id and target_profile.tenant_id=_tenant_id
+            and (target_profile.company_id is null or target_profile.company_id=_row_company_id)
+            and (target_profile.branch_id is null
+                 or private.can_access_branch(_actor_id,_tenant_id,target_profile.branch_id))
+        )
+        and not exists (
+          select 1
+          from public.user_roles conflicting_role
+          left join public.branches conflicting_branch
+            on conflicting_branch.id=conflicting_role.branch_id
+           and conflicting_branch.tenant_id=conflicting_role.tenant_id
+          where conflicting_role.user_id=_target_user_id
+            and conflicting_role.tenant_id=_tenant_id
+            and (
+              (conflicting_role.company_id is not null
+               and conflicting_role.company_id<>_row_company_id)
+              or (conflicting_role.company_id is not null
+                  and conflicting_branch.company_id is not null
+                  and conflicting_role.company_id<>conflicting_branch.company_id)
+            )
+        )
+      )
+    );
+$function$;
+revoke all on function private.can_manage_user_role_row(uuid,uuid,uuid,uuid,uuid,public.app_role) from public, anon;
+grant execute on function private.can_manage_user_role_row(uuid,uuid,uuid,uuid,uuid,public.app_role) to authenticated, service_role;
+
+-- Restrict each user_roles row by its own company/branch, not merely by whether
+-- the target user has any membership in the viewer's company.
+drop policy if exists company_scope_user_roles_select on public.user_roles;
+create policy company_scope_user_roles_select on public.user_roles
+as restrictive for select to authenticated
+using (
+  private.can_view_user_role_row(
+    (select auth.uid()),tenant_id,user_id,company_id,branch_id
+  )
+);
+
+drop policy if exists company_scope_user_roles_insert on public.user_roles;
+create policy company_scope_user_roles_insert on public.user_roles
+as restrictive for insert to authenticated
+with check (
+  private.can_manage_user_role_row(
+    (select auth.uid()),tenant_id,user_id,company_id,branch_id,role
+  )
+  or (
+    user_id=(select auth.uid()) and role='owner'
+    and company_id is null and branch_id is null
+    and not public.is_super_owner((select auth.uid()))
+    and exists (
+      select 1 from public.tenants t
+      where t.id=user_roles.tenant_id and t.owner_id=(select auth.uid())
+    )
+  )
+);
+
+drop policy if exists company_scope_user_roles_update on public.user_roles;
+create policy company_scope_user_roles_update on public.user_roles
+as restrictive for update to authenticated
+using (
+  private.can_manage_user_role_row(
+    (select auth.uid()),tenant_id,user_id,company_id,branch_id,role
+  )
+)
+with check (
+  private.can_manage_user_role_row(
+    (select auth.uid()),tenant_id,user_id,company_id,branch_id,role
+  )
+);
+
+drop policy if exists company_scope_user_roles_delete on public.user_roles;
+create policy company_scope_user_roles_delete on public.user_roles
+as restrictive for delete to authenticated
+using (
+  private.can_manage_user_role_row(
+    (select auth.uid()),tenant_id,user_id,company_id,branch_id,role
+  )
+);
+
+-- Custom role definitions are tenant-wide, so company-scoped owners/managers
+-- must not change definitions that affect other companies.
+drop policy if exists company_scope_custom_roles_insert on public.custom_roles;
+create policy company_scope_custom_roles_insert on public.custom_roles
+as restrictive for insert to authenticated
+with check (
+  is_super_owner((select auth.uid()))
+  or private.is_tenant_owner_user((select auth.uid()),tenant_id)
+);
+
+drop policy if exists company_scope_custom_roles_update on public.custom_roles;
+create policy company_scope_custom_roles_update on public.custom_roles
+as restrictive for update to authenticated
+using (
+  is_super_owner((select auth.uid()))
+  or private.is_tenant_owner_user((select auth.uid()),tenant_id)
+)
+with check (
+  is_super_owner((select auth.uid()))
+  or private.is_tenant_owner_user((select auth.uid()),tenant_id)
+);
+
+drop policy if exists company_scope_custom_roles_delete on public.custom_roles;
+create policy company_scope_custom_roles_delete on public.custom_roles
+as restrictive for delete to authenticated
+using (
+  is_super_owner((select auth.uid()))
+  or private.is_tenant_owner_user((select auth.uid()),tenant_id)
+);
+
+-- The permissive UPO policies still require the relevant role/permission and hiring
+-- relationship; these restrictive policies add the missing company boundary.
+drop policy if exists company_scope_user_permission_overrides_insert on public.user_permission_overrides;
+create policy company_scope_user_permission_overrides_insert on public.user_permission_overrides
+as restrictive for insert to authenticated
+with check (
+  not private.is_super_owner_target((select auth.uid()),user_permission_overrides.user_id)
+  and (
+    is_super_owner((select auth.uid()))
+    or private.can_access_creator_company(tenant_id,user_id)
+  )
+);
+
+drop policy if exists company_scope_user_permission_overrides_update on public.user_permission_overrides;
+create policy company_scope_user_permission_overrides_update on public.user_permission_overrides
+as restrictive for update to authenticated
+using (
+  not private.is_super_owner_target((select auth.uid()),user_permission_overrides.user_id)
+  and (
+    is_super_owner((select auth.uid()))
+    or private.can_access_creator_company(tenant_id,user_id)
+  )
+)
+with check (
+  not private.is_super_owner_target((select auth.uid()),user_permission_overrides.user_id)
+  and (
+    is_super_owner((select auth.uid()))
+    or private.can_access_creator_company(tenant_id,user_id)
+  )
+);
+
+drop policy if exists company_scope_user_permission_overrides_delete on public.user_permission_overrides;
+create policy company_scope_user_permission_overrides_delete on public.user_permission_overrides
+as restrictive for delete to authenticated
+using (
+  not private.is_super_owner_target((select auth.uid()),user_permission_overrides.user_id)
+  and (
+    is_super_owner((select auth.uid()))
+    or private.can_access_creator_company(tenant_id,user_id)
+  )
+);
+
+-- Protect the platform owner's profile from tenant/company administrators.
+-- The platform owner may still update their own ordinary profile fields.
+drop policy if exists protect_super_owner_profile_update on public.profiles;
+create policy protect_super_owner_profile_update on public.profiles
+as restrictive for update to authenticated
+using (
+  not private.is_super_owner_target((select auth.uid()),profiles.id)
+  or profiles.id=(select auth.uid())
+)
+with check (
+  not private.is_super_owner_target((select auth.uid()),profiles.id)
+  or profiles.id=(select auth.uid())
+);
+
+drop policy if exists protect_super_owner_profile_delete on public.profiles;
+create policy protect_super_owner_profile_delete on public.profiles
+as restrictive for delete to authenticated
+using (
+  not private.is_super_owner_target((select auth.uid()),profiles.id)
+);
+
+-- Assign a custom role only within the actor's company unless the actor is the
+-- tenant owner or platform owner. Preserve company_id on both role and profile.
+create or replace function public.assign_custom_role_to_user(
+  _user_id uuid, _tenant_id uuid, _custom_role_id uuid, _branch_id uuid, _actor_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_is_super boolean;
+  v_is_tenant_owner boolean;
+  v_actor_company_count integer;
+  v_actor_company uuid;
+  v_actor_company_wide boolean := false;
+  v_profile_company uuid;
+  v_profile_branch uuid;
+  v_profile_hired_by uuid;
+  v_target_company_count integer;
+  v_target_company uuid;
+  v_branch_company uuid;
+  v_has_target_owner boolean;
+  v_has_target_manager boolean;
+begin
+  if auth.uid() is null or _actor_id is distinct from auth.uid() then
+    raise exception 'Authenticated actor mismatch' using errcode='42501';
+  end if;
+  if exists (select 1 from public.super_owners so where so.user_id=_user_id) then
+    raise exception 'The platform Super Owner account is protected' using errcode='42501';
+  end if;
+
+  v_is_super := public.is_super_owner(auth.uid());
+  v_is_tenant_owner := exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=auth.uid() and ur.tenant_id=_tenant_id
+      and ur.role='owner' and ur.company_id is null
+  );
+
+  if not v_is_super and not v_is_tenant_owner then
+    select count(distinct coalesce(ur.company_id,b.company_id)),
+           min(coalesce(ur.company_id,b.company_id)::text)::uuid
+      into v_actor_company_count,v_actor_company
+    from public.user_roles ur
+    left join public.branches b on b.id=ur.branch_id and b.tenant_id=ur.tenant_id
+    where ur.user_id=auth.uid() and ur.tenant_id=_tenant_id
+      and ur.role in ('owner','manager')
+      and coalesce(ur.company_id,b.company_id) is not null;
+    if v_actor_company_count <> 1 then
+      raise exception 'Actor must be assigned to exactly one company' using errcode='42501';
+    end if;
+    select exists (
+      select 1 from public.user_roles actor_role
+      where actor_role.user_id=auth.uid() and actor_role.tenant_id=_tenant_id
+        and actor_role.company_id=v_actor_company
+        and actor_role.role in ('owner','manager')
+    ) into v_actor_company_wide;
+  end if;
+
+  if not public.has_permission(auth.uid(),_tenant_id,'roles.manage')
+     or not public.has_permission(auth.uid(),_tenant_id,'users.change_role') then
+    raise exception 'Permission denied: roles.manage' using errcode='42501';
+  end if;
+  if not exists (
+    select 1 from public.custom_roles
+    where id=_custom_role_id and tenant_id=_tenant_id
+  ) then
+    raise exception 'Custom role does not belong to this tenant' using errcode='23503';
+  end if;
+
+  select p.company_id,p.branch_id,p.hired_by
+    into v_profile_company,v_profile_branch,v_profile_hired_by
+  from public.profiles p
+  where p.id=_user_id and p.tenant_id=_tenant_id
+  for update;
+  if not found then
+    raise exception 'Target user does not belong to this tenant' using errcode='P0002';
+  end if;
+
+  perform 1 from public.user_roles ur
+  where ur.user_id=_user_id and ur.tenant_id=_tenant_id
+  for update;
+
+  select coalesce(bool_or(ur.role='owner'),false),
+         coalesce(bool_or(ur.role='manager'),false),
+         count(distinct coalesce(ur.company_id,b.company_id)),
+         min(coalesce(ur.company_id,b.company_id)::text)::uuid
+    into v_has_target_owner,v_has_target_manager,v_target_company_count,v_target_company
+  from public.user_roles ur
+  left join public.branches b on b.id=ur.branch_id and b.tenant_id=ur.tenant_id
+  where ur.user_id=_user_id and ur.tenant_id=_tenant_id
+    and coalesce(ur.company_id,b.company_id) is not null;
+
+  if v_has_target_owner then
+    raise exception 'The tenant owner cannot be assigned a custom staff role' using errcode='42501';
+  end if;
+  if v_target_company_count>1 then
+    raise exception 'Target user has conflicting company role assignments' using errcode='42501';
+  end if;
+  if v_profile_company is not null and v_target_company_count>0
+     and v_target_company is distinct from v_profile_company then
+    raise exception 'Target profile and role company assignments do not match' using errcode='42501';
+  end if;
+
+  v_target_company := coalesce(v_profile_company,v_target_company);
+  if v_target_company is null and v_profile_branch is not null then
+    select b.company_id into v_branch_company
+    from public.branches b where b.id=v_profile_branch and b.tenant_id=_tenant_id;
+    v_target_company := v_branch_company;
+  end if;
+
+  if _branch_id is not null then
+    select b.company_id into v_branch_company
+    from public.branches b
+    where b.id=_branch_id and b.tenant_id=_tenant_id and b.is_active=true;
+    if not found then
+      raise exception 'Branch does not belong to the requested tenant or is inactive' using errcode='23503';
+    end if;
+    if v_target_company is not null and v_target_company is distinct from v_branch_company then
+      raise exception 'Branch belongs to another company' using errcode='42501';
+    end if;
+    if v_target_company is null and not v_is_super and not v_is_tenant_owner
+       and v_profile_hired_by is distinct from auth.uid() then
+      raise exception 'You cannot assign an unowned user to another company' using errcode='42501';
+    end if;
+    v_target_company := v_branch_company;
+  end if;
+
+  if v_target_company is not null and not exists (
+    select 1 from public.companies c
+    where c.id=v_target_company and c.tenant_id=_tenant_id
+  ) then
+    raise exception 'Target company does not belong to this tenant' using errcode='23503';
+  end if;
+
+  -- Branch-only managers may administer only users and branches already assigned to them.
+  if not v_is_super and not v_is_tenant_owner and not v_actor_company_wide then
+    if v_profile_branch is null and not exists (
+      select 1 from public.user_roles target_role
+      where target_role.user_id=_user_id and target_role.tenant_id=_tenant_id
+        and target_role.branch_id is not null
+    ) then
+      raise exception 'Branch-scoped manager cannot manage an unassigned company user' using errcode='42501';
+    end if;
+    if v_profile_branch is not null and not exists (
+      select 1 from public.user_roles actor_role
+      where actor_role.user_id=auth.uid() and actor_role.tenant_id=_tenant_id
+        and actor_role.branch_id=v_profile_branch
+        and (actor_role.company_id is null or actor_role.company_id=v_target_company)
+    ) then
+      raise exception 'Target profile branch is outside the actor branch scope' using errcode='42501';
+    end if;
+    if exists (
+      select 1 from public.user_roles target_role
+      where target_role.user_id=_user_id and target_role.tenant_id=_tenant_id
+        and target_role.branch_id is not null
+        and not exists (
+          select 1 from public.user_roles actor_role
+          where actor_role.user_id=auth.uid() and actor_role.tenant_id=_tenant_id
+            and actor_role.branch_id=target_role.branch_id
+            and (actor_role.company_id is null or actor_role.company_id=v_target_company)
+        )
+    ) then
+      raise exception 'Target role branch is outside the actor branch scope' using errcode='42501';
+    end if;
+    if _branch_id is null or not exists (
+      select 1 from public.user_roles actor_role
+      where actor_role.user_id=auth.uid() and actor_role.tenant_id=_tenant_id
+        and actor_role.branch_id=_branch_id
+        and (actor_role.company_id is null or actor_role.company_id=v_target_company)
+    ) then
+      raise exception 'Branch-scoped manager may assign only to an assigned branch' using errcode='42501';
+    end if;
+  end if;
+  if not v_is_super and not v_is_tenant_owner
+     and v_target_company is distinct from v_actor_company then
+    raise exception 'You cannot assign a custom role outside your company' using errcode='42501';
+  end if;
+  if v_has_target_manager and not v_is_super and not v_is_tenant_owner then
+    raise exception 'Only the tenant owner can change a manager role' using errcode='42501';
+  end if;
+
+  delete from public.user_roles
+  where user_id=_user_id and tenant_id=_tenant_id;
+
+  insert into public.user_roles(user_id,tenant_id,role,branch_id,company_id,hired_by,custom_role_id)
+  values(_user_id,_tenant_id,'waiter'::public.app_role,_branch_id,v_target_company,auth.uid(),_custom_role_id);
+
+  update public.profiles
+  set branch_id=_branch_id,company_id=coalesce(v_target_company,company_id)
+  where id=_user_id and tenant_id=_tenant_id;
+end;
+$function$;
+revoke all on function public.assign_custom_role_to_user(uuid,uuid,uuid,uuid,uuid) from public, anon;
+grant execute on function public.assign_custom_role_to_user(uuid,uuid,uuid,uuid,uuid) to authenticated, service_role;
+
+-- Replace a user's built-in role without losing company assignment or allowing
+-- a company manager to operate on another company's staff.
+create or replace function public.replace_user_role_in_tenant(
+  _user_id uuid, _tenant_id uuid, _role public.app_role, _branch_id uuid, _actor_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_is_super boolean;
+  v_is_tenant_owner boolean;
+  v_actor_company_count integer;
+  v_actor_company uuid;
+  v_profile_company uuid;
+  v_profile_branch uuid;
+  v_profile_hired_by uuid;
+  v_target_company_count integer;
+  v_target_company uuid;
+  v_branch_company uuid;
+  v_has_target_owner boolean;
+  v_has_target_manager boolean;
+begin
+  if _actor_id is null then
+    raise exception 'Actor is required' using errcode='42501';
+  end if;
+  if exists (select 1 from public.super_owners so where so.user_id=_user_id) then
+    raise exception 'The platform Super Owner account is protected' using errcode='42501';
+  end if;
+  v_is_super := public.is_super_owner(_actor_id);
+  v_is_tenant_owner := exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=_actor_id and ur.tenant_id=_tenant_id
+      and ur.role='owner' and ur.company_id is null
+  );
+
+  if not v_is_super and not v_is_tenant_owner then
+    select count(distinct coalesce(ur.company_id,b.company_id)),
+           min(coalesce(ur.company_id,b.company_id)::text)::uuid
+      into v_actor_company_count,v_actor_company
+    from public.user_roles ur
+    left join public.branches b on b.id=ur.branch_id and b.tenant_id=ur.tenant_id
+    where ur.user_id=_actor_id and ur.tenant_id=_tenant_id
+      and ur.role in ('owner','manager')
+      and coalesce(ur.company_id,b.company_id) is not null;
+    if v_actor_company_count <> 1 then
+      raise exception 'Actor must be assigned to exactly one company' using errcode='42501';
+    end if;
+  end if;
+
+  if not public.has_permission(_actor_id,_tenant_id,'users.change_role') then
+    raise exception 'Permission denied: users.change_role' using errcode='42501';
+  end if;
+  if _role='owner'::public.app_role then
+    raise exception 'The tenant owner role cannot be assigned through staff management' using errcode='42501';
+  end if;
+  if _role='manager'::public.app_role and not v_is_super and not v_is_tenant_owner then
+    raise exception 'Only the tenant owner can assign a manager role' using errcode='42501';
+  end if;
+
+  select p.company_id,p.branch_id,p.hired_by
+    into v_profile_company,v_profile_branch,v_profile_hired_by
+  from public.profiles p
+  where p.id=_user_id and p.tenant_id=_tenant_id
+  for update;
+  if not found then
+    raise exception 'Target profile was not found in the requested tenant' using errcode='P0002';
+  end if;
+
+  perform 1 from public.user_roles ur
+  where ur.user_id=_user_id and ur.tenant_id=_tenant_id
+  for update;
+
+  select coalesce(bool_or(ur.role='owner'),false),
+         coalesce(bool_or(ur.role='manager'),false),
+         count(distinct coalesce(ur.company_id,b.company_id)),
+         min(coalesce(ur.company_id,b.company_id)::text)::uuid
+    into v_has_target_owner,v_has_target_manager,v_target_company_count,v_target_company
+  from public.user_roles ur
+  left join public.branches b on b.id=ur.branch_id and b.tenant_id=ur.tenant_id
+  where ur.user_id=_user_id and ur.tenant_id=_tenant_id
+    and coalesce(ur.company_id,b.company_id) is not null;
+
+  if v_has_target_owner then
+    raise exception 'The tenant owner role cannot be changed' using errcode='42501';
+  end if;
+  if v_has_target_manager and not v_is_super and not v_is_tenant_owner then
+    raise exception 'Only the tenant owner can change a manager role' using errcode='42501';
+  end if;
+  if v_target_company_count>1 then
+    raise exception 'Target user has conflicting company role assignments' using errcode='42501';
+  end if;
+  if v_profile_company is not null and v_target_company_count>0
+     and v_target_company is distinct from v_profile_company then
+    raise exception 'Target profile and role company assignments do not match' using errcode='42501';
+  end if;
+
+  v_target_company := coalesce(v_profile_company,v_target_company);
+  if v_target_company is null and v_profile_branch is not null then
+    select b.company_id into v_branch_company
+    from public.branches b where b.id=v_profile_branch and b.tenant_id=_tenant_id;
+    v_target_company := v_branch_company;
+  end if;
+
+  if _branch_id is not null then
+    select b.company_id into v_branch_company
+    from public.branches b
+    where b.id=_branch_id and b.tenant_id=_tenant_id and b.is_active=true;
+    if not found then
+      raise exception 'Branch does not belong to the requested tenant or is inactive' using errcode='23503';
+    end if;
+    if v_target_company is not null and v_target_company is distinct from v_branch_company then
+      raise exception 'Branch belongs to another company' using errcode='42501';
+    end if;
+    if v_target_company is null and not v_is_super and not v_is_tenant_owner
+       and v_profile_hired_by is distinct from _actor_id then
+      raise exception 'You cannot assign an unowned user to another company' using errcode='42501';
+    end if;
+    v_target_company := v_branch_company;
+  end if;
+
+  if not v_is_super and not v_is_tenant_owner
+     and v_target_company is distinct from v_actor_company then
+    raise exception 'You cannot change a role outside your company' using errcode='42501';
+  end if;
+
+  delete from public.user_roles
+  where user_id=_user_id and tenant_id=_tenant_id;
+
+  insert into public.user_roles(user_id,tenant_id,role,branch_id,company_id,hired_by)
+  values(_user_id,_tenant_id,_role,_branch_id,v_target_company,_actor_id);
+
+  update public.profiles
+  set branch_id=_branch_id,company_id=coalesce(v_target_company,company_id)
+  where id=_user_id and tenant_id=_tenant_id;
+end;
+$function$;
+revoke all on function public.replace_user_role_in_tenant(uuid,uuid,public.app_role,uuid,uuid) from public, anon, authenticated;
+grant execute on function public.replace_user_role_in_tenant(uuid,uuid,public.app_role,uuid,uuid) to service_role;
+
+-- A branch transfer cannot silently move an employee into a different company.
+create or replace function public.transfer_user_role_branch(
+  _user_role_id uuid, _tenant_id uuid, _branch_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_target_user uuid;
+  v_role_company uuid;
+  v_profile_company uuid;
+  v_target_company uuid;
+  v_branch_company uuid;
+  v_updated_profiles integer;
+begin
+  select ur.user_id,ur.company_id
+    into v_target_user,v_role_company
+  from public.user_roles ur
+  where ur.id=_user_role_id and ur.tenant_id=_tenant_id
+  for update;
+  if not found then
+    raise exception 'Role assignment not found in the requested tenant' using errcode='P0002';
+  end if;
+  if exists (select 1 from public.super_owners so where so.user_id=v_target_user) then
+    raise exception 'The platform Super Owner account is protected' using errcode='42501';
+  end if;
+
+  select p.company_id into v_profile_company
+  from public.profiles p
+  where p.id=v_target_user and p.tenant_id=_tenant_id
+  for update;
+  if not found then
+    raise exception 'Target profile was not found in the requested tenant' using errcode='P0002';
+  end if;
+
+  v_target_company := coalesce(v_role_company,v_profile_company);
+
+  if _branch_id is not null then
+    select b.company_id into v_branch_company
+    from public.branches b
+    where b.id=_branch_id and b.tenant_id=_tenant_id and b.is_active=true;
+    if not found then
+      raise exception 'Branch does not belong to the requested tenant or is inactive' using errcode='23503';
+    end if;
+    if v_target_company is not null and v_target_company is distinct from v_branch_company then
+      raise exception 'Branch transfer cannot cross company boundaries' using errcode='42501';
+    end if;
+    v_target_company := coalesce(v_target_company,v_branch_company);
+  end if;
+
+  update public.user_roles
+  set branch_id=_branch_id,company_id=coalesce(v_target_company,company_id)
+  where id=_user_role_id and tenant_id=_tenant_id;
+
+  update public.profiles
+  set branch_id=_branch_id,company_id=coalesce(v_target_company,company_id)
+  where id=v_target_user and tenant_id=_tenant_id;
+  get diagnostics v_updated_profiles=row_count;
+  if v_updated_profiles=0 then
+    raise exception 'Target profile was not found in the requested tenant' using errcode='P0002';
+  end if;
+end;
+$function$;
+revoke all on function public.transfer_user_role_branch(uuid,uuid,uuid) from public, anon, authenticated;
+grant execute on function public.transfer_user_role_branch(uuid,uuid,uuid) to service_role;
+
+commit;
+
+
+-- =====================================================================
+-- SOURCE MIGRATION: 20261119000008_bind_branch_access_and_helper_actors.sql
+
+-- Bind SECURITY DEFINER authorization helpers to the authenticated actor and
+-- ensure tenant owners can access/manage branches across their companies.
+begin;
+
+create or replace function private.can_access_branch(_user_id uuid,_tenant_id uuid,_branch_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select _user_id=(select auth.uid())
+    and (
+      exists (
+        select 1 from public.super_owners so where so.user_id=_user_id
+      )
+      or exists (
+        select 1 from public.user_roles tenant_owner
+        where tenant_owner.user_id=_user_id
+          and tenant_owner.tenant_id=_tenant_id
+          and tenant_owner.role='owner'
+          and tenant_owner.company_id is null
+      )
+      or exists (
+        select 1
+        from public.user_roles ur
+        join public.branches b on b.id=_branch_id and b.tenant_id=_tenant_id
+        where ur.user_id=_user_id and ur.tenant_id=_tenant_id
+          and (
+            (ur.role in ('owner','manager','accountant')
+             and (
+               (ur.company_id is not null and b.company_id=ur.company_id)
+               or (ur.company_id is null and b.company_id is null)
+             ))
+            or (ur.branch_id=_branch_id and (ur.company_id is null or b.company_id=ur.company_id))
+          )
+      )
+    );
+$function$;
+revoke all on function private.can_access_branch(uuid,uuid,uuid) from public, anon;
+grant execute on function private.can_access_branch(uuid,uuid,uuid) to authenticated, service_role;
+
+create or replace function private.can_manage_expenses(_user_id uuid,_tenant_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select _user_id=(select auth.uid())
+    and exists (
+      select 1 from public.user_roles
+      where user_id=_user_id and tenant_id=_tenant_id
+        and role in ('owner','manager','accountant')
+    );
+$function$;
+revoke all on function private.can_manage_expenses(uuid,uuid) from public, anon;
+grant execute on function private.can_manage_expenses(uuid,uuid) to authenticated, service_role;
+
+create or replace function private.has_role(_user_id uuid,_tenant_id uuid,_role public.app_role)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select _user_id=(select auth.uid())
+    and exists (
+      select 1 from public.user_roles
+      where user_id=_user_id and tenant_id=_tenant_id and role=_role
+    );
+$function$;
+revoke all on function private.has_role(uuid,uuid,public.app_role) from public, anon;
+grant execute on function private.has_role(uuid,uuid,public.app_role) to authenticated, service_role;
+
+create or replace function private.is_tenant_admin(_user_id uuid,_tenant_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select _user_id=(select auth.uid())
+    and (
+      exists (select 1 from public.super_owners so where so.user_id=_user_id)
+      or exists (
+        select 1 from public.user_roles ur
+        where ur.user_id=_user_id and ur.tenant_id=_tenant_id
+          and ur.role in ('owner','manager')
+      )
+    );
+$function$;
+revoke all on function private.is_tenant_admin(uuid,uuid) from public, anon;
+grant execute on function private.is_tenant_admin(uuid,uuid) to authenticated, service_role;
+
+create or replace function private.is_tenant_member(_user_id uuid,_tenant_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select _user_id=(select auth.uid())
+    and exists (
+      select 1 from public.user_roles
+      where user_id=_user_id and tenant_id=_tenant_id
+    );
+$function$;
+revoke all on function private.is_tenant_member(uuid,uuid) from public, anon;
+grant execute on function private.is_tenant_member(uuid,uuid) to authenticated, service_role;
+
+create or replace function private.user_branch_id(_user_id uuid,_tenant_id uuid)
+returns uuid
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select case when _user_id=(select auth.uid()) then (
+    select branch_id from public.user_roles
+    where user_id=_user_id and tenant_id=_tenant_id
+    limit 1
+  ) else null end;
+$function$;
+revoke all on function private.user_branch_id(uuid,uuid) from public, anon;
+grant execute on function private.user_branch_id(uuid,uuid) to authenticated, service_role;
+
+create or replace function private.user_has_role_in_tenant(_user_id uuid,_tenant_id uuid,_roles text[])
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select _user_id=(select auth.uid())
+    and exists (
+      select 1 from public.user_roles
+      where user_id=_user_id and tenant_id=_tenant_id
+        and role::text=any(_roles)
+    );
+$function$;
+revoke all on function private.user_has_role_in_tenant(uuid,uuid,text[]) from public, anon;
+grant execute on function private.user_has_role_in_tenant(uuid,uuid,text[]) to authenticated, service_role;
+
+create or replace function private.was_hired_by(_target uuid,_actor uuid,_tenant_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select _actor=(select auth.uid())
+    and exists (
+      select 1 from public.user_roles
+      where user_id=_target and tenant_id=_tenant_id and hired_by=_actor
+    );
+$function$;
+revoke all on function private.was_hired_by(uuid,uuid,uuid) from public, anon;
+grant execute on function private.was_hired_by(uuid,uuid,uuid) to authenticated, service_role;
+
+-- Tenant owners have tenant-wide branch administration. Company owners/managers
+-- remain limited to branches belonging to their assigned company.
+drop policy if exists company_scope_branches_insert on public.branches;
+create policy company_scope_branches_insert on public.branches
+as restrictive for insert to authenticated
+with check (
+  public.is_super_owner((select auth.uid()))
+  or private.is_tenant_owner_user((select auth.uid()),tenant_id)
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid())
+      and ur.tenant_id=branches.tenant_id
+      and ur.company_id=branches.company_id
+      and ur.role in ('owner','manager')
+  )
+);
+
+drop policy if exists company_scope_branches_update on public.branches;
+create policy company_scope_branches_update on public.branches
+as restrictive for update to authenticated
+using (
+  private.can_access_branch((select auth.uid()),tenant_id,id)
+)
+with check (
+  public.is_super_owner((select auth.uid()))
+  or private.is_tenant_owner_user((select auth.uid()),tenant_id)
+  or exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid())
+      and ur.tenant_id=branches.tenant_id
+      and ur.company_id=branches.company_id
+      and ur.role in ('owner','manager')
+  )
+);
+
+
+-- Trigger functions are invoked by PostgreSQL triggers, not by client RPCs.
+-- Remove unnecessary direct EXECUTE grants from all API roles.
+revoke all on function private.enforce_inventory_reference_tenant() from public, anon, authenticated, service_role;
+revoke all on function private.enforce_notification_audience_tenant() from public, anon, authenticated, service_role;
+revoke all on function private.enforce_notification_read_tenant() from public, anon, authenticated, service_role;
+revoke all on function private.enforce_same_tenant_foreign_key() from public, anon, authenticated, service_role;
+revoke all on function private.enforce_tenant_user_membership() from public, anon, authenticated, service_role;
+revoke all on function private.prevent_cash_refund_overdraw() from public, anon, authenticated, service_role;
+
+commit;
+
+
+-- =====================================================================
+-- SOURCE MIGRATION: 20261119000009_private_avatar_and_company_asset_scope.sql
+
+-- Separate private user avatars from public catalog/marketing images and
+-- scope public asset writes to the owning company.
+begin;
+
+create or replace function private.can_manage_company_assets(
+  _actor_id uuid,_tenant_id uuid,_company_id uuid,_asset_folder text
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select _actor_id=(select auth.uid())
+    and exists (
+      select 1
+      from public.user_roles ur
+      join public.companies c
+        on c.id=_company_id and c.tenant_id=_tenant_id
+      where ur.user_id=_actor_id
+        and ur.tenant_id=_tenant_id
+        and ur.company_id=_company_id
+        and ur.role in ('owner','manager')
+    )
+    and case _asset_folder
+      when 'branding' then public.has_permission(_actor_id,_tenant_id,'settings.manage')
+      when 'marketing' then public.has_permission(_actor_id,_tenant_id,'settings.manage')
+      when 'products' then public.has_permission(_actor_id,_tenant_id,'products.manage')
+      when 'branches' then public.has_permission(_actor_id,_tenant_id,'branches.manage')
+      when 'categories' then public.has_permission(_actor_id,_tenant_id,'categories.manage')
+      when 'avatars' then public.has_permission(_actor_id,_tenant_id,'hr.employees.manage')
+      else false
+    end;
+$function$;
+revoke all on function private.can_manage_company_assets(uuid,uuid,uuid,text) from public, anon;
+grant execute on function private.can_manage_company_assets(uuid,uuid,uuid,text) to authenticated, service_role;
+
+insert into storage.buckets (id,name,public,file_size_limit,allowed_mime_types)
+values (
+  'restaurant-private-assets',
+  'restaurant-private-assets',
+  false,
+  5242880,
+  array['image/jpeg','image/png','image/webp','image/avif']
+)
+on conflict (id) do update
+set public=false,
+    file_size_limit=excluded.file_size_limit,
+    allowed_mime_types=excluded.allowed_mime_types;
+
+-- Private avatars: only the owner uploads/changes their own file. Users who can
+-- view that employee profile in the tenant/company can receive a signed URL.
+drop policy if exists private_profile_avatar_select on storage.objects;
+create policy private_profile_avatar_select on storage.objects
+for select to authenticated
+using (
+  bucket_id='restaurant-private-assets'
+  and split_part(name,'/',1) ~* '^[0-9a-f-]{36}$'
+  and split_part(name,'/',2)='profiles'
+  and split_part(name,'/',3) ~* '^[0-9a-f-]{36}$'
+  and (
+    (
+      split_part(name,'/',3)=(select auth.uid())::text
+      and (
+        public.is_super_owner((select auth.uid()))
+        or private.is_tenant_member((select auth.uid()),split_part(name,'/',1)::uuid)
+      )
+    )
+    or private.can_access_creator_company(
+      split_part(name,'/',1)::uuid,
+      split_part(name,'/',3)::uuid
+    )
+  )
+);
+
+drop policy if exists private_profile_avatar_insert on storage.objects;
+create policy private_profile_avatar_insert on storage.objects
+for insert to authenticated
+with check (
+  bucket_id='restaurant-private-assets'
+  and split_part(name,'/',1) ~* '^[0-9a-f-]{36}$'
+  and split_part(name,'/',2)='profiles'
+  and split_part(name,'/',3)=(select auth.uid())::text
+  and (
+    public.is_super_owner((select auth.uid()))
+    or private.is_tenant_member((select auth.uid()),split_part(name,'/',1)::uuid)
+  )
+);
+
+drop policy if exists private_profile_avatar_update on storage.objects;
+create policy private_profile_avatar_update on storage.objects
+for update to authenticated
+using (
+  bucket_id='restaurant-private-assets'
+  and split_part(name,'/',1) ~* '^[0-9a-f-]{36}$'
+  and split_part(name,'/',2)='profiles'
+  and split_part(name,'/',3)=(select auth.uid())::text
+  and (
+    public.is_super_owner((select auth.uid()))
+    or private.is_tenant_member((select auth.uid()),split_part(name,'/',1)::uuid)
+  )
+)
+with check (
+  bucket_id='restaurant-private-assets'
+  and split_part(name,'/',1) ~* '^[0-9a-f-]{36}$'
+  and split_part(name,'/',2)='profiles'
+  and split_part(name,'/',3)=(select auth.uid())::text
+  and (
+    public.is_super_owner((select auth.uid()))
+    or private.is_tenant_member((select auth.uid()),split_part(name,'/',1)::uuid)
+  )
+);
+
+drop policy if exists private_profile_avatar_delete on storage.objects;
+create policy private_profile_avatar_delete on storage.objects
+for delete to authenticated
+using (
+  bucket_id='restaurant-private-assets'
+  and split_part(name,'/',1) ~* '^[0-9a-f-]{36}$'
+  and split_part(name,'/',2)='profiles'
+  and split_part(name,'/',3)=(select auth.uid())::text
+  and (
+    public.is_super_owner((select auth.uid()))
+    or private.is_tenant_member((select auth.uid()),split_part(name,'/',1)::uuid)
+  )
+);
+
+-- The restaurant-assets bucket stays public for public-facing images, but its
+-- write paths are limited to tenant-wide assets or the actor's own company.
+drop policy if exists restaurant_assets_company_scope_insert on storage.objects;
+create policy restaurant_assets_company_scope_insert on storage.objects
+as restrictive for insert to authenticated
+with check (
+  bucket_id <> 'restaurant-assets'
+  or (
+    split_part(name,'/',1) ~* '^[0-9a-f-]{36}$'
+    and (
+      (
+        split_part(name,'/',2) in ('branding','marketing','products','branches','categories','avatars')
+        and (
+          public.is_super_owner((select auth.uid()))
+          or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
+        )
+      )
+      or (
+        split_part(name,'/',2)='companies'
+        and split_part(name,'/',3) ~* '^[0-9a-f-]{36}$'
+        and split_part(name,'/',4) in ('branding','marketing','products','branches','categories','avatars')
+        and (
+          public.is_super_owner((select auth.uid()))
+          or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
+          or private.can_manage_company_assets(
+            (select auth.uid()),
+            split_part(name,'/',1)::uuid,
+            split_part(name,'/',3)::uuid,
+            split_part(name,'/',4)
+          )
+        )
+      )
+    )
+  )
+);
+
+drop policy if exists restaurant_assets_company_scope_update on storage.objects;
+create policy restaurant_assets_company_scope_update on storage.objects
+as restrictive for update to authenticated
+using (
+  bucket_id <> 'restaurant-assets'
+  or (
+    split_part(name,'/',1) ~* '^[0-9a-f-]{36}$'
+    and (
+      (
+        split_part(name,'/',2) in ('branding','marketing','products','branches','categories','avatars')
+        and (
+          public.is_super_owner((select auth.uid()))
+          or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
+        )
+      )
+      or (
+        split_part(name,'/',2)='companies'
+        and split_part(name,'/',3) ~* '^[0-9a-f-]{36}$'
+        and split_part(name,'/',4) in ('branding','marketing','products','branches','categories','avatars')
+        and (
+          public.is_super_owner((select auth.uid()))
+          or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
+          or private.can_manage_company_assets(
+            (select auth.uid()),
+            split_part(name,'/',1)::uuid,
+            split_part(name,'/',3)::uuid,
+            split_part(name,'/',4)
+          )
+        )
+      )
+    )
+  )
+)
+with check (
+  bucket_id <> 'restaurant-assets'
+  or (
+    split_part(name,'/',1) ~* '^[0-9a-f-]{36}$'
+    and (
+      (
+        split_part(name,'/',2) in ('branding','marketing','products','branches','categories','avatars')
+        and (
+          public.is_super_owner((select auth.uid()))
+          or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
+        )
+      )
+      or (
+        split_part(name,'/',2)='companies'
+        and split_part(name,'/',3) ~* '^[0-9a-f-]{36}$'
+        and split_part(name,'/',4) in ('branding','marketing','products','branches','categories','avatars')
+        and (
+          public.is_super_owner((select auth.uid()))
+          or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
+          or private.can_manage_company_assets(
+            (select auth.uid()),
+            split_part(name,'/',1)::uuid,
+            split_part(name,'/',3)::uuid,
+            split_part(name,'/',4)
+          )
+        )
+      )
+    )
+  )
+);
+
+drop policy if exists restaurant_assets_company_scope_delete on storage.objects;
+create policy restaurant_assets_company_scope_delete on storage.objects
+as restrictive for delete to authenticated
+using (
+  bucket_id <> 'restaurant-assets'
+  or (
+    split_part(name,'/',1) ~* '^[0-9a-f-]{36}$'
+    and (
+      (
+        split_part(name,'/',2) in ('branding','marketing','products','branches','categories','avatars')
+        and (
+          public.is_super_owner((select auth.uid()))
+          or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
+        )
+      )
+      or (
+        split_part(name,'/',2)='companies'
+        and split_part(name,'/',3) ~* '^[0-9a-f-]{36}$'
+        and split_part(name,'/',4) in ('branding','marketing','products','branches','categories','avatars')
+        and (
+          public.is_super_owner((select auth.uid()))
+          or private.is_tenant_owner_user((select auth.uid()),split_part(name,'/',1)::uuid)
+          or private.can_manage_company_assets(
+            (select auth.uid()),
+            split_part(name,'/',1)::uuid,
+            split_part(name,'/',3)::uuid,
+            split_part(name,'/',4)
+          )
+        )
+      )
+    )
+  )
+);
+
+commit;
+
