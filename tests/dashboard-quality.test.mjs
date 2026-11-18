@@ -168,8 +168,8 @@ test("shared image uploader validates formats and stores permanent public URLs",
 });
 
 test("branch and category image fields use the shared uploader", () => {
-  assert.match(branches, /<ImageUploader tenantId={tenantId} folder="branches"/);
-  assert.match(categories, /<ImageUploader tenantId={tenantId} folder="categories"/);
+  assert.match(branches, /<ImageUploader tenantId={tenantId} companyId={companyId \|\| null} folder="branches"/);
+  assert.match(categories, /<ImageUploader tenantId={tenantId} companyId={companyId} folder="categories"/);
 });
 
 test("POS supports scheduled promotional placements without changing checkout logic", () => {
