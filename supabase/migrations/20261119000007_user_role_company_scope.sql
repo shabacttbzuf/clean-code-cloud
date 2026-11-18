@@ -211,12 +211,13 @@ as $function$
         _row_role not in ('owner'::public.app_role,'manager'::public.app_role)
         and _row_company_id is not null
         and exists (
-          select 1 from public.user_roles company_owner
-          where company_owner.user_id=_actor_id
-            and company_owner.tenant_id=_tenant_id
-            and company_owner.role='owner'
-            and company_owner.company_id=_row_company_id
+          select 1 from public.user_roles company_admin
+          where company_admin.user_id=_actor_id
+            and company_admin.tenant_id=_tenant_id
+            and company_admin.role in ('owner','manager')
+            and company_admin.company_id=_row_company_id
         )
+        and public.has_permission(_actor_id,_tenant_id,'users.change_role')
         and (_row_branch_id is null or private.can_access_branch(_actor_id,_tenant_id,_row_branch_id))
         and exists (
           select 1 from public.profiles target_profile
