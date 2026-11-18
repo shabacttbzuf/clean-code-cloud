@@ -120,6 +120,17 @@ async function getActorCompanyScope(
   };
 }
 
+function hasCompanyWideUserAdminScope(actorScope: {
+  isSuperOwner: boolean;
+  isTenantOwner: boolean;
+  companyId: string | null;
+  roles: Array<{ role: string; company_id: string | null; branch_id: string | null }>;
+}) {
+  return !!actorScope.companyId && actorScope.roles.some(
+    (r) => r.company_id === actorScope.companyId && ["owner", "manager"].includes(r.role),
+  );
+}
+
 async function assertBranchInActorScope(
   supabaseAdmin: any,
   branchId: string | null | undefined,
@@ -132,15 +143,17 @@ async function assertBranchInActorScope(
   },
 ) {
   const branch = await assertBranchBelongsToTenant(supabaseAdmin, branchId, tenantId);
-  if (!branch) return null;
   if (actorScope.isSuperOwner || actorScope.isTenantOwner) return branch;
-  if (actorScope.companyId && branch.company_id === actorScope.companyId) return branch;
-  if (
-    !actorScope.companyId &&
-    branch.company_id == null &&
-    actorScope.roles.some((r) => r.branch_id === branch.id)
-  ) return branch;
-  throw new Error("لا يمكنك إدارة مستخدمين أو نقلهم إلى فرع خارج شركتك.");
+  const hasCompanyWideScope = hasCompanyWideUserAdminScope(actorScope);
+  if (!branch) {
+    if (hasCompanyWideScope) return null;
+    throw new Error("يجب اختيار أحد الفروع المسندة إلى حسابك لإدارة الموظفين.");
+  }
+  if (hasCompanyWideScope && branch.company_id === actorScope.companyId) return branch;
+  if (actorScope.roles.some(
+    (r) => r.branch_id === branch.id && (r.company_id == null || r.company_id === branch.company_id),
+  )) return branch;
+  throw new Error("لا يمكنك إدارة مستخدمين أو نقلهم إلى فرع خارج نطاقك.");
 }
 
 async function assertCanAssignRole(
@@ -236,15 +249,27 @@ async function assertTargetRoleManageable(
   if (branchIds.length) {
     const { data: branches, error: branchesError } = await supabaseAdmin
       .from("branches")
-      .select("company_id")
+      .select("id,company_id")
       .eq("tenant_id", tenantId)
       .in("id", branchIds);
     if (branchesError) throw new Error(branchesError.message);
+    if ((branches ?? []).length !== branchIds.length) {
+      throw new Error("يوجد فرع غير صالح ضمن إسناد الموظف؛ راجع مسؤول النظام.");
+    }
     for (const b of branches ?? []) if (b.company_id) targetCompanyIds.add(b.company_id);
   }
 
   if (targetCompanyIds.size !== 1 || !targetCompanyIds.has(actorScope.companyId)) {
     throw new Error("لا يمكنك إدارة حساب موظف لا يتبع شركتك.");
+  }
+
+  if (!hasCompanyWideUserAdminScope(actorScope)) {
+    const allowedBranchIds = new Set(
+      actorScope.roles.map((r: any) => r.branch_id).filter(Boolean),
+    );
+    if (!branchIds.length || branchIds.some((id) => !allowedBranchIds.has(id))) {
+      throw new Error("لا يمكنك إدارة موظف خارج الفروع المسندة إلى حسابك.");
+    }
   }
 }
 /**

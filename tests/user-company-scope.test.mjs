@@ -82,3 +82,11 @@ test("the platform Super Owner account cannot be modified through role RPCs or R
   assert.match(migration, /protect_super_owner_profile_update[\s\S]*private\.is_super_owner_target/i);
   assert.match(migration, /protect_super_owner_profile_delete[\s\S]*private\.is_super_owner_target/i);
 });
+
+test("branch-only managers cannot use an inferred company assignment to manage other branches", () => {
+  assert.match(users, /function hasCompanyWideUserAdminScope/);
+  assert.match(users, /r\.company_id === actorScope\.companyId && \["owner", "manager"\]\.includes\(r\.role\)/);
+  assert.match(users, /يجب اختيار أحد الفروع المسندة إلى حسابك لإدارة الموظفين/);
+  assert.match(users, /const allowedBranchIds = new Set/);
+  assert.match(users, /branchIds\.some\(\(id\) => !allowedBranchIds\.has\(id\)\)/);
+});
