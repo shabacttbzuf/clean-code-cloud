@@ -93,7 +93,7 @@ type Row = {
 };
 
 function UsersPage() {
-  const { tenantId, isAdmin, userId, role, isSuperOwner } = useActiveTenant();
+  const { tenantId, isAdmin, userId, isSuperOwner } = useActiveTenant();
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [pwdUser, setPwdUser] = useState<Row | null>(null);
