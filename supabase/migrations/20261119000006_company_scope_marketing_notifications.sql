@@ -103,6 +103,9 @@ security definer
 set search_path = pg_catalog, public, private, pg_temp
 as $function$
   select
+    (select auth.uid()) is not null
+    and _user_id = (select auth.uid())
+    and (
     exists (select 1 from public.super_owners so where so.user_id = _user_id)
     or exists (
       select 1
@@ -117,6 +120,7 @@ as $function$
           or (ur.branch_id = _branch_id
               and (ur.company_id is null or ur.company_id = b.company_id))
         )
+    )
     );
 $function$;
 revoke all on function private.can_access_branch(uuid,uuid,uuid) from public, anon;
