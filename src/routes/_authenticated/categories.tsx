@@ -41,7 +41,7 @@ const schema = z.object({
 });
 
 function CategoriesPage() {
-  const { tenantId, isAdmin } = useActiveTenant();
+  const { tenantId, isAdmin, membership } = useActiveTenant();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Category | null>(null);
@@ -108,7 +108,7 @@ function CategoriesPage() {
               <DialogTrigger asChild>
                 <Button><Plus className="ml-2 h-4 w-4" />قسم جديد</Button>
               </DialogTrigger>
-              <CategoryDialog initial={editing} tenantId={tenantId!} onSubmit={(v) => upsert.mutate(v)} pending={upsert.isPending} />
+              <CategoryDialog initial={editing} tenantId={tenantId!} companyId={membership?.company_id ?? null} onSubmit={(v) => upsert.mutate(v)} pending={upsert.isPending} />
             </Dialog>
           )
         }
@@ -168,11 +168,13 @@ function CategoriesPage() {
 function CategoryDialog({
   initial,
   tenantId,
+  companyId,
   onSubmit,
   pending,
 }: {
   initial: Category | null;
   tenantId: string;
+  companyId: string | null;
   onSubmit: (v: z.infer<typeof schema>) => void;
   pending: boolean;
 }) {
@@ -194,7 +196,7 @@ function CategoryDialog({
           if (err instanceof z.ZodError) toast.error(err.issues[0].message);
         }
       }}>
-        <ImageUploader tenantId={tenantId} folder="categories" value={imageUrl} onChange={setImageUrl} aspect="wide" />
+        <ImageUploader tenantId={tenantId} companyId={companyId} folder="categories" value={imageUrl} onChange={setImageUrl} aspect="wide" />
         <div className="space-y-2">
           <Label>اسم القسم</Label>
           <Input value={name} onChange={(e) => setName(e.target.value)} required />
