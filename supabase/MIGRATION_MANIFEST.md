@@ -169,3 +169,7 @@
 87. `supabase/migrations/20261119000002_scope_customer_payment_idempotency.sql`
 
 **الإجمالي: 87 ترحيلاً.**
+
+88. `supabase/migrations/20261119000003_scope_cash_session_close_to_branch.sql`
+
+**الإجمالي: 88 ترحيلاً.**
