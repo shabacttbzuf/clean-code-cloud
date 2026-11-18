@@ -49,9 +49,10 @@ async function assertBranchBelongsToTenant(
     .select("id,company_id")
     .eq("id", branchId)
     .eq("tenant_id", tenantId)
+    .eq("is_active", true)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("الفرع المحدد لا يتبع المؤسسة المطلوبة.");
+  if (!data) throw new Error("الفرع المحدد غير موجود أو غير نشط داخل المؤسسة المطلوبة.");
   return data as { id: string; company_id: string | null };
 }
 
@@ -179,12 +180,13 @@ async function assertTargetRoleManageable(
 ) {
   const actorScope = await getActorCompanyScope(supabase, supabaseAdmin, actorId, tenantId);
 
-  const { data: targetIsSuperOwner, error: targetSuperError } = await supabase.rpc(
-    "is_super_owner",
-    { _user_id: targetUserId },
-  );
+  const { data: targetSuperOwner, error: targetSuperError } = await supabaseAdmin
+    .from("super_owners")
+    .select("user_id")
+    .eq("user_id", targetUserId)
+    .maybeSingle();
   if (targetSuperError) throw new Error(targetSuperError.message);
-  if (targetIsSuperOwner) {
+  if (targetSuperOwner) {
     throw new Error("لا يمكن تعديل حساب المالك الأعلى من إدارة الموظفين.");
   }
 
