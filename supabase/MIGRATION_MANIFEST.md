@@ -179,3 +179,6 @@
 91. `supabase/migrations/20261119000006_company_scope_marketing_notifications.sql`
 
 **الإجمالي: 91 ترحيلاً.**
+92. `supabase/migrations/20261119000007_user_role_company_scope.sql`
+
+**الإجمالي: 92 ترحيلاً.**
