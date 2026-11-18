@@ -46,3 +46,7 @@ test("public asset writes are restricted to tenant owner or the matching company
   assert.match(migration, /restaurant_assets_company_scope_delete[\s\S]*private\.can_manage_company_assets/i);
   assert.match(migration, /split_part\(name,'\/',2\)='companies'/i);
 });
+
+test("public category images are included in the scoped asset folders", () => {
+  assert.match(migration, /'branches','categories'/);
+});
