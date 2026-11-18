@@ -55,3 +55,9 @@ test("server-side user management resolves actor scope and stamps company_id", (
   assert.match(users, /إسناد دور المدير العام متاح لمالك المؤسسة فقط/);
   assert.match(users, /لا يمكن تعديل حساب المالك الأعلى/);
 });
+
+test("company managers can manage only permitted staff roles in their own company", () => {
+  assert.match(migration, /company_admin\.role in \('owner','manager'\)/i);
+  assert.match(migration, /public\.has_permission\(_actor_id,_tenant_id,'users\.change_role'\)/i);
+  assert.match(migration, /_row_role not in \('owner'::public\.app_role,'manager'::public\.app_role\)/i);
+});
