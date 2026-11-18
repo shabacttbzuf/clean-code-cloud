@@ -53,9 +53,11 @@ test("tenant administrators cannot manage users outside their tenant", () => {
   assert.match(userAdminSource, /المستخدم المستهدف لا ينتمي إلى المؤسسة المحددة/);
 });
 
-test("manager cannot grant privileged owner or manager roles", () => {
-  assert.match(userAdminSource, /role !== "owner" && role !== "manager"/);
-  assert.match(userAdminSource, /لا يحق للمدير منح صلاحيات المالك أو المدير/);
+test("company-scoped administrators cannot grant tenant owner or manager roles", () => {
+  assert.match(userAdminSource, /if \(role === "owner"\)/);
+  assert.match(userAdminSource, /if \(role !== "manager"\) return/);
+  assert.match(userAdminSource, /إسناد دور المدير العام متاح لمالك المؤسسة فقط/);
+  assert.match(userAdminSource, /لا يمكن إسناد دور مالك المؤسسة من شاشة إدارة الموظفين/);
 });
 
 test("role changes use the atomic database function", () => {
