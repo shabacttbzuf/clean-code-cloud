@@ -290,7 +290,7 @@ export const createUser = createServerFn({ method: "POST" })
         role: ROLE_ENUM,
         custom_role_id: z.string().uuid().optional().nullable(),
         branch_id: z.string().uuid().optional().nullable(),
-        avatar_url: z.string().url().optional().nullable(),
+        avatar_url: z.string().max(2048).refine((value) => value.startsWith("private://") || z.string().url().safeParse(value).success, "رابط الصورة غير صالح").optional().nullable(),
       })
       .parse(data),
   )
@@ -599,6 +599,18 @@ export const updateMyProfile = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
+    if (data.avatar_url?.startsWith("private://")) {
+      const parts = data.avatar_url.slice("private://".length).split("/");
+      if (
+        parts.length !== 4 ||
+        !/^[0-9a-f-]{36}$/i.test(parts[0]) ||
+        parts[1] !== "profiles" ||
+        parts[2] !== context.userId ||
+        !/^[a-zA-Z0-9._-]+$/.test(parts[3])
+      ) {
+        throw new Error("لا يمكنك ربط ملف صورة تابع لمستخدم آخر");
+      }
+    }
     const patch: {
       full_name?: string;
       username?: string | null;
