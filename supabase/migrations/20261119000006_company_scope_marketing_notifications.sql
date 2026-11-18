@@ -544,12 +544,14 @@ using (
     join public.branches b on b.id=ur.branch_id
     where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
       and b.company_id=marketing_campaigns.company_id
+      and (ur.company_id is null or ur.company_id=b.company_id)
   )
   or exists (
     select 1 from public.user_roles ur
     join public.departments d on d.id=ur.department_id
     where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
       and d.company_id=marketing_campaigns.company_id
+      and (ur.company_id is null or ur.company_id=d.company_id)
   )
 );
 
