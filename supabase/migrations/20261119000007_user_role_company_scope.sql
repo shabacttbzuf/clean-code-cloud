@@ -91,53 +91,164 @@ $function$;
 revoke all on function private.can_access_creator_company(uuid,uuid) from public, anon;
 grant execute on function private.can_access_creator_company(uuid,uuid) to authenticated, service_role;
 
+-- SECURITY DEFINER helpers avoid recursive RLS evaluation while checking
+-- the actor's and target user's role assignments.
+create or replace function private.is_tenant_owner_user(_user_id uuid,_tenant_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select _user_id=(select auth.uid())
+    and exists (
+      select 1 from public.user_roles ur
+      where ur.user_id=_user_id and ur.tenant_id=_tenant_id
+        and ur.role='owner' and ur.company_id is null
+    );
+$function$;
+revoke all on function private.is_tenant_owner_user(uuid,uuid) from public, anon;
+grant execute on function private.is_tenant_owner_user(uuid,uuid) to authenticated, service_role;
+
+create or replace function private.can_view_user_role_row(
+  _viewer_id uuid,_tenant_id uuid,_target_user_id uuid,
+  _row_company_id uuid,_row_branch_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select _viewer_id=(select auth.uid())
+    and (
+      _viewer_id=_target_user_id
+      or public.is_super_owner(_viewer_id)
+      or private.is_tenant_owner_user(_viewer_id,_tenant_id)
+      or (
+        _row_company_id is not null
+        and exists (
+          select 1 from public.user_roles viewer
+          where viewer.user_id=_viewer_id and viewer.tenant_id=_tenant_id
+            and viewer.company_id=_row_company_id
+        )
+        and exists (
+          select 1 from public.profiles target_profile
+          where target_profile.id=_target_user_id and target_profile.tenant_id=_tenant_id
+            and (target_profile.company_id is null or target_profile.company_id=_row_company_id)
+        )
+        and not exists (
+          select 1
+          from public.user_roles conflicting_role
+          left join public.branches conflicting_branch
+            on conflicting_branch.id=conflicting_role.branch_id
+           and conflicting_branch.tenant_id=conflicting_role.tenant_id
+          where conflicting_role.user_id=_target_user_id
+            and conflicting_role.tenant_id=_tenant_id
+            and (
+              (conflicting_role.company_id is not null
+               and conflicting_role.company_id<>_row_company_id)
+              or (conflicting_role.company_id is not null
+                  and conflicting_branch.company_id is not null
+                  and conflicting_role.company_id<>conflicting_branch.company_id)
+            )
+        )
+        and (_row_branch_id is null or private.can_access_branch(_viewer_id,_tenant_id,_row_branch_id))
+      )
+      or (
+        _row_company_id is null and _row_branch_id is not null
+        and private.can_access_branch(_viewer_id,_tenant_id,_row_branch_id)
+        and exists (
+          select 1 from public.profiles target_profile
+          where target_profile.id=_target_user_id and target_profile.tenant_id=_tenant_id
+            and (target_profile.company_id is null or target_profile.company_id=(
+              select b.company_id from public.branches b
+              where b.id=_row_branch_id and b.tenant_id=_tenant_id
+            ))
+        )
+        and not exists (
+          select 1
+          from public.user_roles conflicting_role
+          left join public.branches conflicting_branch
+            on conflicting_branch.id=conflicting_role.branch_id
+           and conflicting_branch.tenant_id=conflicting_role.tenant_id
+          where conflicting_role.user_id=_target_user_id
+            and conflicting_role.tenant_id=_tenant_id
+            and conflicting_role.company_id is not null
+            and conflicting_role.company_id is distinct from (
+              select b.company_id from public.branches b
+              where b.id=_row_branch_id and b.tenant_id=_tenant_id
+            )
+        )
+      )
+    );
+$function$;
+revoke all on function private.can_view_user_role_row(uuid,uuid,uuid,uuid,uuid) from public, anon;
+grant execute on function private.can_view_user_role_row(uuid,uuid,uuid,uuid,uuid) to authenticated, service_role;
+
+create or replace function private.can_manage_user_role_row(
+  _actor_id uuid,_tenant_id uuid,_target_user_id uuid,
+  _row_company_id uuid,_row_branch_id uuid,_row_role public.app_role
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select _actor_id=(select auth.uid())
+    and (
+      public.is_super_owner(_actor_id)
+      or (
+        _row_role<>'owner'::public.app_role
+        and private.is_tenant_owner_user(_actor_id,_tenant_id)
+      )
+      or (
+        _row_role not in ('owner'::public.app_role,'manager'::public.app_role)
+        and _row_company_id is not null
+        and exists (
+          select 1 from public.user_roles company_owner
+          where company_owner.user_id=_actor_id
+            and company_owner.tenant_id=_tenant_id
+            and company_owner.role='owner'
+            and company_owner.company_id=_row_company_id
+        )
+        and (_row_branch_id is null or private.can_access_branch(_actor_id,_tenant_id,_row_branch_id))
+        and exists (
+          select 1 from public.profiles target_profile
+          where target_profile.id=_target_user_id and target_profile.tenant_id=_tenant_id
+            and (target_profile.company_id is null or target_profile.company_id=_row_company_id)
+        )
+        and not exists (
+          select 1
+          from public.user_roles conflicting_role
+          left join public.branches conflicting_branch
+            on conflicting_branch.id=conflicting_role.branch_id
+           and conflicting_branch.tenant_id=conflicting_role.tenant_id
+          where conflicting_role.user_id=_target_user_id
+            and conflicting_role.tenant_id=_tenant_id
+            and (
+              (conflicting_role.company_id is not null
+               and conflicting_role.company_id<>_row_company_id)
+              or (conflicting_role.company_id is not null
+                  and conflicting_branch.company_id is not null
+                  and conflicting_role.company_id<>conflicting_branch.company_id)
+            )
+        )
+      )
+    );
+$function$;
+revoke all on function private.can_manage_user_role_row(uuid,uuid,uuid,uuid,uuid,public.app_role) from public, anon;
+grant execute on function private.can_manage_user_role_row(uuid,uuid,uuid,uuid,uuid,public.app_role) to authenticated, service_role;
+
 -- Restrict each user_roles row by its own company/branch, not merely by whether
 -- the target user has any membership in the viewer's company.
 drop policy if exists company_scope_user_roles_select on public.user_roles;
 create policy company_scope_user_roles_select on public.user_roles
 as restrictive for select to authenticated
 using (
-  user_id=(select auth.uid())
-  or is_super_owner((select auth.uid()))
-  or exists (
-    select 1 from public.user_roles tenant_owner
-    where tenant_owner.user_id=(select auth.uid())
-      and tenant_owner.tenant_id=user_roles.tenant_id
-      and tenant_owner.role='owner' and tenant_owner.company_id is null
-  )
-  or (
-    company_id is not null
-    and exists (
-      select 1 from public.user_roles viewer
-      where viewer.user_id=(select auth.uid())
-        and viewer.tenant_id=user_roles.tenant_id
-        and viewer.company_id=user_roles.company_id
-    )
-    and exists (
-      select 1 from public.profiles target_profile
-      where target_profile.id=user_roles.user_id and target_profile.tenant_id=user_roles.tenant_id
-        and (target_profile.company_id is null or target_profile.company_id=user_roles.company_id)
-    )
-    and not exists (
-      select 1 from public.user_roles conflicting_role
-      where conflicting_role.user_id=user_roles.user_id
-        and conflicting_role.tenant_id=user_roles.tenant_id
-        and conflicting_role.id<>user_roles.id
-        and conflicting_role.company_id is not null
-        and conflicting_role.company_id<>user_roles.company_id
-    )
-    and (branch_id is null or private.can_access_branch((select auth.uid()),tenant_id,branch_id))
-  )
-  or (
-    company_id is null and branch_id is not null
-    and private.can_access_branch((select auth.uid()),tenant_id,branch_id)
-    and exists (
-      select 1 from public.profiles target_profile
-      where target_profile.id=user_roles.user_id and target_profile.tenant_id=user_roles.tenant_id
-        and (target_profile.company_id is null or target_profile.company_id=(
-          select b.company_id from public.branches b where b.id=user_roles.branch_id and b.tenant_id=user_roles.tenant_id
-        ))
-    )
+  private.can_view_user_role_row(
+    (select auth.uid()),tenant_id,user_id,company_id,branch_id
   )
 );
 
@@ -145,15 +256,8 @@ drop policy if exists company_scope_user_roles_insert on public.user_roles;
 create policy company_scope_user_roles_insert on public.user_roles
 as restrictive for insert to authenticated
 with check (
-  is_super_owner((select auth.uid()))
-  or (
-    role <> 'owner'
-    and exists (
-      select 1 from public.user_roles tenant_owner
-      where tenant_owner.user_id=(select auth.uid())
-        and tenant_owner.tenant_id=user_roles.tenant_id
-        and tenant_owner.role='owner' and tenant_owner.company_id is null
-    )
+  private.can_manage_user_role_row(
+    (select auth.uid()),tenant_id,user_id,company_id,branch_id,role
   )
   or (
     user_id=(select auth.uid()) and role='owner'
@@ -162,111 +266,19 @@ with check (
       where t.id=user_roles.tenant_id and t.owner_id=(select auth.uid())
     )
   )
-  or (
-    role <> 'owner'
-    and role <> 'manager'
-    and company_id is not null
-    and exists (
-      select 1 from public.user_roles company_owner
-      where company_owner.user_id=(select auth.uid())
-        and company_owner.tenant_id=user_roles.tenant_id
-        and company_owner.role='owner'
-        and company_owner.company_id=user_roles.company_id
-    )
-    and (branch_id is null or private.can_access_branch((select auth.uid()),tenant_id,branch_id))
-    and exists (
-      select 1 from public.profiles target_profile
-      where target_profile.id=user_roles.user_id and target_profile.tenant_id=user_roles.tenant_id
-        and (target_profile.company_id is null or target_profile.company_id=user_roles.company_id)
-    )
-    and not exists (
-      select 1 from public.user_roles conflicting_role
-      where conflicting_role.user_id=user_roles.user_id
-        and conflicting_role.tenant_id=user_roles.tenant_id
-        and conflicting_role.id<>user_roles.id
-        and conflicting_role.company_id is not null
-        and conflicting_role.company_id<>user_roles.company_id
-    )
-  )
 );
 
 drop policy if exists company_scope_user_roles_update on public.user_roles;
 create policy company_scope_user_roles_update on public.user_roles
 as restrictive for update to authenticated
 using (
-  is_super_owner((select auth.uid()))
-  or (
-    role <> 'owner'
-    and exists (
-      select 1 from public.user_roles tenant_owner
-      where tenant_owner.user_id=(select auth.uid())
-        and tenant_owner.tenant_id=user_roles.tenant_id
-        and tenant_owner.role='owner' and tenant_owner.company_id is null
-    )
-  )
-  or (
-    role <> 'owner'
-    and role <> 'manager'
-    and company_id is not null
-    and exists (
-      select 1 from public.user_roles company_owner
-      where company_owner.user_id=(select auth.uid())
-        and company_owner.tenant_id=user_roles.tenant_id
-        and company_owner.role='owner'
-        and company_owner.company_id=user_roles.company_id
-    )
-    and (branch_id is null or private.can_access_branch((select auth.uid()),tenant_id,branch_id))
-    and exists (
-      select 1 from public.profiles target_profile
-      where target_profile.id=user_roles.user_id and target_profile.tenant_id=user_roles.tenant_id
-        and (target_profile.company_id is null or target_profile.company_id=user_roles.company_id)
-    )
-    and not exists (
-      select 1 from public.user_roles conflicting_role
-      where conflicting_role.user_id=user_roles.user_id
-        and conflicting_role.tenant_id=user_roles.tenant_id
-        and conflicting_role.id<>user_roles.id
-        and conflicting_role.company_id is not null
-        and conflicting_role.company_id<>user_roles.company_id
-    )
+  private.can_manage_user_role_row(
+    (select auth.uid()),tenant_id,user_id,company_id,branch_id,role
   )
 )
 with check (
-  is_super_owner((select auth.uid()))
-  or (
-    role <> 'owner'
-    and exists (
-      select 1 from public.user_roles tenant_owner
-      where tenant_owner.user_id=(select auth.uid())
-        and tenant_owner.tenant_id=user_roles.tenant_id
-        and tenant_owner.role='owner' and tenant_owner.company_id is null
-    )
-  )
-  or (
-    role <> 'owner'
-    and role <> 'manager'
-    and company_id is not null
-    and exists (
-      select 1 from public.user_roles company_owner
-      where company_owner.user_id=(select auth.uid())
-        and company_owner.tenant_id=user_roles.tenant_id
-        and company_owner.role='owner'
-        and company_owner.company_id=user_roles.company_id
-    )
-    and (branch_id is null or private.can_access_branch((select auth.uid()),tenant_id,branch_id))
-    and exists (
-      select 1 from public.profiles target_profile
-      where target_profile.id=user_roles.user_id and target_profile.tenant_id=user_roles.tenant_id
-        and (target_profile.company_id is null or target_profile.company_id=user_roles.company_id)
-    )
-    and not exists (
-      select 1 from public.user_roles conflicting_role
-      where conflicting_role.user_id=user_roles.user_id
-        and conflicting_role.tenant_id=user_roles.tenant_id
-        and conflicting_role.id<>user_roles.id
-        and conflicting_role.company_id is not null
-        and conflicting_role.company_id<>user_roles.company_id
-    )
+  private.can_manage_user_role_row(
+    (select auth.uid()),tenant_id,user_id,company_id,branch_id,role
   )
 );
 
@@ -274,41 +286,8 @@ drop policy if exists company_scope_user_roles_delete on public.user_roles;
 create policy company_scope_user_roles_delete on public.user_roles
 as restrictive for delete to authenticated
 using (
-  is_super_owner((select auth.uid()))
-  or (
-    role <> 'owner'
-    and exists (
-      select 1 from public.user_roles tenant_owner
-      where tenant_owner.user_id=(select auth.uid())
-        and tenant_owner.tenant_id=user_roles.tenant_id
-        and tenant_owner.role='owner' and tenant_owner.company_id is null
-    )
-  )
-  or (
-    role <> 'owner'
-    and role <> 'manager'
-    and company_id is not null
-    and exists (
-      select 1 from public.user_roles company_owner
-      where company_owner.user_id=(select auth.uid())
-        and company_owner.tenant_id=user_roles.tenant_id
-        and company_owner.role='owner'
-        and company_owner.company_id=user_roles.company_id
-    )
-    and (branch_id is null or private.can_access_branch((select auth.uid()),tenant_id,branch_id))
-    and exists (
-      select 1 from public.profiles target_profile
-      where target_profile.id=user_roles.user_id and target_profile.tenant_id=user_roles.tenant_id
-        and (target_profile.company_id is null or target_profile.company_id=user_roles.company_id)
-    )
-    and not exists (
-      select 1 from public.user_roles conflicting_role
-      where conflicting_role.user_id=user_roles.user_id
-        and conflicting_role.tenant_id=user_roles.tenant_id
-        and conflicting_role.id<>user_roles.id
-        and conflicting_role.company_id is not null
-        and conflicting_role.company_id<>user_roles.company_id
-    )
+  private.can_manage_user_role_row(
+    (select auth.uid()),tenant_id,user_id,company_id,branch_id,role
   )
 );
 
@@ -319,12 +298,7 @@ create policy company_scope_custom_roles_insert on public.custom_roles
 as restrictive for insert to authenticated
 with check (
   is_super_owner((select auth.uid()))
-  or exists (
-    select 1 from public.user_roles tenant_owner
-    where tenant_owner.user_id=(select auth.uid())
-      and tenant_owner.tenant_id=custom_roles.tenant_id
-      and tenant_owner.role='owner' and tenant_owner.company_id is null
-  )
+  or private.is_tenant_owner_user((select auth.uid()),tenant_id)
 );
 
 drop policy if exists company_scope_custom_roles_update on public.custom_roles;
@@ -332,21 +306,11 @@ create policy company_scope_custom_roles_update on public.custom_roles
 as restrictive for update to authenticated
 using (
   is_super_owner((select auth.uid()))
-  or exists (
-    select 1 from public.user_roles tenant_owner
-    where tenant_owner.user_id=(select auth.uid())
-      and tenant_owner.tenant_id=custom_roles.tenant_id
-      and tenant_owner.role='owner' and tenant_owner.company_id is null
-  )
+  or private.is_tenant_owner_user((select auth.uid()),tenant_id)
 )
 with check (
   is_super_owner((select auth.uid()))
-  or exists (
-    select 1 from public.user_roles tenant_owner
-    where tenant_owner.user_id=(select auth.uid())
-      and tenant_owner.tenant_id=custom_roles.tenant_id
-      and tenant_owner.role='owner' and tenant_owner.company_id is null
-  )
+  or private.is_tenant_owner_user((select auth.uid()),tenant_id)
 );
 
 drop policy if exists company_scope_custom_roles_delete on public.custom_roles;
@@ -354,12 +318,7 @@ create policy company_scope_custom_roles_delete on public.custom_roles
 as restrictive for delete to authenticated
 using (
   is_super_owner((select auth.uid()))
-  or exists (
-    select 1 from public.user_roles tenant_owner
-    where tenant_owner.user_id=(select auth.uid())
-      and tenant_owner.tenant_id=custom_roles.tenant_id
-      and tenant_owner.role='owner' and tenant_owner.company_id is null
-  )
+  or private.is_tenant_owner_user((select auth.uid()),tenant_id)
 );
 
 -- The permissive UPO policies still require the relevant role/permission and hiring
