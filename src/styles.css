@@ -177,3 +177,76 @@
     font-feature-settings: "tnum";
   }
 }
+
+
+/* Subtle, consistent interaction motion; respect users who reduce animation. */
+@media (prefers-reduced-motion: no-preference) {
+  a,
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea,
+  [data-slot="card"] {
+    transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+    transition-duration: 160ms;
+    transition-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+
+  button:not(:disabled):active,
+  [role="button"]:not([aria-disabled="true"]):active {
+    transform: translateY(1px) scale(0.99);
+  }
+
+  [data-slot="card"]:hover {
+    border-color: color-mix(in oklch, var(--color-primary) 22%, var(--color-border));
+  }
+}
+
+:where(a, button, input, select, textarea, [role="button"]):focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+
+/* Keep action toasts centered at the top, clear of the RTL sidebar trigger. */
+[data-sonner-toaster][data-x-position="center"] {
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%) !important;
+  width: min( calc(100vw - 2rem), 28rem ) !important;
+}
+[data-sonner-toaster][data-y-position="top"] {
+  top: max(1rem, env(safe-area-inset-top)) !important;
+}
+[data-sonner-toaster][data-x-position="center"] [data-sonner-toast] {
+  width: 100%;
+  text-align: center;
+}
+
+
+/* User-selected workspace background remains behind readable cards and controls. */
+.workspace-surface {
+  background-color: var(--color-background);
+  background-image:
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--color-background) 88%, transparent),
+      color-mix(in srgb, var(--color-background) 94%, transparent)
+    ),
+    var(--workspace-background-image, none);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}

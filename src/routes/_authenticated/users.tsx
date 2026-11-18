@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
@@ -88,15 +88,27 @@ type Row = {
   avatar_url: string | null;
   is_active: boolean;
   last_login_at: string | null;
+  custom_role_id: string | null;
+  custom_role_name: string | null;
 };
 
 function UsersPage() {
-  const { tenantId, isAdmin, userId } = useActiveTenant();
+  const { tenantId, isAdmin, userId, role, isSuperOwner } = useActiveTenant();
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [pwdUser, setPwdUser] = useState<Row | null>(null);
   const [roleUser, setRoleUser] = useState<Row | null>(null);
   const [transferUser, setTransferUser] = useState<Row | null>(null);
+
+  const { data: customRoles } = useQuery({
+    queryKey: ["custom-roles", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("custom_roles").select("id, name").eq("tenant_id", tenantId!).order("name");
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!tenantId && (role === "owner" || isSuperOwner),
+  });
 
   const { data: branches } = useQuery({
     queryKey: ["branches-lite", tenantId],
@@ -116,7 +128,7 @@ function UsersPage() {
     queryFn: async (): Promise<Row[]> => {
       const { data: roles, error } = await supabase
         .from("user_roles")
-        .select("id, user_id, role, branch_id")
+         .select("id, user_id, role, branch_id, custom_role_id")
         .eq("tenant_id", tenantId!);
       if (error) throw error;
       const ids = Array.from(new Set((roles ?? []).map((r) => r.user_id)));
@@ -125,6 +137,12 @@ function UsersPage() {
         .from("profiles")
         .select("id, full_name, username, phone, avatar_url, is_active, last_login_at")
         .in("id", ids);
+      const customIds = Array.from(new Set((roles ?? []).map((r) => r.custom_role_id).filter(Boolean))) as string[];
+      const { data: customRows, error: customError } = customIds.length
+        ? await supabase.from("custom_roles").select("id, name").eq("tenant_id", tenantId!).in("id", customIds)
+        : { data: [], error: null };
+      if (customError) throw customError;
+      const customMap = new Map((customRows ?? []).map((r) => [r.id, r.name]));
       const map = new Map((profiles ?? []).map((p) => [p.id, p]));
       return (roles ?? []).map((r) => {
         const p = map.get(r.user_id);
@@ -133,6 +151,8 @@ function UsersPage() {
           user_id: r.user_id,
           role: r.role,
           branch_id: r.branch_id,
+          custom_role_id: r.custom_role_id,
+          custom_role_name: r.custom_role_id ? customMap.get(r.custom_role_id) ?? "دور مخصص" : null,
           full_name: p?.full_name ?? null,
           username: p?.username ?? null,
           phone: p?.phone ?? null,
@@ -263,7 +283,7 @@ function UsersPage() {
                       <span
                         className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${roleColors[r.role] ?? "bg-muted"}`}
                       >
-                        {ROLES.find((x) => x.value === r.role)?.label ?? r.role}
+                        {r.custom_role_name ?? ROLES.find((x) => x.value === r.role)?.label ?? r.role}
                       </span>
                       <span className="rounded-full bg-muted px-2 py-0.5 text-[10px]">
                         {branchName(r.branch_id)}
@@ -292,6 +312,7 @@ function UsersPage() {
         onOpenChange={setCreateOpen}
         tenantId={tenantId}
         branches={branches ?? []}
+        customRoles={customRoles ?? []}
       />
       <PasswordDialog user={pwdUser} onClose={() => setPwdUser(null)} tenantId={tenantId} />
       <RoleDialog
@@ -299,6 +320,7 @@ function UsersPage() {
         onClose={() => setRoleUser(null)}
         tenantId={tenantId}
         branches={branches ?? []}
+        customRoles={customRoles ?? []}
       />
       <TransferDialog
         user={transferUser}
@@ -327,11 +349,13 @@ function CreateUserDialog({
   onOpenChange,
   tenantId,
   branches,
+  customRoles,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   tenantId: string | null;
   branches: Array<{ id: string; name: string }>;
+  customRoles: Array<{ id: string; name: string }>;
 }) {
   const qc = useQueryClient();
   const createFn = useServerFn(createUser);
@@ -342,6 +366,7 @@ function CreateUserDialog({
     username: "",
     phone: "",
     role: "cashier" as (typeof ROLES)[number]["value"],
+    custom_role_id: "",
     branch_id: "none",
   });
 
@@ -357,6 +382,7 @@ function CreateUserDialog({
           username: form.username.trim() || null,
           phone: form.phone.trim() || null,
           role: form.role,
+          custom_role_id: form.custom_role_id || null,
           branch_id: form.branch_id === "none" ? null : form.branch_id,
         },
       });
@@ -372,6 +398,7 @@ function CreateUserDialog({
         username: "",
         phone: "",
         role: "cashier",
+        custom_role_id: "",
         branch_id: "none",
       });
     },
@@ -412,12 +439,13 @@ function CreateUserDialog({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>الدور</Label>
-              <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v as any })}>
+              <Select value={form.custom_role_id ? `custom:${form.custom_role_id}` : form.role} onValueChange={(v) => v.startsWith("custom:") ? setForm({ ...form, role: "waiter", custom_role_id: v.slice(7) }) : setForm({ ...form, role: v as any, custom_role_id: "" })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {ROLES.map((r) => (
-                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                  ))}
+                  <SelectItem value="__builtin_header" disabled>الأدوار الأساسية</SelectItem>
+                  {ROLES.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                  {customRoles.length > 0 && <SelectItem value="__custom_header" disabled>الأدوار المخصصة</SelectItem>}
+                  {customRoles.map((r) => <SelectItem key={r.id} value={`custom:${r.id}`}>مخصص: {r.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -500,15 +528,24 @@ function RoleDialog({
   onClose,
   tenantId,
   branches,
+  customRoles,
 }: {
   user: Row | null;
   onClose: () => void;
   tenantId: string | null;
   branches: Array<{ id: string; name: string }>;
+  customRoles: Array<{ id: string; name: string }>;
 }) {
   const qc = useQueryClient();
   const [role, setRole] = useState<string>("cashier");
+  const [customRoleId, setCustomRoleId] = useState<string>("");
   const [branchId, setBranchId] = useState<string>("none");
+  useEffect(() => {
+    if (!user) return;
+    setRole(user.role);
+    setCustomRoleId(user.custom_role_id ?? "");
+    setBranchId(user.branch_id ?? "none");
+  }, [user]);
   const changeFn = useServerFn(changeUserRole);
   const mut = useMutation({
     mutationFn: async () => {
@@ -518,6 +555,7 @@ function RoleDialog({
           user_id: user.user_id,
           tenant_id: tenantId,
           role: role as any,
+          custom_role_id: customRoleId || null,
           branch_id: branchId === "none" ? null : branchId,
         },
       });
@@ -536,6 +574,7 @@ function RoleDialog({
         if (!o) onClose();
         else if (user) {
           setRole(user.role);
+          setCustomRoleId(user.custom_role_id ?? "");
           setBranchId(user.branch_id ?? "none");
         }
       }}
@@ -547,12 +586,11 @@ function RoleDialog({
         <div className="grid gap-3">
           <div>
             <Label>الدور</Label>
-            <Select value={role} onValueChange={setRole}>
+            <Select value={customRoleId ? `custom:${customRoleId}` : role} onValueChange={(v) => v.startsWith("custom:") ? (setRole("waiter"), setCustomRoleId(v.slice(7))) : (setRole(v), setCustomRoleId(""))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {ROLES.map((r) => (
-                  <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                ))}
+                {ROLES.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                {customRoles.map((r) => <SelectItem key={r.id} value={`custom:${r.id}`}>مخصص: {r.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

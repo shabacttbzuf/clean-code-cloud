@@ -239,18 +239,25 @@ function ProductDialog({
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/avif"];
+    if (!allowed.includes(file.type)) {
+      toast.error("صيغة الصورة غير مدعومة. استخدم JPG أو PNG أو WEBP أو AVIF");
+      e.target.value = "";
+      return;
+    }
     if (file.size > 5 * 1024 * 1024) {
       toast.error("الحجم الأقصى 5MB");
+      e.target.value = "";
       return;
     }
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop() ?? "jpg";
+      const ext = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif" } as Record<string, string>)[file.type];
       const path = `${tenantId}/products/${crypto.randomUUID()}.${ext}`;
-      const { error } = await supabase.storage.from("restaurant-assets").upload(path, file, { upsert: true });
+      const { error } = await supabase.storage.from("restaurant-assets").upload(path, file, { upsert: false, contentType: file.type, cacheControl: "31536000" });
       if (error) throw error;
-      const { data } = await supabase.storage.from("restaurant-assets").createSignedUrl(path, 60 * 60 * 24 * 365);
-      if (data?.signedUrl) setImageUrl(data.signedUrl);
+      const { data } = supabase.storage.from("restaurant-assets").getPublicUrl(path);
+      setImageUrl(data.publicUrl);
       toast.success("تم رفع الصورة");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "فشل الرفع");

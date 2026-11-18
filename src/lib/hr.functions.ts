@@ -2,19 +2,14 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-async function assertHRAccess(supabase: any, userId: string, tenantId: string) {
-  const { data: isSO } = await supabase.rpc("is_super_owner", { _user_id: userId });
-  if (isSO) return;
-  const { data, error } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("tenant_id", tenantId);
+async function assertPermission(supabase: any, userId: string, tenantId: string, permissionKey: string) {
+  const { data, error } = await supabase.rpc("has_permission", {
+    _user_id: userId,
+    _tenant_id: tenantId,
+    _permission_key: permissionKey,
+  });
   if (error) throw new Error(error.message);
-  const roles = (data ?? []).map((r: any) => r.role);
-  if (!roles.some((r: string) => ["owner", "manager"].includes(r))) {
-    throw new Error("غير مصرح");
-  }
+  if (data !== true) throw new Error(`غير مصرح: الصلاحية المطلوبة ${permissionKey}.`);
 }
 
 /** Compute + create a payroll run for a given month/year (+optional branch). */
@@ -31,8 +26,9 @@ export const runMonthlyPayroll = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertHRAccess(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "payroll.run");
     const supabase = context.supabase;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     // Reject if a run already exists
     let existQ = supabase
@@ -159,18 +155,18 @@ export const runMonthlyPayroll = createServerFn({ method: "POST" })
       const bIds = (bList ?? []).map((x: any) => x.id);
       const dIds = (dList ?? []).map((x: any) => x.id);
       if (bIds.length) {
-        const { error } = await supabase.from("bonuses").update({ payroll_item_id: item.id }).in("id", bIds);
+        const { error } = await supabaseAdmin.from("bonuses").update({ payroll_item_id: item.id }).in("id", bIds);
         if (error) throw new Error(error.message);
       }
       if (dIds.length) {
-        const { error } = await supabase.from("deductions").update({ payroll_item_id: item.id }).in("id", dIds);
+        const { error } = await supabaseAdmin.from("deductions").update({ payroll_item_id: item.id }).in("id", dIds);
         if (error) throw new Error(error.message);
       }
 
       totalGross += gross; totalNet += net; totalBonuses += bonusesTotal; totalDeductions += deductionsTotal;
     }
 
-    const { error: totalsError } = await supabase.from("payroll_runs").update({
+    const { error: totalsError } = await supabaseAdmin.from("payroll_runs").update({
       total_gross: totalGross, total_net: totalNet,
       total_bonuses: totalBonuses, total_deductions: totalDeductions,
     }).eq("id", run.id).eq("tenant_id", data.tenant_id);
@@ -180,7 +176,7 @@ export const runMonthlyPayroll = createServerFn({ method: "POST" })
     } catch (error) {
       // Remove the draft and its items if any calculation or write fails.
       // FK cleanup detaches bonus/deduction references so they remain reusable.
-      const { error: cleanupError } = await supabase
+      const { error: cleanupError } = await supabaseAdmin
         .from("payroll_runs")
         .delete()
         .eq("id", run.id)
@@ -198,7 +194,7 @@ export const approvePayroll = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: z.string().uuid(), tenant_id: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertHRAccess(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "payroll.approve");
     const { data: updated, error } = await context.supabase
       .from("payroll_runs")
       .update({
@@ -220,7 +216,7 @@ export const markPayrollPaid = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: z.string().uuid(), tenant_id: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertHRAccess(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "payroll.approve");
     const { data: updated, error } = await context.supabase
       .from("payroll_runs")
       .update({ status: "paid", paid_at: new Date().toISOString() })
@@ -249,7 +245,7 @@ export const rejectPayroll = createServerFn({ method: "POST" })
     }).parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertHRAccess(context.supabase, context.userId, data.tenant_id);
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "payroll.approve");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin.rpc("reject_payroll_run", {
       _run_id: data.id,

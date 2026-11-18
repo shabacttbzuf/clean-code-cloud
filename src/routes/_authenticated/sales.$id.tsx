@@ -35,7 +35,7 @@ type Refund = {
 };
 
 const methodLabels: Record<string, string> = {
-  cash: "نقدي", card: "بطاقة", transfer: "تحويل", mixed: "مختلط",
+  cash: "نقدي", card: "بطاقة", transfer: "محفظة / تحويل", mixed: "دفع جزئي", credit: "آجل",
 };
 
 function SaleDetailPage() {

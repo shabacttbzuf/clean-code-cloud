@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Loader2, Plus, Trash2, ShieldAlert, Copy } from "lucide-react";
 import { toast } from "sonner";
+import { useSuperOwner } from "@/hooks/use-super-owner";
 
 export const Route = createFileRoute("/_authenticated/roles")({ component: RolesPage });
 
@@ -23,6 +24,7 @@ const BUILTIN = ["owner", "manager", "accountant", "cashier", "warehouse", "wait
 
 function RolesPage() {
   const { tenantId, role, loading } = useActiveTenant();
+  const { isSuperOwner } = useSuperOwner();
   const qc = useQueryClient();
   const createFn = useServerFn(createCustomRole);
   const delFn = useServerFn(deleteCustomRole);
@@ -30,7 +32,8 @@ function RolesPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", copy_from_builtin: "" as string, copy_from_custom: "" });
   const [selected, setSelected] = useState<string | null>(null);
-  const canAccess = role === "owner";
+  const canAccess = role === "owner" || role === "manager" || isSuperOwner;
+  const canManage = role === "owner" || isSuperOwner;
 
   const customRolesQ = useQuery({
     queryKey: ["custom-roles", tenantId],
@@ -131,9 +134,11 @@ function RolesPage() {
         title="إدارة الأدوار"
         subtitle="أدوار مبنية مسبقًا + أدوار مخصصة غير محدودة. يمكنك نسخ الصلاحيات من دور آخر."
         action={
-          <Button onClick={() => setOpen(true)}>
-            <Plus className="ml-2 h-4 w-4" /> دور مخصص جديد
-          </Button>
+          canManage ? (
+            <Button onClick={() => setOpen(true)}>
+              <Plus className="ml-2 h-4 w-4" /> دور مخصص جديد
+            </Button>
+          ) : undefined
         }
       />
 
@@ -170,16 +175,18 @@ function RolesPage() {
                         </div>
                       )}
                     </div>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (confirm("حذف الدور؟")) del.mutate(r.id);
-                      }}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
+                    {canManage && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm("حذف الدور؟")) del.mutate(r.id);
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    )}
                   </div>
                 ))}
                 {(customRolesQ.data ?? []).length === 0 && (
@@ -194,7 +201,7 @@ function RolesPage() {
           <CardContent className="p-4">
             {!selected ? (
               <div className="grid h-40 place-items-center text-sm text-muted-foreground">
-                اختر دورًا مخصصًا لتعديل صلاحياته.
+                {canManage ? "اختر دورًا مخصصًا لتعديل صلاحياته." : "اختر دورًا مخصصًا لمراجعة صلاحياته."}
               </div>
             ) : permsQ.isLoading || rolePermsQ.isLoading ? (
               <Loader2 className="mx-auto my-8 h-5 w-5 animate-spin" />
@@ -214,7 +221,7 @@ function RolesPage() {
                             </div>
                             <Checkbox
                               checked={on}
-                              disabled={togglePerm.isPending}
+                              disabled={!canManage || togglePerm.isPending}
                               onCheckedChange={(v) => togglePerm.mutate({ key: p.key, granted: !!v })}
                             />
                           </label>
@@ -229,7 +236,7 @@ function RolesPage() {
         </Card>
       </div>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      {canManage && <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>دور مخصص جديد</DialogTitle>
@@ -267,7 +274,7 @@ function RolesPage() {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog>}
     </div>
   );
 }

@@ -93,6 +93,38 @@ const SidebarProvider = React.forwardRef<
       return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open);
     }, [isMobile, setOpen, setOpenMobile]);
 
+    // Edge-swipe navigation for RTL mobile layouts: swipe left from the right edge to open,
+    // then swipe right from inside the drawer to close it.
+    React.useEffect(() => {
+      if (!isMobile) return;
+      let startX = 0;
+      let startY = 0;
+      let tracking = false;
+      const onTouchStart = (event: TouchEvent) => {
+        if (event.touches.length !== 1) return;
+        startX = event.touches[0].clientX;
+        startY = event.touches[0].clientY;
+        const inRightEdge = startX >= window.innerWidth - 28;
+        const inOpenDrawer = openMobile && startX >= window.innerWidth - 320;
+        tracking = inRightEdge || inOpenDrawer;
+      };
+      const onTouchEnd = (event: TouchEvent) => {
+        if (!tracking || event.changedTouches.length !== 1) return;
+        tracking = false;
+        const deltaX = event.changedTouches[0].clientX - startX;
+        const deltaY = event.changedTouches[0].clientY - startY;
+        if (Math.abs(deltaY) > Math.abs(deltaX) * 0.8) return;
+        if (!openMobile && startX >= window.innerWidth - 28 && deltaX < -60) setOpenMobile(true);
+        if (openMobile && deltaX > 70) setOpenMobile(false);
+      };
+      window.addEventListener("touchstart", onTouchStart, { passive: true });
+      window.addEventListener("touchend", onTouchEnd, { passive: true });
+      return () => {
+        window.removeEventListener("touchstart", onTouchStart);
+        window.removeEventListener("touchend", onTouchEnd);
+      };
+    }, [isMobile, openMobile, setOpenMobile]);
+
     // Adds a keyboard shortcut to toggle the sidebar.
     React.useEffect(() => {
       const handleKeyDown = (event: KeyboardEvent) => {

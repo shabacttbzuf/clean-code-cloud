@@ -63,14 +63,20 @@ test("role changes use the atomic database function", () => {
   assert.match(userAdminSource, /transfer_user_role_branch/);
 });
 
-test("first super-owner bootstrap requires an explicit deployment allowlist", () => {
+test("first super-owner bootstrap validates the caller in the protected Edge Function", () => {
   const source = readFileSync(
     new URL("../src/lib/super-owner.functions.ts", import.meta.url),
     "utf8",
   );
-  assert.match(source, /INITIAL_SUPER_OWNER_USER_ID/);
-  assert.match(source, /bootstrap_first_super_owner/);
-  assert.match(source, /initialOwnerId !== context\.userId/);
+  const edgeFunction = readFileSync(
+    new URL("../supabase/functions/bootstrap-first-super-owner/index.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /bootstrap-first-super-owner/);
+  assert.match(edgeFunction, /ALLOWED_INITIAL_OWNER_ID/);
+  assert.match(edgeFunction, /auth\.getUser\(token\)/);
+  assert.match(edgeFunction, /userData\.user\.id !== ALLOWED_INITIAL_OWNER_ID/);
+  assert.match(edgeFunction, /admin\.rpc\("bootstrap_first_super_owner"/);
 });
 
 const roleMigration = readFileSync(
@@ -236,8 +242,10 @@ test("new SQL functions use valid paired dollar-quote delimiters", () => {
     .filter((name) => name.startsWith("20261111") && name.endsWith(".sql"));
   for (const name of migrationNames) {
     const sql = readFileSync(new URL("../supabase/migrations/" + name, import.meta.url), "utf8");
-    assert.doesNotMatch(sql, /AS \$(?!\$)/, name);
-    assert.equal((sql.match(/\$\$/g) ?? []).length % 2, 0, name);
+    const delimiters = [...sql.matchAll(/\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$/g)].map((match) => match[0]);
+    for (const delimiter of new Set(delimiters)) {
+      assert.equal(delimiters.filter((value) => value === delimiter).length % 2, 0, `${name}: ${delimiter}`);
+    }
   }
 });
 
@@ -635,4 +643,70 @@ test("complete database snapshot includes active branch migration once", () => {
     "utf8",
   );
   assert.equal(snapshot.split("SOURCE MIGRATION: 20261111000033_require_active_branch_for_sales_and_sessions.sql").length - 1, 1);
+});
+
+const posSource = readFileSync(
+  new URL("../src/routes/_authenticated/pos.tsx", import.meta.url),
+  "utf8",
+);
+const cashSessionsSource = readFileSync(
+  new URL("../src/routes/_authenticated/cash-sessions.tsx", import.meta.url),
+  "utf8",
+);
+const inventoryPageSource = readFileSync(
+  new URL("../src/routes/_authenticated/inventory.index.tsx", import.meta.url),
+  "utf8",
+);
+const invoicePrintSource = readFileSync(
+  new URL("../src/lib/invoice-pdf.ts", import.meta.url),
+  "utf8",
+);
+
+
+test("POS requires an editable invoice review before atomic checkout", () => {
+  assert.match(posSource, /const beginCheckout = \(method: PaymentUI\)/);
+  assert.match(posSource, /مراجعة الفاتورة قبل الإصدار/);
+  assert.match(posSource, /checkoutMut\.mutate\(reviewMethod\)/);
+  assert.doesNotMatch(posSource, /checkoutMut\.mutate\("(cash|card|wallet)"\)/);
+  assert.match(posSource, /aria-label="حذف الصنف"/);
+});
+
+test("cash session preview matches the database cash-payment and refund calculation", () => {
+  assert.match(cashSessionsSource, /\.from\("payments"\)/);
+  assert.match(cashSessionsSource, /\.eq\("method", "cash"\)/);
+  assert.match(cashSessionsSource, /\.from\("sale_refunds"\)/);
+  assert.match(cashSessionsSource, /\.eq\("refund_method", "cash"\)/);
+  assert.match(cashSessionsSource, /opening_balance\) \+ salesCash - cashRefunds/);
+});
+test("POS catalog displays images and blocks products without branch stock", () => {
+  assert.match(posSource, /pos-inventory/);
+  assert.match(posSource, /refetchInterval: 30_000/);
+  assert.match(posSource, /product\.image_url/);
+  assert.match(posSource, /stockUnavailable/);
+  assert.match(posSource, /لا يوجد رصيد مخزون مسجل/);
+  assert.match(posSource, /سجّل الكميات الافتتاحية من شاشة المخزون/);
+});
+const inventoryGuardMigration = readFileSync(
+  new URL("../supabase/migrations/20261111030810_prevent_negative_inventory_bootstrap.sql", import.meta.url),
+  "utf8",
+);
+
+test("database rejects negative stock when a product has no inventory row", () => {
+  assert.match(inventoryGuardMigration, /inventory_quantity_nonnegative/);
+  assert.match(inventoryGuardMigration, /NOT VALID/);
+  assert.match(inventoryGuardMigration, /IF _delta < 0/);
+  assert.match(inventoryGuardMigration, /IF NOT FOUND OR v_current_quantity \+ _delta < 0/);
+});
+test("inventory page exposes negative and missing stock instead of hiding it", () => {
+  assert.match(inventoryPageSource, /has_inventory_record/);
+  assert.match(inventoryPageSource, /r\.quantity < 0/);
+  assert.match(inventoryPageSource, /رصيد سالب/);
+  assert.match(inventoryPageSource, /غير مسجل/);
+});
+
+test("POS receipt printing uses the user gesture and includes cashier identity", () => {
+  assert.match(posSource, /printWindowRef\.current = window\.open/);
+  assert.match(posSource, /cashier_name: cashierProfile\.data/);
+  assert.match(invoicePrintSource, /targetWindow === undefined/);
+  assert.match(invoicePrintSource, /if \(!w \|\| w\.closed\) return false/);
 });

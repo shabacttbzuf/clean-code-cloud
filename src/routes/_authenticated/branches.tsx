@@ -24,6 +24,7 @@ export const Route = createFileRoute("/_authenticated/branches")({
 type Branch = {
   id: string;
   tenant_id: string;
+  company_id: string | null;
   name: string;
   address: string | null;
   phone: string | null;
@@ -41,6 +42,7 @@ type ProfileLite = { id: string; full_name: string | null };
 
 const schema = z.object({
   name: z.string().trim().min(2, "الاسم قصير").max(100),
+  company_id: z.string().uuid("اختر الشركة التابعة للفرع"),
   address: z.string().trim().max(255).optional().or(z.literal("")),
   phone: z.string().trim().max(20).optional().or(z.literal("")),
   tax_number: z.string().trim().max(50).optional().or(z.literal("")),
@@ -54,7 +56,8 @@ const schema = z.object({
 });
 
 function BranchesPage() {
-  const { tenantId, isAdmin } = useActiveTenant();
+  const { tenantId, isAdmin, isSuperOwner, membership } = useActiveTenant();
+  const canManageBranches = isAdmin || isSuperOwner;
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Branch | null>(null);
@@ -73,6 +76,17 @@ function BranchesPage() {
     enabled: !!tenantId,
   });
 
+  const companies = useQuery({
+    queryKey: ["branch-companies", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("companies").select("id, name").eq("tenant_id", tenantId!).eq("is_active", true).order("name");
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!tenantId && canManageBranches,
+  });
+  const availableCompanies = (companies.data ?? []).filter((c) => isSuperOwner || !membership?.company_id || c.id === membership.company_id);
+
   const managers = useQuery({
     queryKey: ["tenant-profiles", tenantId],
     queryFn: async (): Promise<ProfileLite[]> => {
@@ -83,7 +97,7 @@ function BranchesPage() {
       if (error) throw error;
       return (data ?? []) as ProfileLite[];
     },
-    enabled: !!tenantId && isAdmin,
+    enabled: !!tenantId && canManageBranches,
   });
   const managerMap = new Map((managers.data ?? []).map((p) => [p.id, p.full_name ?? "—"]));
 
@@ -137,7 +151,7 @@ function BranchesPage() {
         title="الفروع"
         subtitle="أدر فروع مطعمك — كل فرع لديه إعدادات وعملة ورقم ضريبي مستقلين."
         action={
-          isAdmin && (
+          canManageBranches && (
             <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditing(null); }}>
               <DialogTrigger asChild>
                 <Button><Plus className="ml-2 h-4 w-4" />إضافة فرع</Button>
@@ -146,6 +160,8 @@ function BranchesPage() {
                 initial={editing}
                 tenantId={tenantId!}
                 managers={managers.data ?? []}
+                companies={availableCompanies}
+                defaultCompanyId={membership?.company_id ?? availableCompanies[0]?.id ?? ""}
                 onSubmit={(v) => upsert.mutate(v)}
                 pending={upsert.isPending}
               />
@@ -157,7 +173,7 @@ function BranchesPage() {
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
       ) : !branches || branches.length === 0 ? (
-        <EmptyState onAdd={isAdmin ? () => setOpen(true) : undefined} />
+        <EmptyState onAdd={canManageBranches ? () => setOpen(true) : undefined} />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {branches.map((b) => (
@@ -198,7 +214,7 @@ function BranchesPage() {
                     <div className="flex items-center gap-1"><UserIcon className="h-3 w-3" />{managerMap.get(b.manager_id) ?? "—"}</div>
                   )}
                 </div>
-                {isAdmin && (
+                {canManageBranches && (
                   <div className="mt-4 flex gap-2 border-t pt-3">
                     <Button
                       size="sm"
@@ -245,16 +261,21 @@ function BranchDialog({
   initial,
   tenantId,
   managers,
+  companies,
+  defaultCompanyId,
   onSubmit,
   pending,
 }: {
   initial: Branch | null;
   tenantId: string;
   managers: ProfileLite[];
+  companies: Array<{ id: string; name: string }>;
+  defaultCompanyId: string;
   onSubmit: (v: z.infer<typeof schema>) => void;
   pending: boolean;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
+  const [companyId, setCompanyId] = useState(initial?.company_id ?? defaultCompanyId);
   const [address, setAddress] = useState(initial?.address ?? "");
   const [phone, setPhone] = useState(initial?.phone ?? "");
   const [tax, setTax] = useState(initial?.tax_number ?? "");
@@ -277,6 +298,7 @@ function BranchDialog({
           try {
             const parsed = schema.parse({
               name,
+              company_id: companyId,
               address,
               phone,
               tax_number: tax,
@@ -296,6 +318,16 @@ function BranchDialog({
         className="space-y-4"
       >
         <ImageUploader tenantId={tenantId} folder="branches" value={imageUrl} onChange={setImageUrl} aspect="wide" />
+        <div className="space-y-2">
+          <Label>الشركة التابعة للفرع</Label>
+          <Select value={companyId} onValueChange={setCompanyId}>
+            <SelectTrigger><SelectValue placeholder="اختر الشركة" /></SelectTrigger>
+            <SelectContent>
+              {companies.map((company) => <SelectItem key={company.id} value={company.id}>{company.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {companies.length === 0 && <p className="text-xs text-destructive">لا توجد شركة نشطة متاحة. أنشئ شركة أولاً أو اربط حسابك بها.</p>}
+        </div>
         <div className="space-y-2">
           <Label htmlFor="b-name">اسم الفرع</Label>
           <Input id="b-name" value={name} onChange={(e) => setName(e.target.value)} required />
@@ -347,7 +379,7 @@ function BranchDialog({
           <Switch id="b-active" checked={active} onCheckedChange={setActive} />
         </div>
         <DialogFooter>
-          <Button type="submit" disabled={pending}>
+          <Button type="submit" disabled={pending || !companyId || companies.length === 0}>
             {pending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
             {initial ? "حفظ التعديلات" : "إضافة"}
           </Button>

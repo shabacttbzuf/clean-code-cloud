@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,16 +33,31 @@ export const Route = createFileRoute("/_authenticated/pos")({
   component: POSPage,
 });
 
+// POS must see the complete product and stock catalogue, even for large branches.
+async function fetchAllRows<T>(query: any): Promise<T[]> {
+  const pageSize = 500;
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await query.range(from, from + pageSize - 1);
+    if (error) throw error;
+    const page = (data ?? []) as T[];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+}
+
 type Product = {
   id: string;
   name: string;
   sale_price: number;
   category_id: string | null;
   is_active: boolean;
+  image_url: string | null;
 };
 type Category = { id: string; name: string };
 type Branch = { id: string; name: string; tax_number: string | null; address: string | null; phone: string | null };
 type Session = { id: string; branch_id: string; status: string };
+type CustomerOption = { id: string; name: string; phone: string | null; credit_limit: number };
 
 type CartItem = { product_id: string; name: string; unit_price: number; quantity: number };
 
@@ -55,39 +71,91 @@ const paymentToDb: Record<PaymentUI, "cash" | "card" | "transfer"> = {
 const DRAFTS_KEY = "pos-drafts-v1";
 type Draft = { id: string; cart: CartItem[]; discount: string; created_at: string };
 
-function loadDrafts(): Draft[] {
+function loadDrafts(storageKey: string): Draft[] {
   try {
-    return JSON.parse(localStorage.getItem(DRAFTS_KEY) || "[]") as Draft[];
+    const value: unknown = JSON.parse(localStorage.getItem(storageKey) || "[]");
+    if (!Array.isArray(value)) return [];
+    return value.filter((draft): draft is Draft => {
+      if (!draft || typeof draft !== "object") return false;
+      const candidate = draft as Partial<Draft>;
+      if (typeof candidate.id !== "string" || typeof candidate.discount !== "string" ||
+          typeof candidate.created_at !== "string" || !Number.isFinite(Date.parse(candidate.created_at)) ||
+          !Array.isArray(candidate.cart) || candidate.cart.length === 0) return false;
+      return candidate.cart.every((item) =>
+        !!item && typeof item.product_id === "string" && typeof item.name === "string" &&
+        Number.isFinite(item.unit_price) && item.unit_price >= 0 &&
+        Number.isInteger(item.quantity) && item.quantity > 0
+      );
+    }).slice(0, 100);
   } catch {
     return [];
   }
 }
-function saveDrafts(list: Draft[]) {
-  localStorage.setItem(DRAFTS_KEY, JSON.stringify(list));
+function saveDrafts(list: Draft[], storageKey: string) {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(list));
+  } catch {
+    // Draft persistence is best-effort when browser storage is unavailable.
+  }
 }
 
 function POSPage() {
-  const { tenantId, tenant, userId, membership, isAdmin } = useActiveTenant();
+  const { tenantId, tenant, userId, membership, isAdmin, isSuperOwner } = useActiveTenant();
   const qc = useQueryClient();
+
+  const cashierProfile = useQuery({
+    queryKey: ["pos-cashier-profile", userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("full_name, username")
+        .eq("id", userId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!userId,
+  });
 
   const [branchId, setBranchId] = useState<string | null>(membership?.branch_id ?? null);
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState<string>("all");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [discount, setDiscount] = useState("0");
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>("none");
+  const [paidAmount, setPaidAmount] = useState("");
   const [openSessionDialog, setOpenSessionDialog] = useState(false);
   const [openingBalance, setOpeningBalance] = useState("0");
-  const [drafts, setDrafts] = useState<Draft[]>(() => (typeof window !== "undefined" ? loadDrafts() : []));
+  // Keep paused invoices isolated per signed-in user, tenant, and branch on shared devices.
+  const draftsStorageKey = `${DRAFTS_KEY}:${tenantId ?? "none"}:${userId ?? "none"}:${branchId ?? "none"}`;
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [draftsOpen, setDraftsOpen] = useState(false);
+  useEffect(() => {
+    setDrafts(loadDrafts(draftsStorageKey));
+  }, [draftsStorageKey]);
   const [paperSize, setPaperSize] = useState<"58mm" | "80mm" | "A4">("80mm");
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewMethod, setReviewMethod] = useState<PaymentUI>("cash");
+  const printWindowRef = useRef<Window | null>(null);
+  const beginCheckout = (method: PaymentUI) => {
+    if (cart.length === 0) return toast.info("الفاتورة فارغة");
+    setReviewMethod(method);
+    setReviewOpen(true);
+  };
 
   const branches = useQuery({
     queryKey: ["branches-active", tenantId],
     queryFn: async (): Promise<Branch[]> => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("branches")
         .select("id, name, tax_number, address, phone")
         .eq("tenant_id", tenantId!)
         .eq("is_active", true);
+      // Branch-scoped staff must never see or select another branch in POS.
+      if (membership?.branch_id && !isAdmin && !isSuperOwner) {
+        query = query.eq("id", membership.branch_id);
+      }
+      const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as Branch[];
     },
@@ -105,6 +173,18 @@ function POSPage() {
     [branches.data, branchId],
   );
 
+  const customers = useQuery({
+    queryKey: ["pos-customers", tenantId],
+    queryFn: async (): Promise<CustomerOption[]> => {
+      const { data, error } = await (supabase.from("customers" as any) as any)
+        .select("id,name,phone,credit_limit").eq("tenant_id", tenantId!).eq("is_active", true).order("name");
+      if (error) throw error;
+      return (data ?? []) as CustomerOption[];
+    },
+    enabled: !!tenantId,
+    staleTime: 60_000,
+  });
+
   const categories = useQuery({
     queryKey: ["categories-min", tenantId],
     queryFn: async (): Promise<Category[]> => {
@@ -118,17 +198,59 @@ function POSPage() {
   const products = useQuery({
     queryKey: ["products-pos", tenantId],
     queryFn: async (): Promise<Product[]> => {
-      const { data, error } = await supabase
-        .from("products")
-        .select("id, name, sale_price, category_id, is_active")
-        .eq("tenant_id", tenantId!)
-        .eq("is_active", true)
-        .order("name");
-      if (error) throw error;
-      return (data ?? []) as Product[];
+      return fetchAllRows<Product>(
+        supabase.from("products")
+          .select("id, name, sale_price, category_id, is_active, image_url")
+          .eq("tenant_id", tenantId!)
+          .eq("is_active", true)
+          .order("name")
+          .order("id"),
+      );
     },
     enabled: !!tenantId,
   });
+
+  const posPromos = useQuery({
+    queryKey: ["pos-marketing-campaigns", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("marketing_campaigns")
+        .select("id,title,description,image_url,target_url,starts_at,ends_at")
+        .eq("tenant_id", tenantId!)
+        .eq("status", "active")
+        .eq("placement", "pos_promo")
+        .order("sort_order")
+        .limit(3);
+      if (error) throw error;
+      const now = Date.now();
+      return (data ?? []).filter((campaign) =>
+        (!campaign.starts_at || new Date(campaign.starts_at).getTime() <= now) &&
+        (!campaign.ends_at || new Date(campaign.ends_at).getTime() > now)
+      );
+    },
+    enabled: !!tenantId,
+    staleTime: 60_000,
+  });
+
+  const inventory = useQuery({
+    queryKey: ["pos-inventory", tenantId, branchId],
+    queryFn: async () => {
+      return fetchAllRows<{ product_id: string; quantity: number }>(
+        supabase.from("inventory")
+          .select("product_id, quantity")
+          .eq("tenant_id", tenantId!)
+          .eq("branch_id", branchId!)
+          .order("product_id"),
+      );
+    },
+    enabled: !!tenantId && !!branchId,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+  });
+
+  const stockByProduct = useMemo(
+    () => new Map((inventory.data ?? []).map((row) => [row.product_id, Number(row.quantity)])),
+    [inventory.data],
+  );
 
   const openSession = useQuery({
     queryKey: ["open-session", userId, branchId],
@@ -156,13 +278,35 @@ function POSPage() {
   }, [products.data, search, catFilter]);
 
   const addToCart = (p: Product) => {
+    if (inventory.isLoading || inventory.isError) {
+      toast.error("لا يمكن إضافة المنتج قبل التحقق من المخزون");
+      return;
+    }
+    const available = stockByProduct.get(p.id);
+    const current = cart.find((item) => item.product_id === p.id)?.quantity ?? 0;
+    if (available === undefined) {
+      toast.error("لا يوجد رصيد مخزون مسجل لهذا المنتج في الفرع");
+      return;
+    }
+    if (available <= current) {
+      toast.error(available <= 0 ? "المنتج غير متوفر في المخزون" : "الكمية المطلوبة تتجاوز المخزون المتاح");
+      return;
+    }
     setCart((prev) => {
-      const found = prev.find((i) => i.product_id === p.id);
-      if (found) return prev.map((i) => (i.product_id === p.id ? { ...i, quantity: i.quantity + 1 } : i));
+      const found = prev.find((item) => item.product_id === p.id);
+      if (found) return prev.map((item) => (item.product_id === p.id ? { ...item, quantity: item.quantity + 1 } : item));
       return [...prev, { product_id: p.id, name: p.name, unit_price: Number(p.sale_price), quantity: 1 }];
     });
   };
-  const inc = (id: string) => setCart((p) => p.map((i) => (i.product_id === id ? { ...i, quantity: i.quantity + 1 } : i)));
+  const inc = (id: string) => {
+    const item = cart.find((entry) => entry.product_id === id);
+    const available = stockByProduct.get(id);
+    if (inventory.isLoading || inventory.isError || !item || available === undefined || item.quantity >= available) {
+      toast.error("لا يمكن زيادة الكمية؛ تحقق من رصيد المخزون");
+      return;
+    }
+    setCart((prev) => prev.map((entry) => (entry.product_id === id ? { ...entry, quantity: entry.quantity + 1 } : entry)));
+  };
   const dec = (id: string) => setCart((p) => p.flatMap((i) => (i.product_id === id ? (i.quantity > 1 ? [{ ...i, quantity: i.quantity - 1 }] : []) : [i])));
   const remove = (id: string) => setCart((p) => p.filter((i) => i.product_id !== id));
 
@@ -205,13 +349,14 @@ function POSPage() {
     },
     items: Array<{ name: string; unit_price: number; quantity: number }>,
     method: PaymentUI,
+    paymentMethod?: string,
   ): InvoiceData & {
     address?: string | null; phone?: string | null; tenant_name?: string | null; logo_url?: string | null;
   } => ({
     invoice_no: sale.invoice_no,
     created_at: sale.created_at,
     branch_name: currentBranch?.name ?? "",
-    cashier_name: "",
+    cashier_name: cashierProfile.data?.full_name?.trim() || cashierProfile.data?.username || "—",
     tax_number: currentBranch?.tax_number,
     address: currentBranch?.address,
     phone: currentBranch?.phone,
@@ -222,7 +367,7 @@ function POSPage() {
     discount: Number(sale.discount),
     tax_amount: Number(sale.tax_amount),
     total: Number(sale.total),
-    payment_method: paymentToDb[method],
+    payment_method: paymentMethod ?? paymentToDb[method],
     items: items.map((i) => ({
       product_name: i.name,
       quantity: i.quantity,
@@ -238,13 +383,19 @@ function POSPage() {
       if (!openSession.data) throw new Error("يجب فتح وردية أولاً");
 
       const dbMethod = paymentToDb[method];
-      const { data: sale, error: saleErr } = await supabase.rpc("create_sale_with_items", {
+      const initialPaid = paidAmount.trim() === "" ? total : Number(paidAmount);
+      if (!Number.isFinite(initialPaid) || initialPaid < 0 || initialPaid > total) {
+        throw new Error("مبلغ المدفوع يجب أن يكون بين صفر وإجمالي الفاتورة");
+      }
+      const { data: sale, error: saleErr } = await (supabase.rpc as any)("create_sale_with_customer", {
         _tenant_id: tenantId,
         _branch_id: branchId,
         _cashier_id: userId,
         _session_id: openSession.data.id,
         _discount: disc,
-        _payment_method: dbMethod,
+        _customer_id: selectedCustomerId === "none" ? null : selectedCustomerId,
+        _paid_amount: initialPaid,
+        _paid_method: dbMethod,
         _items: cart.map((item) => ({
           product_id: item.product_id,
           quantity: item.quantity,
@@ -274,35 +425,76 @@ function POSPage() {
       return { sale, method, items: invoiceItems };
     },
     onSuccess: ({ sale, method, items }) => {
+      setReviewOpen(false);
       toast.success(`تم إصدار فاتورة #${sale.invoice_no}`);
-      const inv = buildInvoice(sale, items, method);
-      try { printInvoiceHTML(inv, paperSize); } catch (e) { console.error(e); }
+      const inv = buildInvoice(sale, items, method, sale.payment_method);
+      try {
+        const printed = printInvoiceHTML(inv, paperSize, printWindowRef.current);
+        if (!printed) toast.warning("تم إصدار الفاتورة، لكن نافذة الطباعة لم تفتح. استخدم زر معاينة الفاتورة.");
+      } catch (e) {
+        console.error(e);
+        toast.warning("تم إصدار الفاتورة، وتعذرت الطباعة التلقائية. يمكنك معاينتها وإعادة طباعتها.");
+      } finally {
+        printWindowRef.current = null;
+      }
       setCart([]);
       setDiscount("0");
+      setSelectedCustomerId("none");
+      setPaidAmount("");
       qc.invalidateQueries({ queryKey: ["sales"] });
       qc.invalidateQueries({ queryKey: ["inventory"] });
+      qc.invalidateQueries({ queryKey: ["pos-inventory", tenantId, branchId] });
       qc.invalidateQueries({ queryKey: ["inventory-movements"] });
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "فشل إتمام البيع"),
+    onError: (e) => {
+      printWindowRef.current?.close();
+      printWindowRef.current = null;
+      const rawMessage = e instanceof Error ? e.message : "";
+      const message = /insufficient stock|inventory record missing/i.test(rawMessage)
+        ? "المخزون غير كافٍ أو لم يتم تسجيل الرصيد الافتتاحي لهذا المنتج في الفرع."
+        : rawMessage || "فشل إتمام البيع";
+      toast.error(message);
+    },
   });
+
+  const confirmCheckout = () => {
+    if (checkoutMut.isPending || cart.length === 0) return;
+    printWindowRef.current?.close();
+    printWindowRef.current = window.open("", "_blank", "width=420,height=720");
+    checkoutMut.mutate(reviewMethod);
+  };
 
   const holdOrDraft = (label: string) => {
     if (cart.length === 0) return toast.info("السلة فارغة");
-    const list = loadDrafts();
+    const list = loadDrafts(draftsStorageKey);
     const d: Draft = { id: crypto.randomUUID(), cart, discount, created_at: new Date().toISOString() };
     list.unshift(d);
-    saveDrafts(list);
+    saveDrafts(list, draftsStorageKey);
     setDrafts(list);
     setCart([]);
     setDiscount("0");
     toast.success(label);
   };
   const restoreDraft = (d: Draft) => {
+    const list = loadDrafts(draftsStorageKey).filter((x) => x.id !== d.id);
+    if (cart.length > 0) list.unshift({ id: crypto.randomUUID(), cart, discount, created_at: new Date().toISOString() });
+    saveDrafts(list, draftsStorageKey);
+    setDrafts(list);
     setCart(d.cart);
     setDiscount(d.discount);
-    const list = loadDrafts().filter((x) => x.id !== d.id);
-    saveDrafts(list);
+    setDraftsOpen(false);
+    if (cart.length > 0) toast.info("حُفظت الفاتورة الحالية كمسودة قبل استعادة المختارة");
+  };
+  const deleteDraft = (id: string) => {
+    const list = loadDrafts(draftsStorageKey).filter((draft) => draft.id !== id);
+    saveDrafts(list, draftsStorageKey);
     setDrafts(list);
+    toast.success("تم حذف المسودة من هذا الجهاز");
+  };
+  const getDraftTotal = (draft: Draft) => {
+    const subtotal = draft.cart.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
+    const discountValue = Math.min(subtotal, Math.max(0, Number(draft.discount) || 0));
+    return subtotal - discountValue + (subtotal - discountValue) * (taxRate / 100);
   };
 
   const printPreview = () => {
@@ -347,7 +539,7 @@ function POSPage() {
           <CardContent className="space-y-4 pt-6">
             <div className="space-y-2">
               <Label>الفرع</Label>
-              <Select value={branchId ?? ""} onValueChange={setBranchId} disabled={!isAdmin && !!membership?.branch_id}>
+              <Select value={branchId ?? ""} onValueChange={setBranchId} disabled={!isAdmin && !isSuperOwner}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {branches.data.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
@@ -364,6 +556,22 @@ function POSPage() {
             </Button>
           </CardContent>
         </Card>
+        {drafts.length > 0 && (
+          <Card>
+            <CardContent className="space-y-2 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div><h2 className="font-bold">لديك {drafts.length} فاتورة مسودة</h2><p className="text-xs text-muted-foreground">يمكنك استعادتها الآن أو بعد فتح الوردية.</p></div>
+                <Button type="button" size="sm" variant="outline" onClick={() => setDraftsOpen((value) => !value)}>{draftsOpen ? "إخفاء" : "عرض المسودات"}</Button>
+              </div>
+              {draftsOpen && drafts.map((draft, index) => (
+                <div key={draft.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-2">
+                  <div className="min-w-0"><div className="text-sm font-semibold">مسودة #{drafts.length - index}</div><div className="text-xs text-muted-foreground">{draft.cart.length} أصناف • {formatMoney(getDraftTotal(draft))} {tenant?.currency ?? ""}</div></div>
+                  <div className="flex gap-1"><Button type="button" size="sm" variant="ghost" className="text-destructive" onClick={() => deleteDraft(draft.id)}>حذف</Button><Button type="button" size="sm" onClick={() => restoreDraft(draft)}>استعادة وإكمال</Button></div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
       </div>
     );
   }
@@ -371,7 +579,7 @@ function POSPage() {
   const currency = tenant?.currency ?? "";
 
   return (
-    <div className="flex h-[calc(100vh-3rem)] flex-col gap-2 overflow-hidden p-1">
+    <div className="flex h-[calc(100dvh-7rem)] min-h-[420px] flex-col gap-2 overflow-hidden p-1">
       <PageHeader
         title="نقطة البيع"
         subtitle={currentBranch?.name}
@@ -385,197 +593,246 @@ function POSPage() {
                 <SelectItem value="A4">ورق A4</SelectItem>
               </SelectContent>
             </Select>
+            <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => setDraftsOpen(true)}>المسودات ({drafts.length})</Button>
             <span className="rounded-full bg-success/15 px-3 py-1 text-xs font-medium text-success">وردية مفتوحة</span>
           </div>
         }
       />
 
-      {/* Three-column layout — fits in one screen */}
-      <div className="grid min-h-0 flex-1 gap-2 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px]">
-        {/* Left area: categories + products */}
-        <div className="grid min-h-0 gap-2 md:grid-cols-[140px_minmax(0,1fr)] lg:grid-cols-[160px_minmax(0,1fr)]">
-          {/* Categories */}
-          <Card className="min-h-0 overflow-hidden">
-            <CardContent className="flex h-full flex-col p-2">
-              <div className="mb-1.5 flex items-center justify-between border-b pb-1">
-                <h2 className="text-xs font-bold">الأقسام</h2>
-                <span className="text-[10px] text-muted-foreground">{(categories.data?.length ?? 0) + 1}</span>
+      {posPromos.data && posPromos.data.length > 0 && (
+        <div className="flex shrink-0 gap-2 overflow-x-auto">
+          {posPromos.data.map((promo) => {
+            const card = (
+              <div className="relative flex h-14 min-w-[220px] flex-1 items-center overflow-hidden rounded-lg border bg-card px-3">
+                {promo.image_url && <img src={promo.image_url} alt="" className="absolute inset-0 h-full w-full object-cover opacity-25" />}
+                <div className="relative z-[1] min-w-0"><div className="truncate text-xs font-bold">{promo.title}</div>{promo.description && <div className="truncate text-[10px] text-muted-foreground">{promo.description}</div>}</div>
               </div>
-              <div className="grid min-h-0 flex-1 grid-cols-1 gap-1.5 overflow-y-auto pr-0.5">
+            );
+            return promo.target_url ? <a key={promo.id} href={promo.target_url} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1">{card}</a> : <div key={promo.id} className="min-w-0 flex-1">{card}</div>;
+          })}
+        </div>
+      )}
+
+      {/* Responsive POS: category chips, dense product grid and a reviewable invoice. */}
+      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-2 lg:grid-cols-[minmax(0,1fr)_360px] lg:grid-rows-1">
+        <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2">
+          <Card className="overflow-hidden">
+            <CardContent className="p-2">
+              <div className="mb-1 flex items-center justify-between border-b pb-1">
+                <h2 className="text-xs font-bold">الأقسام</h2>
+                <span className="text-[10px] text-muted-foreground">{(categories.data?.length ?? 0) + 1} قسم</span>
+              </div>
+              <div className="grid grid-cols-5 gap-1 sm:grid-cols-6 xl:grid-cols-9">
                 <CategoryTile label="الكل" active={catFilter === "all"} onClick={() => setCatFilter("all")} />
-                {(categories.data ?? []).map((c) => (
-                  <CategoryTile key={c.id} label={c.name} active={catFilter === c.id} onClick={() => setCatFilter(c.id)} />
+                {(categories.data ?? []).map((category) => (
+                  <CategoryTile key={category.id} label={category.name} active={catFilter === category.id} onClick={() => setCatFilter(category.id)} />
                 ))}
               </div>
             </CardContent>
           </Card>
 
-          {/* Products */}
           <Card className="min-h-0 overflow-hidden">
             <CardContent className="flex h-full flex-col p-2">
               <div className="mb-1.5 flex items-center gap-2 border-b pb-1">
                 <h2 className="text-xs font-bold">المنتجات</h2>
                 <div className="relative mr-auto w-56 max-w-full">
                   <Search className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="بحث..."
-                    className="h-7 pr-7 text-xs"
-                    autoFocus
-                  />
+                  <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ابحث عن منتج..." className="h-8 pr-7 text-xs" />
                 </div>
-                <span className="text-[10px] text-muted-foreground">{filteredProducts.length}</span>
+                <span className="text-[10px] text-muted-foreground">{filteredProducts.length} منتج</span>
               </div>
-              <div className="grid min-h-0 flex-1 grid-cols-3 gap-1.5 overflow-y-auto pr-0.5 sm:grid-cols-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7">
-                {filteredProducts.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => addToCart(p)}
-                    className="flex min-h-[62px] flex-col items-center justify-center rounded-md border bg-card p-1.5 text-center text-xs font-semibold leading-tight transition hover:border-primary hover:bg-primary/5 active:scale-95"
-                  >
-                    <span className="line-clamp-2">{p.name}</span>
-                    <span className="mt-1 text-[10px] font-normal text-muted-foreground num">{formatMoney(Number(p.sale_price))}</span>
-                  </button>
-                ))}
+              {inventory.isError ? (
+                <div className="mb-1 rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-[10px] text-destructive" role="alert">
+                  تعذر تحميل رصيد المخزون؛ البيع متوقف حتى يتم التحقق من اتصال قاعدة البيانات.
+                </div>
+              ) : !inventory.isLoading && filteredProducts.length > 0 && filteredProducts.every((product) => (stockByProduct.get(product.id) ?? 0) <= 0) ? (
+                <div className="mb-1 rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-[10px] text-destructive" role="status">
+                  لا يوجد رصيد متاح في هذا الفرع. سجّل الكميات الافتتاحية من شاشة المخزون قبل البيع.
+                </div>
+              ) : null}
+              <div className="grid min-h-0 flex-1 content-start grid-cols-4 gap-1 overflow-y-auto p-0.5 sm:grid-cols-5 md:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8">
+                {filteredProducts.map((product) => {
+                  const available = stockByProduct.get(product.id);
+                  const stockUnavailable = inventory.isLoading || inventory.isError || available === undefined || available <= 0;
+                  const stockLabel = inventory.isLoading
+                    ? "جاري التحقق"
+                    : inventory.isError
+                      ? "تعذر المخزون"
+                      : available === undefined
+                        ? "غير مسجل"
+                        : available < 0
+                          ? `رصيد سالب: ${available}`
+                          : available === 0
+                            ? "نفد المخزون"
+                            : `متاح: ${available}`;
+                  return (
+                    <button key={product.id} type="button" onClick={() => addToCart(product)}
+                      disabled={stockUnavailable || checkoutMut.isPending}
+                      title={stockLabel}
+                      className="flex min-h-[52px] flex-col items-center justify-center rounded-md border bg-card p-0.5 text-center text-[9px] font-semibold leading-tight shadow-sm transition hover:border-primary hover:bg-primary/5 active:scale-95 disabled:cursor-not-allowed disabled:opacity-55 sm:min-h-[58px] sm:p-1 sm:text-[10px]">
+                      <span className="relative mb-0.5 grid h-5 w-5 place-items-center overflow-hidden rounded bg-muted text-[10px] font-black text-muted-foreground sm:h-6 sm:w-6">
+                        {product.name.slice(0, 1)}
+                        {product.image_url && <img src={product.image_url} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} />}
+                      </span>
+                      <span className="line-clamp-1 w-full">{product.name}</span>
+                      <span className="mt-0.5 text-[9px] font-bold text-primary num">{formatMoney(Number(product.sale_price))}</span>
+                      <span className={`mt-0.5 text-[9px] font-semibold ${available !== undefined && available > 0 ? "text-success" : "text-destructive"}`}>{stockLabel}</span>
+                    </button>
+                  );
+                })}
                 {filteredProducts.length === 0 && (
-                  <div className="col-span-full grid place-items-center rounded-md border bg-muted/30 p-6 text-center text-xs text-muted-foreground">
-                    لا توجد منتجات
-                  </div>
+                  <div className="col-span-full grid place-items-center rounded-md border bg-muted/30 p-6 text-center text-xs text-muted-foreground">لا توجد منتجات مطابقة</div>
                 )}
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Right column: invoice */}
-        <Card className="min-h-0 overflow-hidden">
+        <Card className="hidden min-h-0 overflow-hidden lg:block">
           <CardContent className="flex h-full flex-col p-2">
             <div className="mb-1.5 flex flex-wrap items-center gap-2 border-b pb-1">
-              <h2 className="text-xs font-bold">الفاتورة</h2>
-            <span className="text-xs text-muted-foreground">
-              {cart.length} صنف • كمية {totalQty}
-            </span>
-            {drafts.length > 0 && (
-              <div className="mr-auto flex flex-wrap items-center gap-1">
-                <span className="text-[10px] text-muted-foreground">مسودات:</span>
-                {drafts.slice(0, 3).map((d, idx) => (
-                  <Button key={d.id} size="sm" variant="outline" className="h-6 px-1.5 text-[10px]" onClick={() => restoreDraft(d)}>
-                    #{idx + 1} ({d.cart.length})
-                  </Button>
-                ))}
-              </div>
-            )}
+              <h2 className="text-xs font-bold">الفاتورة الحالية</h2>
+              <span className="text-xs text-muted-foreground">{cart.length} صنف • {totalQty} قطعة</span>
+              {drafts.length > 0 && <Button type="button" size="sm" variant="ghost" className="mr-auto h-6 text-[10px]" onClick={() => setDraftsOpen(true)}>عرض جميع المسودات ({drafts.length})</Button>}
             </div>
-
-            {/* Items list */}
             <div className="min-h-0 flex-1 overflow-y-auto rounded-md border">
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-muted/70 text-[10px]">
-                  <tr>
-                    <th className="p-1.5 text-right">المنتج</th>
-                    <th className="p-1.5 text-center">الكمية</th>
-                    <th className="p-1.5 text-center">الإجمالي</th>
-                    <th className="p-1.5 text-center"></th>
-                  </tr>
+                  <tr><th className="p-1.5 text-right">المنتج</th><th className="p-1.5 text-center">الكمية</th><th className="p-1.5 text-center">الإجمالي</th><th className="p-1.5 text-center"></th></tr>
                 </thead>
                 <tbody>
                   {cart.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="p-6 text-center text-[11px] text-muted-foreground">
-                        اضغط على أي منتج لإضافته
-                      </td>
+                    <tr><td colSpan={4} className="p-6 text-center text-[11px] text-muted-foreground">أضف المنتجات لتكوين الفاتورة</td></tr>
+                  ) : cart.map((item) => (
+                    <tr key={item.product_id} className="border-t">
+                      <td className="p-1.5 text-right"><div className="font-medium leading-tight">{item.name}</div><div className="text-[10px] text-muted-foreground num">{formatMoney(item.unit_price)}</div></td>
+                      <td className="p-1.5 text-center"><div className="inline-flex items-center gap-0.5">
+                        <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => dec(item.product_id)} disabled={checkoutMut.isPending}><Minus className="h-3 w-3" /></Button>
+                        <span className="min-w-6 text-center font-semibold num">{item.quantity}</span>
+                        <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => inc(item.product_id)} disabled={checkoutMut.isPending || inventory.isLoading || inventory.isError || (stockByProduct.get(item.product_id) ?? 0) <= item.quantity}><Plus className="h-3 w-3" /></Button>
+                      </div></td>
+                      <td className="p-1.5 text-center font-bold num">{formatMoney(item.unit_price * item.quantity)}</td>
+                      <td className="p-1.5 text-center"><Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" aria-label="حذف الصنف" onClick={() => remove(item.product_id)} disabled={checkoutMut.isPending}><Trash2 className="h-3.5 w-3.5" /></Button></td>
                     </tr>
-                  ) : (
-                    cart.map((i) => (
-                      <tr key={i.product_id} className="border-t">
-                        <td className="p-1.5 text-right">
-                          <div className="font-medium leading-tight">{i.name}</div>
-                          <div className="text-[10px] text-muted-foreground num">{formatMoney(i.unit_price)}</div>
-                        </td>
-                        <td className="p-1.5 text-center">
-                          <div className="inline-flex items-center gap-0.5">
-                            <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => dec(i.product_id)}>
-                              <Minus className="h-3 w-3" />
-                            </Button>
-                            <span className="min-w-6 text-center text-xs font-semibold num">{i.quantity}</span>
-                            <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => inc(i.product_id)}>
-                              <Plus className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </td>
-                        <td className="p-1.5 text-center font-bold num">{formatMoney(i.unit_price * i.quantity)}</td>
-                        <td className="p-1.5 text-center">
-                          <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => remove(i.product_id)}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
-
-            {/* Totals */}
             <div className="mt-1.5 rounded-md border bg-muted/30 p-2 text-xs">
-              <div className="mb-1.5 flex items-center gap-2">
-                <Label className="shrink-0 text-[10px] text-muted-foreground">خصم</Label>
-                <Input type="number" min="0" step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} className="h-7 text-xs" />
-              </div>
-              <div className="flex justify-between text-muted-foreground">
-                <span>الفرعي</span>
-                <span className="num">{formatMoney(subtotal)}</span>
-              </div>
-              {disc > 0 && (
-                <div className="flex justify-between text-destructive">
-                  <span>الخصم</span>
-                  <span className="num">-{formatMoney(disc)}</span>
-                </div>
-              )}
-              {taxRate > 0 && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>ضريبة ({taxRate}%)</span>
-                  <span className="num">{formatMoney(taxAmount)}</span>
-                </div>
-              )}
-              <div className="mt-1 flex items-baseline justify-between border-t pt-1 text-lg font-black">
-                <span>الإجمالي</span>
-                <span className="num text-primary">
-                  {formatMoney(total)} <span className="text-[10px] font-normal text-muted-foreground">{currency}</span>
-                </span>
-              </div>
+              <div className="mb-1.5 flex items-center gap-2"><Label className="shrink-0 text-[10px] text-muted-foreground">الخصم</Label><Input type="number" min="0" max={subtotal} step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} className="h-7 text-xs" disabled={checkoutMut.isPending} /></div>
+              <div className="flex justify-between text-muted-foreground"><span>المجموع الفرعي</span><span className="num">{formatMoney(subtotal)}</span></div>
+              {disc > 0 && <div className="flex justify-between text-destructive"><span>الخصم</span><span className="num">-{formatMoney(disc)}</span></div>}
+              {taxRate > 0 && <div className="flex justify-between text-muted-foreground"><span>الضريبة ({taxRate}%)</span><span className="num">{formatMoney(taxAmount)}</span></div>}
+              <div className="mt-1 flex items-baseline justify-between border-t pt-1 text-lg font-black"><span>الإجمالي</span><span className="num text-primary">{formatMoney(total)} <span className="text-[10px] font-normal text-muted-foreground">{currency}</span></span></div>
             </div>
-
-            {/* Payment buttons */}
             <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-              <PayBtn icon={Banknote} label="نقدي" onClick={() => checkoutMut.mutate("cash")} disabled={checkoutMut.isPending || cart.length === 0} />
-              <PayBtn icon={Wallet} label="محفظة" onClick={() => checkoutMut.mutate("wallet")} disabled={checkoutMut.isPending || cart.length === 0} />
-              <PayBtn icon={CreditCard} label="بطاقة" onClick={() => checkoutMut.mutate("card")} disabled={checkoutMut.isPending || cart.length === 0} />
+              <PayBtn icon={Banknote} label="نقدي" onClick={() => beginCheckout("cash")} disabled={checkoutMut.isPending || cart.length === 0} />
+              <PayBtn icon={Wallet} label="محفظة" onClick={() => beginCheckout("wallet")} disabled={checkoutMut.isPending || cart.length === 0} />
+              <PayBtn icon={CreditCard} label="بطاقة" onClick={() => beginCheckout("card")} disabled={checkoutMut.isPending || cart.length === 0} />
             </div>
-
-            {/* Action row */}
             <div className="mt-1.5 grid grid-cols-4 gap-1">
-              <Button variant="outline" size="sm" className="h-8 px-1 text-[10px]" onClick={() => holdOrDraft("تم التعليق")}> <Pause className="ml-0.5 h-3 w-3" />تعليق</Button>
-              <Button variant="outline" size="sm" className="h-8 px-1 text-[10px]" onClick={() => holdOrDraft("تم الحفظ")}> <Save className="ml-0.5 h-3 w-3" />مسودة</Button>
-              <Button variant="outline" size="sm" className="h-8 px-1 text-[10px]" onClick={printPreview}> <Printer className="ml-0.5 h-3 w-3" />طباعة</Button>
-              <Button variant="outline" size="sm" className="h-8 px-1 text-[10px] text-destructive" onClick={() => { setCart([]); setDiscount("0"); }} disabled={cart.length === 0}>
-                <X className="ml-0.5 h-3 w-3" />إلغاء
-              </Button>
+              <Button variant="outline" size="sm" className="h-8 px-1 text-[10px]" onClick={() => holdOrDraft("تم تعليق الفاتورة")}><Pause className="ml-0.5 h-3 w-3" />تعليق</Button>
+              <Button variant="outline" size="sm" className="h-8 px-1 text-[10px]" onClick={() => holdOrDraft("تم حفظ المسودة")}><Save className="ml-0.5 h-3 w-3" />مسودة</Button>
+              <Button variant="outline" size="sm" className="h-8 px-1 text-[10px]" onClick={printPreview}><Printer className="ml-0.5 h-3 w-3" />معاينة</Button>
+              <Button variant="outline" size="sm" className="h-8 px-1 text-[10px] text-destructive" onClick={() => { setCart([]); setDiscount("0"); }} disabled={cart.length === 0}><X className="ml-0.5 h-3 w-3" />إلغاء</Button>
             </div>
-            <Button
-              size="sm"
-              className="mt-1.5 h-10 bg-success text-sm font-bold text-success-foreground hover:bg-success/90"
-              onClick={() => checkoutMut.mutate("cash")}
-              disabled={checkoutMut.isPending || cart.length === 0}
-            >
-              {checkoutMut.isPending ? <Loader2 className="ml-1 h-4 w-4 animate-spin" /> : <CheckCircle2 className="ml-1 h-4 w-4" />}
-              إتمام البيع
+            <Button size="sm" className="mt-1.5 h-10 bg-success text-sm font-bold text-success-foreground hover:bg-success/90" onClick={() => beginCheckout("cash")} disabled={checkoutMut.isPending || cart.length === 0}>
+              <CheckCircle2 className="ml-1 h-4 w-4" />مراجعة وإتمام البيع
             </Button>
           </CardContent>
         </Card>
+
+        <Card className="lg:hidden">
+          <CardContent className="flex items-center gap-2 p-2">
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] text-muted-foreground">الفاتورة • {cart.length} أصناف / {totalQty} قطع</div>
+              <div className="text-lg font-black text-primary num">{formatMoney(total)} <span className="text-xs font-normal text-muted-foreground">{currency}</span></div>
+            </div>
+            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 px-2" onClick={() => setDraftsOpen(true)}>المسودات ({drafts.length})</Button>
+            <Button size="sm" className="h-10 shrink-0 font-bold" onClick={() => beginCheckout("cash")} disabled={checkoutMut.isPending || cart.length === 0}>مراجعة الفاتورة</Button>
+            <Button size="icon" variant="outline" className="h-10 w-10 shrink-0" aria-label="حفظ مسودة" onClick={() => holdOrDraft("تم حفظ المسودة")} disabled={cart.length === 0}><Save className="h-4 w-4" /></Button>
+            <Button size="icon" variant="outline" className="h-10 w-10 shrink-0" aria-label="معاينة وطباعة الفاتورة" onClick={printPreview} disabled={cart.length === 0}><Printer className="h-4 w-4" /></Button>
+          </CardContent>
+        </Card>
       </div>
+
+      <Dialog open={draftsOpen} onOpenChange={setDraftsOpen}>
+        <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto" dir="rtl">
+          <DialogHeader><DialogTitle>الفواتير المسودة والمعلقة</DialogTitle><DialogDescription>مسودات محفوظة على هذا الجهاز لهذا المستخدم والفرع، وليست فواتير بيع صادرة.</DialogDescription></DialogHeader>
+          {drafts.length === 0 ? <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">لا توجد مسودات. احفظ فاتورة من نقطة البيع لتظهر هنا وتكملها لاحقاً.</div> : (
+            <div className="space-y-2">
+              {drafts.map((draft, index) => (
+                <div key={draft.id} className="rounded-lg border p-3">
+                  <div className="flex flex-wrap justify-between gap-2"><div><div className="font-bold">مسودة #{drafts.length - index}</div><div className="text-xs text-muted-foreground">{new Intl.DateTimeFormat("ar-YE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(draft.created_at))}</div></div><div className="text-left"><div className="font-bold text-primary num">{formatMoney(getDraftTotal(draft))} {currency}</div><div className="text-xs text-muted-foreground">{draft.cart.length} أصناف • {draft.cart.reduce((sum, item) => sum + item.quantity, 0)} قطعة</div></div></div>
+                  <div className="mt-2 rounded bg-muted/40 p-2">{draft.cart.slice(0, 5).map(item => <div key={item.product_id} className="flex justify-between gap-2 text-xs"><span className="truncate">{item.name} × {item.quantity}</span><span className="shrink-0 num">{formatMoney(item.unit_price * item.quantity)}</span></div>)}{draft.cart.length > 5 && <div className="text-xs text-muted-foreground">و{draft.cart.length - 5} أصناف أخرى</div>}</div>
+                  <div className="mt-2 flex justify-end gap-2"><Button type="button" size="sm" variant="ghost" className="text-destructive" onClick={() => deleteDraft(draft.id)}>حذف المسودة</Button><Button type="button" size="sm" onClick={() => restoreDraft(draft)}>فتح وإكمال الفاتورة</Button></div>
+                </div>
+              ))}
+            </div>
+          )}
+          <DialogFooter><Button type="button" variant="outline" onClick={() => setDraftsOpen(false)}>إغلاق</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={reviewOpen} onOpenChange={(open) => { if (!checkoutMut.isPending) setReviewOpen(open); }}>
+        <DialogContent className="max-h-[92dvh] max-w-2xl overflow-y-auto" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>مراجعة الفاتورة قبل الإصدار</DialogTitle>
+            <DialogDescription>راجع الأصناف والكميات والأسعار، ويمكنك الزيادة أو التخفيض أو حذف أي صنف قبل اعتماد البيع.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="overflow-x-auto rounded-lg border">
+              <table className="w-full min-w-[320px] text-xs">
+                <thead className="bg-muted/60"><tr><th className="p-2 text-right">الصنف</th><th className="p-2 text-center">الكمية</th><th className="p-2 text-center">السعر</th><th className="p-2 text-center">الإجمالي</th><th className="p-2"></th></tr></thead>
+                <tbody>
+                  {cart.map((item) => (
+                    <tr key={item.product_id} className="border-t">
+                      <td className="p-2 font-medium">{item.name}</td>
+                      <td className="p-2"><div className="flex items-center justify-center gap-1">
+                        <Button size="icon" variant="outline" className="h-7 w-7" aria-label="تقليل الكمية" onClick={() => dec(item.product_id)} disabled={checkoutMut.isPending}><Minus className="h-3 w-3" /></Button>
+                        <span className="min-w-6 text-center font-bold num">{item.quantity}</span>
+                        <Button size="icon" variant="outline" className="h-7 w-7" aria-label="زيادة الكمية" onClick={() => inc(item.product_id)} disabled={checkoutMut.isPending || inventory.isLoading || inventory.isError || (stockByProduct.get(item.product_id) ?? 0) <= item.quantity}><Plus className="h-3 w-3" /></Button>
+                      </div></td>
+                      <td className="p-2 text-center num">{formatMoney(item.unit_price)}</td>
+                      <td className="p-2 text-center font-bold num">{formatMoney(item.unit_price * item.quantity)}</td>
+                      <td className="p-2 text-center"><Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" aria-label="حذف الصنف" onClick={() => remove(item.product_id)} disabled={checkoutMut.isPending}><Trash2 className="h-4 w-4" /></Button></td>
+                    </tr>
+                  ))}
+                  {cart.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">أصبحت الفاتورة فارغة؛ أغلق المراجعة وأضف المنتجات من جديد.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+            <div className="grid gap-2 rounded-lg border bg-muted/30 p-3 sm:grid-cols-2">
+              <div className="space-y-1"><Label className="text-xs">الخصم</Label><Input type="number" min="0" max={subtotal} step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} disabled={checkoutMut.isPending} /></div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label className="text-xs">العميل (اختياري للبيع النقدي، وإلزامي للبيع الآجل)</Label>
+                <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId} disabled={checkoutMut.isPending}>
+                  <SelectTrigger><SelectValue placeholder="بيع نقدي بدون عميل" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">بيع نقدي بدون عميل</SelectItem>
+                    {(customers.data ?? []).map((customer) => <SelectItem key={customer.id} value={customer.id}>{customer.name} — سقف {formatMoney(Number(customer.credit_limit))}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1"><Label className="text-xs">طريقة الدفع</Label><Select value={reviewMethod} onValueChange={(value) => setReviewMethod(value as PaymentUI)} disabled={checkoutMut.isPending}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">نقداً</SelectItem><SelectItem value="wallet">محفظة / تحويل</SelectItem><SelectItem value="card">بطاقة</SelectItem></SelectContent></Select></div>
+              <div className="space-y-1"><Label className="text-xs">المبلغ المدفوع الآن</Label><Input type="number" min="0" max={total} step="0.01" placeholder={String(total)} value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} disabled={checkoutMut.isPending} /><p className="text-[10px] text-muted-foreground">اتركه فارغاً لسداد كامل الفاتورة. المتبقي يصبح مديونية على العميل.</p></div>
+              <div className="flex justify-between text-sm font-semibold text-destructive sm:col-span-2"><span>المتبقي على العميل</span><span className="num">{formatMoney(Math.max(0, total - (paidAmount.trim() === "" ? total : Number(paidAmount) || 0)))} {currency}</span></div>
+              <div className="flex justify-between text-sm text-muted-foreground"><span>المجموع الفرعي</span><span className="num">{formatMoney(subtotal)}</span></div>
+              <div className="flex justify-between text-sm text-muted-foreground"><span>الخصم</span><span className="num">-{formatMoney(disc)}</span></div>
+              <div className="flex justify-between text-sm text-muted-foreground"><span>الضريبة ({taxRate}%)</span><span className="num">{formatMoney(taxAmount)}</span></div>
+              <div className="flex justify-between border-t pt-2 text-base font-black"><span>الإجمالي</span><span className="text-primary num">{formatMoney(total)} {currency}</span></div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:justify-between">
+            <Button variant="outline" onClick={() => setReviewOpen(false)} disabled={checkoutMut.isPending}>العودة للتعديل</Button>
+            <Button className="bg-success font-bold text-success-foreground hover:bg-success/90" disabled={checkoutMut.isPending || cart.length === 0 || disc > subtotal || (selectedCustomerId === "none" && paidAmount.trim() !== "" && Number(paidAmount) !== total) || (paidAmount.trim() !== "" && (!Number.isFinite(Number(paidAmount)) || Number(paidAmount) < 0 || Number(paidAmount) > total))}
+              onClick={confirmCheckout}>
+              {checkoutMut.isPending ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="ml-2 h-4 w-4" />}
+              تأكيد وإصدار الفاتورة
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -585,11 +842,12 @@ function CategoryTile({ label, active, onClick }: { label: string; active: boole
     <button
       type="button"
       onClick={onClick}
-      className={`grid min-h-[44px] place-items-center rounded-md border p-1.5 text-center text-[11px] font-semibold leading-tight transition active:scale-95 ${
-        active ? "border-primary bg-primary text-primary-foreground shadow" : "bg-card hover:border-primary hover:bg-primary/5"
-      }`}
+      className={active
+        ? "inline-flex min-h-7 w-full items-center justify-center rounded-md border border-primary bg-primary px-1 py-0.5 text-center text-[9px] font-semibold leading-tight text-primary-foreground shadow transition active:scale-95 sm:min-h-8 sm:text-[10px]"
+        : "inline-flex min-h-7 w-full items-center justify-center rounded-md border bg-card px-1 py-0.5 text-center text-[9px] font-semibold leading-tight transition hover:border-primary hover:bg-primary/5 active:scale-95 sm:min-h-8 sm:text-[10px]"}
+      title={label}
     >
-      <span className="line-clamp-2">{label}</span>
+      <span className="line-clamp-1">{label}</span>
     </button>
   );
 }
