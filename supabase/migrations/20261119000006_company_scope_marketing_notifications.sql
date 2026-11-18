@@ -62,8 +62,6 @@ as $function$
           (ur.role = 'owner' and ur.company_id is null)
           or (ur.role in ('owner','manager','accountant')
               and ur.company_id is not null and ur.company_id = b.company_id)
-          or (ur.role in ('manager','accountant')
-              and ur.company_id is null and b.company_id is null)
           or (ur.branch_id = _branch_id
               and (ur.company_id is null or ur.company_id = b.company_id))
         )
