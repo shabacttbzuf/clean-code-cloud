@@ -342,7 +342,6 @@ function UsersPage() {
         branches={branches ?? []}
         customRoles={customRoles ?? []}
         canAssignManager={canAssignManager}
-        isSuperOwner={isSuperOwner}
       />
       <TransferDialog
         user={transferUser}
@@ -556,7 +555,6 @@ function RoleDialog({
   branches,
   customRoles,
   canAssignManager,
-  isSuperOwner,
 }: {
   user: Row | null;
   onClose: () => void;
@@ -564,7 +562,6 @@ function RoleDialog({
   branches: Array<{ id: string; name: string }>;
   customRoles: Array<{ id: string; name: string }>;
   canAssignManager: boolean;
-  isSuperOwner: boolean;
 }) {
   const qc = useQueryClient();
   const [role, setRole] = useState<string>("cashier");
