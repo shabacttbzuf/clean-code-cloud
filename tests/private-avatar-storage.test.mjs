@@ -44,6 +44,7 @@ test("profile avatars are stored in a private bucket and served with signed URLs
 
 test("profile updates cannot point to another user's private avatar path", () => {
   assert.match(usersFunctions, /avatar_url: z\.string\(\)\.max\(2048\)\.refine/);
+  assert.match(usersFunctions, /updateMyProfile[\\s\\S]*avatar_url: z\\.string\\(\\)\\.max\\(2048\\)\\.refine/);
   assert.match(usersFunctions, /parts\[2\] !== context\.userId/);
 });
 
