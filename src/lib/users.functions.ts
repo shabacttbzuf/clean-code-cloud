@@ -594,7 +594,7 @@ export const updateMyProfile = createServerFn({ method: "POST" })
         full_name: z.string().min(1).max(120).optional(),
         username: z.string().min(2).max(60).optional().nullable(),
         phone: z.string().max(30).optional().nullable(),
-        avatar_url: z.string().url().optional().nullable(),
+        avatar_url: z.string().max(2048).refine((value) => value.startsWith("private://") || z.string().url().safeParse(value).success, "رابط الصورة غير صالح").optional().nullable(),
       })
       .parse(data),
   )
