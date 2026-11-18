@@ -29,6 +29,13 @@ as $function$
           and creator_profile.company_id=viewer.company_id
           and (creator_profile.branch_id is null
                or private.can_access_branch((select auth.uid()),_tenant_id,creator_profile.branch_id))
+          and not exists (
+            select 1 from public.user_roles conflicting_role
+            where conflicting_role.user_id=_creator_id
+              and conflicting_role.tenant_id=_tenant_id
+              and conflicting_role.company_id is not null
+              and conflicting_role.company_id<>creator_profile.company_id
+          )
       )
       or exists (
         select 1
@@ -44,6 +51,19 @@ as $function$
             select 1 from public.profiles p
             where p.id=_creator_id and p.tenant_id=_tenant_id
               and (p.company_id is not null or p.branch_id is not null)
+          )
+          and (
+            select count(distinct coalesce(creator_scope.company_id,creator_branch.company_id))
+            from public.user_roles creator_scope
+            left join public.branches creator_branch
+              on creator_branch.id=creator_scope.branch_id and creator_branch.tenant_id=creator_scope.tenant_id
+            where creator_scope.user_id=_creator_id and creator_scope.tenant_id=_tenant_id
+              and coalesce(creator_scope.company_id,creator_branch.company_id) is not null
+          )=1
+          and not exists (
+            select 1 from public.user_roles creator_owner
+            where creator_owner.user_id=_creator_id and creator_owner.tenant_id=_tenant_id
+              and creator_owner.role='owner' and creator_owner.company_id is null
           )
       )
     );
@@ -77,6 +97,14 @@ using (
       select 1 from public.profiles target_profile
       where target_profile.id=user_roles.user_id and target_profile.tenant_id=user_roles.tenant_id
         and (target_profile.company_id is null or target_profile.company_id=user_roles.company_id)
+    )
+    and not exists (
+      select 1 from public.user_roles conflicting_role
+      where conflicting_role.user_id=user_roles.user_id
+        and conflicting_role.tenant_id=user_roles.tenant_id
+        and conflicting_role.id<>user_roles.id
+        and conflicting_role.company_id is not null
+        and conflicting_role.company_id<>user_roles.company_id
     )
     and (branch_id is null or private.can_access_branch((select auth.uid()),tenant_id,branch_id))
   )
@@ -130,6 +158,14 @@ with check (
       where target_profile.id=user_roles.user_id and target_profile.tenant_id=user_roles.tenant_id
         and (target_profile.company_id is null or target_profile.company_id=user_roles.company_id)
     )
+    and not exists (
+      select 1 from public.user_roles conflicting_role
+      where conflicting_role.user_id=user_roles.user_id
+        and conflicting_role.tenant_id=user_roles.tenant_id
+        and conflicting_role.id<>user_roles.id
+        and conflicting_role.company_id is not null
+        and conflicting_role.company_id<>user_roles.company_id
+    )
   )
 );
 
@@ -163,6 +199,14 @@ using (
       where target_profile.id=user_roles.user_id and target_profile.tenant_id=user_roles.tenant_id
         and (target_profile.company_id is null or target_profile.company_id=user_roles.company_id)
     )
+    and not exists (
+      select 1 from public.user_roles conflicting_role
+      where conflicting_role.user_id=user_roles.user_id
+        and conflicting_role.tenant_id=user_roles.tenant_id
+        and conflicting_role.id<>user_roles.id
+        and conflicting_role.company_id is not null
+        and conflicting_role.company_id<>user_roles.company_id
+    )
   )
 )
 with check (
@@ -191,6 +235,14 @@ with check (
       select 1 from public.profiles target_profile
       where target_profile.id=user_roles.user_id and target_profile.tenant_id=user_roles.tenant_id
         and (target_profile.company_id is null or target_profile.company_id=user_roles.company_id)
+    )
+    and not exists (
+      select 1 from public.user_roles conflicting_role
+      where conflicting_role.user_id=user_roles.user_id
+        and conflicting_role.tenant_id=user_roles.tenant_id
+        and conflicting_role.id<>user_roles.id
+        and conflicting_role.company_id is not null
+        and conflicting_role.company_id<>user_roles.company_id
     )
   )
 );
@@ -224,6 +276,14 @@ using (
       select 1 from public.profiles target_profile
       where target_profile.id=user_roles.user_id and target_profile.tenant_id=user_roles.tenant_id
         and (target_profile.company_id is null or target_profile.company_id=user_roles.company_id)
+    )
+    and not exists (
+      select 1 from public.user_roles conflicting_role
+      where conflicting_role.user_id=user_roles.user_id
+        and conflicting_role.tenant_id=user_roles.tenant_id
+        and conflicting_role.id<>user_roles.id
+        and conflicting_role.company_id is not null
+        and conflicting_role.company_id<>user_roles.company_id
     )
   )
 );
