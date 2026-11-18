@@ -73,11 +73,28 @@ using (
         and viewer.tenant_id=user_roles.tenant_id
         and viewer.company_id=user_roles.company_id
     )
+    and exists (
+      select 1 from public.profiles target_profile
+      where target_profile.id=user_roles.user_id and target_profile.tenant_id=user_roles.tenant_id
+        and (target_profile.company_id is null or target_profile.company_id=user_roles.company_id)
+    )
     and (branch_id is null or private.can_access_branch((select auth.uid()),tenant_id,branch_id))
+    and exists (
+      select 1 from public.profiles target_profile
+      where target_profile.id=user_roles.user_id and target_profile.tenant_id=user_roles.tenant_id
+        and (target_profile.company_id is null or target_profile.company_id=user_roles.company_id)
+    )
   )
   or (
     company_id is null and branch_id is not null
     and private.can_access_branch((select auth.uid()),tenant_id,branch_id)
+    and exists (
+      select 1 from public.profiles target_profile
+      where target_profile.id=user_roles.user_id and target_profile.tenant_id=user_roles.tenant_id
+        and (target_profile.company_id is null or target_profile.company_id=(
+          select b.company_id from public.branches b where b.id=user_roles.branch_id and b.tenant_id=user_roles.tenant_id
+        ))
+    )
   )
 );
 
@@ -109,6 +126,11 @@ with check (
         and company_owner.company_id=user_roles.company_id
     )
     and (branch_id is null or private.can_access_branch((select auth.uid()),tenant_id,branch_id))
+    and exists (
+      select 1 from public.profiles target_profile
+      where target_profile.id=user_roles.user_id and target_profile.tenant_id=user_roles.tenant_id
+        and (target_profile.company_id is null or target_profile.company_id=user_roles.company_id)
+    )
   )
 );
 
@@ -133,6 +155,11 @@ using (
         and company_owner.company_id=user_roles.company_id
     )
     and (branch_id is null or private.can_access_branch((select auth.uid()),tenant_id,branch_id))
+    and exists (
+      select 1 from public.profiles target_profile
+      where target_profile.id=user_roles.user_id and target_profile.tenant_id=user_roles.tenant_id
+        and (target_profile.company_id is null or target_profile.company_id=user_roles.company_id)
+    )
   )
 )
 with check (
@@ -153,6 +180,11 @@ with check (
         and company_owner.company_id=user_roles.company_id
     )
     and (branch_id is null or private.can_access_branch((select auth.uid()),tenant_id,branch_id))
+    and exists (
+      select 1 from public.profiles target_profile
+      where target_profile.id=user_roles.user_id and target_profile.tenant_id=user_roles.tenant_id
+        and (target_profile.company_id is null or target_profile.company_id=user_roles.company_id)
+    )
   )
 );
 
@@ -177,6 +209,11 @@ using (
         and company_owner.company_id=user_roles.company_id
     )
     and (branch_id is null or private.can_access_branch((select auth.uid()),tenant_id,branch_id))
+    and exists (
+      select 1 from public.profiles target_profile
+      where target_profile.id=user_roles.user_id and target_profile.tenant_id=user_roles.tenant_id
+        and (target_profile.company_id is null or target_profile.company_id=user_roles.company_id)
+    )
   )
 );
 
@@ -295,6 +332,9 @@ begin
 
   if v_has_target_owner then
     raise exception 'The tenant owner cannot be assigned a custom staff role' using errcode='42501';
+  end if;
+  if v_target_company_count>1 then
+    raise exception 'Target user has conflicting company role assignments' using errcode='42501';
   end if;
   if v_profile_company is not null and v_target_company_count>0
      and v_target_company is distinct from v_profile_company then
@@ -439,6 +479,9 @@ begin
   end if;
   if v_has_target_manager and not v_is_super and not v_is_tenant_owner then
     raise exception 'Only the tenant owner can change a manager role' using errcode='42501';
+  end if;
+  if v_target_company_count>1 then
+    raise exception 'Target user has conflicting company role assignments' using errcode='42501';
   end if;
   if v_profile_company is not null and v_target_company_count>0
      and v_target_company is distinct from v_profile_company then
