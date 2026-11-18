@@ -9874,3 +9874,11 @@ commit;
 create index if not exists platform_branding_updated_by_idx
   on public.platform_branding(updated_by)
   where updated_by is not null;
+
+ 
+-- =====================================================================
+-- SOURCE MIGRATION: 20261119000006_company_scope_marketing_notifications.sql
+-- =====================================================================
+
+-- Company-scope marketing campaigns and notifications, and preserve tenant-owner branch access.
+-- See the source migration file for the complete trigger and RLS definitions.
