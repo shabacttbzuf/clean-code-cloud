@@ -384,13 +384,14 @@ function CreateUserDialog({
 }) {
   const qc = useQueryClient();
   const createFn = useServerFn(createUser);
+  const defaultRole = isSuperOwner ? "manager" : "cashier";
   const [form, setForm] = useState({
     email: "",
     password: "",
     full_name: "",
     username: "",
     phone: "",
-    role: "cashier" as (typeof ROLES)[number]["value"],
+    role: defaultRole as (typeof ROLES)[number]["value"],
     custom_role_id: "",
     branch_id: "none",
   });
@@ -422,7 +423,7 @@ function CreateUserDialog({
         full_name: "",
         username: "",
         phone: "",
-        role: "cashier",
+        role: defaultRole as (typeof ROLES)[number]["value"],
         custom_role_id: "",
         branch_id: "none",
       });
