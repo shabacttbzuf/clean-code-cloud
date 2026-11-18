@@ -136,6 +136,8 @@ as $function$
           select 1 from public.profiles target_profile
           where target_profile.id=_target_user_id and target_profile.tenant_id=_tenant_id
             and (target_profile.company_id is null or target_profile.company_id=_row_company_id)
+            and (target_profile.branch_id is null
+                 or private.can_access_branch(_viewer_id,_tenant_id,target_profile.branch_id))
         )
         and not exists (
           select 1
@@ -165,6 +167,8 @@ as $function$
               select b.company_id from public.branches b
               where b.id=_row_branch_id and b.tenant_id=_tenant_id
             ))
+            and (target_profile.branch_id is null
+                 or private.can_access_branch(_viewer_id,_tenant_id,target_profile.branch_id))
         )
         and not exists (
           select 1
@@ -218,6 +222,8 @@ as $function$
           select 1 from public.profiles target_profile
           where target_profile.id=_target_user_id and target_profile.tenant_id=_tenant_id
             and (target_profile.company_id is null or target_profile.company_id=_row_company_id)
+            and (target_profile.branch_id is null
+                 or private.can_access_branch(_actor_id,_tenant_id,target_profile.branch_id))
         )
         and not exists (
           select 1
