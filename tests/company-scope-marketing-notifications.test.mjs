@@ -19,6 +19,7 @@ test("branch access preserves tenant-owner visibility and scopes company manager
   assert.match(migration, /ur\.role = 'owner' and ur\.company_id is null/i);
   assert.match(migration, /ur\.company_id = b\.company_id/i);
   assert.match(migration, /private\.can_access_branch\(uuid,uuid,uuid\)/i);
+  assert.match(migration, /_user_id = \(select auth\.uid\(\)\)/i);
 });
 
 test("notifications are scoped to company, branch, and department audiences", () => {
@@ -37,6 +38,8 @@ test("marketing campaigns enforce company scope in RLS and on writes", () => {
   assert.match(migration, /marketing_campaigns_company_id_idx/i);
   assert.match(migration, /notifications_company_id_idx/i);
   assert.match(migration, /company_scope_marketing_campaigns_select[\s\S]*as restrictive/i);
+  assert.match(migration, /join public\.branches b on b\.id=ur\.branch_id/i);
+  assert.match(migration, /join public\.departments d on d\.id=ur\.department_id/i);
   assert.match(migration, /company_scope_marketing_campaigns_update[\s\S]*with check/i);
   assert.match(migration, /campaign company must belong to the same tenant/i);
 });
