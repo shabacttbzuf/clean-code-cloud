@@ -11421,6 +11421,7 @@ with check (
   )
   or (
     user_id=(select auth.uid()) and role='owner'
+    and company_id is null and branch_id is null
     and exists (
       select 1 from public.tenants t
       where t.id=user_roles.tenant_id and t.owner_id=(select auth.uid())
