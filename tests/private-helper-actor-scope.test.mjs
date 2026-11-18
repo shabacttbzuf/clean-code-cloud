@@ -10,7 +10,7 @@ const migration = readFileSync(
 test("branch access is bound to auth.uid and includes tenant-wide owner access", () => {
   assert.match(migration, /private\.can_access_branch[\s\S]*_user_id=\(select auth\.uid\(\)\)/i);
   assert.match(migration, /tenant_owner\.role='owner'[\s\S]*tenant_owner\.company_id is null/i);
-  assert.match(migration, /ur\.company_id=b\.company_id/i);
+  assert.match(migration, /b\\.company_id=ur\\.company_id/i);
   assert.match(migration, /ur\.branch_id=_branch_id/i);
 });
 
