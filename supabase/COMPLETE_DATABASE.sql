@@ -10420,6 +10420,7 @@ using (
 commit;
 -- =====================================================================
 -- SOURCE MIGRATION: 20261119000006_company_scope_marketing_notifications.sql
+
 -- Enforce company boundaries for marketing campaigns and notifications.
 -- Also make tenant owners company-wide for branch access while keeping company managers scoped.
 begin;
@@ -10731,6 +10732,18 @@ using (
     where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
       and ur.company_id=notifications.company_id
   )
+  or (audience_type='branch' and exists (
+    select 1 from public.branches b
+    where b.id=notifications.audience_id and b.tenant_id=notifications.tenant_id
+      and private.can_access_branch((select auth.uid()), notifications.tenant_id, b.id)
+  ))
+  or (audience_type='department' and exists (
+    select 1 from public.user_roles ur
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
+      and ur.department_id=notifications.audience_id
+      and (ur.company_id is null or ur.company_id=notifications.company_id)
+  ))
+  or (audience_type='user' and audience_id=(select auth.uid()))
 );
 
 drop policy if exists company_scope_notifications_insert on public.notifications;
