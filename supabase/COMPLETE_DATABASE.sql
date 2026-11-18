@@ -10464,6 +10464,58 @@ create index if not exists notifications_company_id_idx
   on public.notifications(company_id)
   where company_id is not null;
 
+-- Backfill only unambiguous historical ownership into the new scope columns.
+-- Financial, HR, notification content, and campaign content are not rewritten.
+with creator_company as (
+  select ur.user_id, ur.tenant_id, min(ur.company_id::text)::uuid as company_id
+  from public.user_roles ur
+  where ur.company_id is not null and ur.role in ('owner','manager')
+  group by ur.user_id, ur.tenant_id
+  having count(distinct ur.company_id)=1
+)
+update public.marketing_campaigns mc
+set company_id=cc.company_id
+from creator_company cc
+where mc.company_id is null and mc.created_by=cc.user_id and mc.tenant_id=cc.tenant_id;
+
+update public.notifications n
+set company_id=b.company_id
+from public.branches b
+where n.company_id is null and n.audience_type='branch'
+  and n.audience_id=b.id and n.tenant_id=b.tenant_id and b.company_id is not null;
+
+update public.notifications n
+set company_id=d.company_id
+from public.departments d
+where n.company_id is null and n.audience_type='department'
+  and n.audience_id=d.id and n.tenant_id=d.tenant_id and d.company_id is not null;
+
+with target_company as (
+  select ur.user_id, ur.tenant_id, min(ur.company_id::text)::uuid as company_id
+  from public.user_roles ur
+  where ur.company_id is not null
+  group by ur.user_id, ur.tenant_id
+  having count(distinct ur.company_id)=1
+)
+update public.notifications n
+set company_id=tc.company_id
+from target_company tc
+where n.company_id is null and n.audience_type='user'
+  and n.audience_id=tc.user_id and n.tenant_id=tc.tenant_id;
+
+with creator_company as (
+  select ur.user_id, ur.tenant_id, min(ur.company_id::text)::uuid as company_id
+  from public.user_roles ur
+  where ur.company_id is not null and ur.role in ('owner','manager')
+  group by ur.user_id, ur.tenant_id
+  having count(distinct ur.company_id)=1
+)
+update public.notifications n
+set company_id=cc.company_id
+from creator_company cc
+where n.company_id is null and n.audience_type in ('all','owner','manager')
+  and n.created_by=cc.user_id and n.tenant_id=cc.tenant_id;
+
 -- A tenant owner with no company assignment can access all companies in the tenant.
 -- Company managers and accountants remain limited to their assigned company.
 create or replace function private.can_access_branch(_user_id uuid, _tenant_id uuid, _branch_id uuid)
