@@ -58,7 +58,19 @@ jobs:
 
       - name: Start local Supabase
         id: start-supabase
-        run: supabase start --exclude studio,edge-runtime,logflare,vector,inbucket
+        run: |
+          # Clear only this ephemeral CI project's leftover Supabase containers before retrying.
+          supabase stop --no-backup || true
+          for attempt in 1 2 3; do
+            if supabase start --exclude studio,edge-runtime,logflare,vector,inbucket; then
+              exit 0
+            fi
+            echo "Supabase startup attempt $attempt failed; cleaning up before retry."
+            supabase stop --no-backup || true
+            if [ "$attempt" -lt 3 ]; then sleep $((attempt * 15)); fi
+          done
+          echo "::error::Supabase local stack failed to start after 3 attempts."
+          exit 1
 
       - name: Apply all migrations to a clean local database
         run: supabase db reset --local
