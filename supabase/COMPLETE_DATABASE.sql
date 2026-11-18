@@ -10880,30 +10880,45 @@ drop policy if exists company_scope_notifications_select on public.notifications
 create policy company_scope_notifications_select on public.notifications
 as restrictive for select to authenticated
 using (
-  company_id is null
-  or is_super_owner((select auth.uid()))
+  is_super_owner((select auth.uid()))
   or exists (
     select 1 from public.user_roles ur
     where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
       and ur.role='owner' and ur.company_id is null
   )
-  or exists (
+  or (company_id is not null and exists (
     select 1 from public.user_roles ur
     where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
       and ur.company_id=notifications.company_id
-  )
-  or (audience_type='branch' and exists (
-    select 1 from public.branches b
-    where b.id=notifications.audience_id and b.tenant_id=notifications.tenant_id
-      and private.can_access_branch((select auth.uid()), notifications.tenant_id, b.id)
   ))
-  or (audience_type='department' and exists (
-    select 1 from public.user_roles ur
-    where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
-      and ur.department_id=notifications.audience_id
-      and (ur.company_id is null or ur.company_id=notifications.company_id)
+  or (company_id is null and (
+    (audience_type='branch' and exists (
+      select 1 from public.branches b
+      where b.id=notifications.audience_id and b.tenant_id=notifications.tenant_id
+        and private.can_access_branch((select auth.uid()), notifications.tenant_id, b.id)
+    ))
+    or (audience_type='department' and exists (
+      select 1 from public.departments d
+      join public.user_roles ur on ur.user_id=(select auth.uid())
+        and ur.tenant_id=notifications.tenant_id
+      where d.id=notifications.audience_id and d.tenant_id=notifications.tenant_id
+        and (
+          (ur.department_id=d.id and (ur.company_id is null or ur.company_id=d.company_id))
+          or (ur.role in ('owner','manager') and ur.company_id is not null and ur.company_id=d.company_id)
+        )
+    ))
+    or (audience_type='user' and audience_id=(select auth.uid()))
+    or (audience_type in ('all','owner','manager') and (
+      notifications.created_by is null
+      or exists (select 1 from public.super_owners so where so.user_id=notifications.created_by)
+      or exists (
+        select 1 from public.user_roles creator_role
+        where creator_role.user_id=notifications.created_by
+          and creator_role.tenant_id=notifications.tenant_id
+          and creator_role.role='owner' and creator_role.company_id is null
+      )
+    ))
   ))
-  or (audience_type='user' and audience_id=(select auth.uid()))
 );
 
 drop policy if exists company_scope_notifications_insert on public.notifications;
@@ -11060,32 +11075,46 @@ drop policy if exists company_scope_marketing_campaigns_select on public.marketi
 create policy company_scope_marketing_campaigns_select on public.marketing_campaigns
 as restrictive for select to authenticated
 using (
-  company_id is null
-  or is_super_owner((select auth.uid()))
+  is_super_owner((select auth.uid()))
   or exists (
     select 1 from public.user_roles ur
     where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
       and ur.role='owner' and ur.company_id is null
   )
-  or exists (
-    select 1 from public.user_roles ur
-    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
-      and ur.company_id=marketing_campaigns.company_id
-  )
-  or exists (
-    select 1 from public.user_roles ur
-    join public.branches b on b.id=ur.branch_id
-    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
-      and b.company_id=marketing_campaigns.company_id
-      and (ur.company_id is null or ur.company_id=b.company_id)
-  )
-  or exists (
-    select 1 from public.user_roles ur
-    join public.departments d on d.id=ur.department_id
-    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
-      and d.company_id=marketing_campaigns.company_id
-      and (ur.company_id is null or ur.company_id=d.company_id)
-  )
+  or (company_id is not null and (
+    exists (
+      select 1 from public.user_roles ur
+      where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+        and ur.company_id=marketing_campaigns.company_id
+    )
+    or exists (
+      select 1 from public.user_roles ur
+      join public.branches b on b.id=ur.branch_id and b.tenant_id=ur.tenant_id
+      where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+        and b.company_id=marketing_campaigns.company_id
+        and (ur.company_id is null or ur.company_id=b.company_id)
+    )
+    or exists (
+      select 1 from public.user_roles ur
+      join public.departments d on d.id=ur.department_id and d.tenant_id=ur.tenant_id
+      where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+        and d.company_id=marketing_campaigns.company_id
+        and (ur.company_id is null or ur.company_id=d.company_id)
+    )
+  ))
+  or (company_id is null and (
+    marketing_campaigns.created_by is null
+    or exists (
+      select 1 from public.super_owners so
+      where so.user_id=marketing_campaigns.created_by
+    )
+    or exists (
+      select 1 from public.user_roles creator_role
+      where creator_role.user_id=marketing_campaigns.created_by
+        and creator_role.tenant_id=marketing_campaigns.tenant_id
+        and creator_role.role='owner' and creator_role.company_id is null
+    )
+  ))
 );
 
 drop policy if exists company_scope_marketing_campaigns_insert on public.marketing_campaigns;
@@ -11371,12 +11400,13 @@ as $function$
         _row_role not in ('owner'::public.app_role,'manager'::public.app_role)
         and _row_company_id is not null
         and exists (
-          select 1 from public.user_roles company_owner
-          where company_owner.user_id=_actor_id
-            and company_owner.tenant_id=_tenant_id
-            and company_owner.role='owner'
-            and company_owner.company_id=_row_company_id
+          select 1 from public.user_roles company_admin
+          where company_admin.user_id=_actor_id
+            and company_admin.tenant_id=_tenant_id
+            and company_admin.role in ('owner','manager')
+            and company_admin.company_id=_row_company_id
         )
+        and public.has_permission(_actor_id,_tenant_id,'users.change_role')
         and (_row_branch_id is null or private.can_access_branch(_actor_id,_tenant_id,_row_branch_id))
         and exists (
           select 1 from public.profiles target_profile
@@ -11866,207 +11896,6 @@ end;
 $function$;
 revoke all on function public.transfer_user_role_branch(uuid,uuid,uuid) from public, anon, authenticated;
 grant execute on function public.transfer_user_role_branch(uuid,uuid,uuid) to service_role;
-
-commit;
-
-
--- =====================================================================
--- SOURCE MIGRATION: 20261119000008_bind_branch_access_and_helper_actors.sql
-
--- Bind SECURITY DEFINER authorization helpers to the authenticated actor and
--- ensure tenant owners can access/manage branches across their companies.
-begin;
-
-create or replace function private.can_access_branch(_user_id uuid,_tenant_id uuid,_branch_id uuid)
-returns boolean
-language sql
-stable
-security definer
-set search_path = pg_catalog, public, private, pg_temp
-as $function$
-  select _user_id=(select auth.uid())
-    and (
-      exists (
-        select 1 from public.super_owners so where so.user_id=_user_id
-      )
-      or exists (
-        select 1 from public.user_roles tenant_owner
-        where tenant_owner.user_id=_user_id
-          and tenant_owner.tenant_id=_tenant_id
-          and tenant_owner.role='owner'
-          and tenant_owner.company_id is null
-      )
-      or exists (
-        select 1
-        from public.user_roles ur
-        join public.branches b on b.id=_branch_id and b.tenant_id=_tenant_id
-        where ur.user_id=_user_id and ur.tenant_id=_tenant_id
-          and (
-            (ur.role in ('owner','manager','accountant')
-             and (
-               (ur.company_id is not null and b.company_id=ur.company_id)
-               or (ur.company_id is null and b.company_id is null)
-             ))
-            or (ur.branch_id=_branch_id and (ur.company_id is null or b.company_id=ur.company_id))
-          )
-      )
-    );
-$function$;
-revoke all on function private.can_access_branch(uuid,uuid,uuid) from public, anon;
-grant execute on function private.can_access_branch(uuid,uuid,uuid) to authenticated, service_role;
-
-create or replace function private.can_manage_expenses(_user_id uuid,_tenant_id uuid)
-returns boolean
-language sql
-stable
-security definer
-set search_path = pg_catalog, public, private, pg_temp
-as $function$
-  select _user_id=(select auth.uid())
-    and exists (
-      select 1 from public.user_roles
-      where user_id=_user_id and tenant_id=_tenant_id
-        and role in ('owner','manager','accountant')
-    );
-$function$;
-revoke all on function private.can_manage_expenses(uuid,uuid) from public, anon;
-grant execute on function private.can_manage_expenses(uuid,uuid) to authenticated, service_role;
-
-create or replace function private.has_role(_user_id uuid,_tenant_id uuid,_role public.app_role)
-returns boolean
-language sql
-stable
-security definer
-set search_path = pg_catalog, public, private, pg_temp
-as $function$
-  select _user_id=(select auth.uid())
-    and exists (
-      select 1 from public.user_roles
-      where user_id=_user_id and tenant_id=_tenant_id and role=_role
-    );
-$function$;
-revoke all on function private.has_role(uuid,uuid,public.app_role) from public, anon;
-grant execute on function private.has_role(uuid,uuid,public.app_role) to authenticated, service_role;
-
-create or replace function private.is_tenant_admin(_user_id uuid,_tenant_id uuid)
-returns boolean
-language sql
-stable
-security definer
-set search_path = pg_catalog, public, private, pg_temp
-as $function$
-  select _user_id=(select auth.uid())
-    and (
-      exists (select 1 from public.super_owners so where so.user_id=_user_id)
-      or exists (
-        select 1 from public.user_roles ur
-        where ur.user_id=_user_id and ur.tenant_id=_tenant_id
-          and ur.role in ('owner','manager')
-      )
-    );
-$function$;
-revoke all on function private.is_tenant_admin(uuid,uuid) from public, anon;
-grant execute on function private.is_tenant_admin(uuid,uuid) to authenticated, service_role;
-
-create or replace function private.is_tenant_member(_user_id uuid,_tenant_id uuid)
-returns boolean
-language sql
-stable
-security definer
-set search_path = pg_catalog, public, private, pg_temp
-as $function$
-  select _user_id=(select auth.uid())
-    and exists (
-      select 1 from public.user_roles
-      where user_id=_user_id and tenant_id=_tenant_id
-    );
-$function$;
-revoke all on function private.is_tenant_member(uuid,uuid) from public, anon;
-grant execute on function private.is_tenant_member(uuid,uuid) to authenticated, service_role;
-
-create or replace function private.user_branch_id(_user_id uuid,_tenant_id uuid)
-returns uuid
-language sql
-stable
-security definer
-set search_path = pg_catalog, public, private, pg_temp
-as $function$
-  select case when _user_id=(select auth.uid()) then (
-    select branch_id from public.user_roles
-    where user_id=_user_id and tenant_id=_tenant_id
-    limit 1
-  ) else null end;
-$function$;
-revoke all on function private.user_branch_id(uuid,uuid) from public, anon;
-grant execute on function private.user_branch_id(uuid,uuid) to authenticated, service_role;
-
-create or replace function private.user_has_role_in_tenant(_user_id uuid,_tenant_id uuid,_roles text[])
-returns boolean
-language sql
-stable
-security definer
-set search_path = pg_catalog, public, private, pg_temp
-as $function$
-  select _user_id=(select auth.uid())
-    and exists (
-      select 1 from public.user_roles
-      where user_id=_user_id and tenant_id=_tenant_id
-        and role::text=any(_roles)
-    );
-$function$;
-revoke all on function private.user_has_role_in_tenant(uuid,uuid,text[]) from public, anon;
-grant execute on function private.user_has_role_in_tenant(uuid,uuid,text[]) to authenticated, service_role;
-
-create or replace function private.was_hired_by(_target uuid,_actor uuid,_tenant_id uuid)
-returns boolean
-language sql
-stable
-security definer
-set search_path = pg_catalog, public, private, pg_temp
-as $function$
-  select _actor=(select auth.uid())
-    and exists (
-      select 1 from public.user_roles
-      where user_id=_target and tenant_id=_tenant_id and hired_by=_actor
-    );
-$function$;
-revoke all on function private.was_hired_by(uuid,uuid,uuid) from public, anon;
-grant execute on function private.was_hired_by(uuid,uuid,uuid) to authenticated, service_role;
-
--- Tenant owners have tenant-wide branch administration. Company owners/managers
--- remain limited to branches belonging to their assigned company.
-drop policy if exists company_scope_branches_insert on public.branches;
-create policy company_scope_branches_insert on public.branches
-as restrictive for insert to authenticated
-with check (
-  public.is_super_owner((select auth.uid()))
-  or private.is_tenant_owner_user((select auth.uid()),tenant_id)
-  or exists (
-    select 1 from public.user_roles ur
-    where ur.user_id=(select auth.uid())
-      and ur.tenant_id=branches.tenant_id
-      and ur.company_id=branches.company_id
-      and ur.role in ('owner','manager')
-  )
-);
-
-drop policy if exists company_scope_branches_update on public.branches;
-create policy company_scope_branches_update on public.branches
-as restrictive for update to authenticated
-using (
-  private.can_access_branch((select auth.uid()),tenant_id,id)
-)
-with check (
-  public.is_super_owner((select auth.uid()))
-  or private.is_tenant_owner_user((select auth.uid()),tenant_id)
-  or exists (
-    select 1 from public.user_roles ur
-    where ur.user_id=(select auth.uid())
-      and ur.tenant_id=branches.tenant_id
-      and ur.company_id=branches.company_id
-      and ur.role in ('owner','manager')
-  )
-);
 
 commit;
 
