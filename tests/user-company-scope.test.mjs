@@ -6,6 +6,10 @@ const migration = readFileSync(
   new URL("../supabase/migrations/20261119000007_user_role_company_scope.sql", import.meta.url),
   "utf8",
 );
+const helperMigration = readFileSync(
+  new URL("../supabase/migrations/20261119000008_bind_branch_access_and_helper_actors.sql", import.meta.url),
+  "utf8",
+);
 const users = readFileSync(
   new URL("../src/lib/users.functions.ts", import.meta.url),
   "utf8",
@@ -60,4 +64,11 @@ test("company managers can manage only permitted staff roles in their own compan
   assert.match(migration, /company_admin\.role in \('owner','manager'\)/i);
   assert.match(migration, /public\.has_permission\(_actor_id,_tenant_id,'users\.change_role'\)/i);
   assert.match(migration, /_row_role not in \('owner'::public\.app_role,'manager'::public\.app_role\)/i);
+});
+
+test("security-definer helper actors are bound to the authenticated user", () => {
+  assert.match(helperMigration, /create or replace function private\.can_access_branch[\s\S]*_user_id=\(select auth\.uid\(\)\)/i);
+  assert.match(helperMigration, /create or replace function private\.is_tenant_admin[\s\S]*_user_id=\(select auth\.uid\(\)\)/i);
+  assert.match(helperMigration, /create or replace function private\.user_has_role_in_tenant[\s\S]*_user_id=\(select auth\.uid\(\)\)/i);
+  assert.match(helperMigration, /create or replace function private\.was_hired_by[\s\S]*_actor=\(select auth\.uid\(\)\)/i);
 });
