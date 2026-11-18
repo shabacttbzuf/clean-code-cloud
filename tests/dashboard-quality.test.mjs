@@ -156,6 +156,7 @@ test("marketing campaigns have tenant isolation and owner-managed lifecycle cont
 const imageUploader = readFileSync(new URL("../src/components/image-uploader.tsx", import.meta.url), "utf8");
 const branches = readFileSync(new URL("../src/routes/_authenticated/branches.tsx", import.meta.url), "utf8");
 const categories = readFileSync(new URL("../src/routes/_authenticated/categories.tsx", import.meta.url), "utf8");
+const products = readFileSync(new URL("../src/routes/_authenticated/products.tsx", import.meta.url), "utf8");
 const posPage = readFileSync(new URL("../src/routes/_authenticated/pos.tsx", import.meta.url), "utf8");
 
 test("shared image uploader validates formats and stores permanent public URLs", () => {
@@ -170,6 +171,10 @@ test("shared image uploader validates formats and stores permanent public URLs",
 test("branch and category image fields use the shared uploader", () => {
   assert.match(branches, /<ImageUploader tenantId={tenantId} companyId={companyId \|\| null} folder="branches"/);
   assert.match(categories, /<ImageUploader tenantId={tenantId} companyId={companyId} folder="categories"/);
+});
+
+test("product images use the active company's public asset path", () => {
+  assert.match(products, /companies\/\$\{companyId\}\/products/);
 });
 
 test("POS supports scheduled promotional placements without changing checkout logic", () => {
