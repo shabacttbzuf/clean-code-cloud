@@ -11472,6 +11472,56 @@ using (
   )
 );
 
+-- Custom role definitions are tenant-wide, so company-scoped owners/managers
+-- must not change definitions that affect other companies.
+drop policy if exists company_scope_custom_roles_insert on public.custom_roles;
+create policy company_scope_custom_roles_insert on public.custom_roles
+as restrictive for insert to authenticated
+with check (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles tenant_owner
+    where tenant_owner.user_id=(select auth.uid())
+      and tenant_owner.tenant_id=custom_roles.tenant_id
+      and tenant_owner.role='owner' and tenant_owner.company_id is null
+  )
+);
+
+drop policy if exists company_scope_custom_roles_update on public.custom_roles;
+create policy company_scope_custom_roles_update on public.custom_roles
+as restrictive for update to authenticated
+using (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles tenant_owner
+    where tenant_owner.user_id=(select auth.uid())
+      and tenant_owner.tenant_id=custom_roles.tenant_id
+      and tenant_owner.role='owner' and tenant_owner.company_id is null
+  )
+)
+with check (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles tenant_owner
+    where tenant_owner.user_id=(select auth.uid())
+      and tenant_owner.tenant_id=custom_roles.tenant_id
+      and tenant_owner.role='owner' and tenant_owner.company_id is null
+  )
+);
+
+drop policy if exists company_scope_custom_roles_delete on public.custom_roles;
+create policy company_scope_custom_roles_delete on public.custom_roles
+as restrictive for delete to authenticated
+using (
+  is_super_owner((select auth.uid()))
+  or exists (
+    select 1 from public.user_roles tenant_owner
+    where tenant_owner.user_id=(select auth.uid())
+      and tenant_owner.tenant_id=custom_roles.tenant_id
+      and tenant_owner.role='owner' and tenant_owner.company_id is null
+  )
+);
+
 -- The permissive UPO policies still require the relevant role/permission and hiring
 -- relationship; these restrictive policies add the missing company boundary.
 drop policy if exists company_scope_user_permission_overrides_insert on public.user_permission_overrides;
