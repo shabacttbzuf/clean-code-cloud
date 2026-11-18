@@ -34,6 +34,8 @@ test("notifications are scoped to company, branch, and department audiences", ()
 test("marketing campaigns enforce company scope in RLS and on writes", () => {
   assert.match(migration, /alter table public\.marketing_campaigns[\s\S]*add column if not exists company_id uuid/i);
   assert.match(migration, /marketing_campaigns_enforce_company_scope/i);
+  assert.match(migration, /marketing_campaigns_company_id_idx/i);
+  assert.match(migration, /notifications_company_id_idx/i);
   assert.match(migration, /company_scope_marketing_campaigns_select[\s\S]*as restrictive/i);
   assert.match(migration, /company_scope_marketing_campaigns_update[\s\S]*with check/i);
   assert.match(migration, /campaign company must belong to the same tenant/i);
