@@ -12098,5 +12098,15 @@ with check (
   )
 );
 
+
+-- Trigger functions are invoked by PostgreSQL triggers, not by client RPCs.
+-- Remove unnecessary direct EXECUTE grants from all API roles.
+revoke all on function private.enforce_inventory_reference_tenant() from public, anon, authenticated, service_role;
+revoke all on function private.enforce_notification_audience_tenant() from public, anon, authenticated, service_role;
+revoke all on function private.enforce_notification_read_tenant() from public, anon, authenticated, service_role;
+revoke all on function private.enforce_same_tenant_foreign_key() from public, anon, authenticated, service_role;
+revoke all on function private.enforce_tenant_user_membership() from public, anon, authenticated, service_role;
+revoke all on function private.prevent_cash_refund_overdraw() from public, anon, authenticated, service_role;
+
 commit;
 
