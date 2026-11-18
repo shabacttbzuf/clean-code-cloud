@@ -487,6 +487,18 @@ using (
     where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
       and ur.company_id=marketing_campaigns.company_id
   )
+  or exists (
+    select 1 from public.user_roles ur
+    join public.branches b on b.id=ur.branch_id
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+      and b.company_id=marketing_campaigns.company_id
+  )
+  or exists (
+    select 1 from public.user_roles ur
+    join public.departments d on d.id=ur.department_id
+    where ur.user_id=(select auth.uid()) and ur.tenant_id=marketing_campaigns.tenant_id
+      and d.company_id=marketing_campaigns.company_id
+  )
 );
 
 drop policy if exists company_scope_marketing_campaigns_insert on public.marketing_campaigns;
