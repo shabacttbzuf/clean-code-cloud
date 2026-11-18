@@ -11,24 +11,27 @@ const users = readFileSync(
   "utf8",
 );
 
-test("user role reads are scoped to the row company and branch", () => {
-  assert.match(migration, /company_scope_user_roles_select[\s\S]*as restrictive for select/i);
-  assert.match(migration, /viewer\.company_id=user_roles\.company_id/i);
-  assert.match(migration, /private\.can_access_branch\(\(select auth\.uid\(\)\),tenant_id,branch_id\)/i);
-  assert.match(migration, /conflicting_role\.company_id<>user_roles\.company_id/i);
+test("user role reads are scoped to the row company and branch without recursive RLS", () => {
+  assert.match(migration, /company_scope_user_roles_select[\s\S]*private\.can_view_user_role_row/i);
+  assert.match(migration, /private\.can_view_user_role_row[\s\S]*security definer/i);
+  assert.match(migration, /viewer\.company_id=_row_company_id/i);
+  assert.match(migration, /private\.can_access_branch\(_viewer_id,_tenant_id,_row_branch_id\)/i);
+  assert.match(migration, /conflicting_role\.company_id<>_row_company_id/i);
 });
 
-test("only tenant owners and the platform owner can administer tenant-wide roles", () => {
-  assert.match(migration, /company_scope_user_roles_insert[\s\S]*role <> 'owner'/i);
-  assert.match(migration, /company_scope_user_roles_update[\s\S]*role <> 'owner'/i);
-  assert.match(migration, /company_scope_user_roles_delete[\s\S]*role <> 'owner'/i);
+test("only tenant owners and the platform owner can administer protected roles", () => {
+  assert.match(migration, /company_scope_user_roles_insert[\s\S]*private\.can_manage_user_role_row/i);
+  assert.match(migration, /company_scope_user_roles_update[\s\S]*private\.can_manage_user_role_row/i);
+  assert.match(migration, /company_scope_user_roles_delete[\s\S]*private\.can_manage_user_role_row/i);
+  assert.match(migration, /_row_role not in \('owner'::public\.app_role,'manager'::public\.app_role\)/i);
   assert.match(migration, /user_id=\(select auth\.uid\(\)\) and role='owner'[\s\S]*t\.owner_id=\(select auth\.uid\(\)\)/i);
 });
 
 test("tenant-wide custom role definitions are managed only by tenant owners", () => {
-  assert.match(migration, /company_scope_custom_roles_insert[\\s\\S]*as restrictive/i);
-  assert.match(migration, /company_scope_custom_roles_update[\\s\\S]*as restrictive/i);
-  assert.match(migration, /company_scope_custom_roles_delete[\\s\\S]*as restrictive/i);
+  assert.match(migration, /company_scope_custom_roles_insert[\s\S]*as restrictive/i);
+  assert.match(migration, /company_scope_custom_roles_update[\s\S]*as restrictive/i);
+  assert.match(migration, /company_scope_custom_roles_delete[\s\S]*as restrictive/i);
+  assert.match(migration, /private\.is_tenant_owner_user\(\(select auth\.uid\(\)\),tenant_id\)/i);
 });
 
 test("permission overrides cannot cross the employee company boundary", () => {
