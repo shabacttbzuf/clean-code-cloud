@@ -207,9 +207,12 @@ async function assertTargetRoleManageable(
   if (targetError) throw new Error(targetError.message);
 
   const roles = targetRoles ?? [];
+  if (!actorScope.isSuperOwner && roles.some((r: any) => r.role === "owner")) {
+    throw new Error("لا يمكن تعديل حساب مالك المؤسسة إلا بواسطة المالك الأعلى.");
+  }
   if (!actorScope.isSuperOwner && !actorScope.isTenantOwner &&
-      roles.some((r: any) => ["owner", "manager"].includes(r.role))) {
-    throw new Error("لا يحق لمدير الشركة إدارة حساب مالك المؤسسة أو مدير آخر.");
+      roles.some((r: any) => r.role === "manager")) {
+    throw new Error("لا يحق لمدير الشركة إدارة حساب مدير آخر.");
   }
 
   if (actorScope.isSuperOwner || actorScope.isTenantOwner) return;
