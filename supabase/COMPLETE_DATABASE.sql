@@ -10419,6 +10419,7 @@ using (
 
 commit;
 -- =====================================================================
+-- SOURCE MIGRATION: 20261119000006_company_scope_marketing_notifications.sql
 -- Enforce company boundaries for marketing campaigns and notifications.
 -- Also make tenant owners company-wide for branch access while keeping company managers scoped.
 begin;
