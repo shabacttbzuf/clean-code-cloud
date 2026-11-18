@@ -271,6 +271,7 @@ using (
               select 1 from public.user_roles ur
               where ur.user_id=(select auth.uid()) and ur.tenant_id=notifications.tenant_id
                 and ur.department_id=d.id
+                and (ur.company_id is null or ur.company_id=d.company_id)
             )
             or exists (
               select 1 from public.user_roles ur
