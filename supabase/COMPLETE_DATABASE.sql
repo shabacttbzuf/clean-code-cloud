@@ -9878,9 +9878,6 @@ create index if not exists platform_branding_updated_by_idx
 
 
 -- =====================================================================
--- SOURCE MIGRATION: 20261119000006_company_scope_marketing_notifications.sql
--- =====================================================================
-
 -- Enforce company boundaries for marketing campaigns and notifications.
 -- Also make tenant owners company-wide for branch access while keeping company managers scoped.
 begin;
@@ -9890,7 +9887,7 @@ alter table public.marketing_campaigns
 alter table public.notifications
   add column if not exists company_id uuid;
 
-do $
+do $$
 begin
   if not exists (
     select 1 from pg_constraint
@@ -9910,7 +9907,7 @@ begin
       add constraint notifications_company_id_fkey
       foreign key (company_id) references public.companies(id) on delete restrict;
   end if;
-end $;
+end $$;
 
 create index if not exists marketing_campaigns_tenant_company_status_idx
   on public.marketing_campaigns(tenant_id, company_id, status, sort_order, created_at desc);
@@ -10077,7 +10074,7 @@ begin
 end;
 $function$;
 revoke all on function private.enforce_notification_company_scope() from public, anon, authenticated;
-grant execute on function private.enforce_notification_company_scope() to service_role;
+grant execute on function private.enforce_notification_company_scope() to authenticated, service_role;
 
 drop trigger if exists notifications_enforce_company_scope on public.notifications;
 create trigger notifications_enforce_company_scope
@@ -10318,7 +10315,7 @@ begin
 end;
 $function$;
 revoke all on function private.enforce_marketing_campaign_company_scope() from public, anon, authenticated;
-grant execute on function private.enforce_marketing_campaign_company_scope() to service_role;
+grant execute on function private.enforce_marketing_campaign_company_scope() to authenticated, service_role;
 
 drop trigger if exists marketing_campaigns_enforce_company_scope on public.marketing_campaigns;
 create trigger marketing_campaigns_enforce_company_scope
@@ -10421,3 +10418,4 @@ using (
 );
 
 commit;
+
