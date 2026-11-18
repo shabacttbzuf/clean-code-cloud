@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string | null
+          company_id: string | null
           description: string
           ends_at: string | null
           id: string
@@ -34,6 +35,7 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by?: string | null
+          company_id?: string | null
           description?: string
           ends_at?: string | null
           id?: string
@@ -50,6 +52,7 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string | null
+          company_id?: string | null
           description?: string
           ends_at?: string | null
           id?: string
@@ -64,6 +67,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "marketing_campaigns_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "marketing_campaigns_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -1352,6 +1362,7 @@ export type Database = {
           body: string | null
           created_at: string
           created_by: string | null
+          company_id: string | null
           delivered_at: string | null
           id: string
           kind: string
@@ -1368,6 +1379,7 @@ export type Database = {
           body?: string | null
           created_at?: string
           created_by?: string | null
+          company_id?: string | null
           delivered_at?: string | null
           id?: string
           kind: string
@@ -1384,6 +1396,7 @@ export type Database = {
           body?: string | null
           created_at?: string
           created_by?: string | null
+          company_id?: string | null
           delivered_at?: string | null
           id?: string
           kind?: string
@@ -1395,6 +1408,13 @@ export type Database = {
           urgency?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "notifications_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "notifications_tenant_id_fkey"
             columns: ["tenant_id"]
