@@ -11280,6 +11280,21 @@ $function$;
 revoke all on function private.can_access_creator_company(uuid,uuid) from public, anon;
 grant execute on function private.can_access_creator_company(uuid,uuid) to authenticated, service_role;
 
+create or replace function private.is_super_owner_target(_actor_id uuid,_target_user_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select _actor_id=(select auth.uid())
+    and exists (
+      select 1 from public.super_owners so where so.user_id=_target_user_id
+    );
+$function$;
+revoke all on function private.is_super_owner_target(uuid,uuid) from public, anon;
+grant execute on function private.is_super_owner_target(uuid,uuid) to authenticated, service_role;
+
 -- SECURITY DEFINER helpers avoid recursive RLS evaluation while checking
 -- the actor's and target user's role assignments.
 create or replace function private.is_tenant_owner_user(_user_id uuid,_tenant_id uuid)
@@ -11462,10 +11477,7 @@ with check (
   or (
     user_id=(select auth.uid()) and role='owner'
     and company_id is null and branch_id is null
-    and not exists (
-      select 1 from public.super_owners protected_super_owner
-      where protected_super_owner.user_id=(select auth.uid())
-    )
+    and not public.is_super_owner((select auth.uid()))
     and exists (
       select 1 from public.tenants t
       where t.id=user_roles.tenant_id and t.owner_id=(select auth.uid())
@@ -11532,28 +11544,61 @@ drop policy if exists company_scope_user_permission_overrides_insert on public.u
 create policy company_scope_user_permission_overrides_insert on public.user_permission_overrides
 as restrictive for insert to authenticated
 with check (
-  is_super_owner((select auth.uid()))
-  or private.can_access_creator_company(tenant_id,user_id)
+  not private.is_super_owner_target((select auth.uid()),user_permission_overrides.user_id)
+  and (
+    is_super_owner((select auth.uid()))
+    or private.can_access_creator_company(tenant_id,user_id)
+  )
 );
 
 drop policy if exists company_scope_user_permission_overrides_update on public.user_permission_overrides;
 create policy company_scope_user_permission_overrides_update on public.user_permission_overrides
 as restrictive for update to authenticated
 using (
-  is_super_owner((select auth.uid()))
-  or private.can_access_creator_company(tenant_id,user_id)
+  not private.is_super_owner_target((select auth.uid()),user_permission_overrides.user_id)
+  and (
+    is_super_owner((select auth.uid()))
+    or private.can_access_creator_company(tenant_id,user_id)
+  )
 )
 with check (
-  is_super_owner((select auth.uid()))
-  or private.can_access_creator_company(tenant_id,user_id)
+  not private.is_super_owner_target((select auth.uid()),user_permission_overrides.user_id)
+  and (
+    is_super_owner((select auth.uid()))
+    or private.can_access_creator_company(tenant_id,user_id)
+  )
 );
 
 drop policy if exists company_scope_user_permission_overrides_delete on public.user_permission_overrides;
 create policy company_scope_user_permission_overrides_delete on public.user_permission_overrides
 as restrictive for delete to authenticated
 using (
-  is_super_owner((select auth.uid()))
-  or private.can_access_creator_company(tenant_id,user_id)
+  not private.is_super_owner_target((select auth.uid()),user_permission_overrides.user_id)
+  and (
+    is_super_owner((select auth.uid()))
+    or private.can_access_creator_company(tenant_id,user_id)
+  )
+);
+
+-- Protect the platform owner's profile from tenant/company administrators.
+-- The platform owner may still update their own ordinary profile fields.
+drop policy if exists protect_super_owner_profile_update on public.profiles;
+create policy protect_super_owner_profile_update on public.profiles
+as restrictive for update to authenticated
+using (
+  not private.is_super_owner_target((select auth.uid()),profiles.id)
+  or profiles.id=(select auth.uid())
+)
+with check (
+  not private.is_super_owner_target((select auth.uid()),profiles.id)
+  or profiles.id=(select auth.uid())
+);
+
+drop policy if exists protect_super_owner_profile_delete on public.profiles;
+create policy protect_super_owner_profile_delete on public.profiles
+as restrictive for delete to authenticated
+using (
+  not private.is_super_owner_target((select auth.uid()),profiles.id)
 );
 
 -- Assign a custom role only within the actor's company unless the actor is the
