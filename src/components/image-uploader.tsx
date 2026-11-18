@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 type Props = {
   tenantId: string;
+  companyId?: string | null;
   folder: string;
   value: string | null;
   onChange: (url: string | null) => void;
@@ -19,7 +20,7 @@ const ALLOWED_TYPES: Record<string, string> = {
   "image/avif": "avif",
 };
 
-export function ImageUploader({ tenantId, folder, value, onChange, aspect = "square", label = "الصورة" }: Props) {
+export function ImageUploader({ tenantId, companyId, folder, value, onChange, aspect = "square", label = "الصورة" }: Props) {
   const [uploading, setUploading] = useState(false);
 
   async function handle(e: React.ChangeEvent<HTMLInputElement>) {
@@ -37,9 +38,16 @@ export function ImageUploader({ tenantId, folder, value, onChange, aspect = "squ
       input.value = "";
       return;
     }
+    if (folder === "branches" && !companyId) {
+      toast.error("اختر الشركة التابعة للفرع قبل رفع صورته");
+      input.value = "";
+      return;
+    }
     setUploading(true);
     try {
-      const path = `${tenantId}/${folder}/${crypto.randomUUID()}.${ext}`;
+      const path = companyId
+        ? `${tenantId}/companies/${companyId}/${folder}/${crypto.randomUUID()}.${ext}`
+        : `${tenantId}/${folder}/${crypto.randomUUID()}.${ext}`;
       const { error } = await supabase.storage.from("restaurant-assets").upload(path, file, {
         upsert: false,
         contentType: file.type,
