@@ -70,3 +70,10 @@ test("tenant owners retain tenant-wide company and branch administration", () =>
   assert.match(migration, /drop policy if exists company_scope_branches_insert/i);
   assert.match(migration, /company_scope_branches_update[\s\S]*ur\.role='owner' and ur\.company_id is null/i);
 });
+
+test("legacy unassigned notifications and campaigns are not exposed as tenant-wide by default", () => {
+  assert.match(migration, /company_id is null and \([\s\S]*notifications\.created_by is null/i);
+  assert.match(migration, /creator_role\.role='owner' and creator_role\.company_id is null/i);
+  assert.match(migration, /company_id is null and \([\s\S]*marketing_campaigns\.created_by is null/i);
+  assert.doesNotMatch(migration, /using \(\s*company_id is null\s+or/i);
+});
