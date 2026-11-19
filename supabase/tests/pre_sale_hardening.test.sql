@@ -8,7 +8,7 @@ select plan(11);
 with function_source as (
   select regexp_replace(
     lower(pg_get_functiondef(
-      'public.create_sale_with_customer(uuid,uuid,uuid,uuid,numeric,uuid,numeric,public.payment_method,jsonb)'::regprocedure
+      'private.create_sale_with_customer(uuid,uuid,uuid,uuid,numeric,uuid,numeric,public.payment_method,jsonb)'::regprocedure
     )),
     '\s+', '', 'g'
   ) as definition
@@ -21,7 +21,7 @@ select ok(
 with function_source as (
   select regexp_replace(
     lower(pg_get_functiondef(
-      'public.create_sale_with_customer(uuid,uuid,uuid,uuid,numeric,uuid,numeric,public.payment_method,jsonb)'::regprocedure
+      'private.create_sale_with_customer(uuid,uuid,uuid,uuid,numeric,uuid,numeric,public.payment_method,jsonb)'::regprocedure
     )),
     '\s+', '', 'g'
   ) as definition
