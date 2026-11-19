@@ -12496,6 +12496,7 @@ commit;
 
 
 
+-- SOURCE MIGRATION: 20261119010000_pre_sale_security_performance_hardening.sql
 -- BEGIN MIGRATION: 20261119010000_pre_sale_security_performance_hardening.sql
 -- Reject NULL, non-array, and empty customer-credit POS item payloads.
 -- Remove only legacy permissive policies whose expressions were verified to be
