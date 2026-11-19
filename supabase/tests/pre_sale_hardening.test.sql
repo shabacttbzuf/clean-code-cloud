@@ -4,30 +4,33 @@ create extension if not exists pgtap with schema extensions;
 
 select plan(11);
 
--- Verify the deployed PostgreSQL function definition, not only the source file.
-select ok(
-  position(
-    '_items is null or jsonb_typeof(_items) is distinct from ''array'''
-    in pg_get_functiondef(
-      'public.create_sale_with_customer(uuid,uuid,uuid,uuid,numeric,uuid,numeric,public.payment_method,jsonb)'::regprocedure
-    )
-  ) > 0,
-  'customer sale RPC explicitly rejects NULL and non-array payloads'
-);
-
-select ok(
-  position(
-    'jsonb_array_length(_items)=0'
-    in pg_get_functiondef(
-      'public.create_sale_with_customer(uuid,uuid,uuid,uuid,numeric,uuid,numeric,public.payment_method,jsonb)'::regprocedure
-    )
-  ) > position(
-    '_items is null or jsonb_typeof(_items) is distinct from ''array'''
-    in pg_get_functiondef(
-      'public.create_sale_with_customer(uuid,uuid,uuid,uuid,numeric,uuid,numeric,public.payment_method,jsonb)'::regprocedure
+-- Normalize case and whitespace because pg_get_functiondef formats SQL keywords.
+with function_source as (
+  select regexp_replace(
+    lower(pg_get_functiondef(
+      'private.create_sale_with_customer(uuid,uuid,uuid,uuid,numeric,uuid,numeric,public.payment_method,jsonb)'::regprocedure
     )),
+    '\s+', '', 'g'
+  ) as definition
+)
+select ok(
+  position('_itemsisnullorjsonb_typeof(_items)isdistinctfrom''array''' in definition) > 0,
+  'customer sale RPC explicitly rejects NULL and non-array payloads'
+) from function_source;
+
+with function_source as (
+  select regexp_replace(
+    lower(pg_get_functiondef(
+      'private.create_sale_with_customer(uuid,uuid,uuid,uuid,numeric,uuid,numeric,public.payment_method,jsonb)'::regprocedure
+    )),
+    '\s+', '', 'g'
+  ) as definition
+)
+select ok(
+  position('jsonb_array_length(_items)=0' in definition) >
+  position('_itemsisnullorjsonb_typeof(_items)isdistinctfrom''array''' in definition),
   'customer sale RPC validates JSON type before array length'
-);
+) from function_source;
 
 select ok(not exists (
   select 1 from pg_policies
