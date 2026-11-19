@@ -75,6 +75,9 @@ jobs:
       - name: Apply all migrations to a clean local database
         run: supabase db reset --local
 
+      - name: Run PostgreSQL pgTAP acceptance checks
+        run: supabase test db
+
       - name: Stop local Supabase
         if: always() && steps.start-supabase.outcome == 'success'
         run: supabase stop --no-backup

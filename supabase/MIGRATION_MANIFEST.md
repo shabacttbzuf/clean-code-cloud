@@ -186,3 +186,7 @@
 94. `supabase/migrations/20261119000009_private_avatar_and_company_asset_scope.sql`
 
 **الإجمالي: 94 ترحيلاً.**
+
+95. `supabase/migrations/20261119010000_pre_sale_security_performance_hardening.sql`
+
+**الإجمالي: 95 ترحيلاً.**
