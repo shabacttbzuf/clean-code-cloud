@@ -25,7 +25,7 @@ select ok(
     '_items is null or jsonb_typeof(_items) is distinct from ''array'''
     in pg_get_functiondef(
       'public.create_sale_with_customer(uuid,uuid,uuid,uuid,numeric,uuid,numeric,public.payment_method,jsonb)'::regprocedure
-    ),
+    )),
   'customer sale RPC validates JSON type before array length'
 );
 
