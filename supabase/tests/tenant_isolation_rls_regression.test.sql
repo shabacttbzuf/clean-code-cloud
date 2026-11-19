@@ -49,9 +49,9 @@ select ok(
 
 select ok(
   (select count(*)=4 from pg_policies where schemaname='public'
-    and tablename='cash_sessions' and policyname like 'company_scope_cash_sessions_%'
+    and tablename='cash_sessions' and policyname like 'company_boundary_cash_sessions_%'
     and permissive='RESTRICTIVE'),
-  'Cash sessions retain restrictive company/branch policies'
+  'Cash sessions retain restrictive company/branch boundary policies'
 );
 
 select ok(
