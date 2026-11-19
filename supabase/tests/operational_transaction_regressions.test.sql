@@ -19,7 +19,7 @@ select ok(
 );
 
 select ok(
-  position('tenant_id=_tenant_id' in lower(pg_get_functiondef('private.create_sale_with_customer(uuid,uuid,uuid,uuid,numeric,uuid,numeric,public.payment_method,jsonb)'::regprocedure))) > 0,
+  position('tenant_id=_tenant_id' in regexp_replace(lower(pg_get_functiondef('private.create_sale_with_customer(uuid,uuid,uuid,uuid,numeric,uuid,numeric,public.payment_method,jsonb)'::regprocedure)), '\s', '', 'g')) > 0,
   'sale creation scopes customers and products to the supplied tenant'
 );
 
@@ -35,7 +35,7 @@ select ok(
 );
 
 select ok(
-  position('tenant_id=_tenant_id' in lower(pg_get_functiondef('private.create_sale_refund(uuid,uuid,text,public.payment_method,jsonb)'::regprocedure))) > 0,
+  position('tenant_id=_tenant_id' in regexp_replace(lower(pg_get_functiondef('private.create_sale_refund(uuid,uuid,text,public.payment_method,jsonb)'::regprocedure)), '\s', '', 'g')) > 0,
   'sale refund validates source sale and items within tenant scope'
 );
 
@@ -45,13 +45,13 @@ select ok(
 );
 
 select ok(
-  position('tenant_id=_tenant_id' in lower(pg_get_functiondef('private.create_purchase_return(uuid,uuid,text,jsonb)'::regprocedure))) > 0,
+  position('tenant_id=_tenant_id' in regexp_replace(lower(pg_get_functiondef('private.create_purchase_return(uuid,uuid,text,jsonb)'::regprocedure)), '\s', '', 'g')) > 0,
   'purchase return enforces tenant scope'
 );
 
 select ok(
   position('for update' in lower(pg_get_functiondef('private.create_purchase_with_items(uuid,uuid,uuid,uuid,text,text,jsonb)'::regprocedure))) > 0
-  and position('tenant_id=_tenant_id' in lower(pg_get_functiondef('private.create_purchase_with_items(uuid,uuid,uuid,uuid,text,text,jsonb)'::regprocedure))) > 0,
+  and position('tenant_id=_tenant_id' in regexp_replace(lower(pg_get_functiondef('private.create_purchase_with_items(uuid,uuid,uuid,uuid,text,text,jsonb)'::regprocedure)), '\s', '', 'g')) > 0,
   'purchase creation locks and tenant-scopes its referenced records'
 );
 
