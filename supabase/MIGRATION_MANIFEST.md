@@ -190,3 +190,7 @@
 95. `supabase/migrations/20261119010000_pre_sale_security_performance_hardening.sql`
 
 **الإجمالي: 95 ترحيلاً.**
+
+96. `supabase/migrations/20261120000000_move_authenticated_definers_to_private_wrappers.sql`
+
+**الإجمالي: 96 ترحيلاً.**
