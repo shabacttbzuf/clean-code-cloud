@@ -105,8 +105,8 @@ function SaleDetailPage() {
         cashier: (profileRes.data?.full_name as string | undefined) ?? "—",
         refunds: refundRows,
         paidAmount: customerPaymentsRes.error ? null :
-          (paymentsRes.data ?? []).reduce((sum, payment) => sum + Number(payment.amount), 0)
-          + (customerPaymentsRes.data ?? []).reduce((sum, payment) => sum + Number(payment.amount), 0),
+          (paymentsRes.data ?? []).reduce((sum: number, payment: { amount: number }) => sum + Number(payment.amount), 0)
+          + (customerPaymentsRes.data ?? []).reduce((sum: number, payment: { amount: number }) => sum + Number(payment.amount), 0),
       };
     },
   });
