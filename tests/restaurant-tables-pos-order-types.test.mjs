@@ -18,6 +18,9 @@ test("restaurant table schema prevents concurrent assignment and client-side occ
 
 test("POS supports dine-in, takeaway and delivery through the validated server RPC", () => {
   assert.match(pos, /create_pos_order/);
+  assert.match(pos, /create_sale_with_customer/);
+  assert.match(pos, /Never silently downgrade dine-in or delivery/);
+  assert.match(pos, /orderType !== "takeaway"/);
   assert.match(pos, /_order_type: orderType/);
   assert.match(pos, /_table_id:/);
   assert.match(pos, /_delivery_customer_name:/);
