@@ -161,10 +161,23 @@ function TeamPermissionsPage() {
         tenant_id: tenantId!, user_id: selectedUser!,
         permission_key: v.permission_key, granted: v.granted,
       } }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["upo", tenantId, selectedUser] });
+    onMutate: async (v) => {
+      const queryKey = ["upo", tenantId, selectedUser] as const;
+      await qc.cancelQueries({ queryKey });
+      const previous = qc.getQueryData<Array<{ permission_key: string; granted: boolean }>>(queryKey);
+      qc.setQueryData<Array<{ permission_key: string; granted: boolean }>>(queryKey, (current = []) => {
+        const next = current.filter((item) => item.permission_key !== v.permission_key);
+        return v.granted === null ? next : [...next, { permission_key: v.permission_key, granted: v.granted }];
+      });
+      return { queryKey, previous };
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (error: Error, _variables, context) => {
+      if (context?.previous) qc.setQueryData(context.queryKey, context.previous);
+      toast.error(error.message);
+    },
+    onSettled: (_data, _error, _variables, context) => {
+      if (context) qc.invalidateQueries({ queryKey: context.queryKey });
+    },
   });
 
   if (tLoading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
@@ -258,7 +271,7 @@ function TeamPermissionsPage() {
                               {!canEditSelected && <Lock className="h-3 w-3 text-muted-foreground" />}
                               <Checkbox
                                 checked={effective}
-                                disabled={!canEditSelected || setMut.isPending}
+                                disabled={!canEditSelected}
                                 onCheckedChange={(v) => {
                                   const next = !!v;
                                   // if flipping to default, clear override; otherwise set explicit

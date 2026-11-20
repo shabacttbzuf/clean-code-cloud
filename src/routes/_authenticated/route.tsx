@@ -64,19 +64,12 @@ function AuthLayout() {
 }
 
 function AuthShell() {
-  const [open, setOpen] = useState(false);
-  const pathname = useRouterState({ select: (r) => r.location.pathname });
-  // Auto-hide the sidebar after any route change to give more workspace.
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
-
   return (
-    <SidebarProvider open={open} onOpenChange={setOpen}>
+    <SidebarProvider defaultOpen={true}>
       <div className="flex min-h-screen w-full">
         <SidebarRouteSync />
         <AppSidebar />
-        <SidebarInset className="workspace-surface">
+        <SidebarInset className="workspace-surface min-w-0">
           <TopBar />
           <main className="min-w-0 flex-1 p-4 md:p-6">
             <PermissionRouteGuard />
@@ -89,11 +82,12 @@ function AuthShell() {
 
 function SidebarRouteSync() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const { setOpen, setOpenMobile } = useSidebar();
+  const { setOpenMobile } = useSidebar();
+  // Close the mobile drawer after navigation, but never collapse the desktop
+  // navigation as a side effect of changing routes.
   useEffect(() => {
-    setOpen(false);
     setOpenMobile(false);
-  }, [pathname, setOpen, setOpenMobile]);
+  }, [pathname, setOpenMobile]);
   return null;
 }
 
