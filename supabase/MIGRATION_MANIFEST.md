@@ -198,3 +198,7 @@
 97. `supabase/migrations/20261120010000_secure_leave_decisions_and_deletion.sql`
 
 **الإجمالي: 97 ترحيلاً.**
+
+98. `supabase/migrations/20261120020000_leave_rejection_actor_integrity.sql`
+
+**الإجمالي: 98 ترحيلاً.**
