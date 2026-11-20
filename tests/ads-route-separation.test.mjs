@@ -6,6 +6,7 @@ const ads = readFileSync(new URL("../src/routes/_authenticated/ads.tsx", import.
 const settings = readFileSync(new URL("../src/routes/_authenticated/settings.tsx", import.meta.url), "utf8");
 const sidebar = readFileSync(new URL("../src/components/app-sidebar.tsx", import.meta.url), "utf8");
 const workspaceTabs = readFileSync(new URL("../src/components/workspace-tabs.tsx", import.meta.url), "utf8");
+const authLayout = readFileSync(new URL("../src/routes/_authenticated/route.tsx", import.meta.url), "utf8");
 
 test("advertising management is a dedicated authenticated route", () => {
   assert.match(ads, /createFileRoute\("\/_authenticated\/ads"\)/);
