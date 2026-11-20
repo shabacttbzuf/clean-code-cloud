@@ -26,6 +26,8 @@ type Sale = {
   branch_id: string; cashier_id: string; notes: string | null;
   order_type: "dine_in" | "takeaway" | "delivery";
   table_name_snapshot: string | null;
+  customer_name_snapshot: string | null;
+  customer_phone_snapshot: string | null;
   delivery_customer_name: string | null;
   delivery_customer_phone: string | null;
   delivery_address: string | null;
@@ -190,6 +192,8 @@ function SaleDetailPage() {
     payment_method: s.payment_method,
     order_type: s.order_type ?? "takeaway",
     table_name: s.table_name_snapshot,
+    customer_name: s.customer_name_snapshot ?? s.delivery_customer_name,
+    customer_phone: s.customer_phone_snapshot ?? s.delivery_customer_phone,
     delivery_fee: Number(s.delivery_fee ?? 0),
     delivery_customer_name: s.delivery_customer_name,
     delivery_customer_phone: s.delivery_customer_phone,
@@ -308,6 +312,8 @@ function SaleDetailPage() {
           {Number(s.delivery_fee ?? 0) > 0 && <Row label="رسوم التوصيل" value={formatMoney(s.delivery_fee)} />}
           <Row label="نوع الطلب" value={s.order_type === "dine_in" ? "محلي" : s.order_type === "delivery" ? "توصيل" : "سفري"} />
           {s.table_name_snapshot && <Row label="الطاولة" value={s.table_name_snapshot} />}
+          {s.customer_name_snapshot && <Row label="العميل" value={s.customer_name_snapshot} />}
+          {s.customer_phone_snapshot && <Row label="هاتف العميل" value={s.customer_phone_snapshot} />}
           {s.order_type === "delivery" && <>
             <Row label="عميل التوصيل" value={s.delivery_customer_name ?? "—"} />
             <Row label="الهاتف" value={s.delivery_customer_phone ?? "—"} />
