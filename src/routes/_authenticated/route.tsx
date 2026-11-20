@@ -183,7 +183,7 @@ function PermissionRouteGuard() {
 
 function TopBar() {
   const { theme, toggle } = useTheme();
-  const { tenantId, tenant, membership } = useActiveTenant();
+  const { tenantId, tenant, membership, memberships, switchTenant } = useActiveTenant();
   const { user } = useAuthSession();
   const { isSuperOwner } = useSuperOwner();
   const [globalSearch, setGlobalSearch] = useState("");
@@ -208,6 +208,18 @@ function TopBar() {
       return data;
     },
     enabled: !!tenantId && !!membership?.branch_id,
+    staleTime: 60_000,
+  });
+  const tenantOptionsQuery = useQuery({
+    queryKey: ["topbar-tenant-options", user?.id, memberships.map((item) => item.tenant_id).sort().join(":")],
+    queryFn: async () => {
+      const ids = memberships.map((item) => item.tenant_id);
+      if (!ids.length) return [];
+      const { data, error } = await supabase.from("tenants").select("id,name").in("id", ids);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: memberships.length > 1,
     staleTime: 60_000,
   });
   const [clock, setClock] = useState(() => new Date());
@@ -314,7 +326,30 @@ function TopBar() {
       <div className="flex min-w-0 items-center gap-2 sm:gap-3">
         <SidebarTrigger className="rounded-xl border border-[#dce5f3] bg-white text-[#174b91] shadow-sm" />
         <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#174b91] to-[#102f5c] text-[#f5c65b] shadow-sm"><Building2 className="h-5 w-5" /></div>
-        <div className="min-w-0"><div className="truncate text-sm font-extrabold text-[#102f5c] sm:text-base">{tenant?.name || "نظام إدارة المطاعم"}</div><div className="hidden text-[10px] text-slate-500 sm:block">نظام إدارة المطاعم المتكامل</div></div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className="min-w-0 rounded-lg px-1 text-right outline-none transition hover:bg-blue-50 focus-visible:ring-2 focus-visible:ring-[#174b91]" aria-label="اختيار الشركة">
+              <span className="block truncate text-sm font-extrabold text-[#102f5c] sm:text-base">{tenant?.name || "نظام إدارة المطاعم"}</span>
+              <span className="block text-[10px] text-slate-500">{memberships.length > 1 ? "تبديل الشركة" : "نظام إدارة المطاعم المتكامل"}</span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-64">
+            <DropdownMenuLabel>الشركات المتاحة لحسابك</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {memberships.map((item) => (
+              <DropdownMenuItem key={item.tenant_id} onSelect={() => {
+                if (item.tenant_id !== tenantId) {
+                  switchTenant(item.tenant_id);
+                  toast.success("تم تبديل الشركة بنجاح");
+                }
+              }} className="cursor-pointer">
+                <Building2 className="ml-2 h-4 w-4" />
+                <span className="min-w-0 flex-1 truncate">{tenantOptionsQuery.data?.find((option) => option.id === item.tenant_id)?.name || (item.tenant_id === tenantId ? tenant?.name : "شركة") || "شركة"}</span>
+                {item.tenant_id === tenantId ? <span className="text-xs text-emerald-600">الحالية</span> : null}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
         <div className="hidden items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 text-xs font-bold text-[#174b91] shadow-sm lg:flex"><Building2 className="h-4 w-4" />{branchQuery.data?.name || (membership?.branch_id ? "الفرع المحدد" : "جميع الفروع")}</div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
