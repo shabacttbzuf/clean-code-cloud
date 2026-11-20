@@ -210,6 +210,18 @@ function TopBar() {
     enabled: !!tenantId && !!membership?.branch_id,
     staleTime: 60_000,
   });
+  const tenantOptionsQuery = useQuery({
+    queryKey: ["topbar-tenant-options", user?.id, memberships.map((item) => item.tenant_id).sort().join(":")],
+    queryFn: async () => {
+      const ids = memberships.map((item) => item.tenant_id);
+      if (!ids.length) return [];
+      const { data, error } = await supabase.from("tenants").select("id,name").in("id", ids);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: memberships.length > 1,
+    staleTime: 60_000,
+  });
   const [clock, setClock] = useState(() => new Date());
   const [fullscreen, setFullscreen] = useState(false);
   useEffect(() => {
@@ -332,7 +344,7 @@ function TopBar() {
                 }
               }} className="cursor-pointer">
                 <Building2 className="ml-2 h-4 w-4" />
-                <span className="min-w-0 flex-1 truncate">{item.tenant_id === tenantId ? tenant?.name || "الشركة الحالية" : "شركة أخرى"}</span>
+                <span className="min-w-0 flex-1 truncate">{tenantOptionsQuery.data?.find((option) => option.id === item.tenant_id)?.name || (item.tenant_id === tenantId ? tenant?.name : "شركة") || "شركة"}</span>
                 {item.tenant_id === tenantId ? <span className="text-xs text-emerald-600">الحالية</span> : null}
               </DropdownMenuItem>
             ))}
