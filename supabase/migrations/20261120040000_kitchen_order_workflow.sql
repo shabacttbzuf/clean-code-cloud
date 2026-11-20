@@ -92,6 +92,24 @@ USING (
   AND private.can_access_branch((select auth.uid()),tenant_id,branch_id)
 );
 
+-- Existing restrictive sales permission gates must explicitly allow kitchen
+-- staff to read only the sale/item snapshots needed for their own queue.
+DROP POLICY IF EXISTS permission_gate_sales_select ON public.sales;
+CREATE POLICY permission_gate_sales_select ON public.sales
+AS RESTRICTIVE FOR SELECT TO authenticated
+USING (
+  private.has_permission((select auth.uid()),tenant_id,'sales.view')
+  OR private.has_permission((select auth.uid()),tenant_id,'kitchen.view')
+);
+
+DROP POLICY IF EXISTS permission_gate_sale_items_select ON public.sale_items;
+CREATE POLICY permission_gate_sale_items_select ON public.sale_items
+AS RESTRICTIVE FOR SELECT TO authenticated
+USING (
+  private.has_permission((select auth.uid()),tenant_id,'sales.view')
+  OR private.has_permission((select auth.uid()),tenant_id,'kitchen.view')
+);
+
 DROP POLICY IF EXISTS kitchen_view_sale_items_select ON public.sale_items;
 CREATE POLICY kitchen_view_sale_items_select ON public.sale_items
 AS PERMISSIVE FOR SELECT TO authenticated
