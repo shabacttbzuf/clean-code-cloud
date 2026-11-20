@@ -333,7 +333,7 @@ function TopBar() {
               <span className="block text-[10px] text-slate-500">{memberships.length > 1 ? "تبديل الشركة" : "نظام إدارة المطاعم المتكامل"}</span>
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-64" dir="rtl">
+          <DropdownMenuContent align="start" className="w-64">
             <DropdownMenuLabel>الشركات المتاحة لحسابك</DropdownMenuLabel>
             <DropdownMenuSeparator />
             {memberships.map((item) => (
