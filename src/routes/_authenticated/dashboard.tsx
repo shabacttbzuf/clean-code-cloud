@@ -146,7 +146,7 @@ function Dashboard() {
       const last30 = new Date(now.getTime() - 29 * 86400000);
       const last30ISO = new Date(last30.getFullYear(), last30.getMonth(), last30.getDate()).toISOString();
 
-      const [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions] = await Promise.all([
+      const [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount] = await Promise.all([
         supabase.from("sales").select("total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfDay),
         supabase.from("sales").select("id, total, subtotal, discount").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfMonth),
         supabase.from("sales").select("total, created_at").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", last30ISO),
