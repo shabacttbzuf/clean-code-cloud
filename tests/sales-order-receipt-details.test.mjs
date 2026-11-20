@@ -29,3 +29,10 @@ test("sales history displays the order type and table snapshot", () => {
   assert.match(list, /order_type/);
   assert.match(list, /table_name_snapshot/);
 });
+
+test("sales history and invoice detail stay compatible before additive metadata policies are deployed", () => {
+  assert.match(list, /missingOrderColumns/);
+  assert.match(list, /order_type: "takeaway"/);
+  assert.match(detail, /customerPaymentsRes\.error\.code !== "42501"/);
+  assert.match(detail, /s\.order_type \?\? "takeaway"/);
+});
