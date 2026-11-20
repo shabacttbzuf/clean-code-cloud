@@ -185,7 +185,6 @@ export function AppSidebar() {
       { title: "أنواع التوظيف", url: "/employment-types", icon: BadgeCheck, permission: "employment_types.view" },
       { title: "إدارة الأدوار", url: "/roles", icon: KeyRound, permission: "roles.view" },
       { title: "سجل الدخول", url: "/login-history", icon: History, permission: "login_history.view" },
-      { title: "الإشعارات", url: "/notifications", icon: Bell, permission: "notifications.view" },
     ],
   };
 
