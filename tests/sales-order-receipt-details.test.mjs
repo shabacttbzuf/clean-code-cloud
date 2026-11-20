@@ -40,3 +40,8 @@ test("sales history and invoice detail stay compatible before additive metadata 
   assert.match(detail, /customerPaymentsRes\.error\.code !== "42501"/);
   assert.match(detail, /s\.order_type \?\? "takeaway"/);
 });
+
+test("customer snapshot trigger uses a valid PostgreSQL dollar-quoted function body", () => {
+  assert.match(migration, /CREATE OR REPLACE FUNCTION private\\.capture_sale_customer_snapshot\\(\\)[\\s\\S]*?AS \\$\\$[\\s\\S]*?END;[\\s\\S]*?\\$\\$;/);
+  assert.doesNotMatch(migration, /AS \\$\\nBEGIN/);
+});
