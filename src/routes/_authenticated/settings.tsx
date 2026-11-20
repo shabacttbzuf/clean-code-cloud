@@ -163,15 +163,26 @@ function SettingsPage() {
     staleTime: 30_000,
   });
   const isTenantOwner = role === "owner" && !membership?.company_id;
-  const canManageMarketing = isSuperOwner || isTenantOwner || marketingPermissions.data?.includes("settings.manage") === true;
+  const canManageMarketing = isSuperOwner || isTenantOwner || ((role === "owner" || role === "manager") && !!membership?.company_id && marketingPermissions.data?.includes("settings.manage") === true);
   const canManageCampaign = (campaign: MarketingCampaign) =>
     isSuperOwner ||
     isTenantOwner ||
     (canManageMarketing && !!membership?.company_id && membership.company_id === campaign.company_id);
   const campaignsQuery = useQuery({
-    queryKey: ["marketing-campaigns", tenantId],
+    queryKey: ["marketing-campaigns", tenantId, membership?.company_id ?? "tenant"],
     queryFn: async (): Promise<MarketingCampaign[]> => {
-      const { data, error } = await supabase.from("marketing_campaigns").select("id,company_id,title,description,image_url,target_url,placement,status,starts_at,ends_at,sort_order").eq("tenant_id", tenantId!).order("sort_order").order("created_at", { ascending: false });
+      let query = supabase.from("marketing_campaigns")
+        .select("id,company_id,title,description,image_url,target_url,placement,status,starts_at,ends_at,sort_order")
+        .eq("tenant_id", tenantId!)
+        .order("sort_order")
+        .order("created_at", { ascending: false });
+      // Company administrators only request their company's campaigns. The
+      // database company-scope RLS policy remains the authoritative boundary.
+      if (!isSuperOwner && !isTenantOwner) {
+        if (!membership?.company_id) return [];
+        query = query.eq("company_id", membership.company_id);
+      }
+      const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as MarketingCampaign[];
     },

@@ -211,15 +211,19 @@ function POSPage() {
   });
 
   const posPromos = useQuery({
-    queryKey: ["pos-marketing-campaigns", tenantId],
+    queryKey: ["pos-marketing-campaigns", tenantId, membership?.company_id ?? "tenant"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("marketing_campaigns")
+      let query = supabase.from("marketing_campaigns")
         .select("id,title,description,image_url,target_url,starts_at,ends_at")
         .eq("tenant_id", tenantId!)
         .eq("status", "active")
         .eq("placement", "pos_promo")
         .order("sort_order")
         .limit(3);
+      if (membership?.company_id) {
+        query = query.or(`company_id.is.null,company_id.eq.${membership.company_id}`);
+      }
+      const { data, error } = await query;
       if (error) throw error;
       const now = Date.now();
       return (data ?? []).filter((campaign) =>
@@ -599,6 +603,11 @@ function POSPage() {
         }
       />
 
+      {posPromos.isError && (
+        <div className="shrink-0 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive" role="alert">
+          تعذر تحميل عروض نقطة البيع. <button type="button" className="underline" onClick={() => posPromos.refetch()}>إعادة المحاولة</button>
+        </div>
+      )}
       {posPromos.data && posPromos.data.length > 0 && (
         <div className="flex shrink-0 gap-2 overflow-x-auto">
           {posPromos.data.map((promo) => {
