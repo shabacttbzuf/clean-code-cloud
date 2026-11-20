@@ -30,5 +30,5 @@ test("campaign creation, image upload, scheduling, activation and pause remain a
 
 test("system settings no longer contains advertising campaign management", () => {
   assert.doesNotMatch(settings, /marketing-campaigns|campaignCreate|campaignDelete|إدارة العروض والإعلانات/);
-  assert.match(settings, /إعدادات الشركة|إعدادات النظام|استوديو تطوير/);
+  assert.match(settings, /إعدادات النشاط التجاري|البيانات الأساسية|استوديو تطوير/);
 });
