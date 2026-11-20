@@ -58,7 +58,7 @@ import {
 export type AppNavigationItem = { title: string; url: string; icon: typeof LayoutDashboard; permission?: string };
 export type AppNavigationGroup = { label: string; items: AppNavigationItem[] };
 
-export const appNavigationGroups: AppNavigationGroup[] = Group[] = [
+export const appNavigationGroups: AppNavigationGroup[] = [
   {
     label: "الرئيسية",
     items: [
