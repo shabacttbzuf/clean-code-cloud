@@ -61,7 +61,7 @@ const schema = z.object({
 });
 
 function SettingsPage() {
-  const { tenant, tenantId, isAdmin, role, membership } = useActiveTenant();
+  const { tenant, tenantId, userId, isAdmin, role, membership } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
   const { design, saveDesign, resetDesign } = useTheme();
   const qc = useQueryClient();
