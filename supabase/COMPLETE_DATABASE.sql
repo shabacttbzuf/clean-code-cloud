@@ -13604,7 +13604,7 @@ BEGIN
       UPDATE public.kitchen_orders
          SET status='cancelled',updated_at=now(),
              notes=coalesce(notes,'') ||
-               CASE WHEN coalesce(notes,'')='' THEN '' ELSE E'\\n' END ||
+               CASE WHEN coalesce(notes,'')='' THEN '' ELSE chr(10) END ||
                'أُلغي البيع المرتبط بهذا الطلب'
        WHERE id=v_order.id;
       INSERT INTO public.kitchen_order_events
