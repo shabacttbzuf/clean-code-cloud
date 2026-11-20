@@ -17,7 +17,8 @@ const dashboardPage = readFileSync(
 const posPage = readFileSync(
   new URL("../src/routes/_authenticated/pos.tsx", import.meta.url),
   "utf8",
-);\nconst settingsPage = readFileSync(
+);
+const settingsPage = readFileSync(
   new URL("../src/routes/_authenticated/settings.tsx", import.meta.url),
   "utf8",
 );
