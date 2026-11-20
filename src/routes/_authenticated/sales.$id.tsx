@@ -82,7 +82,9 @@ function SaleDetailPage() {
       if (itemsRes.error) throw itemsRes.error;
       if (refundsRes.error) throw refundsRes.error;
       if (paymentsRes.error) throw paymentsRes.error;
-      if (customerPaymentsRes.error) throw customerPaymentsRes.error;
+      // Before the additive sale-scoped policy is deployed, sales viewers who
+      // lack customers.view may not read the customer's separate payment ledger.
+      if (customerPaymentsRes.error && customerPaymentsRes.error.code !== "42501") throw customerPaymentsRes.error;
       const refundRows = (refundsRes.data ?? []) as Refund[];
       const refundIds = refundRows.map((r) => r.id);
       const refundItemsRes = refundIds.length
@@ -103,7 +105,7 @@ function SaleDetailPage() {
         cashier: (profileRes.data?.full_name as string | undefined) ?? "—",
         refunds: refundRows,
         paidAmount: (paymentsRes.data ?? []).reduce((sum, payment) => sum + Number(payment.amount), 0)
-          + (customerPaymentsRes.data ?? []).reduce((sum, payment) => sum + Number(payment.amount), 0),
+          + (customerPaymentsRes.error ? 0 : (customerPaymentsRes.data ?? []).reduce((sum, payment) => sum + Number(payment.amount), 0)),
       };
     },
   });
@@ -185,7 +187,7 @@ function SaleDetailPage() {
     tax_amount: Number(s.tax_amount),
     total: Number(s.total),
     payment_method: s.payment_method,
-    order_type: s.order_type,
+    order_type: s.order_type ?? "takeaway",
     table_name: s.table_name_snapshot,
     delivery_fee: Number(s.delivery_fee ?? 0),
     delivery_customer_name: s.delivery_customer_name,
