@@ -319,7 +319,7 @@ function TeamPermissionsPage() {
                               <div className="text-[10px] text-muted-foreground" dir="ltr">{p.key}</div>
                             </div>
                             <div className="flex items-center gap-2">
-                              {isOverride && <Badge variant="secondary" className="text-[9px]">مخصّص</Badge>}
+                              {isOverride ? <Badge variant="secondary" className="text-[9px]">تجاوز مخصص</Badge> : <Badge variant="outline" className="text-[9px]">موروث من الدور</Badge>}
                               {!canEditSelected && <Lock className="h-3 w-3 text-muted-foreground" />}
                               <Checkbox
                                 checked={effective}
