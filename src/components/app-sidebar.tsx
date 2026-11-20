@@ -55,10 +55,10 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-type Item = { title: string; url: string; icon: typeof LayoutDashboard; permission?: string };
-type Group = { label: string; items: Item[] };
+export type AppNavigationItem = { title: string; url: string; icon: typeof LayoutDashboard; permission?: string };
+export type AppNavigationGroup = { label: string; items: AppNavigationItem[] };
 
-const groups: Group[] = [
+export const appNavigationGroups: AppNavigationGroup[] = Group[] = [
   {
     label: "الرئيسية",
     items: [
@@ -175,7 +175,7 @@ export function AppSidebar() {
   const allowed = (item: Item) =>
     isSuperOwner || (!!permissionsQuery.data && (!item.permission || permissionsQuery.data.has(item.permission)));
 
-  const enterpriseGroup: Group = {
+  const enterpriseGroup: AppNavigationGroup = {
     label: "المؤسسة",
     items: [
       { title: "إدارة المستخدمين", url: "/users-admin", icon: UsersRound, permission: "users.manage" },
@@ -189,19 +189,19 @@ export function AppSidebar() {
   };
 
   const showAdmin = isSuperOwner || totalCount === 0;
-  const systemItems: Item[] = [];
+  const systemItems: AppNavigationItem[] = [];
   if (isSuperOwner) systemItems.push({ title: "مركز تحكم المالك", url: "/owner-center", icon: Crown });
   if (isSuperOwner) systemItems.push({ title: "استوديو تطوير النظام", url: "/settings#developer-studio", icon: Palette });
   if (showAdmin) systemItems.push({ title: "إدارة النظام", url: "/admin", icon: ShieldCheck });
   systemItems.push({ title: "سجل التدقيق", url: "/audit-logs", icon: ScrollText, permission: "audit.view" });
 
-  const customGroup: Group = {
+  const customGroup: AppNavigationGroup = {
     label: "اختصارات مخصصة",
     items: customItems.map((item) => ({ title: item.title, url: item.url, icon: Bookmark })),
   };
 
-  const allGroups: Group[] = [
-    ...groups,
+  const allGroups: AppNavigationGroup[] = [
+    ...appNavigationGroups,
     enterpriseGroup,
     { label: "النظام", items: systemItems },
     ...(isSuperOwner && customItems.length ? [customGroup] : []),
