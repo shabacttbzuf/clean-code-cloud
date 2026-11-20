@@ -37,6 +37,16 @@ CREATE INDEX IF NOT EXISTS sales_table_active_idx
 
 ALTER TABLE public.restaurant_tables ENABLE ROW LEVEL SECURITY;
 
+-- Prevent browser clients from forging or clearing current_sale_id. Only the
+-- SECURITY DEFINER checkout/release routines may change occupancy.
+REVOKE INSERT, UPDATE, DELETE ON public.restaurant_tables FROM anon, authenticated;
+GRANT SELECT ON public.restaurant_tables TO authenticated;
+GRANT INSERT (tenant_id,branch_id,name,capacity,section_name,status)
+  ON public.restaurant_tables TO authenticated;
+GRANT UPDATE (name,capacity,section_name,status)
+  ON public.restaurant_tables TO authenticated;
+GRANT DELETE ON public.restaurant_tables TO authenticated;
+
 INSERT INTO public.permissions (key,label_ar,label_en,category,description)
 VALUES
  ('tables.view','عرض الطاولات','View restaurant tables','operations','View tables in assigned branches'),
