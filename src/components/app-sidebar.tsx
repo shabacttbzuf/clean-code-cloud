@@ -37,6 +37,7 @@ import {
   Bookmark,
   Palette,
   Megaphone,
+  Armchair,
   ChefHat,
 } from "lucide-react";
 import { useSuperOwner } from "@/hooks/use-super-owner";
@@ -69,9 +70,11 @@ const groups: Group[] = [
     label: "البيع",
     items: [
       { title: "المبيعات ونقطة البيع", url: "/pos", icon: ShoppingCart, permission: "pos.use" },
+      { title: "الطاولات", url: "/tables", icon: Armchair, permission: "tables.view" },
       { title: "الفواتير", url: "/sales", icon: Receipt, permission: "sales.view" },
       { title: "الورديات", url: "/cash-sessions", icon: Wallet, permission: "cash.view" },
       { title: "العملاء", url: "/customers", icon: UserSquare2, permission: "customers.view" },
+      { title: "الإشعارات", url: "/notifications", icon: Bell, permission: "notifications.view" },
     ],
   },
   {
@@ -182,7 +185,6 @@ export function AppSidebar() {
       { title: "أنواع التوظيف", url: "/employment-types", icon: BadgeCheck, permission: "employment_types.view" },
       { title: "إدارة الأدوار", url: "/roles", icon: KeyRound, permission: "roles.view" },
       { title: "سجل الدخول", url: "/login-history", icon: History, permission: "login_history.view" },
-      { title: "الإشعارات", url: "/notifications", icon: Bell, permission: "notifications.view" },
     ],
   };
 

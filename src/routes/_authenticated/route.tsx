@@ -101,6 +101,7 @@ const ROUTE_PERMISSION_RULES: Array<{ prefix: string; permission: string }> = [
   { prefix: "/reports", permission: "reports.view" },
   { prefix: "/pos", permission: "pos.use" },
   { prefix: "/kitchen", permission: "kitchen.view" },
+  { prefix: "/tables", permission: "tables.view" },
   { prefix: "/sales", permission: "sales.view" },
   { prefix: "/cash-sessions", permission: "cash.view" },
   { prefix: "/customers", permission: "customers.view" },

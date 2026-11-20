@@ -29,6 +29,7 @@ import { Route as AuthenticatedEmploymentTypesRouteImport } from './routes/_auth
 import { Route as AuthenticatedExpenseCategoriesRouteImport } from './routes/_authenticated/expense-categories'
 import { Route as AuthenticatedExpensesRouteImport } from './routes/_authenticated/expenses'
 import { Route as AuthenticatedJobTitlesRouteImport } from './routes/_authenticated/job-titles'
+import { Route as AuthenticatedTablesRouteImport } from './routes/_authenticated/tables'
 import { Route as AuthenticatedKitchenRouteImport } from './routes/_authenticated/kitchen'
 import { Route as AuthenticatedLoginHistoryRouteImport } from './routes/_authenticated/login-history'
 import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
@@ -155,6 +156,11 @@ const AuthenticatedExpensesRoute = AuthenticatedExpensesRouteImport.update({
 const AuthenticatedJobTitlesRoute = AuthenticatedJobTitlesRouteImport.update({
   id: '/job-titles',
   path: '/job-titles',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedTablesRoute = AuthenticatedTablesRouteImport.update({
+  id: '/tables',
+  path: '/tables',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedKitchenRoute = AuthenticatedKitchenRouteImport.update({
@@ -308,6 +314,7 @@ export interface FileRoutesByFullPath {
   '/expense-categories': typeof AuthenticatedExpenseCategoriesRoute
   '/expenses': typeof AuthenticatedExpensesRoute
   '/job-titles': typeof AuthenticatedJobTitlesRoute
+  '/tables': typeof AuthenticatedTablesRoute
   '/kitchen': typeof AuthenticatedKitchenRoute
   '/login-history': typeof AuthenticatedLoginHistoryRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
@@ -400,6 +407,7 @@ export interface FileRoutesById {
   '/_authenticated/expense-categories': typeof AuthenticatedExpenseCategoriesRoute
   '/_authenticated/expenses': typeof AuthenticatedExpensesRoute
   '/_authenticated/job-titles': typeof AuthenticatedJobTitlesRoute
+  '/_authenticated/tables': typeof AuthenticatedTablesRoute
   '/_authenticated/kitchen': typeof AuthenticatedKitchenRoute
   '/_authenticated/login-history': typeof AuthenticatedLoginHistoryRoute
   '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
@@ -447,6 +455,7 @@ export interface FileRouteTypes {
     | '/expense-categories'
     | '/expenses'
     | '/job-titles'
+    | '/tables'
     | '/kitchen'
     | '/login-history'
     | '/notifications'
@@ -877,6 +886,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedExpenseCategoriesRoute: typeof AuthenticatedExpenseCategoriesRoute
   AuthenticatedExpensesRoute: typeof AuthenticatedExpensesRoute
   AuthenticatedJobTitlesRoute: typeof AuthenticatedJobTitlesRoute
+  AuthenticatedTablesRoute: typeof AuthenticatedTablesRoute
   AuthenticatedKitchenRoute: typeof AuthenticatedKitchenRoute
   AuthenticatedLoginHistoryRoute: typeof AuthenticatedLoginHistoryRoute
   AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
@@ -919,6 +929,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedExpenseCategoriesRoute: AuthenticatedExpenseCategoriesRoute,
   AuthenticatedExpensesRoute: AuthenticatedExpensesRoute,
   AuthenticatedJobTitlesRoute: AuthenticatedJobTitlesRoute,
+  AuthenticatedTablesRoute: AuthenticatedTablesRoute,
   AuthenticatedKitchenRoute: AuthenticatedKitchenRoute,
   AuthenticatedLoginHistoryRoute: AuthenticatedLoginHistoryRoute,
   AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
@@ -968,6 +979,13 @@ declare module '@tanstack/react-router' {
       path: '/branches/$branchId'
       fullPath: '/branches/$branchId'
       preLoaderRoute: typeof AuthenticatedBranchesBranchIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/tables': {
+      id: '/_authenticated/tables'
+      path: '/tables'
+      fullPath: '/tables'
+      preLoaderRoute: typeof AuthenticatedTablesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/kitchen': {

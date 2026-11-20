@@ -8,6 +8,7 @@ const cash = readFileSync(new URL("../supabase/migrations/20261115000003_custome
 const balanceFix = readFileSync(new URL("../supabase/migrations/20261115000004_fix_customer_balance_aggregation.sql", import.meta.url), "utf8");
 const customers = readFileSync(new URL("../src/routes/_authenticated/customers.tsx", import.meta.url), "utf8");
 const pos = readFileSync(new URL("../src/routes/_authenticated/pos.tsx", import.meta.url), "utf8");
+const posOrder = readFileSync(new URL("../supabase/migrations/20261120050000_restaurant_tables_pos_order_types.sql", import.meta.url), "utf8");
 
 test("customer credit ceiling and invoice links are tenant-safe", () => {
   assert.match(schema, /credit_limit numeric\(14,2\) not null default 0/i);
@@ -46,7 +47,8 @@ test("customer form exposes credit limit and account view supports collections",
 
 test("POS checkout selects a customer and calls the credit-aware RPC", () => {
   assert.match(pos, /pos-customers/);
-  assert.match(pos, /create_sale_with_customer/);
+  assert.match(pos, /create_pos_order/);
+  assert.match(posOrder, /private\.create_sale_with_customer/);
   assert.match(pos, /_customer_id:/);
   assert.match(pos, /_paid_amount:/);
 });

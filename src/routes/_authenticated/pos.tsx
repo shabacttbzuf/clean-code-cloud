@@ -123,6 +123,12 @@ function POSPage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [discount, setDiscount] = useState("0");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("none");
+  const [orderType, setOrderType] = useState<"dine_in" | "takeaway" | "delivery">("takeaway");
+  const [selectedTableId, setSelectedTableId] = useState<string>("none");
+  const [deliveryName, setDeliveryName] = useState("");
+  const [deliveryPhone, setDeliveryPhone] = useState("");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [deliveryFeeInput, setDeliveryFeeInput] = useState("0");
   const [paidAmount, setPaidAmount] = useState("");
   const [openSessionDialog, setOpenSessionDialog] = useState(false);
   const [openingBalance, setOpeningBalance] = useState("0");
@@ -172,6 +178,24 @@ function POSPage() {
     () => branches.data?.find((b) => b.id === branchId) ?? null,
     [branches.data, branchId],
   );
+
+  useEffect(() => {
+    setSelectedTableId("none");
+  }, [branchId]);
+
+  const restaurantTables = useQuery({
+    queryKey: ["pos-restaurant-tables", tenantId, branchId],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from("restaurant_tables" as any) as any)
+        .select("id,name,capacity,section_name,status,current_sale_id")
+        .eq("tenant_id", tenantId!).eq("branch_id", branchId!)
+        .eq("status", "active").is("current_sale_id", null).order("name");
+      if (error) throw error;
+      return (data ?? []) as Array<{id:string;name:string;capacity:number;section_name:string|null;status:string;current_sale_id:string|null}>;
+    },
+    enabled: !!tenantId && !!branchId,
+    refetchInterval: 15_000,
+  });
 
   const customers = useQuery({
     queryKey: ["pos-customers", tenantId],
@@ -320,7 +344,9 @@ function POSPage() {
   const taxable = Math.max(0, subtotal - disc);
   const taxRate = Number(tenant?.tax_rate ?? 0);
   const taxAmount = +(taxable * (taxRate / 100)).toFixed(2);
-  const total = +(taxable + taxAmount).toFixed(2);
+  const deliveryFee = orderType === "delivery" ? Math.max(0, Number(deliveryFeeInput) || 0) : 0;
+  const total = +(taxable + taxAmount + deliveryFee).toFixed(2);
+  const selectedTable = restaurantTables.data?.find((table) => table.id === selectedTableId) ?? null;
 
   const openSess = useMutation({
     mutationFn: async () => {
@@ -367,6 +393,14 @@ function POSPage() {
     tenant_name: tenant?.name ?? null,
     logo_url: tenant?.logo_url ?? null,
     currency: tenant?.currency ?? "SAR",
+    order_type: orderType,
+    table_name: selectedTable?.name ?? null,
+    delivery_fee: Number((sale as any).delivery_fee ?? deliveryFee),
+    delivery_customer_name: orderType === "delivery" ? deliveryName : null,
+    delivery_customer_phone: orderType === "delivery" ? deliveryPhone : null,
+    delivery_address: orderType === "delivery" ? deliveryAddress : null,
+    paid_amount: paidAmount.trim() === "" ? Number(sale.total) : Number(paidAmount),
+    due_amount: Math.max(0, Number(sale.total) - (paidAmount.trim() === "" ? Number(sale.total) : Number(paidAmount))),
     subtotal: Number(sale.subtotal),
     discount: Number(sale.discount),
     tax_amount: Number(sale.tax_amount),
@@ -391,7 +425,16 @@ function POSPage() {
       if (!Number.isFinite(initialPaid) || initialPaid < 0 || initialPaid > total) {
         throw new Error("مبلغ المدفوع يجب أن يكون بين صفر وإجمالي الفاتورة");
       }
-      const { data: sale, error: saleErr } = await (supabase.rpc as any)("create_sale_with_customer", {
+      if (orderType === "dine_in" && (!selectedTableId || selectedTableId === "none")) {
+        throw new Error("اختر طاولة متاحة للطلب المحلي");
+      }
+      if (orderType === "delivery" && (!deliveryName.trim() || !deliveryPhone.trim() || !deliveryAddress.trim())) {
+        throw new Error("أدخل اسم عميل التوصيل ورقم هاتفه وعنوانه");
+      }
+      if (orderType === "delivery" && (!Number.isFinite(Number(deliveryFeeInput)) || Number(deliveryFeeInput) < 0)) {
+        throw new Error("أدخل رسوم توصيل صحيحة");
+      }
+      let { data: sale, error: saleErr } = await (supabase.rpc as any)("create_pos_order", {
         _tenant_id: tenantId,
         _branch_id: branchId,
         _cashier_id: userId,
@@ -404,7 +447,41 @@ function POSPage() {
           product_id: item.product_id,
           quantity: item.quantity,
         })),
+        _order_type: orderType,
+        _table_id: orderType === "dine_in" ? selectedTableId : null,
+        _delivery_customer_name: orderType === "delivery" ? deliveryName.trim() : null,
+        _delivery_customer_phone: orderType === "delivery" ? deliveryPhone.trim() : null,
+        _delivery_address: orderType === "delivery" ? deliveryAddress.trim() : null,
+        _delivery_fee: deliveryFee,
       });
+
+      // Keep legacy takeaway checkout operational until the additive database
+      // migration is deployed. Never silently downgrade dine-in or delivery.
+      const missingOrderRpc = saleErr && (
+        saleErr.code === "PGRST202" ||
+        /could not find the function|function public\.create_pos_order.*does not exist/i.test(saleErr.message ?? "")
+      );
+      if (missingOrderRpc) {
+        if (orderType !== "takeaway" || deliveryFee > 0) {
+          throw new Error("يتطلب الطلب المحلي والتوصيل تطبيق تحديث قاعدة البيانات أولاً. يمكنك إكمال الطلب السفري حالياً.");
+        }
+        const legacy = await (supabase.rpc as any)("create_sale_with_customer", {
+          _tenant_id: tenantId,
+          _branch_id: branchId,
+          _cashier_id: userId,
+          _session_id: openSession.data.id,
+          _discount: disc,
+          _customer_id: selectedCustomerId === "none" ? null : selectedCustomerId,
+          _paid_amount: initialPaid,
+          _paid_method: dbMethod,
+          _items: cart.map((item) => ({
+            product_id: item.product_id,
+            quantity: item.quantity,
+          })),
+        });
+        sale = legacy.data;
+        saleErr = legacy.error;
+      }
       if (saleErr) throw saleErr;
       if (!sale) throw new Error("لم يتم إنشاء الفاتورة.");
 
@@ -445,6 +522,13 @@ function POSPage() {
       setDiscount("0");
       setSelectedCustomerId("none");
       setPaidAmount("");
+      setOrderType("takeaway");
+      setSelectedTableId("none");
+      setDeliveryName("");
+      setDeliveryPhone("");
+      setDeliveryAddress("");
+      setDeliveryFeeInput("0");
+      void qc.invalidateQueries({ queryKey: ["pos-restaurant-tables", tenantId, branchId] });
       qc.invalidateQueries({ queryKey: ["sales"] });
       qc.invalidateQueries({ queryKey: ["inventory"] });
       qc.invalidateQueries({ queryKey: ["pos-inventory", tenantId, branchId] });
@@ -790,6 +874,38 @@ function POSPage() {
             <DialogDescription>راجع الأصناف والكميات والأسعار، ويمكنك الزيادة أو التخفيض أو حذف أي صنف قبل اعتماد البيع.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
+            <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 sm:grid-cols-2">
+              <div className="space-y-1 sm:col-span-2">
+                <Label>نوع الطلب</Label>
+                <Select value={orderType} onValueChange={(value) => { setOrderType(value as "dine_in" | "takeaway" | "delivery"); setSelectedTableId("none"); }}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="dine_in">محلي — داخل المطعم</SelectItem>
+                    <SelectItem value="takeaway">سفري — استلام من المطعم</SelectItem>
+                    <SelectItem value="delivery">توصيل إلى العميل</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {orderType === "dine_in" && (
+                <div className="space-y-1 sm:col-span-2">
+                  <Label>الطاولة المتاحة</Label>
+                  <Select value={selectedTableId} onValueChange={setSelectedTableId}>
+                    <SelectTrigger><SelectValue placeholder="اختر طاولة" /></SelectTrigger>
+                    <SelectContent>
+                      {(restaurantTables.data ?? []).map((table) => <SelectItem key={table.id} value={table.id}>{table.name} — {table.capacity} مقاعد{table.section_name ? " · " + table.section_name : ""}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  {restaurantTables.isError && <p className="text-xs text-destructive">تعذر تحميل الطاولات. أعد المحاولة.</p>}
+                  {restaurantTables.data?.length === 0 && <p className="text-xs text-muted-foreground">لا توجد طاولات متاحة في هذا الفرع. أضف طاولات أو أخلِ طاولة مشغولة من صفحة الطاولات.</p>}
+                </div>
+              )}
+              {orderType === "delivery" && <>
+                <div className="space-y-1"><Label>اسم عميل التوصيل</Label><Input value={deliveryName} onChange={(e) => setDeliveryName(e.target.value)} maxLength={120} /></div>
+                <div className="space-y-1"><Label>رقم الهاتف</Label><Input value={deliveryPhone} onChange={(e) => setDeliveryPhone(e.target.value)} maxLength={30} dir="ltr" /></div>
+                <div className="space-y-1 sm:col-span-2"><Label>عنوان التوصيل</Label><Input value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} maxLength={500} /></div>
+                <div className="space-y-1"><Label>رسوم التوصيل</Label><Input type="number" min="0" step="0.01" value={deliveryFeeInput} onChange={(e) => setDeliveryFeeInput(e.target.value)} /></div>
+              </>}
+            </div>
             <div className="overflow-x-auto rounded-lg border">
               <table className="w-full min-w-[320px] text-xs">
                 <thead className="bg-muted/60"><tr><th className="p-2 text-right">الصنف</th><th className="p-2 text-center">الكمية</th><th className="p-2 text-center">السعر</th><th className="p-2 text-center">الإجمالي</th><th className="p-2"></th></tr></thead>
@@ -829,12 +945,13 @@ function POSPage() {
               <div className="flex justify-between text-sm text-muted-foreground"><span>المجموع الفرعي</span><span className="num">{formatMoney(subtotal)}</span></div>
               <div className="flex justify-between text-sm text-muted-foreground"><span>الخصم</span><span className="num">-{formatMoney(disc)}</span></div>
               <div className="flex justify-between text-sm text-muted-foreground"><span>الضريبة ({taxRate}%)</span><span className="num">{formatMoney(taxAmount)}</span></div>
+              {orderType === "delivery" && <div className="flex justify-between text-sm text-muted-foreground"><span>رسوم التوصيل</span><span className="num">{formatMoney(deliveryFee)}</span></div>}
               <div className="flex justify-between border-t pt-2 text-base font-black"><span>الإجمالي</span><span className="text-primary num">{formatMoney(total)} {currency}</span></div>
             </div>
           </div>
           <DialogFooter className="gap-2 sm:justify-between">
             <Button variant="outline" onClick={() => setReviewOpen(false)} disabled={checkoutMut.isPending}>العودة للتعديل</Button>
-            <Button className="bg-success font-bold text-success-foreground hover:bg-success/90" disabled={checkoutMut.isPending || cart.length === 0 || disc > subtotal || (selectedCustomerId === "none" && paidAmount.trim() !== "" && Number(paidAmount) !== total) || (paidAmount.trim() !== "" && (!Number.isFinite(Number(paidAmount)) || Number(paidAmount) < 0 || Number(paidAmount) > total))}
+            <Button className="bg-success font-bold text-success-foreground hover:bg-success/90" disabled={checkoutMut.isPending || cart.length === 0 || disc > subtotal || (orderType === "dine_in" && (!selectedTableId || selectedTableId === "none" || restaurantTables.isLoading || restaurantTables.isError)) || (orderType === "delivery" && (!deliveryName.trim() || !deliveryPhone.trim() || !deliveryAddress.trim() || !Number.isFinite(Number(deliveryFeeInput)) || Number(deliveryFeeInput) < 0)) || (selectedCustomerId === "none" && paidAmount.trim() !== "" && Number(paidAmount) !== total) || (paidAmount.trim() !== "" && (!Number.isFinite(Number(paidAmount)) || Number(paidAmount) < 0 || Number(paidAmount) > total))}
               onClick={confirmCheckout}>
               {checkoutMut.isPending ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="ml-2 h-4 w-4" />}
               تأكيد وإصدار الفاتورة
