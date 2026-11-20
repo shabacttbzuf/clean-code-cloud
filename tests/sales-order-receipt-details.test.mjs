@@ -42,6 +42,9 @@ test("sales history and invoice detail stay compatible before additive metadata 
 });
 
 test("customer snapshot trigger uses a valid PostgreSQL dollar-quoted function body", () => {
-  assert.match(migration, /CREATE OR REPLACE FUNCTION private\\.capture_sale_customer_snapshot\\(\\)[\\s\\S]*?AS \\$\\$[\\s\\S]*?END;[\\s\\S]*?\\$\\$;/);
-  assert.doesNotMatch(migration, /AS \\$\\nBEGIN/);
+  assert.match(
+    migration,
+    /CREATE OR REPLACE FUNCTION private\.capture_sale_customer_snapshot\(\)[\s\S]*?AS \$\$[\s\S]*?END;[\s\S]*?\$\$;/,
+  );
+  assert.doesNotMatch(migration, /AS \$\nBEGIN/);
 });
