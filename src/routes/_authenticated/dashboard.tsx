@@ -6,7 +6,7 @@ import { useSuperOwner } from "@/hooks/use-super-owner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
-import { Loader2, TrendingUp, TrendingDown, Receipt, Wallet, Package, Crown, Building2, Users as UsersIcon } from "lucide-react";
+import { Loader2, TrendingUp, TrendingDown, Receipt, Wallet, Package, Crown, Building2, Users as UsersIcon, Bell, Wifi, WifiOff, CircleHelp, ClipboardList, ChefHat } from "lucide-react";
 import { formatMoney } from "@/lib/format";
 import { Link } from "@tanstack/react-router";
 import { Sparkles, ShoppingBag, ArrowLeft } from "lucide-react";
@@ -70,6 +70,40 @@ function Dashboard() {
     },
     enabled: !!tenantId,
     staleTime: 60_000,
+  });
+
+  const systemStatusQuery = useQuery({
+    queryKey: ["dashboard-system-status", tenantId],
+    queryFn: async () => {
+      if (!tenantId) throw new Error("No active tenant");
+      const checkedAt = new Date().toISOString();
+      const { data, error } = await supabase.from("tenants").select("id").eq("id", tenantId).maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error("Active organization is not accessible");
+      return { checkedAt };
+    },
+    enabled: !!tenantId,
+    refetchInterval: 30_000,
+    retry: 1,
+  });
+
+  const dashboardNotifications = useQuery({
+    queryKey: ["dashboard-notifications", tenantId, user?.id],
+    queryFn: async () => {
+      if (!tenantId || !user?.id) return [];
+      const [items, reads] = await Promise.all([
+        supabase.from("notifications").select("id,title,body,created_at,urgency")
+          .eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(6),
+        (supabase.from("notification_reads" as any) as any).select("notification_id").eq("user_id", user.id),
+      ]);
+      if (items.error) throw items.error;
+      if (reads.error) throw reads.error;
+      const readIds = new Set<string>((reads.data ?? []).map((row: { notification_id: string }) => row.notification_id));
+      return (items.data ?? []).map((item) => ({ ...item, isRead: readIds.has(item.id) }));
+    },
+    enabled: !!tenantId && !!user?.id && hasPermission("notifications.view"),
+    refetchInterval: 30_000,
+    staleTime: 10_000,
   });
 
   const superStats = useQuery({
@@ -215,7 +249,7 @@ function Dashboard() {
     queryKey: ["dashboard-latest-orders", tenantId, membership?.branch_id],
     queryFn: async () => {
       if (!tenantId) return [];
-      let query = supabase.from("sales").select("id,invoice_no,total,status,created_at,order_type")
+      let query = supabase.from("sales").select("id,invoice_no,total,status,created_at,order_type,customer_id")
         .eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(8);
       if (membership?.branch_id) query = query.eq("branch_id", membership.branch_id);
       const { data, error } = await query;
@@ -236,7 +270,17 @@ function Dashboard() {
       if (membership?.branch_id) query = query.eq("branch_id", membership.branch_id);
       const { data, error } = await query;
       if (error) throw error;
-      return data ?? [];
+      const orders = data ?? [];
+      const saleIds = [...new Set(orders.map((order: { sale_id: string }) => order.sale_id))];
+      if (!saleIds.length) return [];
+      const { data: salesRows, error: salesError } = await supabase.from("sales")
+        .select("id,invoice_no").eq("tenant_id", tenantId).in("id", saleIds);
+      if (salesError) throw salesError;
+      const invoiceMap = new Map((salesRows ?? []).map((sale) => [sale.id, sale.invoice_no]));
+      return orders.map((order: { id: string; branch_id: string; sale_id: string; status: string; created_at: string }) => ({
+        ...order,
+        invoice_no: invoiceMap.get(order.sale_id) ?? null,
+      }));
     },
     enabled: !!tenantId && hasPermission("kitchen.view"),
     refetchInterval: 15_000,
@@ -376,24 +420,59 @@ function Dashboard() {
       )}
       {(hasPermission("sales.view") || hasPermission("kitchen.view")) && (
         <section className="grid gap-4 xl:grid-cols-2" aria-label="متابعة الطلبات والتشغيل">
-          {hasPermission("sales.view") && <Card><CardContent className="p-4">
-            <div className="mb-3 flex items-center justify-between"><h2 className="font-bold">أحدث الطلبات والفواتير</h2><Link to="/sales" className="text-xs font-semibold text-primary hover:underline">عرض الكل</Link></div>
+          {hasPermission("sales.view") && <Card className="overflow-hidden border-[#dce5f3] shadow-sm"><CardContent className="p-0">
+            <div className="flex items-center justify-between border-b border-[#e7edf6] bg-gradient-to-l from-[#f4f7fc] to-white px-4 py-3"><div><h2 className="font-extrabold text-[#102f5c]">أحدث الفواتير والطلبات</h2><p className="mt-1 text-[11px] text-slate-500">آخر العمليات المسجلة في الفرع المصرح به</p></div><Link to="/sales" className="rounded-full border border-[#dce5f3] bg-white px-3 py-1.5 text-xs font-bold text-[#174b91] hover:bg-blue-50">عرض الكل</Link></div>
             {latestOrders.isError ? <p role="alert" className="text-sm text-destructive">تعذر تحميل أحدث الطلبات. <button className="underline" onClick={() => void latestOrders.refetch()}>إعادة المحاولة</button></p>
               : latestOrders.isLoading ? <div className="py-6 text-center text-sm text-muted-foreground">جارٍ تحميل الطلبات...</div>
               : (latestOrders.data ?? []).length === 0 ? <div className="py-6 text-center text-sm text-muted-foreground">لا توجد طلبات مسجلة بعد.</div>
-              : <div className="space-y-2">{(latestOrders.data ?? []).map((order) => <div key={order.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
-                <div className="min-w-0"><div className="truncate text-sm font-semibold">فاتورة #{order.invoice_no ?? "—"}</div><div className="mt-1 text-xs text-muted-foreground">{new Intl.DateTimeFormat("ar-YE", { dateStyle: "short", timeStyle: "short" }).format(new Date(order.created_at))} · {order.order_type === "dine_in" ? "محلي" : order.order_type === "delivery" ? "توصيل" : "سفري"}</div></div>
-                <div className="shrink-0 text-left"><div className="text-sm font-bold num">{formatMoney(Number(order.total))} {currency}</div><div className="text-xs text-muted-foreground">{order.status === "completed" ? "مكتملة" : order.status === "void" ? "ملغاة" : String(order.status)}</div></div>
+              : <div className="divide-y divide-[#edf1f7] px-4">{(latestOrders.data ?? []).map((order) => <div key={order.id} className="flex items-center justify-between gap-3 py-3">
+                <div className="flex min-w-0 items-center gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#edf3fc] text-[#174b91]"><Receipt className="h-5 w-5" /></div><div className="min-w-0"><div className="truncate text-sm font-extrabold text-[#18375f]">فاتورة #{order.invoice_no ?? "—"}</div><div className="mt-1 text-[11px] text-slate-500">{new Intl.DateTimeFormat("ar-YE", { dateStyle: "short", timeStyle: "short" }).format(new Date(order.created_at))} · {order.order_type === "dine_in" ? "داخل المطعم" : order.order_type === "delivery" ? "توصيل" : "سفري"}</div></div></div>
+                <div className="shrink-0 text-left"><div className="text-sm font-extrabold text-[#102f5c] num">{formatMoney(Number(order.total))} {currency}</div><span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${order.status === "completed" ? "bg-emerald-50 text-emerald-700" : order.status === "void" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700"}`}>{order.status === "completed" ? "مكتملة" : order.status === "void" ? "ملغاة" : order.status === "pending" ? "معلقة" : order.status === "draft" ? "مسودة" : "قيد المعالجة"}</span></div>
               </div>)}</div>}
           </CardContent></Card>}
-          {hasPermission("kitchen.view") && <Card><CardContent className="p-4">
-            <div className="mb-3 flex items-center justify-between"><h2 className="font-bold">حالة المطبخ</h2><Link to="/kitchen" className="text-xs font-semibold text-primary hover:underline">فتح شاشة المطبخ</Link></div>
+          {hasPermission("kitchen.view") && <Card className="overflow-hidden border-[#dce5f3] shadow-sm"><CardContent className="p-0">
+            <div className="flex items-center justify-between border-b border-[#e7edf6] bg-gradient-to-l from-[#f4f7fc] to-white px-4 py-3"><div><h2 className="font-extrabold text-[#102f5c]">حالة المطبخ</h2><p className="mt-1 text-[11px] text-slate-500">متابعة مراحل تجهيز الطلبات</p></div><Link to="/kitchen" className="rounded-full border border-[#dce5f3] bg-white px-3 py-1.5 text-xs font-bold text-[#174b91] hover:bg-blue-50">شاشة المطبخ</Link></div><div className="p-4">
             {kitchenOverview.isError ? <p role="alert" className="text-sm text-destructive">تعذر تحميل حالة المطبخ. <button className="underline" onClick={() => void kitchenOverview.refetch()}>إعادة المحاولة</button></p>
               : kitchenOverview.isLoading ? <div className="py-6 text-center text-sm text-muted-foreground">جارٍ تحميل حالة المطبخ...</div>
-              : <div className="grid grid-cols-3 gap-2">{(["new", "preparing", "ready"] as const).map((status) => <div key={status} className="rounded-lg border p-3 text-center"><div className="text-xl font-extrabold num">{(kitchenOverview.data ?? []).filter((order: { status: string }) => order.status === status).length}</div><div className="mt-1 text-xs text-muted-foreground">{status === "new" ? "جديد" : status === "preparing" ? "قيد التحضير" : "جاهز"}</div></div>)}</div>}
-            <p className="mt-3 text-xs text-muted-foreground">حالة التحضير مستقلة عن حالة الفاتورة والمدفوعات.</p>
+              : <><div className="grid grid-cols-3 gap-2">{(["new", "preparing", "ready"] as const).map((status) => <div key={status} className={`rounded-xl border p-3 text-center ${status === "new" ? "border-sky-100 bg-sky-50" : status === "preparing" ? "border-amber-100 bg-amber-50" : "border-emerald-100 bg-emerald-50"}`}><div className="text-2xl font-extrabold text-[#102f5c] num">{(kitchenOverview.data ?? []).filter((order: { status: string }) => order.status === status).length}</div><div className="mt-1 text-xs font-bold text-slate-600">{status === "new" ? "جديد" : status === "preparing" ? "قيد التحضير" : "جاهز"}</div></div>)}</div><div className="mt-3 divide-y divide-[#edf1f7]">{(kitchenOverview.data ?? []).slice(0, 4).map((order: { id: string; status: string; created_at: string; invoice_no?: number | null }) => <div key={order.id} className="flex items-center justify-between gap-2 py-2 text-xs"><span className="font-bold text-slate-700">طلب #{order.invoice_no ?? "—"}</span><span className={`rounded-full px-2 py-1 font-bold ${order.status === "new" ? "bg-sky-50 text-sky-700" : order.status === "preparing" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>{order.status === "new" ? "جديد" : order.status === "preparing" ? "قيد التحضير" : "جاهز"}</span></div>)}</div></>}
+            <p className="mt-3 text-[11px] text-slate-500">حالة التحضير مستقلة عن حالة الفاتورة والمدفوعات.</p></div>
           </CardContent></Card>}
         </section>
+      )}
+
+      <section className="grid gap-4 xl:grid-cols-3" aria-label="الإشعارات وحالة النظام والاختصارات">
+        {hasPermission("notifications.view") && <Card className="overflow-hidden border-[#dce5f3] shadow-sm xl:col-span-2">
+          <CardContent className="p-0">
+            <div className="flex items-center justify-between border-b border-[#e7edf6] bg-gradient-to-l from-[#f4f7fc] to-white px-4 py-3">
+              <div className="flex items-center gap-2"><Bell className="h-5 w-5 text-[#174b91]" /><div><h2 className="font-extrabold text-[#102f5c]">آخر الإشعارات</h2><p className="mt-1 text-[11px] text-slate-500">تنبيهات الحساب والشركة</p></div></div>
+              <Link to="/notifications" className="rounded-full border border-[#dce5f3] bg-white px-3 py-1.5 text-xs font-bold text-[#174b91] hover:bg-blue-50">كل الإشعارات</Link>
+            </div>
+            <div className="divide-y divide-[#edf1f7] px-4">
+              {dashboardNotifications.isError ? <div role="alert" className="py-5 text-sm text-destructive">تعذر تحميل الإشعارات. <button className="underline" onClick={() => void dashboardNotifications.refetch()}>إعادة المحاولة</button></div>
+                : dashboardNotifications.isLoading ? <div className="py-6 text-center text-sm text-muted-foreground">جارٍ تحميل الإشعارات...</div>
+                : (dashboardNotifications.data ?? []).length === 0 ? <div className="py-6 text-center text-sm text-muted-foreground">لا توجد إشعارات حالياً.</div>
+                : (dashboardNotifications.data ?? []).map((item) => <div key={item.id} className="flex items-start gap-3 py-3"><span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${item.isRead ? "bg-slate-300" : "bg-amber-500"}`} /><div className="min-w-0 flex-1"><div className={`text-sm ${item.isRead ? "font-medium text-slate-600" : "font-extrabold text-[#18375f]"}`}>{item.title}</div>{item.body && <p className="mt-1 line-clamp-2 text-xs text-slate-500">{item.body}</p>}<div className="mt-1 text-[10px] text-slate-400">{new Date(item.created_at).toLocaleString("ar-YE")}</div></div>{!item.isRead && <span className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700">جديد</span>}</div>)}
+            </div>
+          </CardContent>
+        </Card>}
+        <Card className="overflow-hidden border-[#dce5f3] shadow-sm">
+          <CardContent className="p-0">
+            <div className="border-b border-[#e7edf6] bg-gradient-to-l from-[#f4f7fc] to-white px-4 py-3"><div className="flex items-center gap-2"><Wifi className="h-5 w-5 text-[#174b91]" /><h2 className="font-extrabold text-[#102f5c]">حالة النظام</h2></div><p className="mt-1 text-[11px] text-slate-500">فحص اتصال قاعدة بيانات الشركة</p></div>
+            <div className="space-y-3 p-4">
+              <div className="flex items-center justify-between gap-2"><span className="text-sm text-slate-600">قاعدة البيانات</span>{systemStatusQuery.isError ? <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-1 text-xs font-bold text-rose-700"><WifiOff className="h-3.5 w-3.5" /> غير متاحة</span> : systemStatusQuery.isLoading ? <span className="text-xs text-slate-500">جارٍ الفحص...</span> : <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700"><Wifi className="h-3.5 w-3.5" /> متصلة</span>}</div>
+              <div className="flex items-center justify-between gap-2 text-xs text-slate-500"><span>آخر تحقق</span><span>{systemStatusQuery.data?.checkedAt ? new Date(systemStatusQuery.data.checkedAt).toLocaleTimeString("ar-YE") : "—"}</span></div>
+              <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => void systemStatusQuery.refetch()} disabled={systemStatusQuery.isFetching}>{systemStatusQuery.isFetching && <Loader2 className="ml-2 h-3.5 w-3.5 animate-spin" />}تحديث الحالة</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="اختصارات العمل">
+        {hasPermission("sales.create") && <Link to="/pos" className="group flex items-center gap-3 rounded-xl border border-[#dce5f3] bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[#b8cce9] hover:shadow-md"><span className="grid h-11 w-11 place-items-center rounded-xl bg-[#edf3fc] text-[#174b91]"><ShoppingBag className="h-5 w-5" /></span><span><span className="block text-sm font-extrabold text-[#102f5c]">نقطة البيع</span><span className="mt-1 block text-xs text-slate-500">إنشاء فاتورة جديدة</span></span></Link>}
+        {hasPermission("sales.view") && <Link to="/sales" className="group flex items-center gap-3 rounded-xl border border-[#dce5f3] bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[#b8cce9] hover:shadow-md"><span className="grid h-11 w-11 place-items-center rounded-xl bg-[#edf3fc] text-[#174b91]"><Receipt className="h-5 w-5" /></span><span><span className="block text-sm font-extrabold text-[#102f5c]">الفواتير</span><span className="mt-1 block text-xs text-slate-500">عرض وإدارة المبيعات</span></span></Link>}
+        {hasPermission("kitchen.view") && <Link to="/kitchen" className="group flex items-center gap-3 rounded-xl border border-[#dce5f3] bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[#b8cce9] hover:shadow-md"><span className="grid h-11 w-11 place-items-center rounded-xl bg-amber-50 text-amber-700"><ChefHat className="h-5 w-5" /></span><span><span className="block text-sm font-extrabold text-[#102f5c]">المطبخ</span><span className="mt-1 block text-xs text-slate-500">متابعة تجهيز الطلبات</span></span></Link>}
+        {hasPermission("reports.view") && <Link to="/reports" className="group flex items-center gap-3 rounded-xl border border-[#dce5f3] bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[#b8cce9] hover:shadow-md"><span className="grid h-11 w-11 place-items-center rounded-xl bg-emerald-50 text-emerald-700"><ClipboardList className="h-5 w-5" /></span><span><span className="block text-sm font-extrabold text-[#102f5c]">التقارير</span><span className="mt-1 block text-xs text-slate-500">تحليل أداء المطعم</span></span></Link>}
+      </section>
       )}
 
     </div>
