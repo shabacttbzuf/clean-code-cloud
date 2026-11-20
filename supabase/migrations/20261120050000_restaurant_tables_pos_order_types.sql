@@ -315,18 +315,22 @@ BEGIN
   IF NEW.status::text <> 'completed' AND OLD.status::text='completed' THEN
     -- Stop any outstanding kitchen ticket before freeing the table.
     FOR v_order IN
-      UPDATE public.kitchen_orders
-         SET status='cancelled',updated_at=now(),notes=coalesce(notes,'') ||
-           CASE WHEN coalesce(notes,'')='' THEN '' ELSE E'\\n' END ||
-           'أُلغي البيع المرتبط بهذا الطلب'
+      SELECT id,tenant_id,branch_id,status
+        FROM public.kitchen_orders
        WHERE sale_id=OLD.id AND status IN ('new','preparing','ready')
-       RETURNING id,tenant_id,branch_id
+       FOR UPDATE
     LOOP
+      UPDATE public.kitchen_orders
+         SET status='cancelled',updated_at=now(),
+             notes=coalesce(notes,'') ||
+               CASE WHEN coalesce(notes,'')='' THEN '' ELSE E'\\n' END ||
+               'أُلغي البيع المرتبط بهذا الطلب'
+       WHERE id=v_order.id;
       INSERT INTO public.kitchen_order_events
         (tenant_id,branch_id,kitchen_order_id,actor_id,old_status,new_status,notes)
       VALUES
         (v_order.tenant_id,v_order.branch_id,v_order.id,auth.uid(),
-         'active','cancelled','أُلغي البيع المرتبط بهذا الطلب');
+         v_order.status,'cancelled','أُلغي البيع المرتبط بهذا الطلب');
     END LOOP;
 
     IF OLD.table_id IS NOT NULL THEN
