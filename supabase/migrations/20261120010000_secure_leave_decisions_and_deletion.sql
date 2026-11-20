@@ -127,8 +127,14 @@ using (
 )
 with check (
   public.is_super_owner((select auth.uid()))
-  or private.has_permission((select auth.uid()), tenant_id, 'hr.leaves.approve')
-  or private.has_permission((select auth.uid()), tenant_id, 'hr.leaves.reject')
+  or (
+    status = 'approved'
+    and private.has_permission((select auth.uid()), tenant_id, 'hr.leaves.approve')
+  )
+  or (
+    status = 'rejected'
+    and private.has_permission((select auth.uid()), tenant_id, 'hr.leaves.reject')
+  )
   or (
     status = 'pending'
     and exists (
