@@ -157,8 +157,9 @@ function Dashboard() {
         supabase.from("expenses").select("amount, category_id").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10)),
         supabase.from("inventory").select("quantity, product_id").eq("tenant_id", tenantId),
         supabase.from("cash_sessions").select("id").eq("tenant_id", tenantId).eq("status", "open"),
+        supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
       ]);
-      for (const result of [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions]) {
+      for (const result of [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount]) {
         if (result.error) throw result.error;
       }
 
@@ -236,6 +237,7 @@ function Dashboard() {
         totalToday, totalMonth, totalExpMonth,
         profit, unknownCostItems,
         salesTodayCount: (salesToday.data ?? []).length,
+        customersCount: customersCount.count ?? 0,
         openSessions: (sessions.data ?? []).length,
         lowStockCount,
         trend, byCat,
@@ -411,10 +413,11 @@ function Dashboard() {
             </Card>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <MiniStat label="ورديات مفتوحة" value={stats.data.openSessions} icon={<Wallet className="h-4 w-4" />} />
             <MiniStat label="نفاد مخزون" value={stats.data.lowStockCount} icon={<Package className="h-4 w-4" />} />
             <MiniStat label="فواتير اليوم" value={stats.data.salesTodayCount} icon={<Receipt className="h-4 w-4" />} />
+            <MiniStat label="إجمالي العملاء" value={stats.data.customersCount} icon={<UsersIcon className="h-4 w-4" />} />
           </div>
         </>
       )}
