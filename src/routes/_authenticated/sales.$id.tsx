@@ -312,8 +312,8 @@ function SaleDetailPage() {
           {Number(s.delivery_fee ?? 0) > 0 && <Row label="رسوم التوصيل" value={formatMoney(s.delivery_fee)} />}
           <Row label="نوع الطلب" value={s.order_type === "dine_in" ? "محلي" : s.order_type === "delivery" ? "توصيل" : "سفري"} />
           {s.table_name_snapshot && <Row label="الطاولة" value={s.table_name_snapshot} />}
-          {s.customer_name_snapshot && <Row label="العميل" value={s.customer_name_snapshot} />}
-          {s.customer_phone_snapshot && <Row label="هاتف العميل" value={s.customer_phone_snapshot} />}
+          {s.order_type !== "delivery" && s.customer_name_snapshot && <Row label="العميل" value={s.customer_name_snapshot} />}
+          {s.order_type !== "delivery" && s.customer_phone_snapshot && <Row label="هاتف العميل" value={s.customer_phone_snapshot} />}
           {s.order_type === "delivery" && <>
             <Row label="عميل التوصيل" value={s.delivery_customer_name ?? "—"} />
             <Row label="الهاتف" value={s.delivery_customer_phone ?? "—"} />
