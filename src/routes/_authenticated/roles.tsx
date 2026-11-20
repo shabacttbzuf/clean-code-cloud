@@ -297,7 +297,8 @@ function RolesPage() {
               <Label>الوصف</Label>
               <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </div>
-            {!editingRole && <div>
+            {!editingRole && <>
+              <div>
               <Label>نسخ الصلاحيات من دور أساسي (اختياري)</Label>
               <Select
                 value={form.copy_from_builtin || "__none__"}
