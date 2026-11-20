@@ -77,7 +77,7 @@ function SaleDetailPage() {
         supabase.from("profiles").select("full_name").eq("id", s.cashier_id).maybeSingle(),
         supabase.from("sale_refunds").select("id, total, reason, refund_method, created_at").eq("sale_id", id).order("created_at", { ascending: false }),
         supabase.from("payments").select("amount").eq("sale_id", id),
-        supabase.from("customer_payments").select("amount").eq("sale_id", id),
+        (supabase.from("customer_payments" as any) as any).select("amount").eq("sale_id", id),
       ]);
       if (itemsRes.error) throw itemsRes.error;
       if (refundsRes.error) throw refundsRes.error;
@@ -96,7 +96,7 @@ function SaleDetailPage() {
         refundedByItem.set(row.sale_item_id, (refundedByItem.get(row.sale_item_id) ?? 0) + Number(row.quantity));
       }
       return {
-        sale: s as Sale,
+        sale: s as unknown as Sale,
         items: ((itemsRes.data ?? []) as Omit<Item, "refunded_quantity">[]).map((item) => ({
           ...item,
           refunded_quantity: refundedByItem.get(item.id) ?? 0,
