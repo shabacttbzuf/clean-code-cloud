@@ -106,7 +106,12 @@ function LeavesPage() {
 
   const create = useMutation({
     mutationFn: async (v: { employee_id: string; leave_type_id: string | null; start_date: string; end_date: string; reason: string }) => {
-      const days = Math.max(1, Math.round((new Date(v.end_date).getTime() - new Date(v.start_date).getTime()) / 86400000) + 1);
+      const startMs = Date.parse(v.start_date + "T00:00:00Z");
+      const endMs = Date.parse(v.end_date + "T00:00:00Z");
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) {
+        throw new Error("تحقق من تاريخ بداية ونهاية الإجازة");
+      }
+      const days = Math.floor((endMs - startMs) / 86400000) + 1;
       const { error } = await supabase.from("leave_requests").insert({
         tenant_id: tenantId!, employee_id: v.employee_id, leave_type_id: v.leave_type_id,
         start_date: v.start_date, end_date: v.end_date, days_count: days, reason: v.reason || null,
