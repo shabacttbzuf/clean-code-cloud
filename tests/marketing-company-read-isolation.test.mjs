@@ -26,6 +26,8 @@ const settingsPage = readFileSync(
 test("marketing campaign reads no longer have a permissive tenant-wide SELECT policy", () => {
   assert.match(migration, /DROP POLICY IF EXISTS "Tenant members read marketing campaigns"/);
   assert.match(migration, /ON public\.marketing_campaigns/);
+  assert.match(migration, /Tenant members read scoped marketing campaigns/);
+  assert.match(migration, /AS PERMISSIVE/);
   assert.match(priorScopeMigration, /company_scope_marketing_campaigns_select/);
   assert.match(priorScopeMigration, /company_id=marketing_campaigns\.company_id/);
   assert.match(priorScopeMigration, /is_super_owner/);
