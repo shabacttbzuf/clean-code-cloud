@@ -12,5 +12,6 @@ test("company-scoped marketing controls require the same settings.manage permiss
 
 test("tenant-wide and Super Owner management remain explicit while campaign actions stay company-scoped", () => {
   assert.match(source, /const isTenantOwner = role === "owner" && !membership\?\.company_id/);
-  assert.match(source, /if \(!isSuperOwner && !isTenantOwner\)[\s\S]*query = query\.eq\("company_id", membership\.company_id\)/);\n  assert.match(source, /\.update\(payload\)\.eq\("id", editingId\)\.eq\("tenant_id", tenantId!\)/);
+  assert.match(source, /if \(!isSuperOwner && !isTenantOwner\)[\s\S]*query = query\.eq\("company_id", membership\.company_id\)/);
+  assert.match(source, /\.update\(payload\)\.eq\("id", editingId\)\.eq\("tenant_id", tenantId!\)/);
 });
