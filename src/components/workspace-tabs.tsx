@@ -59,13 +59,15 @@ export function WorkspaceTabs() {
   }
 
   useEffect(() => {
-    const existing = tabs.find((tab) => tab.path === pathname);
-    const next = existing
-      ? tabs.map((tab) => tab.path === pathname ? { ...tab, title: titleFor(pathname) } : tab)
-      : [...tabs, { path: pathname, title: titleFor(pathname) }];
-    persist(next);
-    // Read the current tab list to preserve pin state when the route changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setTabs((current) => {
+      const existing = current.find((tab) => tab.path === pathname);
+      const next = existing
+        ? current.map((tab) => tab.path === pathname ? { ...tab, title: titleFor(pathname) } : tab)
+        : [...current, { path: pathname, title: titleFor(pathname) }];
+      const limited = limitTabs(next);
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(limited)); } catch { /* storage is optional */ }
+      return limited;
+    });
   }, [pathname]);
 
   const activePath = useMemo(() => pathname, [pathname]);
