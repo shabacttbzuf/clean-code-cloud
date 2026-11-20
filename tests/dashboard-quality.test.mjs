@@ -217,3 +217,19 @@ test("developer studio can rename or hide non-critical built-in tabs and restore
   assert.match(appSidebar, /navOverrides\[item\.url\.split\("#"\)\[0\]\]/);
   assert.match(appSidebar, /ras-sidebar-overrides-updated/);
 });
+
+test("dashboard provides permission-scoped operations, notifications, and a truthful database health check", () => {
+  assert.match(dashboard, /أحدث الفواتير والطلبات/);
+  assert.match(dashboard, /invoice_no/);
+  assert.match(dashboard, /حالة المطبخ/);
+  assert.match(dashboard, /dashboard-notifications/);
+  assert.match(dashboard, /notifications\.view/);
+  assert.match(dashboard, /notification_reads/);
+  assert.match(dashboard, /dashboard-system-status/);
+  assert.match(dashboard, /قاعدة البيانات/);
+  assert.match(dashboard, /systemStatusQuery\.isError/);
+  assert.match(dashboard, /اختصارات العمل/);
+  assert.match(dashboard, /hasPermission\("sales.create"\)/);
+  assert.match(dashboard, /hasPermission\("kitchen.view"\)/);
+  assert.match(dashboard, /hasPermission\("reports.view"\)/);
+});
