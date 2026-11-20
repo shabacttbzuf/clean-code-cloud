@@ -37,6 +37,7 @@ import {
   Bookmark,
   Palette,
   Megaphone,
+  Armchair,
   ChefHat,
 } from "lucide-react";
 import { useSuperOwner } from "@/hooks/use-super-owner";
@@ -69,6 +70,7 @@ const groups: Group[] = [
     label: "البيع",
     items: [
       { title: "المبيعات ونقطة البيع", url: "/pos", icon: ShoppingCart, permission: "pos.use" },
+      { title: "الطاولات", url: "/tables", icon: Armchair, permission: "tables.view" },
       { title: "الفواتير", url: "/sales", icon: Receipt, permission: "sales.view" },
       { title: "الورديات", url: "/cash-sessions", icon: Wallet, permission: "cash.view" },
       { title: "العملاء", url: "/customers", icon: UserSquare2, permission: "customers.view" },
