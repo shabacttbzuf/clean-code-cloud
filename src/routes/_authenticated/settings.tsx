@@ -13,7 +13,7 @@ import { z } from "zod";
 import { PageHeader } from "@/components/page-header";
 import { useTheme, DEFAULT_DESIGN, type DesignSettings } from "@/lib/theme";
 import { useSuperOwner } from "@/hooks/use-super-owner";
-import { Palette, RotateCcw, Plus, Trash2, MonitorCog, Megaphone, Image } from "lucide-react";
+import { Palette, RotateCcw, Plus, Trash2, MonitorCog, Image } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   component: SettingsPage,
@@ -51,8 +51,6 @@ const MANAGEABLE_NAV_ITEMS = [
   { title: "سجل التدقيق", url: "/audit-logs", protected: true },
 ] as const;
 
-type MarketingCampaign = { id: string; company_id: string | null; title: string; description: string; image_url: string | null; target_url: string | null; placement: string; status: string; starts_at: string | null; ends_at: string | null; sort_order: number };
-
 const schema = z.object({
   name: z.string().trim().min(2, "الاسم قصير").max(100),
   currency: z.string().trim().min(1).max(5),
@@ -61,7 +59,7 @@ const schema = z.object({
 });
 
 function SettingsPage() {
-  const { tenant, tenantId, userId, isAdmin, role, membership } = useActiveTenant();
+  const { tenant, tenantId, isAdmin, role, membership } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
   const { design, saveDesign, resetDesign } = useTheme();
   const qc = useQueryClient();
@@ -76,16 +74,6 @@ function SettingsPage() {
   const [navOverrides, setNavOverrides] = useState<Record<string, NavOverride>>({});
   const [newTabTitle, setNewTabTitle] = useState("");
   const [newTabUrl, setNewTabUrl] = useState("/dashboard");
-  const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
-  const [editingCampaignCompanyId, setEditingCampaignCompanyId] = useState<string | null>(null);
-  const [campaignTitle, setCampaignTitle] = useState("");
-  const [campaignDescription, setCampaignDescription] = useState("");
-  const [campaignImage, setCampaignImage] = useState("");
-  const [campaignTarget, setCampaignTarget] = useState("");
-  const [campaignPlacement, setCampaignPlacement] = useState("dashboard_banner");
-  const [campaignStart, setCampaignStart] = useState("");
-  const [campaignEnd, setCampaignEnd] = useState("");
-  const [uploadingCampaignImage, setUploadingCampaignImage] = useState(false);
   const [platformBrand, setPlatformBrand] = useState({ brand_name: "إدارة الوتيري بلس", phone: "", promotional_text: "", website_url: "", logo_url: "", enabled: true, placement: "footer" });
   const platformBrandQuery = useQuery({
     queryKey: ["platform-branding"],
@@ -147,117 +135,6 @@ function SettingsPage() {
       setNavOverrides({});
     }
   }, []);
-
-  // Match the database's restrictive marketing policies: company-scoped
-  // owners/managers must hold settings.manage; tenant owners and Super Owners
-  // retain tenant-wide management.
-  const marketingPermissions = useQuery({
-    queryKey: ["marketing-management-permissions", tenantId, userId],
-    queryFn: async () => {
-      if (!tenantId) return [] as string[];
-      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId });
-      if (error) throw error;
-      return (data ?? []) as string[];
-    },
-    enabled: !!tenantId && !isSuperOwner && !(role === "owner" && !membership?.company_id),
-    staleTime: 30_000,
-  });
-  const isTenantOwner = role === "owner" && !membership?.company_id;
-  const canManageMarketing = isSuperOwner || isTenantOwner || ((role === "owner" || role === "manager") && !!membership?.company_id && marketingPermissions.data?.includes("settings.manage") === true);
-  const canManageCampaign = (campaign: MarketingCampaign) =>
-    isSuperOwner ||
-    isTenantOwner ||
-    (canManageMarketing && !!membership?.company_id && membership.company_id === campaign.company_id);
-  const campaignsQuery = useQuery({
-    queryKey: ["marketing-campaigns", tenantId, membership?.company_id ?? "tenant"],
-    queryFn: async (): Promise<MarketingCampaign[]> => {
-      let query = supabase.from("marketing_campaigns")
-        .select("id,company_id,title,description,image_url,target_url,placement,status,starts_at,ends_at,sort_order")
-        .eq("tenant_id", tenantId!)
-        .order("sort_order")
-        .order("created_at", { ascending: false });
-      // Company administrators only request their company's campaigns. The
-      // database company-scope RLS policy remains the authoritative boundary.
-      if (!isSuperOwner && !isTenantOwner) {
-        if (!membership?.company_id) return [];
-        query = query.eq("company_id", membership.company_id);
-      }
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data ?? []) as MarketingCampaign[];
-    },
-    enabled: !!tenantId && canManageMarketing,
-  });
-
-  const campaignCreate = useMutation({
-    mutationFn: async () => {
-      const title = campaignTitle.trim();
-      if (title.length < 2 || title.length > 120) throw new Error("اسم العرض يجب أن يكون بين حرفين و120 حرفاً");
-      if (campaignDescription.length > 500) throw new Error("الوصف أطول من الحد المسموح");
-      if (campaignTarget && !/^https?:\/\//i.test(campaignTarget)) throw new Error("رابط الوجهة يجب أن يبدأ بـ https:// أو http://");
-      if (campaignStart && campaignEnd && new Date(campaignEnd) <= new Date(campaignStart)) throw new Error("تاريخ النهاية يجب أن يكون بعد البداية");
-      const payload = {
-        company_id: editingCampaignId ? editingCampaignCompanyId : (membership?.company_id ?? null),
-        title,
-        description: campaignDescription.trim(),
-        image_url: campaignImage || null,
-        target_url: campaignTarget.trim() || null,
-        placement: campaignPlacement,
-        starts_at: campaignStart ? new Date(campaignStart).toISOString() : null,
-        ends_at: campaignEnd ? new Date(campaignEnd).toISOString() : null,
-      };
-      const result = editingCampaignId
-        ? await supabase.from("marketing_campaigns").update(payload).eq("id", editingCampaignId).eq("tenant_id", tenantId!)
-        : await supabase.from("marketing_campaigns").insert({ ...payload, tenant_id: tenantId!, status: "draft" });
-      if (result.error) throw result.error;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["marketing-campaigns", tenantId] });
-      setEditingCampaignId(null);
-      setEditingCampaignCompanyId(null);
-      setCampaignTitle(""); setCampaignDescription(""); setCampaignImage(""); setCampaignTarget(""); setCampaignStart(""); setCampaignEnd("");
-      toast.success("تم حفظ بيانات العرض.");
-    },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر حفظ العرض"),
-  });
-
-  const campaignUpdate = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await supabase.from("marketing_campaigns").update({ status }).eq("id", id).eq("tenant_id", tenantId!);
-      if (error) throw error;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["marketing-campaigns", tenantId] }),
-    onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر تحديث العرض"),
-  });
-
-  const campaignDelete = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("marketing_campaigns").delete().eq("id", id).eq("tenant_id", tenantId!);
-      if (error) throw error;
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["marketing-campaigns", tenantId] }); toast.success("تم حذف العرض"); },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر حذف العرض"),
-  });
-
-  async function uploadCampaignImage(file?: File) {
-    if (!file || !tenantId || !canManageMarketing) return;
-    const allowed = ["image/jpeg", "image/png", "image/webp", "image/avif"];
-    if (!allowed.includes(file.type)) { toast.error("صيغة الصورة غير مدعومة"); return; }
-    if (file.size > 5 * 1024 * 1024) { toast.error("الحجم الأقصى للصورة 5MB"); return; }
-    setUploadingCampaignImage(true);
-    try {
-      const ext = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif" } as Record<string, string>)[file.type];
-      const path = membership?.company_id
-        ? `${tenantId}/companies/${membership.company_id}/marketing/${crypto.randomUUID()}.${ext}`
-        : `${tenantId}/marketing/${crypto.randomUUID()}.${ext}`;
-      const { error } = await supabase.storage.from("restaurant-assets").upload(path, file, { upsert: false, contentType: file.type, cacheControl: "31536000" });
-      if (error) throw error;
-      const { data } = supabase.storage.from("restaurant-assets").getPublicUrl(path);
-      setCampaignImage(data.publicUrl);
-      toast.success("تم رفع صورة العرض");
-    } catch (error) { toast.error(error instanceof Error ? error.message : "تعذر رفع الصورة"); }
-    finally { setUploadingCampaignImage(false); }
-  }
 
   const save = useMutation({
     mutationFn: async () => {
@@ -443,64 +320,6 @@ function SettingsPage() {
               <div className="flex items-center gap-2 text-sm"><Label>موضع الظهور</Label><select className="h-9 rounded-md border bg-background px-2" value={platformBrand.placement} onChange={(e) => setPlatformBrand({ ...platformBrand, placement: e.target.value })}><option value="footer">أسفل الصفحة</option><option value="header">أعلى الصفحة</option><option value="both">أعلى وأسفل الصفحة</option></select></div>
             </div>
             <Button onClick={() => savePlatformBrand.mutate()} disabled={savePlatformBrand.isPending}>{savePlatformBrand.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}حفظ هوية النظام</Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {canManageMarketing && (
-        <Card id="marketing-campaigns"><CardHeader><CardTitle className="flex items-center gap-2"><Megaphone className="h-5 w-5 text-primary" /> إدارة العروض والإعلانات</CardTitle>
-            <CardDescription>أنشئ حملات ترويجية بصور وروابط، وحدد مكان ظهورها وفترة تشغيلها. تحفظ الحملات كمسودات حتى تقوم بتفعيلها.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-2"><Label>عنوان العرض</Label><Input value={campaignTitle} onChange={(e) => setCampaignTitle(e.target.value)} maxLength={120} placeholder="مثال: عرض نهاية الأسبوع" /></div>
-              <div className="space-y-2"><Label>مكان العرض</Label>
-                <select value={campaignPlacement} onChange={(e) => setCampaignPlacement(e.target.value)} className="h-10 w-full rounded-md border bg-background px-3 text-sm">
-                  <option value="dashboard_banner">شريط أعلى لوحة التحكم</option><option value="dashboard_card">بطاقة داخل لوحة التحكم</option><option value="pos_promo">منطقة ترويج نقطة البيع</option>
-                </select>
-              </div>
-              <div className="space-y-2 md:col-span-2"><Label>الوصف</Label><Input value={campaignDescription} onChange={(e) => setCampaignDescription(e.target.value)} maxLength={500} placeholder="تفاصيل العرض أو الإعلان" /></div>
-              <div className="space-y-2"><Label>رابط الوجهة (اختياري)</Label><Input dir="ltr" value={campaignTarget} onChange={(e) => setCampaignTarget(e.target.value)} placeholder="https://example.com/offer" /></div>
-              <div className="space-y-2"><Label>صورة الإعلان</Label>
-                <div className="flex items-center gap-3">
-                  <div className="grid h-14 w-20 shrink-0 place-items-center overflow-hidden rounded-md border bg-muted">{campaignImage ? <img src={campaignImage} alt="صورة العرض" className="h-full w-full object-cover" /> : <Image className="h-5 w-5 text-muted-foreground" />}</div>
-                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-muted">{uploadingCampaignImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}{uploadingCampaignImage ? "جارٍ الرفع..." : "اختيار صورة"}<input className="hidden" type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={uploadingCampaignImage} onChange={(e) => { void uploadCampaignImage(e.target.files?.[0]); e.currentTarget.value = ""; }} /></label>
-                </div>
-              </div>
-              <div className="space-y-2"><Label>بداية العرض (اختياري)</Label><Input type="datetime-local" value={campaignStart} onChange={(e) => setCampaignStart(e.target.value)} /></div>
-              <div className="space-y-2"><Label>نهاية العرض (اختياري)</Label><Input type="datetime-local" value={campaignEnd} onChange={(e) => setCampaignEnd(e.target.value)} /></div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" onClick={() => campaignCreate.mutate()} disabled={campaignCreate.isPending || !campaignTitle.trim()}>{campaignCreate.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}{editingCampaignId ? "حفظ التعديلات" : "حفظ كمسودة"}</Button>
-              {editingCampaignId && <Button type="button" variant="outline" onClick={() => { setEditingCampaignId(null); setCampaignTitle(""); setCampaignDescription(""); setCampaignImage(""); setCampaignTarget(""); setCampaignStart(""); setCampaignEnd(""); }}>إلغاء التعديل</Button>}
-            </div>
-            <div className="space-y-2 border-t pt-4">
-              <h3 className="font-semibold">الحملات المحفوظة</h3>
-              {campaignsQuery.isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : campaignsQuery.isError ? <div className="text-sm text-destructive">تعذر تحميل الحملات. <Button type="button" variant="link" onClick={() => campaignsQuery.refetch()}>إعادة المحاولة</Button></div> : campaignsQuery.data?.length ? campaignsQuery.data.map((campaign) => (
-                <div key={campaign.id} className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
-                  {campaign.image_url && <img src={campaign.image_url} alt="" className="h-14 w-20 rounded object-cover" />}
-                  <div className="min-w-0 flex-1"><div className="font-medium">{campaign.title}</div><div className="text-xs text-muted-foreground">{campaign.placement === "dashboard_banner" ? "شريط لوحة التحكم" : campaign.placement === "dashboard_card" ? "بطاقة لوحة التحكم" : "نقطة البيع"} · {campaign.status === "active" ? "نشط" : campaign.status === "paused" ? "متوقف" : campaign.status === "archived" ? "مؤرشف" : "مسودة"}</div></div>
-                  <Button type="button" size="sm" variant="ghost" disabled={!canManageCampaign(campaign)} onClick={() => {
-                    setEditingCampaignId(campaign.id);
-                    setEditingCampaignCompanyId(campaign.company_id ?? null);
-                    setCampaignTitle(campaign.title);
-                    setCampaignDescription(campaign.description);
-                    setCampaignImage(campaign.image_url ?? "");
-                    setCampaignTarget(campaign.target_url ?? "");
-                    setCampaignPlacement(campaign.placement);
-                    const toLocalInput = (value: string | null) => {
-                      if (!value) return "";
-                      const date = new Date(value);
-                      return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-                    };
-                    setCampaignStart(toLocalInput(campaign.starts_at));
-                    setCampaignEnd(toLocalInput(campaign.ends_at));
-                  }}>تعديل</Button>
-                  <Button type="button" size="sm" variant="outline" disabled={!canManageCampaign(campaign) || campaignUpdate.isPending} onClick={() => campaignUpdate.mutate({ id: campaign.id, status: campaign.status === "active" ? "paused" : "active" })}>{campaign.status === "active" ? "إيقاف" : "تفعيل"}</Button>
-                  <Button type="button" size="icon" variant="ghost" aria-label={`حذف ${campaign.title}`} disabled={!canManageCampaign(campaign) || campaignDelete.isPending} onClick={() => { if (window.confirm("هل تريد حذف هذا العرض؟")) campaignDelete.mutate(campaign.id); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                </div>
-              )) : <p className="text-sm text-muted-foreground">لا توجد حملات بعد.</p>}
-            </div>
           </CardContent>
         </Card>
       )}
