@@ -395,6 +395,8 @@ function POSPage() {
     currency: tenant?.currency ?? "SAR",
     order_type: orderType,
     table_name: selectedTable?.name ?? null,
+    customer_name: orderType === "delivery" ? deliveryName : customers.data?.find((customer) => customer.id === selectedCustomerId)?.name ?? null,
+    customer_phone: orderType === "delivery" ? deliveryPhone : customers.data?.find((customer) => customer.id === selectedCustomerId)?.phone ?? null,
     delivery_fee: Number((sale as any).delivery_fee ?? deliveryFee),
     delivery_customer_name: orderType === "delivery" ? deliveryName : null,
     delivery_customer_phone: orderType === "delivery" ? deliveryPhone : null,
