@@ -174,8 +174,8 @@ test("marketing campaigns have tenant isolation and owner-managed lifecycle cont
   assert.match(adsRoute, /\.eq\("tenant_id", tenantId!\)/);
   assert.match(adsRoute, /\.eq\("company_id", membership\.company_id\)/);
   assert.match(campaignMigration, /enable row level security/);
-  assert.match(campaignMigration, /private\\.is_tenant_member/);
-  assert.match(campaignMigration, /private\\.is_tenant_admin/);
+  assert.match(campaignMigration, /private\.is_tenant_member/);
+  assert.match(campaignMigration, /private\.is_tenant_admin/);
 });
 
 const imageUploader = readFileSync(new URL("../src/components/image-uploader.tsx", import.meta.url), "utf8");
