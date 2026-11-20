@@ -8,7 +8,7 @@ const layout = readFileSync(new URL("../src/routes/_authenticated/route.tsx", im
 const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 
 test("dashboard rejects partial query failures instead of presenting misleading totals", () => {
-  assert.match(dashboard, /for \(const result of \[salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions\]\)/);
+  assert.match(dashboard, /for \(const result of \[salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount\]\)/);
   assert.match(dashboard, /if \(result\.error\) throw result\.error/);
   assert.match(dashboard, /if \(catsRes\.error\) throw catsRes\.error/);
   assert.match(dashboard, /لم يتم عرض أرقام جزئية أو مضللة/);
