@@ -39,6 +39,8 @@ type SaleRow = {
   status: string;
   branch_id: string;
   cashier_id: string;
+  order_type: "dine_in" | "takeaway" | "delivery";
+  table_name_snapshot: string | null;
   refund_total: number;
 };
 
@@ -61,8 +63,8 @@ function SalesListPage() {
     queryKey: ["sales", tenantId],
     queryFn: async (): Promise<SaleRow[]> => {
       const list = await fetchAllRows<Omit<SaleRow, "refund_total">>(
-        supabase.from("sales")
-          .select("id, invoice_no, created_at, total, discount, tax_amount, subtotal, payment_method, status, branch_id, cashier_id")
+        (supabase.from("sales" as any) as any)
+          .select("id, invoice_no, created_at, total, discount, tax_amount, subtotal, payment_method, status, branch_id, cashier_id, order_type, table_name_snapshot")
           .eq("tenant_id", tenantId!)
           .neq("status", "void")
           .order("created_at", { ascending: false })
@@ -139,6 +141,7 @@ function SalesListPage() {
                   <tr>
                     <th className="p-3 font-medium">رقم</th>
                     <th className="p-3 font-medium">التاريخ</th>
+                    <th className="p-3 font-medium">نوع الطلب</th>
                     <th className="p-3 font-medium">الدفع</th>
                     <th className="p-3 font-medium">الخصم</th>
                     <th className="p-3 font-medium">الضريبة</th>
@@ -152,6 +155,7 @@ function SalesListPage() {
                     <tr key={s.id} className="border-t hover:bg-muted/30">
                       <td className="p-3 font-mono">#{s.invoice_no}</td>
                       <td className="p-3 text-muted-foreground">{formatDateTime(s.created_at)}</td>
+                      <td className="p-3 text-xs">{s.order_type === "dine_in" ? "محلي" : s.order_type === "delivery" ? "توصيل" : "سفري"}{s.table_name_snapshot ? <div className="text-[10px] text-muted-foreground">{s.table_name_snapshot}</div> : null}</td>
                       <td className="p-3">
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${methodColors[s.payment_method] ?? "bg-muted"}`}>
                           {methodLabels[s.payment_method] ?? s.payment_method}
