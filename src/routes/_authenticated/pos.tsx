@@ -842,6 +842,38 @@ function POSPage() {
             <DialogDescription>راجع الأصناف والكميات والأسعار، ويمكنك الزيادة أو التخفيض أو حذف أي صنف قبل اعتماد البيع.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
+            <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 sm:grid-cols-2">
+              <div className="space-y-1 sm:col-span-2">
+                <Label>نوع الطلب</Label>
+                <Select value={orderType} onValueChange={(value) => { setOrderType(value as "dine_in" | "takeaway" | "delivery"); setSelectedTableId("none"); }}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="dine_in">محلي — داخل المطعم</SelectItem>
+                    <SelectItem value="takeaway">سفري — استلام من المطعم</SelectItem>
+                    <SelectItem value="delivery">توصيل إلى العميل</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {orderType === "dine_in" && (
+                <div className="space-y-1 sm:col-span-2">
+                  <Label>الطاولة المتاحة</Label>
+                  <Select value={selectedTableId} onValueChange={setSelectedTableId}>
+                    <SelectTrigger><SelectValue placeholder="اختر طاولة" /></SelectTrigger>
+                    <SelectContent>
+                      {(restaurantTables.data ?? []).map((table) => <SelectItem key={table.id} value={table.id}>{table.name} — {table.capacity} مقاعد{table.section_name ? " · " + table.section_name : ""}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  {restaurantTables.isError && <p className="text-xs text-destructive">تعذر تحميل الطاولات. أعد المحاولة.</p>}
+                  {restaurantTables.data?.length === 0 && <p className="text-xs text-muted-foreground">لا توجد طاولات متاحة في هذا الفرع. أضف طاولات أو أخلِ طاولة مشغولة من صفحة الطاولات.</p>}
+                </div>
+              )}
+              {orderType === "delivery" && <>
+                <div className="space-y-1"><Label>اسم عميل التوصيل</Label><Input value={deliveryName} onChange={(e) => setDeliveryName(e.target.value)} maxLength={120} /></div>
+                <div className="space-y-1"><Label>رقم الهاتف</Label><Input value={deliveryPhone} onChange={(e) => setDeliveryPhone(e.target.value)} maxLength={30} dir="ltr" /></div>
+                <div className="space-y-1 sm:col-span-2"><Label>عنوان التوصيل</Label><Input value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} maxLength={500} /></div>
+                <div className="space-y-1"><Label>رسوم التوصيل</Label><Input type="number" min="0" step="0.01" value={deliveryFeeInput} onChange={(e) => setDeliveryFeeInput(e.target.value)} /></div>
+              </>}
+            </div>
             <div className="overflow-x-auto rounded-lg border">
               <table className="w-full min-w-[320px] text-xs">
                 <thead className="bg-muted/60"><tr><th className="p-2 text-right">الصنف</th><th className="p-2 text-center">الكمية</th><th className="p-2 text-center">السعر</th><th className="p-2 text-center">الإجمالي</th><th className="p-2"></th></tr></thead>
@@ -881,12 +913,13 @@ function POSPage() {
               <div className="flex justify-between text-sm text-muted-foreground"><span>المجموع الفرعي</span><span className="num">{formatMoney(subtotal)}</span></div>
               <div className="flex justify-between text-sm text-muted-foreground"><span>الخصم</span><span className="num">-{formatMoney(disc)}</span></div>
               <div className="flex justify-between text-sm text-muted-foreground"><span>الضريبة ({taxRate}%)</span><span className="num">{formatMoney(taxAmount)}</span></div>
+              {orderType === "delivery" && <div className="flex justify-between text-sm text-muted-foreground"><span>رسوم التوصيل</span><span className="num">{formatMoney(deliveryFee)}</span></div>}
               <div className="flex justify-between border-t pt-2 text-base font-black"><span>الإجمالي</span><span className="text-primary num">{formatMoney(total)} {currency}</span></div>
             </div>
           </div>
           <DialogFooter className="gap-2 sm:justify-between">
             <Button variant="outline" onClick={() => setReviewOpen(false)} disabled={checkoutMut.isPending}>العودة للتعديل</Button>
-            <Button className="bg-success font-bold text-success-foreground hover:bg-success/90" disabled={checkoutMut.isPending || cart.length === 0 || disc > subtotal || (selectedCustomerId === "none" && paidAmount.trim() !== "" && Number(paidAmount) !== total) || (paidAmount.trim() !== "" && (!Number.isFinite(Number(paidAmount)) || Number(paidAmount) < 0 || Number(paidAmount) > total))}
+            <Button className="bg-success font-bold text-success-foreground hover:bg-success/90" disabled={checkoutMut.isPending || cart.length === 0 || disc > subtotal || (orderType === "dine_in" && (!selectedTableId || selectedTableId === "none" || restaurantTables.isLoading || restaurantTables.isError)) || (orderType === "delivery" && (!deliveryName.trim() || !deliveryPhone.trim() || !deliveryAddress.trim() || !Number.isFinite(Number(deliveryFeeInput)) || Number(deliveryFeeInput) < 0)) || (selectedCustomerId === "none" && paidAmount.trim() !== "" && Number(paidAmount) !== total) || (paidAmount.trim() !== "" && (!Number.isFinite(Number(paidAmount)) || Number(paidAmount) < 0 || Number(paidAmount) > total))}
               onClick={confirmCheckout}>
               {checkoutMut.isPending ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="ml-2 h-4 w-4" />}
               تأكيد وإصدار الفاتورة
