@@ -455,7 +455,7 @@ export const createCustomRole = createServerFn({ method: "POST" })
     z
       .object({
         tenant_id: uuid,
-        name: z.string().min(1).max(80),
+        name: z.string().trim().min(1).max(80),
         description: z.string().max(500).optional().nullable(),
         copy_from_builtin: z
           .enum(["owner", "manager", "accountant", "cashier", "warehouse", "waiter", "kitchen"])
@@ -463,12 +463,22 @@ export const createCustomRole = createServerFn({ method: "POST" })
           .nullable(),
         copy_from_custom: uuid.optional().nullable(),
       })
+      .refine((value) => !(value.copy_from_builtin && value.copy_from_custom), {
+        message: "اختر مصدراً واحداً فقط لنسخ الصلاحيات.",
+      })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
     await assertPermission(context.supabase, context.userId, data.tenant_id, "roles.manage");
     await assertTenantOwnerOrSuperOwner(context.supabase, context.userId, data.tenant_id);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    if (data.copy_from_custom) {
+      const { data: sourceRole, error: sourceError } = await supabaseAdmin
+        .from("custom_roles").select("id")
+        .eq("id", data.copy_from_custom).eq("tenant_id", data.tenant_id).maybeSingle();
+      if (sourceError) throw new Error(sourceError.message);
+      if (!sourceRole) throw new Error("الدور المصدر لا يتبع المؤسسة المحددة.");
+    }
     const { data: role, error } = await supabaseAdmin
       .from("custom_roles")
       .insert({
@@ -496,6 +506,32 @@ export const createCustomRole = createServerFn({ method: "POST" })
     return { ok: true, id: role.id };
   });
 
+export const updateCustomRole = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    z.object({
+      id: uuid,
+      tenant_id: uuid,
+      name: z.string().trim().min(1).max(80),
+      description: z.string().max(500).nullable().optional(),
+    }).parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "roles.manage");
+    await assertTenantOwnerOrSuperOwner(context.supabase, context.userId, data.tenant_id);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: role, error: readError } = await supabaseAdmin
+      .from("custom_roles").select("id")
+      .eq("id", data.id).eq("tenant_id", data.tenant_id).maybeSingle();
+    if (readError) throw new Error(readError.message);
+    if (!role) throw new Error("الدور المخصص لا يتبع المؤسسة المحددة.");
+    const { error } = await supabaseAdmin.from("custom_roles")
+      .update({ name: data.name, description: data.description ?? null })
+      .eq("id", data.id).eq("tenant_id", data.tenant_id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
 export const deleteCustomRole = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: uuid, tenant_id: uuid }).parse(data))
@@ -503,7 +539,8 @@ export const deleteCustomRole = createServerFn({ method: "POST" })
     await assertPermission(context.supabase, context.userId, data.tenant_id, "roles.manage");
     await assertTenantOwnerOrSuperOwner(context.supabase, context.userId, data.tenant_id);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("custom_roles").delete().eq("id", data.id);
+    const { error } = await supabaseAdmin.from("custom_roles").delete()
+      .eq("id", data.id).eq("tenant_id", data.tenant_id);
     if (error) throw new Error(error.message);
     return { ok: true };
   });

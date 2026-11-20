@@ -70,3 +70,21 @@ test("custom role assignment cannot demote the tenant owner", () => {
   assert.match(protectOwnerMigration, /v_target_role = 'owner'::public\.app_role/);
   assert.match(protectOwnerMigration, /tenant owner cannot be assigned a custom staff role/);
 });
+
+const enterpriseFunctions = readFileSync(new URL("../src/lib/enterprise.functions.ts", import.meta.url), "utf8");
+const rolesPage = readFileSync(new URL("../src/routes/_authenticated/roles.tsx", import.meta.url), "utf8");
+
+test("custom role edit and delete actions are restricted to the selected tenant", () => {
+  assert.match(enterpriseFunctions, /export const updateCustomRole/);
+  assert.match(enterpriseFunctions, /\.eq\("id", data\.id\)\.eq\("tenant_id", data\.tenant_id\)/);
+  assert.match(enterpriseFunctions, /from\("custom_roles"\)\.delete\(\)[\s\S]*\.eq\("tenant_id", data\.tenant_id\)/);
+  assert.match(enterpriseFunctions, /copy_from_custom[\s\S]*الدور المصدر لا يتبع المؤسسة المحددة/);
+});
+
+test("custom role editor supports rename, cloning from custom roles and permission search", () => {
+  assert.match(rolesPage, /updateCustomRole/);
+  assert.match(rolesPage, /copy_from_custom/);
+  assert.match(rolesPage, /permissionSearch/);
+  assert.match(rolesPage, /roleSearch/);
+  assert.match(rolesPage, /تعديل الدور المخصص/);
+});
