@@ -26,7 +26,7 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 });
 
 function Dashboard() {
-  const { tenantId, tenant, user, membership } = useActiveTenant();
+  const { tenantId, tenant, user, membership, hasPermission } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
   const profileQuery = useQuery({
     queryKey: ["dashboard-profile-name", user?.id],
@@ -210,6 +210,39 @@ function Dashboard() {
     enabled: !!tenantId,
   });
 
+
+  const latestOrders = useQuery({
+    queryKey: ["dashboard-latest-orders", tenantId, membership?.branch_id],
+    queryFn: async () => {
+      if (!tenantId) return [];
+      let query = supabase.from("sales").select("id,invoice_no,total,status,created_at,order_type")
+        .eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(8);
+      if (membership?.branch_id) query = query.eq("branch_id", membership.branch_id);
+      const { data, error } = await query;
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!tenantId && hasPermission("sales.view"),
+    refetchInterval: 15_000,
+    staleTime: 5_000,
+  });
+  const kitchenOverview = useQuery({
+    queryKey: ["dashboard-kitchen-overview", tenantId, membership?.branch_id],
+    queryFn: async () => {
+      if (!tenantId) return [];
+      let query = (supabase.from("kitchen_orders" as any) as any).select("id,branch_id,sale_id,status,created_at")
+        .eq("tenant_id", tenantId).in("status", ["new", "preparing", "ready"])
+        .order("created_at", { ascending: false }).limit(12);
+      if (membership?.branch_id) query = query.eq("branch_id", membership.branch_id);
+      const { data, error } = await query;
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!tenantId && hasPermission("kitchen.view"),
+    refetchInterval: 15_000,
+    staleTime: 5_000,
+  });
+
   const currency = tenant?.currency ?? "";
 
   return (
@@ -341,6 +374,28 @@ function Dashboard() {
           </div>
         </>
       )}
+      {(hasPermission("sales.view") || hasPermission("kitchen.view")) && (
+        <section className="grid gap-4 xl:grid-cols-2" aria-label="متابعة الطلبات والتشغيل">
+          {hasPermission("sales.view") && <Card><CardContent className="p-4">
+            <div className="mb-3 flex items-center justify-between"><h2 className="font-bold">أحدث الطلبات والفواتير</h2><Link to="/sales" className="text-xs font-semibold text-primary hover:underline">عرض الكل</Link></div>
+            {latestOrders.isError ? <p role="alert" className="text-sm text-destructive">تعذر تحميل أحدث الطلبات. <button className="underline" onClick={() => void latestOrders.refetch()}>إعادة المحاولة</button></p>
+              : latestOrders.isLoading ? <div className="py-6 text-center text-sm text-muted-foreground">جارٍ تحميل الطلبات...</div>
+              : (latestOrders.data ?? []).length === 0 ? <div className="py-6 text-center text-sm text-muted-foreground">لا توجد طلبات مسجلة بعد.</div>
+              : <div className="space-y-2">{(latestOrders.data ?? []).map((order) => <div key={order.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                <div className="min-w-0"><div className="truncate text-sm font-semibold">فاتورة #{order.invoice_no ?? "—"}</div><div className="mt-1 text-xs text-muted-foreground">{new Intl.DateTimeFormat("ar-YE", { dateStyle: "short", timeStyle: "short" }).format(new Date(order.created_at))} · {order.order_type === "dine_in" ? "محلي" : order.order_type === "delivery" ? "توصيل" : "سفري"}</div></div>
+                <div className="shrink-0 text-left"><div className="text-sm font-bold num">{formatMoney(Number(order.total))} {currency}</div><div className="text-xs text-muted-foreground">{order.status === "completed" ? "مكتملة" : order.status === "void" ? "ملغاة" : String(order.status)}</div></div>
+              </div>)}</div>}
+          </CardContent></Card>}
+          {hasPermission("kitchen.view") && <Card><CardContent className="p-4">
+            <div className="mb-3 flex items-center justify-between"><h2 className="font-bold">حالة المطبخ</h2><Link to="/kitchen" className="text-xs font-semibold text-primary hover:underline">فتح شاشة المطبخ</Link></div>
+            {kitchenOverview.isError ? <p role="alert" className="text-sm text-destructive">تعذر تحميل حالة المطبخ. <button className="underline" onClick={() => void kitchenOverview.refetch()}>إعادة المحاولة</button></p>
+              : kitchenOverview.isLoading ? <div className="py-6 text-center text-sm text-muted-foreground">جارٍ تحميل حالة المطبخ...</div>
+              : <div className="grid grid-cols-3 gap-2">{(["new", "preparing", "ready"] as const).map((status) => <div key={status} className="rounded-lg border p-3 text-center"><div className="text-xl font-extrabold num">{(kitchenOverview.data ?? []).filter((order: { status: string }) => order.status === status).length}</div><div className="mt-1 text-xs text-muted-foreground">{status === "new" ? "جديد" : status === "preparing" ? "قيد التحضير" : "جاهز"}</div></div>)}</div>}
+            <p className="mt-3 text-xs text-muted-foreground">حالة التحضير مستقلة عن حالة الفاتورة والمدفوعات.</p>
+          </CardContent></Card>}
+        </section>
+      )}
+
     </div>
   );
 }
