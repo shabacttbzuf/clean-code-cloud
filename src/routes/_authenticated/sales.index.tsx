@@ -62,14 +62,33 @@ function SalesListPage() {
   const sales = useQuery({
     queryKey: ["sales", tenantId],
     queryFn: async (): Promise<SaleRow[]> => {
-      const list = await fetchAllRows<Omit<SaleRow, "refund_total">>(
-        (supabase.from("sales" as any) as any)
-          .select("id, invoice_no, created_at, total, discount, tax_amount, subtotal, payment_method, status, branch_id, cashier_id, order_type, table_name_snapshot")
-          .eq("tenant_id", tenantId!)
-          .neq("status", "void")
-          .order("created_at", { ascending: false })
-          .order("id", { ascending: false }),
-      );
+      let list: Omit<SaleRow, "refund_total">[];
+      try {
+        list = await fetchAllRows<Omit<SaleRow, "refund_total">>(
+          (supabase.from("sales" as any) as any)
+            .select("id, invoice_no, created_at, total, discount, tax_amount, subtotal, payment_method, status, branch_id, cashier_id, order_type, table_name_snapshot")
+            .eq("tenant_id", tenantId!)
+            .neq("status", "void")
+            .order("created_at", { ascending: false })
+            .order("id", { ascending: false }),
+        );
+      } catch (error) {
+        const dbError = error as { code?: string; message?: string };
+        const missingOrderColumns = dbError.code === "42703" || dbError.code === "PGRST204" ||
+          (/order_type|table_name_snapshot/.test(dbError.message ?? "") && /column|schema cache|not found/i.test(dbError.message ?? ""));
+        if (!missingOrderColumns) throw error;
+        // Existing installations remain usable until the additive order-type
+        // migration is deployed; legacy sales are presented as takeaway.
+        const legacy = await fetchAllRows<Omit<SaleRow, "refund_total" | "order_type" | "table_name_snapshot">>(
+          supabase.from("sales")
+            .select("id, invoice_no, created_at, total, discount, tax_amount, subtotal, payment_method, status, branch_id, cashier_id")
+            .eq("tenant_id", tenantId!)
+            .neq("status", "void")
+            .order("created_at", { ascending: false })
+            .order("id", { ascending: false }),
+        );
+        list = legacy.map((sale) => ({ ...sale, order_type: "takeaway", table_name_snapshot: null }));
+      }
       const refundTotals = new Map<string, number>();
       // Keep each IN filter comfortably below URL/request limits for large histories.
       for (let i = 0; i < list.length; i += 200) {
