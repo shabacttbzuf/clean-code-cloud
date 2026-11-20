@@ -13,6 +13,14 @@ export type InvoiceData = {
   tax_amount: number;
   total: number;
   payment_method: string;
+  order_type?: "dine_in" | "takeaway" | "delivery" | null;
+  table_name?: string | null;
+  delivery_fee?: number;
+  delivery_customer_name?: string | null;
+  delivery_customer_phone?: string | null;
+  delivery_address?: string | null;
+  paid_amount?: number;
+  due_amount?: number;
   items: Array<{
     product_name: string;
     quantity: number;
@@ -251,6 +259,11 @@ export function printInvoiceHTML(
     <div>الكاشير: ${escapeHtml(data.cashier_name || "-")}</div>
     <div>الفرع: ${escapeHtml(data.branch_name)}</div>
   </div>
+  <div class="meta">
+    <div>نوع الطلب: ${data.order_type === "dine_in" ? "محلي" : data.order_type === "delivery" ? "توصيل" : "سفري"}</div>
+    ${data.table_name ? `<div>الطاولة: ${escapeHtml(data.table_name)}</div>` : ""}
+  </div>
+  ${data.order_type === "delivery" ? `<div class="muted">عميل التوصيل: ${escapeHtml(data.delivery_customer_name || "-")} · ${escapeHtml(data.delivery_customer_phone || "-")}</div><div class="muted">العنوان: ${escapeHtml(data.delivery_address || "-")}</div>` : ""}
   <div class="divider"></div>
   <table>
     <thead>
@@ -267,7 +280,10 @@ export function printInvoiceHTML(
     <div class="row"><span>المجموع الفرعي</span><span>${formatMoney(data.subtotal)} ${escapeHtml(data.currency)}</span></div>
     ${data.discount > 0 ? `<div class="row"><span>الخصم</span><span>-${formatMoney(data.discount)} ${escapeHtml(data.currency)}</span></div>` : ""}
     ${data.tax_amount > 0 ? `<div class="row"><span>الضريبة</span><span>${formatMoney(data.tax_amount)} ${escapeHtml(data.currency)}</span></div>` : ""}
+    ${(data.delivery_fee ?? 0) > 0 ? `<div class="row"><span>رسوم التوصيل</span><span>${formatMoney(data.delivery_fee ?? 0)} ${escapeHtml(data.currency)}</span></div>` : ""}
     <div class="row grand"><span>الإجمالي</span><span>${formatMoney(data.total)} ${escapeHtml(data.currency)}</span></div>
+    <div class="row"><span>المدفوع</span><span>${formatMoney(data.paid_amount ?? data.total)} ${escapeHtml(data.currency)}</span></div>
+    <div class="row"><span>المتبقي</span><span>${formatMoney(data.due_amount ?? 0)} ${escapeHtml(data.currency)}</span></div>
     <div class="row"><span>طريقة الدفع</span><span>${escapeHtml(paymentAr[data.payment_method] ?? data.payment_method)}</span></div>
   </div>
   <div class="center thanks">شكراً لزيارتكم — نتشرف بخدمتكم مجدداً</div>
