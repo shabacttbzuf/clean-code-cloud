@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
-import { createCustomRole, deleteCustomRole, setCustomRolePermission } from "@/lib/enterprise.functions";
+import { createCustomRole, deleteCustomRole, setCustomRolePermission, updateCustomRole } from "@/lib/enterprise.functions";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Loader2, Plus, Trash2, ShieldAlert, Copy } from "lucide-react";
+import { Loader2, Plus, Trash2, ShieldAlert, Copy, Pencil, Search } from "lucide-react";
 import { toast } from "sonner";
 import { useSuperOwner } from "@/hooks/use-super-owner";
 
@@ -38,9 +38,13 @@ function RolesPage() {
   const createFn = useServerFn(createCustomRole);
   const delFn = useServerFn(deleteCustomRole);
   const setPermFn = useServerFn(setCustomRolePermission);
+  const updateFn = useServerFn(updateCustomRole);
   const [open, setOpen] = useState(false);
+  const [editingRole, setEditingRole] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", description: "", copy_from_builtin: "" as string, copy_from_custom: "" });
   const [selected, setSelected] = useState<string | null>(null);
+  const [roleSearch, setRoleSearch] = useState("");
+  const [permissionSearch, setPermissionSearch] = useState("");
   const canAccess = role === "owner" || role === "manager" || isSuperOwner;
   const canManage = role === "owner" || isSuperOwner;
 
@@ -92,6 +96,25 @@ function RolesPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const update = useMutation({
+    mutationFn: () => updateFn({
+      data: {
+        id: editingRole!,
+        tenant_id: tenantId!,
+        name: form.name.trim(),
+        description: form.description || null,
+      },
+    }),
+    onSuccess: () => {
+      setOpen(false);
+      setEditingRole(null);
+      setForm({ name: "", description: "", copy_from_builtin: "", copy_from_custom: "" });
+      qc.invalidateQueries({ queryKey: ["custom-roles", tenantId] });
+      toast.success("تم تحديث الدور");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   const del = useMutation({
     mutationFn: (id: string) => delFn({ data: { id, tenant_id: tenantId! } }),
     onSuccess: () => {
@@ -130,8 +153,16 @@ function RolesPage() {
     );
 
   const permsSet = new Set(rolePermsQ.data ?? []);
+  const filteredRoles = (customRolesQ.data ?? []).filter((role: any) =>
+    String(role.name ?? "").toLowerCase().includes(roleSearch.trim().toLowerCase())
+  );
+  const filteredPermissions = (permsQ.data ?? []).filter((permission) =>
+    !permissionSearch.trim() ||
+    permission.label_ar.toLowerCase().includes(permissionSearch.trim().toLowerCase()) ||
+    permission.key.toLowerCase().includes(permissionSearch.trim().toLowerCase())
+  );
   const grouped = new Map<string, { key: string; label_ar: string }[]>();
-  for (const p of permsQ.data ?? []) {
+  for (const p of filteredPermissions) {
     const arr = grouped.get(p.category) ?? [];
     arr.push(p);
     grouped.set(p.category, arr);
@@ -165,9 +196,10 @@ function RolesPage() {
           </Card>
           <Card>
             <CardContent className="p-3">
-              <div className="mb-2 text-xs font-semibold text-muted-foreground">الأدوار المخصصة</div>
+              <div className="mb-2 text-xs font-semibold text-muted-foreground">الأدوار المخصصة ({filteredRoles.length})</div>
+              <div className="mb-2 relative"><Search className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input className="pr-9" placeholder="ابحث عن دور..." value={roleSearch} onChange={(e) => setRoleSearch(e.target.value)} /></div>
               <div className="space-y-1">
-                {(customRolesQ.data ?? []).map((r: any) => (
+                {filteredRoles.map((r: any) => (
                   <div
                     key={r.id}
                     className={`flex cursor-pointer items-center justify-between rounded-md border p-2 text-sm ${
@@ -185,16 +217,18 @@ function RolesPage() {
                       )}
                     </div>
                     {canManage && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={(e) => {
+                      <div className="flex items-center">
+                        <Button size="icon" variant="ghost" aria-label="تعديل الدور" onClick={(e) => {
                           e.stopPropagation();
-                          if (confirm("حذف الدور؟")) del.mutate(r.id);
-                        }}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
+                          setEditingRole(r.id);
+                          setForm({ name: r.name, description: r.description ?? "", copy_from_builtin: "", copy_from_custom: "" });
+                          setOpen(true);
+                        }}><Pencil className="h-3 w-3" /></Button>
+                        <Button size="icon" variant="ghost" aria-label="حذف الدور" onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm("حذف الدور المخصص؟")) del.mutate(r.id);
+                        }}><Trash2 className="h-3 w-3" /></Button>
+                      </div>
                     )}
                   </div>
                 ))}
@@ -216,6 +250,10 @@ function RolesPage() {
               <Loader2 className="mx-auto my-8 h-5 w-5 animate-spin" />
             ) : (
               <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-xs text-muted-foreground">الصلاحيات الممنوحة: {permsSet.size} من {permsQ.data?.length ?? 0}</div>
+                  <div className="relative w-full max-w-sm"><Search className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input className="pr-9" placeholder="ابحث باسم الصلاحية أو مفتاحها..." value={permissionSearch} onChange={(e) => setPermissionSearch(e.target.value)} /></div>
+                </div>
                 {Array.from(grouped.entries()).map(([cat, perms]) => (
                   <div key={cat}>
                     <div className="mb-2 text-xs font-semibold text-muted-foreground">{cat}</div>
@@ -245,10 +283,10 @@ function RolesPage() {
         </Card>
       </div>
 
-      {canManage && <Dialog open={open} onOpenChange={setOpen}>
+      {canManage && <Dialog open={open} onOpenChange={(value) => { setOpen(value); if (!value) { setEditingRole(null); setForm({ name: "", description: "", copy_from_builtin: "", copy_from_custom: "" }); } }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>دور مخصص جديد</DialogTitle>
+            <DialogTitle>{editingRole ? "تعديل الدور المخصص" : "دور مخصص جديد"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div>
@@ -259,7 +297,7 @@ function RolesPage() {
               <Label>الوصف</Label>
               <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </div>
-            <div>
+            {!editingRole && <div>
               <Label>نسخ الصلاحيات من دور أساسي (اختياري)</Label>
               <Select
                 value={form.copy_from_builtin || "__none__"}
@@ -274,12 +312,23 @@ function RolesPage() {
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <Label>نسخ الصلاحيات من دور مخصص (اختياري)</Label>
+              <Select value={form.copy_from_custom || "__none__"} onValueChange={(value) => setForm({ ...form, copy_from_custom: value === "__none__" ? "" : value, copy_from_builtin: "" })}>
+                <SelectTrigger><SelectValue placeholder="اختر دوراً مخصصاً" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">—</SelectItem>
+                  {(customRolesQ.data ?? []).map((role: any) => <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            </>}
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>إلغاء</Button>
-            <Button disabled={!form.name.trim() || create.isPending} onClick={() => create.mutate()}>
-              {create.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
-              إنشاء
+            <Button disabled={!form.name.trim() || create.isPending || update.isPending} onClick={() => editingRole ? update.mutate() : create.mutate()}>
+              {(create.isPending || update.isPending) && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
+              {editingRole ? "حفظ التعديلات" : "إنشاء"}
             </Button>
           </DialogFooter>
         </DialogContent>
