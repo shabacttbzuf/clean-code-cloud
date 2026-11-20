@@ -12,6 +12,7 @@ test("advertising management is a dedicated authenticated route", () => {
   assert.match(ads, /createFileRoute\("\/_authenticated\/ads"\)/);
   assert.match(sidebar, /title: "الإعلانات", url: "\/ads"/);
   assert.match(workspaceTabs, /\["\/ads", "الإعلانات"\]/);
+  assert.match(authLayout, /prefix: "\/ads", permission: "settings.view"/);
 });
 
 test("advertising management preserves tenant and company scope and permission checks", () => {
