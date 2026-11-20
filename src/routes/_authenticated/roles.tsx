@@ -21,6 +21,15 @@ import { useSuperOwner } from "@/hooks/use-super-owner";
 export const Route = createFileRoute("/_authenticated/roles")({ component: RolesPage });
 
 const BUILTIN = ["owner", "manager", "accountant", "cashier", "warehouse", "waiter", "kitchen"];
+const BUILTIN_LABELS: Record<string, string> = {
+  owner: "مالك الشركة",
+  manager: "مدير الفرع",
+  accountant: "المحاسب",
+  cashier: "أمين الصندوق",
+  warehouse: "أمين المخزن",
+  waiter: "النادل",
+  kitchen: "مشرف المطبخ",
+};
 
 function RolesPage() {
   const { tenantId, role, loading } = useActiveTenant();
@@ -149,7 +158,7 @@ function RolesPage() {
               <div className="mb-2 text-xs font-semibold text-muted-foreground">الأدوار الأساسية</div>
               <div className="flex flex-wrap gap-1">
                 {BUILTIN.map((r) => (
-                  <Badge key={r} variant="outline">{r}</Badge>
+                  <Badge key={r} variant="outline">{BUILTIN_LABELS[r] ?? r}</Badge>
                 ))}
               </div>
             </CardContent>
@@ -171,7 +180,7 @@ function RolesPage() {
                       {r.copied_from_builtin && (
                         <div className="text-[10px] text-muted-foreground">
                           <Copy className="mr-1 inline h-3 w-3" />
-                          من: {r.copied_from_builtin}
+                          من: {BUILTIN_LABELS[r.copied_from_builtin] ?? r.copied_from_builtin}
                         </div>
                       )}
                     </div>
@@ -260,7 +269,7 @@ function RolesPage() {
                 <SelectContent>
                   <SelectItem value="__none__">—</SelectItem>
                   {BUILTIN.map((r) => (
-                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                    <SelectItem key={r} value={r}>{BUILTIN_LABELS[r] ?? r}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
