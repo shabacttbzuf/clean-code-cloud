@@ -17,10 +17,10 @@ const STORAGE_KEY = "ras-theme";
 export const DESIGN_STORAGE_KEY = "ras-design-customization-v1";
 export const DESIGN_UPDATED_EVENT = "ras-design-updated";
 export const DEFAULT_DESIGN: DesignSettings = {
-  background: "#f4f7f5",
-  primary: "#176b52",
-  accent: "#d7a83e",
-  sidebar: "#173d32",
+  background: "#f3f6fc",
+  primary: "#174b91",
+  accent: "#d9a441",
+  sidebar: "#102f5c",
   card: "#ffffff",
   backgroundImage: "",
 };

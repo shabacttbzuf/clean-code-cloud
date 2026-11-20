@@ -15,7 +15,7 @@ test("dashboard rejects partial query failures instead of presenting misleading 
 });
 
 test("CI runs on the active feature branch and supports a manual verification run", () => {
-  assert.match(workflow, /branches: \["main", "feature\/\*\*"\]/);
+  assert.match(workflow, /branches: \["main", "feature\/\*\*", "feat\/\*\*"\]/);
   assert.match(workflow, /workflow_dispatch:/);
 });
 
@@ -80,7 +80,7 @@ const sonner = readFileSync(new URL("../src/components/ui/sonner.tsx", import.me
 const userAdmin = readFileSync(new URL("../src/routes/_authenticated/users-admin.tsx", import.meta.url), "utf8");
 
 test("dashboard and account menu show profile names, including the platform owner's requested name", () => {
-  assert.match(dashboard, /مرحبا \$\{displayName\}/);
+  assert.match(dashboard, /أهلاً بك، \{displayName\}/);
   assert.match(dashboard, /shafiqalwatiry@gmail\.com/);
   assert.match(authLayout, /topbar-profile-name/);
   assert.match(authLayout, /شفيق الوتيري/);
@@ -118,6 +118,8 @@ test("inventory alerts can be filtered by negative, missing, and below-minimum s
 const settings = readFileSync(new URL("../src/routes/_authenticated/settings.tsx", import.meta.url), "utf8");
 const theme = readFileSync(new URL("../src/lib/theme.tsx", import.meta.url), "utf8");
 const appSidebar = readFileSync(new URL("../src/components/app-sidebar.tsx", import.meta.url), "utf8");
+const appLauncher = readFileSync(new URL("../src/components/app-launcher.tsx", import.meta.url), "utf8");
+const workspaceTabs = readFileSync(new URL("../src/components/workspace-tabs.tsx", import.meta.url), "utf8");
 const campaignMigration = readFileSync(new URL("../supabase/migrations/20261111233538_marketing_campaigns_management.sql", import.meta.url), "utf8");
 
 test("owner design studio customizes workspace colors and background with a safe reset", () => {
@@ -129,6 +131,22 @@ test("owner design studio customizes workspace colors and background with a safe
   assert.match(theme, /--background/);
   assert.match(theme, /backgroundImage/);
   assert.match(theme, /resetDesign/);
+});
+
+test("app launcher mirrors enterprise, system, and owner-only custom navigation with the same permission boundaries", () => {
+  assert.match(appLauncher, /enterpriseGroup/);
+  assert.match(appLauncher, /systemItems/);
+  assert.match(appLauncher, /اختصارات مخصصة/);
+  assert.match(appLauncher, /navOverrides\[basePath\]/);
+  assert.match(appLauncher, /permissions\.data\.has\(item\.permission\)/);
+});
+
+test("workspace tabs preserve pinned pages and enforce a stable maximum", () => {
+  assert.match(workspaceTabs, /MAX_TABS = 12/);
+  assert.match(workspaceTabs, /function limitTabs/);
+  assert.match(workspaceTabs, /function togglePinned/);
+  assert.match(workspaceTabs, /PinOff/);
+  assert.match(workspaceTabs, /tab\.pinned/);
 });
 
 test("custom sidebar tabs are owner-only shortcuts to an allowlisted existing route", () => {

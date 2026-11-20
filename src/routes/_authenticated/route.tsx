@@ -2,6 +2,8 @@ import { createFileRoute, Outlet, redirect, useNavigate, useRouterState } from "
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppSidebar } from "@/components/app-sidebar";
+import { AppLauncher } from "@/components/app-launcher";
+import { WorkspaceTabs } from "@/components/workspace-tabs";
 import { SidebarProvider, SidebarTrigger, SidebarInset, useSidebar } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import {
@@ -71,6 +73,7 @@ function AuthShell() {
         <AppSidebar />
         <SidebarInset className="workspace-surface min-w-0">
           <TopBar />
+          <WorkspaceTabs />
           <main className="min-w-0 flex-1 p-4 md:p-6">
             <PermissionRouteGuard />
           </main>
@@ -267,6 +270,7 @@ function TopBar() {
         <div className="text-sm font-semibold">نظام إدارة الأعمال</div>
       </div>
       <div className="flex items-center gap-2">
+        <AppLauncher />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="relative" aria-label="الإشعارات">
