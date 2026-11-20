@@ -434,7 +434,7 @@ function POSPage() {
       if (orderType === "delivery" && (!Number.isFinite(Number(deliveryFeeInput)) || Number(deliveryFeeInput) < 0)) {
         throw new Error("أدخل رسوم توصيل صحيحة");
       }
-      const { data: sale, error: saleErr } = await (supabase.rpc as any)("create_pos_order", {
+      let { data: sale, error: saleErr } = await (supabase.rpc as any)("create_pos_order", {
         _tenant_id: tenantId,
         _branch_id: branchId,
         _cashier_id: userId,
@@ -454,6 +454,34 @@ function POSPage() {
         _delivery_address: orderType === "delivery" ? deliveryAddress.trim() : null,
         _delivery_fee: deliveryFee,
       });
+
+      // Keep legacy takeaway checkout operational until the additive database
+      // migration is deployed. Never silently downgrade dine-in or delivery.
+      const missingOrderRpc = saleErr && (
+        saleErr.code === "PGRST202" ||
+        /could not find the function|function public\.create_pos_order.*does not exist/i.test(saleErr.message ?? "")
+      );
+      if (missingOrderRpc) {
+        if (orderType !== "takeaway" || deliveryFee > 0) {
+          throw new Error("يتطلب الطلب المحلي والتوصيل تطبيق تحديث قاعدة البيانات أولاً. يمكنك إكمال الطلب السفري حالياً.");
+        }
+        const legacy = await (supabase.rpc as any)("create_sale_with_customer", {
+          _tenant_id: tenantId,
+          _branch_id: branchId,
+          _cashier_id: userId,
+          _session_id: openSession.data.id,
+          _discount: disc,
+          _customer_id: selectedCustomerId === "none" ? null : selectedCustomerId,
+          _paid_amount: initialPaid,
+          _paid_method: dbMethod,
+          _items: cart.map((item) => ({
+            product_id: item.product_id,
+            quantity: item.quantity,
+          })),
+        });
+        sale = legacy.data;
+        saleErr = legacy.error;
+      }
       if (saleErr) throw saleErr;
       if (!sale) throw new Error("لم يتم إنشاء الفاتورة.");
 
