@@ -123,6 +123,12 @@ function POSPage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [discount, setDiscount] = useState("0");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("none");
+  const [orderType, setOrderType] = useState<"dine_in" | "takeaway" | "delivery">("takeaway");
+  const [selectedTableId, setSelectedTableId] = useState<string>("none");
+  const [deliveryName, setDeliveryName] = useState("");
+  const [deliveryPhone, setDeliveryPhone] = useState("");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [deliveryFeeInput, setDeliveryFeeInput] = useState("0");
   const [paidAmount, setPaidAmount] = useState("");
   const [openSessionDialog, setOpenSessionDialog] = useState(false);
   const [openingBalance, setOpeningBalance] = useState("0");
@@ -172,6 +178,20 @@ function POSPage() {
     () => branches.data?.find((b) => b.id === branchId) ?? null,
     [branches.data, branchId],
   );
+
+  const restaurantTables = useQuery({
+    queryKey: ["pos-restaurant-tables", tenantId, branchId],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from("restaurant_tables" as any) as any)
+        .select("id,name,capacity,section_name,status,current_sale_id")
+        .eq("tenant_id", tenantId!).eq("branch_id", branchId!)
+        .eq("status", "active").is("current_sale_id", null).order("name");
+      if (error) throw error;
+      return (data ?? []) as Array<{id:string;name:string;capacity:number;section_name:string|null;status:string;current_sale_id:string|null}>;
+    },
+    enabled: !!tenantId && !!branchId,
+    refetchInterval: 15_000,
+  });
 
   const customers = useQuery({
     queryKey: ["pos-customers", tenantId],
@@ -320,7 +340,9 @@ function POSPage() {
   const taxable = Math.max(0, subtotal - disc);
   const taxRate = Number(tenant?.tax_rate ?? 0);
   const taxAmount = +(taxable * (taxRate / 100)).toFixed(2);
-  const total = +(taxable + taxAmount).toFixed(2);
+  const deliveryFee = orderType === "delivery" ? Math.max(0, Number(deliveryFeeInput) || 0) : 0;
+  const total = +(taxable + taxAmount + deliveryFee).toFixed(2);
+  const selectedTable = restaurantTables.data?.find((table) => table.id === selectedTableId) ?? null;
 
   const openSess = useMutation({
     mutationFn: async () => {
@@ -367,6 +389,14 @@ function POSPage() {
     tenant_name: tenant?.name ?? null,
     logo_url: tenant?.logo_url ?? null,
     currency: tenant?.currency ?? "SAR",
+    order_type: orderType,
+    table_name: selectedTable?.name ?? null,
+    delivery_fee: Number((sale as any).delivery_fee ?? deliveryFee),
+    delivery_customer_name: orderType === "delivery" ? deliveryName : null,
+    delivery_customer_phone: orderType === "delivery" ? deliveryPhone : null,
+    delivery_address: orderType === "delivery" ? deliveryAddress : null,
+    paid_amount: paidAmount.trim() === "" ? Number(sale.total) : Number(paidAmount),
+    due_amount: Math.max(0, Number(sale.total) - (paidAmount.trim() === "" ? Number(sale.total) : Number(paidAmount))),
     subtotal: Number(sale.subtotal),
     discount: Number(sale.discount),
     tax_amount: Number(sale.tax_amount),
@@ -391,7 +421,16 @@ function POSPage() {
       if (!Number.isFinite(initialPaid) || initialPaid < 0 || initialPaid > total) {
         throw new Error("مبلغ المدفوع يجب أن يكون بين صفر وإجمالي الفاتورة");
       }
-      const { data: sale, error: saleErr } = await (supabase.rpc as any)("create_sale_with_customer", {
+      if (orderType === "dine_in" && (!selectedTableId || selectedTableId === "none")) {
+        throw new Error("اختر طاولة متاحة للطلب المحلي");
+      }
+      if (orderType === "delivery" && (!deliveryName.trim() || !deliveryPhone.trim() || !deliveryAddress.trim())) {
+        throw new Error("أدخل اسم عميل التوصيل ورقم هاتفه وعنوانه");
+      }
+      if (orderType === "delivery" && (!Number.isFinite(Number(deliveryFeeInput)) || Number(deliveryFeeInput) < 0)) {
+        throw new Error("أدخل رسوم توصيل صحيحة");
+      }
+      const { data: sale, error: saleErr } = await (supabase.rpc as any)("create_pos_order", {
         _tenant_id: tenantId,
         _branch_id: branchId,
         _cashier_id: userId,
@@ -404,6 +443,12 @@ function POSPage() {
           product_id: item.product_id,
           quantity: item.quantity,
         })),
+        _order_type: orderType,
+        _table_id: orderType === "dine_in" ? selectedTableId : null,
+        _delivery_customer_name: orderType === "delivery" ? deliveryName.trim() : null,
+        _delivery_customer_phone: orderType === "delivery" ? deliveryPhone.trim() : null,
+        _delivery_address: orderType === "delivery" ? deliveryAddress.trim() : null,
+        _delivery_fee: deliveryFee,
       });
       if (saleErr) throw saleErr;
       if (!sale) throw new Error("لم يتم إنشاء الفاتورة.");
@@ -445,6 +490,13 @@ function POSPage() {
       setDiscount("0");
       setSelectedCustomerId("none");
       setPaidAmount("");
+      setOrderType("takeaway");
+      setSelectedTableId("none");
+      setDeliveryName("");
+      setDeliveryPhone("");
+      setDeliveryAddress("");
+      setDeliveryFeeInput("0");
+      void qc.invalidateQueries({ queryKey: ["pos-restaurant-tables", tenantId, branchId] });
       qc.invalidateQueries({ queryKey: ["sales"] });
       qc.invalidateQueries({ queryKey: ["inventory"] });
       qc.invalidateQueries({ queryKey: ["pos-inventory", tenantId, branchId] });
