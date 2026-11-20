@@ -163,7 +163,7 @@ function SettingsPage() {
     staleTime: 30_000,
   });
   const isTenantOwner = role === "owner" && !membership?.company_id;
-  const canManageMarketing = isSuperOwner || isTenantOwner || marketingPermissions.data?.includes("settings.manage") === true;
+  const canManageMarketing = isSuperOwner || isTenantOwner || ((role === "owner" || role === "manager") && !!membership?.company_id && marketingPermissions.data?.includes("settings.manage") === true);
   const canManageCampaign = (campaign: MarketingCampaign) =>
     isSuperOwner ||
     isTenantOwner ||
