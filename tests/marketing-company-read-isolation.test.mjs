@@ -15,6 +15,6 @@ test("marketing campaign reads no longer have a permissive tenant-wide SELECT po
   assert.match(migration, /DROP POLICY IF EXISTS "Tenant members read marketing campaigns"/);
   assert.match(migration, /ON public\.marketing_campaigns/);
   assert.match(priorScopeMigration, /company_scope_marketing_campaigns_select/);
-  assert.match(priorScopeMigration, /company_id = marketing_campaigns\.company_id/);
+  assert.match(priorScopeMigration, /company_id=marketing_campaigns\.company_id/);
   assert.match(priorScopeMigration, /private\.is_super_owner/);
 });
