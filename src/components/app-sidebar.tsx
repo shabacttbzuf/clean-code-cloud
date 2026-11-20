@@ -172,7 +172,7 @@ export function AppSidebar() {
     enabled: !!tenantId && !!userId && !isSuperOwner,
     staleTime: 30_000,
   });
-  const allowed = (item: Item) =>
+  const allowed = (item: AppNavigationItem) =>
     isSuperOwner || (!!permissionsQuery.data && (!item.permission || permissionsQuery.data.has(item.permission)));
 
   const enterpriseGroup: AppNavigationGroup = {
