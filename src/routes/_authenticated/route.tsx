@@ -270,6 +270,7 @@ function TopBar() {
         <div className="text-sm font-semibold">نظام إدارة الأعمال</div>
       </div>
       <div className="flex items-center gap-2">
+        <AppLauncher />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="relative" aria-label="الإشعارات">
