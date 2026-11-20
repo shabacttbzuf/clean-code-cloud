@@ -1163,6 +1163,8 @@ export type Database = {
           leave_type_id: string | null
           reason: string | null
           rejection_reason: string | null
+          rejected_at: string | null
+          rejected_by: string | null
           start_date: string
           status: string
           tenant_id: string
@@ -1180,6 +1182,8 @@ export type Database = {
           leave_type_id?: string | null
           reason?: string | null
           rejection_reason?: string | null
+          rejected_at?: string | null
+          rejected_by?: string | null
           start_date: string
           status?: string
           tenant_id: string
@@ -1197,6 +1201,8 @@ export type Database = {
           leave_type_id?: string | null
           reason?: string | null
           rejection_reason?: string | null
+          rejected_at?: string | null
+          rejected_by?: string | null
           start_date?: string
           status?: string
           tenant_id?: string

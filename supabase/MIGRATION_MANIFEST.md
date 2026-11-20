@@ -194,3 +194,7 @@
 96. `supabase/migrations/20261120000000_move_authenticated_definers_to_private_wrappers.sql`
 
 **الإجمالي: 96 ترحيلاً.**
+
+97. `supabase/migrations/20261120010000_secure_leave_decisions_and_deletion.sql`
+
+**الإجمالي: 97 ترحيلاً.**
