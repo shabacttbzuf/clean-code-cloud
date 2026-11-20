@@ -22,7 +22,7 @@ type KitchenOrder = {
   notes: string | null;
   created_at: string;
 };
-type Sale = { id: string; invoice_no: number; created_at: string; notes: string | null };
+type Sale = { id: string; invoice_no: number; created_at: string; notes: string | null; order_type: "dine_in" | "takeaway" | "delivery"; table_id: string | null; table_name?: string | null; delivery_customer_name: string | null; delivery_customer_phone: string | null; delivery_address: string | null; delivery_fee: number };
 type SaleItem = { sale_id: string; product_name: string; quantity: number };
 
 const statusLabel: Record<KitchenOrder["status"], string> = {
@@ -69,12 +69,21 @@ function KitchenPage() {
       const saleIds = orders.map((order) => order.sale_id);
       if (!saleIds.length) return [];
       const [salesResult, itemsResult] = await Promise.all([
-        supabase.from("sales").select("id,invoice_no,created_at,notes").in("id", saleIds),
+        supabase.from("sales").select("id,invoice_no,created_at,notes,order_type,table_id,delivery_customer_name,delivery_customer_phone,delivery_address,delivery_fee").in("id", saleIds),
         supabase.from("sale_items").select("sale_id,product_name,quantity").in("sale_id", saleIds),
       ]);
       if (salesResult.error) throw salesResult.error;
       if (itemsResult.error) throw itemsResult.error;
-      const salesMap = new Map((salesResult.data ?? []).map((sale) => [sale.id, sale as Sale]));
+      const sales = (salesResult.data ?? []) as Sale[];
+      const tableIds = [...new Set(sales.map((sale) => sale.table_id).filter((id): id is string => !!id))];
+      const tableNames = new Map<string, string>();
+      if (tableIds.length) {
+        const { data: tableRows, error: tableError } = await (supabase.from("restaurant_tables" as any) as any)
+          .select("id,name").in("id", tableIds);
+        if (tableError) throw tableError;
+        for (const table of tableRows ?? []) tableNames.set(table.id, table.name);
+      }
+      const salesMap = new Map(sales.map((sale) => [sale.id, { ...sale, table_name: sale.table_id ? tableNames.get(sale.table_id) ?? null : null }]));
       const itemsMap = new Map<string, SaleItem[]>();
       for (const item of (itemsResult.data ?? []) as SaleItem[]) {
         itemsMap.set(item.sale_id, [...(itemsMap.get(item.sale_id) ?? []), item]);
@@ -154,12 +163,14 @@ function KitchenPage() {
                         <Badge variant={column.status === "ready" ? "default" : "outline"}>{statusLabel[order.status]}</Badge>
                       </div>
                       <div className="flex items-center gap-1 text-xs text-muted-foreground"><Clock3 className="h-3 w-3" />{new Intl.DateTimeFormat("ar-YE", { hour: "2-digit", minute: "2-digit" }).format(new Date(order.created_at))}</div>
+                      <div className="text-xs text-muted-foreground">نوع الطلب: {order.sale?.order_type === "dine_in" ? "محلي" : order.sale?.order_type === "delivery" ? "توصيل" : "سفري"}{order.sale?.table_name ? " · الطاولة: " + order.sale.table_name : ""}</div>
                     </CardHeader>
                     <CardContent className="space-y-3 p-3 pt-0">
                       <div className="space-y-2">
                         {order.items.map((item, index) => <div key={`${order.id}-${index}`} className="flex items-center justify-between gap-3 border-b pb-1 text-sm last:border-0"><span>{item.product_name}</span><span className="shrink-0 rounded bg-muted px-2 py-0.5 font-bold">× {item.quantity}</span></div>)}
                         {order.items.length === 0 && <p className="text-xs text-muted-foreground">تعذر العثور على تفاصيل الأصناف.</p>}
                       </div>
+                      {order.sale?.order_type === "delivery" && <div className="rounded-md bg-muted p-2 text-xs"><strong>التوصيل:</strong> {order.sale.delivery_customer_name} · {order.sale.delivery_customer_phone}<br />{order.sale.delivery_address}</div>}
                       {(order.notes || order.sale?.notes) && <div className="rounded-md bg-amber-500/10 p-2 text-xs"><strong>ملاحظات:</strong> {order.notes || order.sale?.notes}</div>}
                       {canManage && <Button className="w-full" size="sm" disabled={statusMutation.isPending} onClick={() => statusMutation.mutate({ id: order.id, status: column.next })}><CheckCircle2 className="ml-2 h-4 w-4" />{column.action}</Button>}
                     </CardContent>
