@@ -20,7 +20,7 @@ test("marketing campaign reads no longer have a permissive tenant-wide SELECT po
   assert.match(migration, /ON public\.marketing_campaigns/);
   assert.match(priorScopeMigration, /company_scope_marketing_campaigns_select/);
   assert.match(priorScopeMigration, /company_id=marketing_campaigns\.company_id/);
-  assert.match(priorScopeMigration, /private\.is_super_owner/);
+  assert.match(priorScopeMigration, /is_super_owner/);
 });
 
 test("company-scoped administrators only query their own campaigns in the management UI", () => {
