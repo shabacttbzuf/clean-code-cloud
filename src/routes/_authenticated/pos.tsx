@@ -179,6 +179,10 @@ function POSPage() {
     [branches.data, branchId],
   );
 
+  useEffect(() => {
+    setSelectedTableId("none");
+  }, [branchId]);
+
   const restaurantTables = useQuery({
     queryKey: ["pos-restaurant-tables", tenantId, branchId],
     queryFn: async () => {
