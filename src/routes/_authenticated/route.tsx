@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Moon, Sun, LogOut, User as UserIcon, Loader2, Bell } from "lucide-react";
+import { Moon, Sun, LogOut, User as UserIcon, Loader2, Bell, Maximize2, Minimize2, CalendarDays, Building2 } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthSession } from "@/hooks/use-auth-session";
@@ -182,8 +182,33 @@ function PermissionRouteGuard() {
 
 function TopBar() {
   const { theme, toggle } = useTheme();
-  const { tenantId } = useActiveTenant();
+  const { tenantId, tenant, membership } = useActiveTenant();
   const { user } = useAuthSession();
+  const branchQuery = useQuery({
+    queryKey: ["topbar-active-branch", tenantId, membership?.branch_id],
+    queryFn: async () => {
+      if (!tenantId || !membership?.branch_id) return null;
+      const { data, error } = await supabase.from("branches").select("id,name").eq("tenant_id", tenantId).eq("id", membership.branch_id).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!tenantId && !!membership?.branch_id,
+    staleTime: 60_000,
+  });
+  const [clock, setClock] = useState(() => new Date());
+  const [fullscreen, setFullscreen] = useState(false);
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(new Date()), 30_000);
+    const sync = () => setFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", sync);
+    return () => { window.clearInterval(timer); document.removeEventListener("fullscreenchange", sync); };
+  }, []);
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch { toast.error("تعذر تغيير وضع ملء الشاشة في هذا المتصفح."); }
+  }
   const { data: currentProfile } = useQuery({
     queryKey: ["topbar-profile-name", user?.id],
     queryFn: async () => {
@@ -264,74 +289,28 @@ function TopBar() {
   const initial = displayName.charAt(0) || "?";
 
   return (
-    <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-2 border-b bg-background/95 px-4 backdrop-blur">
-      <div className="flex items-center gap-2">
-        <SidebarTrigger />
-        <div className="text-sm font-semibold">نظام إدارة الأعمال</div>
+    <header className="sticky top-0 z-30 flex min-h-[68px] items-center justify-between gap-3 border-b border-[#dbe5f4] bg-[rgba(248,250,255,.96)] px-3 py-2 shadow-[0_3px_14px_rgba(16,47,92,.06)] backdrop-blur-xl sm:px-5" dir="rtl">
+      <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+        <SidebarTrigger className="rounded-xl border border-[#dce5f3] bg-white text-[#174b91] shadow-sm" />
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#174b91] to-[#102f5c] text-[#f5c65b] shadow-sm"><Building2 className="h-5 w-5" /></div>
+        <div className="min-w-0"><div className="truncate text-sm font-extrabold text-[#102f5c] sm:text-base">{tenant?.name || "نظام إدارة المطاعم"}</div><div className="hidden text-[10px] text-slate-500 sm:block">نظام إدارة المطاعم المتكامل</div></div>
+        <div className="hidden items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 text-xs font-bold text-[#174b91] shadow-sm lg:flex"><Building2 className="h-4 w-4" />{branchQuery.data?.name || (membership?.branch_id ? "الفرع المحدد" : "جميع الفروع")}</div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+        <div className="hidden items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 text-[11px] font-semibold text-[#425b7d] shadow-sm md:flex"><CalendarDays className="h-4 w-4 text-[#174b91]" />{clock.toLocaleDateString("ar-YE",{weekday:"long",day:"numeric",month:"long"})}</div>
+        <Button type="button" variant="outline" size="icon" onClick={toggleFullscreen} aria-label={fullscreen ? "الخروج من ملء الشاشة" : "ملء الشاشة"} className="hidden rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm sm:inline-flex">{fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</Button>
+        <Button variant="outline" size="icon" onClick={toggle} aria-label="تبديل الوضع" className="hidden rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm sm:inline-flex">{theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</Button>
         <AppLauncher />
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative" aria-label="الإشعارات">
-              <Bell className="h-5 w-5" />
-              {unreadCount > 0 && <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full border-2 border-background bg-red-500" />}
-            </Button>
-          </DropdownMenuTrigger>
+          <DropdownMenuTrigger asChild><Button variant="outline" size="icon" className="relative rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm" aria-label="الإشعارات"><Bell className="h-5 w-5" />{unreadCount > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full border-2 border-white bg-red-500 px-1 text-[10px] font-bold text-white">{unreadCount > 9 ? "9+" : unreadCount}</span>}</Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-[min(92vw,360px)]">
-            <div className="flex items-center justify-between px-2 py-1.5">
-              <DropdownMenuLabel className="p-0">الإشعارات {unreadCount > 0 ? "(" + unreadCount + ")" : ""}</DropdownMenuLabel>
-              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={markAllNotificationsRead}>قراءة الكل</Button>
-            </div>
-            <DropdownMenuSeparator />
-            {(notificationsQuery.data?.items ?? []).length === 0 ? (
-              <div className="px-3 py-6 text-center text-sm text-muted-foreground">لا توجد إشعارات جديدة</div>
-            ) : (notificationsQuery.data?.items ?? []).map((n: any) => {
-              const isRead = notificationsQuery.data?.readIds.has(n.id);
-              return (
-                <DropdownMenuItem key={n.id} className="block cursor-pointer whitespace-normal py-2" onSelect={() => markNotificationRead(n.id)}>
-                  <div className="flex items-start gap-2">
-                    {!isRead && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-500" />}
-                    <div className="min-w-0 flex-1">
-                      <div className={isRead ? "text-sm font-normal" : "text-sm font-semibold"}>{n.title}</div>
-                      {n.body && <div className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{n.body}</div>}
-                      <div className="mt-1 text-[10px] text-muted-foreground">{new Date(n.created_at).toLocaleString("ar-YE")}</div>
-                    </div>
-                  </div>
-                </DropdownMenuItem>
-              );
-            })}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => navigate({ to: "/notifications" })} className="justify-center text-primary">عرض كل الإشعارات</DropdownMenuItem>
+            <div className="flex items-center justify-between px-2 py-1.5"><DropdownMenuLabel className="p-0">الإشعارات {unreadCount > 0 ? "(" + unreadCount + ")" : ""}</DropdownMenuLabel><Button size="sm" variant="ghost" className="h-7 text-xs" onClick={markAllNotificationsRead}>قراءة الكل</Button></div><DropdownMenuSeparator />
+            {(notificationsQuery.data?.items ?? []).length === 0 ? <div className="px-3 py-6 text-center text-sm text-muted-foreground">لا توجد إشعارات جديدة</div> : (notificationsQuery.data?.items ?? []).map((n: any) => { const isRead = notificationsQuery.data?.readIds.has(n.id); return <DropdownMenuItem key={n.id} className="block cursor-pointer whitespace-normal py-2" onSelect={() => markNotificationRead(n.id)}><div className="flex items-start gap-2">{!isRead && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-500" />}<div className="min-w-0 flex-1"><div className={isRead ? "text-sm font-normal" : "text-sm font-semibold"}>{n.title}</div>{n.body && <div className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{n.body}</div>}<div className="mt-1 text-[10px] text-muted-foreground">{new Date(n.created_at).toLocaleString("ar-YE")}</div></div></div></DropdownMenuItem>; })}
+            <DropdownMenuSeparator /><DropdownMenuItem onSelect={() => navigate({ to: "/notifications" })} className="justify-center text-primary">عرض كل الإشعارات</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Button variant="ghost" size="icon" onClick={toggle} aria-label="تبديل الوضع">
-          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="rounded-full">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback>{initial}</AvatarFallback>
-              </Avatar>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel className="text-sm font-semibold">{displayName}</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate({ to: "/profile" })}>
-              <UserIcon className="ml-2 h-4 w-4" />
-              ملفي الشخصي
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate({ to: "/settings" })}>
-              <UserIcon className="ml-2 h-4 w-4" />
-              الإعدادات
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleSignOut} disabled={signingOut}>
-              <LogOut className="ml-2 h-4 w-4" />
-              تسجيل الخروج
-            </DropdownMenuItem>
-          </DropdownMenuContent>
+        <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" className="h-11 gap-2 rounded-full px-1.5 sm:px-2"><Avatar className="h-9 w-9 border-2 border-[#dce5f3]"><AvatarFallback className="bg-[#e8effb] font-bold text-[#174b91]">{initial}</AvatarFallback></Avatar><span className="hidden min-w-0 text-right sm:block"><span className="block max-w-28 truncate text-xs font-extrabold text-[#102f5c]">{displayName}</span><span className="block text-[10px] text-slate-500">حساب المستخدم</span></span></Button></DropdownMenuTrigger>
+          <DropdownMenuContent align="end"><DropdownMenuLabel className="text-sm font-semibold">{displayName}</DropdownMenuLabel><DropdownMenuSeparator /><DropdownMenuItem onClick={() => navigate({ to: "/profile" })}><UserIcon className="ml-2 h-4 w-4" />ملفي الشخصي</DropdownMenuItem><DropdownMenuItem onClick={() => navigate({ to: "/settings" })}><UserIcon className="ml-2 h-4 w-4" />الإعدادات</DropdownMenuItem><DropdownMenuItem onClick={handleSignOut} disabled={signingOut}><LogOut className="ml-2 h-4 w-4" />تسجيل الخروج</DropdownMenuItem></DropdownMenuContent>
         </DropdownMenu>
       </div>
     </header>

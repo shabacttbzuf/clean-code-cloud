@@ -25,7 +25,7 @@ test("notification receipts are isolated per authenticated user", () => {
 });
 
 test("global shell uses business-neutral identity", () => {
-  assert.ok(layout.includes("نظام إدارة الأعمال"));
+  assert.ok(layout.includes("نظام إدارة المطاعم"));
   assert.ok(sidebar.includes("منصة الشركات والفروع"));
   assert.ok(!sidebar.includes("محاسبة المطاعم"));
 });

@@ -214,24 +214,18 @@ function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <section className="relative isolate overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-l from-[#102f5c] via-[#174b91] to-[#2867a8] px-5 py-7 text-white shadow-lg sm:px-8 sm:py-9" aria-labelledby="dashboard-welcome-title">
-        <div className="pointer-events-none absolute -left-12 -top-16 h-56 w-56 rounded-full border-[24px] border-white/5" />
-        <div className="pointer-events-none absolute -bottom-24 right-1/3 h-56 w-56 rounded-full bg-[#d9a441]/15 blur-3xl" />
-        <div className="relative z-[1] flex flex-col justify-between gap-6 sm:flex-row sm:items-center">
+      <section className="relative isolate min-h-[205px] overflow-hidden rounded-2xl border border-[#d7e2f6] bg-[#102f5c] text-white shadow-[0_8px_24px_rgba(16,47,92,.16)] sm:min-h-[220px]" aria-labelledby="dashboard-welcome-title">
+        <img src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1800&q=85" alt="" className="absolute inset-0 h-full w-full object-cover opacity-75" />
+        <div className="absolute inset-0 bg-gradient-to-l from-[#061c3d]/95 via-[#0c2d59]/80 to-[#102f5c]/5" />
+        <div className="absolute inset-x-0 bottom-0 h-2 bg-gradient-to-l from-[#f0b52f] via-[#d9a441] to-transparent" />
+        <div className="relative z-[1] flex min-h-[205px] flex-col justify-center px-6 py-7 sm:min-h-[220px] sm:px-10">
           <div className="max-w-2xl">
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium text-white/90">
-              <Sparkles className="h-3.5 w-3.5 text-[#f2c66d]" />
-              مساحة عملك لإدارة مطعمك
-            </div>
-            <h1 id="dashboard-welcome-title" className="text-2xl font-bold tracking-tight sm:text-3xl">أهلاً بك، {displayName}</h1>
-            <p className="mt-2 text-sm leading-7 text-white/80 sm:text-base">إدارة أسهل.. عمل أكثر كفاءة.</p>
-            {tenant?.name && <p className="mt-1 text-xs text-white/70">{tenant.name}</p>}
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white/90"><Sparkles className="h-4 w-4 text-[#f4c24f]" /> {tenant?.name ?? "مساحة إدارة المطعم"}</div>
+            <h1 id="dashboard-welcome-title" className="text-2xl font-extrabold tracking-tight sm:text-4xl">أهلاً بك في نظام إدارة <span className="text-[#f5bd36]">المطاعم</span></h1>
+            <p className="mt-3 text-base font-medium text-white/90 sm:text-xl">إدارة أسهل.. عمل أكثر كفاءة</p>
+            <p className="mt-1 text-xs text-white/70">مرحباً {displayName}</p>
           </div>
-          <Link to="/pos" className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#d9a441] px-5 py-3 text-sm font-bold text-[#102f5c] shadow-md transition hover:bg-[#edbd59] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">
-            <ShoppingBag className="h-4 w-4" />
-            فتح نقطة البيع
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
+          <Link to="/pos" className="mt-4 inline-flex min-h-10 w-fit items-center gap-2 rounded-full bg-[#f2b632] px-5 py-2 text-sm font-extrabold text-[#102f5c] shadow-md transition hover:bg-[#ffd16b]"><ShoppingBag className="h-4 w-4" /> فتح نقطة البيع <ArrowLeft className="h-4 w-4" /></Link>
         </div>
       </section>
 
@@ -294,7 +288,7 @@ function Dashboard() {
         <Card><CardContent className="p-6 text-center text-sm text-muted-foreground">لا توجد مؤسسة نشطة مرتبطة بهذا الحساب لعرض المؤشرات.</CardContent></Card>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Kpi label="مبيعات اليوم" value={`${formatMoney(stats.data.totalToday)} ${currency}`} sub={`${stats.data.salesTodayCount} فاتورة`} icon={<Receipt className="h-5 w-5" />} tone="primary" />
             <Kpi label="مبيعات الشهر" value={`${formatMoney(stats.data.totalMonth)} ${currency}`} icon={<TrendingUp className="h-5 w-5" />} tone="success" />
             <Kpi label="مصروفات الشهر" value={`${formatMoney(stats.data.totalExpMonth)} ${currency}`} icon={<TrendingDown className="h-5 w-5" />} tone="destructive" />
