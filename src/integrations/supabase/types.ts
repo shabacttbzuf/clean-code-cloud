@@ -2396,8 +2396,14 @@ export type Database = {
           customer_id: string | null
           created_at: string
           discount: number
+          delivery_address: string | null
+          delivery_customer_name: string | null
+          delivery_customer_phone: string | null
+          delivery_fee: number
           id: string
           invoice_no: number
+          order_type: string
+          table_id: string | null
           notes: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           session_id: string | null
@@ -2414,8 +2420,14 @@ export type Database = {
           customer_id?: string | null
           created_at?: string
           discount?: number
+          delivery_address?: string | null
+          delivery_customer_name?: string | null
+          delivery_customer_phone?: string | null
+          delivery_fee?: number
           id?: string
           invoice_no: number
+          order_type?: string
+          table_id?: string | null
           notes?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
           session_id?: string | null
@@ -2432,8 +2444,14 @@ export type Database = {
           customer_id?: string | null
           created_at?: string
           discount?: number
+          delivery_address?: string | null
+          delivery_customer_name?: string | null
+          delivery_customer_phone?: string | null
+          delivery_fee?: number
           id?: string
           invoice_no?: number
+          order_type?: string
+          table_id?: string | null
           notes?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
           session_id?: string | null
