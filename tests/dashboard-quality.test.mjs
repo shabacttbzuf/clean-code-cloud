@@ -8,7 +8,7 @@ const layout = readFileSync(new URL("../src/routes/_authenticated/route.tsx", im
 const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 
 test("dashboard rejects partial query failures instead of presenting misleading totals", () => {
-  assert.match(dashboard, /for \(const result of \[salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions\]\)/);
+  assert.match(dashboard, /for \(const result of \[salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount\]\)/);
   assert.match(dashboard, /if \(result\.error\) throw result\.error/);
   assert.match(dashboard, /if \(catsRes\.error\) throw catsRes\.error/);
   assert.match(dashboard, /لم يتم عرض أرقام جزئية أو مضللة/);
@@ -216,4 +216,20 @@ test("developer studio can rename or hide non-critical built-in tabs and restore
   assert.match(settings, /resetNavOverrides/);
   assert.match(appSidebar, /navOverrides\[item\.url\.split\("#"\)\[0\]\]/);
   assert.match(appSidebar, /ras-sidebar-overrides-updated/);
+});
+
+test("dashboard provides permission-scoped operations, notifications, and a truthful database health check", () => {
+  assert.match(dashboard, /أحدث الفواتير والطلبات/);
+  assert.match(dashboard, /invoice_no/);
+  assert.match(dashboard, /حالة المطبخ/);
+  assert.match(dashboard, /dashboard-notifications/);
+  assert.match(dashboard, /notifications\.view/);
+  assert.match(dashboard, /notification_reads/);
+  assert.match(dashboard, /dashboard-system-status/);
+  assert.match(dashboard, /قاعدة البيانات/);
+  assert.match(dashboard, /systemStatusQuery\.isError/);
+  assert.match(dashboard, /اختصارات العمل/);
+  assert.match(dashboard, /hasPermission\("sales.create"\)/);
+  assert.match(dashboard, /hasPermission\("kitchen.view"\)/);
+  assert.match(dashboard, /hasPermission\("reports.view"\)/);
 });
