@@ -5,20 +5,23 @@ select plan(4);
 select ok(
   exists (select 1 from information_schema.columns
           where table_schema='public' and table_name='sales'
-            and column_name='table_name_snapshot'),
-  'Sales persist the table name captured at checkout'
+            and column_name in ('table_name_snapshot','customer_name_snapshot','customer_phone_snapshot')
+          group by table_name having count(*)=3),
+  'Sales persist immutable table and customer identity snapshots'
 );
 
 select ok(
-  exists (select 1 from pg_trigger where tgrelid='public.sales'::regclass
-          and tgname='trg_capture_sale_table_name_snapshot' and not tgisinternal),
-  'Table names are snapshotted by a database trigger'
+  (select count(*)=2 from pg_trigger where tgrelid='public.sales'::regclass
+    and tgname in ('trg_capture_sale_table_name_snapshot','trg_capture_sale_customer_snapshot')
+    and not tgisinternal),
+  'Table and customer identity snapshots are captured by database triggers'
 );
 
 select ok(
-  (select prosecdef from pg_proc
-   where oid='private.capture_sale_table_name_snapshot()'::regprocedure),
-  'The snapshot trigger reads branch tables through a private SECURITY DEFINER function'
+  (select bool_and(prosecdef) from pg_proc
+   where oid in ('private.capture_sale_table_name_snapshot()'::regprocedure,
+                 'private.capture_sale_customer_snapshot()'::regprocedure)),
+  'Snapshot triggers read branch tables and customer records through private SECURITY DEFINER functions'
 );
 
 select ok(
