@@ -13776,7 +13776,7 @@ RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, public, private, pg_temp
-AS $
+AS $$
 BEGIN
   IF NEW.order_type='delivery' THEN
     NEW.customer_name_snapshot := nullif(btrim(NEW.delivery_customer_name),'');
@@ -13796,7 +13796,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$;
+$$;
 
 REVOKE ALL ON FUNCTION private.capture_sale_customer_snapshot() FROM PUBLIC,anon,authenticated;
 DROP TRIGGER IF EXISTS trg_capture_sale_customer_snapshot ON public.sales;
