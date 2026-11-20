@@ -23,3 +23,12 @@ test("leave deletion requires confirmation and protects approved payroll records
   assert.match(migration, /prevent_deleting_payroll_linked_leave/);
   assert.match(migration, /pr\.status in \('approved', 'paid'\)/);
 });
+
+test("generated Supabase types include rejection audit metadata", () => {
+  const types = readFileSync(new URL("../src/integrations/supabase/types.ts", import.meta.url), "utf8");
+  const blockStart = types.indexOf("      leave_requests: {");
+  const blockEnd = types.indexOf("      leave_types: {", blockStart);
+  const leaveTypes = types.slice(blockStart, blockEnd);
+  assert.match(leaveTypes, /rejected_at: string \| null/);
+  assert.match(leaveTypes, /rejected_by: string \| null/);
+});
