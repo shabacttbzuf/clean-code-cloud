@@ -58,7 +58,7 @@ SELECT NULL,'builtin',role_name::public.app_role,NULL,permission_key
 FROM (VALUES
  ('owner','tables.view'),('owner','tables.manage'),
  ('manager','tables.view'),('manager','tables.manage'),
- ('cashier','tables.view'),('waiter','tables.view'),
+ ('cashier','tables.view'),('waiter','tables.view'),('kitchen','tables.view'),
  ('cashier','notifications.view'),('waiter','notifications.view')
 ) AS defaults(role_name,permission_key)
 WHERE EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid=e.enumtypid
