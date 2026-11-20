@@ -282,8 +282,8 @@ export function printInvoiceHTML(
     ${data.tax_amount > 0 ? `<div class="row"><span>الضريبة</span><span>${formatMoney(data.tax_amount)} ${escapeHtml(data.currency)}</span></div>` : ""}
     ${(data.delivery_fee ?? 0) > 0 ? `<div class="row"><span>رسوم التوصيل</span><span>${formatMoney(data.delivery_fee ?? 0)} ${escapeHtml(data.currency)}</span></div>` : ""}
     <div class="row grand"><span>الإجمالي</span><span>${formatMoney(data.total)} ${escapeHtml(data.currency)}</span></div>
-    <div class="row"><span>المدفوع</span><span>${formatMoney(data.paid_amount ?? data.total)} ${escapeHtml(data.currency)}</span></div>
-    <div class="row"><span>المتبقي</span><span>${formatMoney(data.due_amount ?? 0)} ${escapeHtml(data.currency)}</span></div>
+    ${data.paid_amount !== undefined ? `<div class="row"><span>المدفوع</span><span>${formatMoney(data.paid_amount)} ${escapeHtml(data.currency)}</span></div>` : ""}
+    ${data.due_amount !== undefined ? `<div class="row"><span>المتبقي</span><span>${formatMoney(data.due_amount)} ${escapeHtml(data.currency)}</span></div>` : ""}
     <div class="row"><span>طريقة الدفع</span><span>${escapeHtml(paymentAr[data.payment_method] ?? data.payment_method)}</span></div>
   </div>
   <div class="center thanks">شكراً لزيارتكم — نتشرف بخدمتكم مجدداً</div>
