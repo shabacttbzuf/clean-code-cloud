@@ -148,11 +148,26 @@ function SettingsPage() {
     }
   }, []);
 
-  const canManageMarketing = isSuperOwner || role === "owner" || (role === "manager" && !!membership?.company_id);
+  // Match the database's restrictive marketing policies: company-scoped
+  // owners/managers must hold settings.manage; tenant owners and Super Owners
+  // retain tenant-wide management.
+  const marketingPermissions = useQuery({
+    queryKey: ["marketing-management-permissions", tenantId, userId],
+    queryFn: async () => {
+      if (!tenantId) return [] as string[];
+      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId });
+      if (error) throw error;
+      return (data ?? []) as string[];
+    },
+    enabled: !!tenantId && !isSuperOwner && !(role === "owner" && !membership?.company_id),
+    staleTime: 30_000,
+  });
+  const isTenantOwner = role === "owner" && !membership?.company_id;
+  const canManageMarketing = isSuperOwner || isTenantOwner || marketingPermissions.data?.includes("settings.manage") === true;
   const canManageCampaign = (campaign: MarketingCampaign) =>
     isSuperOwner ||
-    (role === "owner" && !membership?.company_id) ||
-    (!!membership?.company_id && membership.company_id === campaign.company_id && (role === "owner" || role === "manager"));
+    isTenantOwner ||
+    (canManageMarketing && !!membership?.company_id && membership.company_id === campaign.company_id);
   const campaignsQuery = useQuery({
     queryKey: ["marketing-campaigns", tenantId],
     queryFn: async (): Promise<MarketingCampaign[]> => {
