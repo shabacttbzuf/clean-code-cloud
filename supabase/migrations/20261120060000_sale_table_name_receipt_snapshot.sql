@@ -2,7 +2,9 @@
 BEGIN;
 
 ALTER TABLE public.sales
-  ADD COLUMN IF NOT EXISTS table_name_snapshot text;
+  ADD COLUMN IF NOT EXISTS table_name_snapshot text,
+  ADD COLUMN IF NOT EXISTS customer_name_snapshot text,
+  ADD COLUMN IF NOT EXISTS customer_phone_snapshot text;
 
 -- A user who can view a sale may see payments attached to that sale
 -- without granting access to the customer's unrelated ledger entries.
@@ -44,6 +46,39 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+CREATE OR REPLACE FUNCTION private.capture_sale_customer_snapshot()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $
+BEGIN
+  IF NEW.order_type='delivery' THEN
+    NEW.customer_name_snapshot := nullif(btrim(NEW.delivery_customer_name),'');
+    NEW.customer_phone_snapshot := nullif(btrim(NEW.delivery_customer_phone),'');
+  ELSIF NEW.customer_id IS NOT NULL THEN
+    SELECT c.name,c.phone
+      INTO NEW.customer_name_snapshot,NEW.customer_phone_snapshot
+      FROM public.customers c
+     WHERE c.id=NEW.customer_id AND c.tenant_id=NEW.tenant_id;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Customer does not belong to this sale tenant'
+        USING ERRCODE='23503';
+    END IF;
+  ELSE
+    NEW.customer_name_snapshot := NULL;
+    NEW.customer_phone_snapshot := NULL;
+  END IF;
+  RETURN NEW;
+END;
+$;
+
+REVOKE ALL ON FUNCTION private.capture_sale_customer_snapshot() FROM PUBLIC,anon,authenticated;
+DROP TRIGGER IF EXISTS trg_capture_sale_customer_snapshot ON public.sales;
+CREATE TRIGGER trg_capture_sale_customer_snapshot
+BEFORE INSERT OR UPDATE OF customer_id,order_type,delivery_customer_name,delivery_customer_phone ON public.sales
+FOR EACH ROW EXECUTE FUNCTION private.capture_sale_customer_snapshot();
 
 REVOKE ALL ON FUNCTION private.capture_sale_table_name_snapshot() FROM PUBLIC,anon,authenticated;
 DROP TRIGGER IF EXISTS trg_capture_sale_table_name_snapshot ON public.sales;
