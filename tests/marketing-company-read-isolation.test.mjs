@@ -10,7 +10,14 @@ const priorScopeMigration = readFileSync(
   new URL("../supabase/migrations/20261119000006_company_scope_marketing_notifications.sql", import.meta.url),
   "utf8",
 );
-const dashboardPage = readFileSync(\n  new URL("../src/routes/_authenticated/dashboard.tsx", import.meta.url),\n  "utf8",\n);\nconst posPage = readFileSync(\n  new URL("../src/routes/_authenticated/pos.tsx", import.meta.url),\n  "utf8",\n);\nconst settingsPage = readFileSync(
+const dashboardPage = readFileSync(
+  new URL("../src/routes/_authenticated/dashboard.tsx", import.meta.url),
+  "utf8",
+);
+const posPage = readFileSync(
+  new URL("../src/routes/_authenticated/pos.tsx", import.meta.url),
+  "utf8",
+);\nconst settingsPage = readFileSync(
   new URL("../src/routes/_authenticated/settings.tsx", import.meta.url),
   "utf8",
 );
