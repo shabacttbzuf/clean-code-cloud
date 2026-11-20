@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Check, X, Loader2, CalendarDays, Printer } from "lucide-react";
+import { Plus, Check, X, Trash2, Loader2, CalendarDays, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { formatDate } from "@/lib/format";
@@ -22,9 +22,9 @@ export const Route = createFileRoute("/_authenticated/hr/leaves")({
 type LeaveRow = {
   id: string; tenant_id: string; employee_id: string; leave_type_id: string | null;
   start_date: string; end_date: string; days_count: number; reason: string | null;
-  status: string; approved_at: string | null; rejection_reason: string | null;
+  status: string; approved_at: string | null; approved_by?: string | null; rejection_reason: string | null; rejected_at?: string | null; rejected_by?: string | null;
 };
-type Employee = { id: string; full_name: string };
+type Employee = { id: string; full_name: string; status?: string };
 type LeaveType = { id: string; name: string; color: string | null };
 
 const statusLabels: Record<string, string> = { pending: "معلّق", approved: "معتمد", rejected: "مرفوض", cancelled: "ملغى" };
@@ -54,7 +54,7 @@ function LeavesPage() {
   const employees = useQuery({
     queryKey: ["employees-min", tenantId],
     queryFn: async (): Promise<Employee[]> => {
-      const { data, error } = await supabase.from("employees").select("id, full_name").eq("tenant_id", tenantId!).eq("status", "active");
+      const { data, error } = await supabase.from("employees").select("id, full_name, status").eq("tenant_id", tenantId!);
       if (error) throw error;
       return (data ?? []) as Employee[];
     },
@@ -78,13 +78,30 @@ function LeavesPage() {
 
   const setStatus = useMutation({
     mutationFn: async (v: { id: string; status: "approved" | "rejected"; reason?: string }) => {
-      const payload: any = { status: v.status, approved_by: userId, approved_at: new Date().toISOString() };
-      if (v.status === "rejected") payload.rejection_reason = v.reason ?? null;
-      const { error } = await supabase.from("leave_requests").update(payload).eq("id", v.id);
+      if (!tenantId || !userId) throw new Error("تعذر تحديد المؤسسة أو المستخدم الحالي");
+      const now = new Date().toISOString();
+      const payload = v.status === "approved"
+        ? { status: "approved", approved_by: userId, approved_at: now, rejected_by: null, rejected_at: null, rejection_reason: null }
+        : { status: "rejected", approved_by: null, approved_at: null, rejected_by: userId, rejected_at: now, rejection_reason: v.reason?.trim() ?? "" };
+      const { data, error } = await supabase.from("leave_requests").update(payload)
+        .eq("id", v.id).eq("tenant_id", tenantId).eq("status", "pending").select("id").maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error("تمت معالجة الطلب مسبقاً أو لا تملك صلاحية اتخاذ القرار");
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["leave-requests", tenantId] }); toast.success("تم"); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشل"),
+  });
+
+  const remove = useMutation({
+    mutationFn: async (id: string) => {
+      if (!tenantId) throw new Error("المؤسسة غير محددة");
+      const { data, error } = await supabase.from("leave_requests").delete()
+        .eq("id", id).eq("tenant_id", tenantId).select("id").maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error("تعذر حذف الطلب؛ تحقق من الصلاحية أو ارتباطه بمسير رواتب معتمد");
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["leave-requests", tenantId] }); toast.success("تم حذف طلب الإجازة"); },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "فشل حذف الطلب"),
   });
 
   const create = useMutation({
@@ -107,7 +124,7 @@ function LeavesPage() {
         action={
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild><Button><Plus className="ml-2 h-4 w-4" />طلب إجازة</Button></DialogTrigger>
-            <LeaveDialog employees={employees.data ?? []} types={types.data ?? []} onSubmit={(v) => create.mutate(v)} pending={create.isPending} />
+            <LeaveDialog employees={(employees.data ?? []).filter((e) => e.status === "active")} types={types.data ?? []} onSubmit={(v) => create.mutate(v)} pending={create.isPending} />
           </Dialog>
         }
       />
@@ -147,16 +164,26 @@ function LeavesPage() {
                   {l.rejection_reason && <div className="mt-1 text-xs text-destructive">سبب الرفض: {l.rejection_reason}</div>}
                 </div>
                 {isAdmin && l.status === "pending" && (
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={() => setStatus.mutate({ id: l.id, status: "approved" })}>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" disabled={setStatus.isPending} onClick={() => setStatus.mutate({ id: l.id, status: "approved" })}>
                       <Check className="ml-1 h-3 w-3" />اعتماد
                     </Button>
-                    <Button size="sm" variant="outline" className="text-destructive" onClick={() => {
-                      const r = prompt("سبب الرفض؟"); if (r !== null) setStatus.mutate({ id: l.id, status: "rejected", reason: r });
+                    <Button size="sm" variant="outline" className="text-destructive" disabled={setStatus.isPending} onClick={() => {
+                      const r = prompt("سبب الرفض (إلزامي):");
+                      if (r === null) return;
+                      if (!r.trim()) { toast.error("يجب كتابة سبب الرفض"); return; }
+                      setStatus.mutate({ id: l.id, status: "rejected", reason: r.trim() });
                     }}>
                       <X className="ml-1 h-3 w-3" />رفض
                     </Button>
                   </div>
+                )}
+                {isAdmin && (
+                  <Button size="sm" variant="ghost" className="text-destructive" disabled={remove.isPending} onClick={() => {
+                    if (window.confirm("هل تريد حذف طلب الإجازة؟ سيتم منع الحذف إذا احتُسب ضمن مسير رواتب معتمد أو مدفوع.")) remove.mutate(l.id);
+                  }}>
+                    <Trash2 className="ml-1 h-3 w-3" />حذف
+                  </Button>
                 )}
               </CardContent>
             </Card>
@@ -183,6 +210,7 @@ function LeaveDialog({ employees, types, onSubmit, pending }: {
       <form className="space-y-3" onSubmit={(e) => {
         e.preventDefault();
         if (!emp) { toast.error("اختر موظف"); return; }
+        if (!start || !end || end < start) { toast.error("تاريخ النهاية يجب ألا يسبق تاريخ البداية"); return; }
         onSubmit({ employee_id: emp, leave_type_id: type || null, start_date: start, end_date: end, reason });
       }}>
         <div className="space-y-2"><Label>الموظف *</Label>
