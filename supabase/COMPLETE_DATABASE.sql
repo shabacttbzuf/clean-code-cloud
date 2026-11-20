@@ -13435,6 +13435,9 @@ BEGIN
         USING ERRCODE='22023';
     END IF;
   ELSIF _order_type='dine_in' THEN
+    IF NOT private.has_permission(auth.uid(),_tenant_id,'tables.view') THEN
+      RAISE EXCEPTION 'Permission denied: tables.view' USING ERRCODE='42501';
+    END IF;
     IF _table_id IS NULL OR _delivery_fee<>0 THEN
       RAISE EXCEPTION 'Dine-in orders require a table and cannot include a delivery fee'
         USING ERRCODE='22023';
