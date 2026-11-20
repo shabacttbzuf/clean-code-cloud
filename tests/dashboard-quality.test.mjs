@@ -80,7 +80,7 @@ const sonner = readFileSync(new URL("../src/components/ui/sonner.tsx", import.me
 const userAdmin = readFileSync(new URL("../src/routes/_authenticated/users-admin.tsx", import.meta.url), "utf8");
 
 test("dashboard and account menu show profile names, including the platform owner's requested name", () => {
-  assert.match(dashboard, /مرحبا \$\{displayName\}/);
+  assert.match(dashboard, /أهلاً بك، \\${displayName}/);
   assert.match(dashboard, /shafiqalwatiry@gmail\.com/);
   assert.match(authLayout, /topbar-profile-name/);
   assert.match(authLayout, /شفيق الوتيري/);
