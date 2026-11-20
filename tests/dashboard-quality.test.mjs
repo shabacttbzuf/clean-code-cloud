@@ -170,7 +170,7 @@ test("marketing campaigns have tenant isolation and owner-managed lifecycle cont
   assert.match(adsRoute, /updateStatus/);
   assert.match(adsRoute, /deleteCampaign/);
   assert.match(adsRoute, /get_my_permissions/);
-  assert.match(adsRoute, /permissions\\.data\\?\\.includes\\("settings\\.manage"\\) === true/);
+  assert.match(adsRoute, /permissions\.data\?\.includes\("settings\.manage"\) === true/);
   assert.match(adsRoute, /\\.eq\\("tenant_id", tenantId!\\)/);
   assert.match(adsRoute, /\\.eq\\("company_id", membership\\.company_id\\)/);
   assert.match(campaignMigration, /enable row level security/);
