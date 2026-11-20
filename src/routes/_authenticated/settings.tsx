@@ -45,6 +45,7 @@ const MANAGEABLE_NAV_ITEMS = [
   { title: "إدارة الأدوار", url: "/roles" },
   { title: "صلاحيات الفريق", url: "/team-permissions" },
   { title: "الإشعارات", url: "/notifications" },
+  { title: "الإعلانات", url: "/ads" },
   { title: "الإعدادات", url: "/settings", protected: true },
   { title: "مركز تحكم المالك", url: "/owner-center", protected: true },
   { title: "إدارة النظام", url: "/admin", protected: true },
