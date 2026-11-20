@@ -15,6 +15,8 @@ export type InvoiceData = {
   payment_method: string;
   order_type?: "dine_in" | "takeaway" | "delivery" | null;
   table_name?: string | null;
+  customer_name?: string | null;
+  customer_phone?: string | null;
   delivery_fee?: number;
   delivery_customer_name?: string | null;
   delivery_customer_phone?: string | null;
@@ -263,6 +265,7 @@ export function printInvoiceHTML(
     <div>نوع الطلب: ${data.order_type === "dine_in" ? "محلي" : data.order_type === "delivery" ? "توصيل" : "سفري"}</div>
     ${data.table_name ? `<div>الطاولة: ${escapeHtml(data.table_name)}</div>` : ""}
   </div>
+  ${data.customer_name ? `<div class="muted">العميل: ${escapeHtml(data.customer_name)}${data.customer_phone ? " · " + escapeHtml(data.customer_phone) : ""}</div>` : ""}
   ${data.order_type === "delivery" ? `<div class="muted">عميل التوصيل: ${escapeHtml(data.delivery_customer_name || "-")} · ${escapeHtml(data.delivery_customer_phone || "-")}</div><div class="muted">العنوان: ${escapeHtml(data.delivery_address || "-")}</div>` : ""}
   <div class="divider"></div>
   <table>
