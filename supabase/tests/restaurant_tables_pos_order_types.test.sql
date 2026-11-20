@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(7);
+select plan(8);
 
 select ok(
   (select relrowsecurity from pg_class where oid='public.restaurant_tables'::regclass),
@@ -45,6 +45,15 @@ select ok(
   not has_column_privilege('authenticated','public.restaurant_tables','current_sale_id','UPDATE')
   and not has_column_privilege('authenticated','public.restaurant_tables','current_sale_id','INSERT'),
   'Clients cannot forge restaurant table occupancy'
+);
+
+select ok(
+  exists (select 1 from pg_trigger where tgrelid='public.kitchen_orders'::regclass
+    and tgname='trg_notify_branch_kitchen_ready' and not tgisinternal)
+  and (select count(*)=2 from public.role_permissions
+       where role_kind='builtin' and permission_key='notifications.view'
+         and builtin_role::text in ('cashier','waiter')),
+  'Kitchen readiness creates branch notifications visible to cashiers and waiters'
 );
 
 select * from finish();
