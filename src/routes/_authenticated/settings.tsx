@@ -13,7 +13,7 @@ import { z } from "zod";
 import { PageHeader } from "@/components/page-header";
 import { useTheme, DEFAULT_DESIGN, type DesignSettings } from "@/lib/theme";
 import { useSuperOwner } from "@/hooks/use-super-owner";
-import { Palette, RotateCcw, Plus, Trash2, MonitorCog, Image } from "lucide-react";
+import { Palette, RotateCcw, Plus, Trash2, MonitorCog, Image, Megaphone } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   component: SettingsPage,
