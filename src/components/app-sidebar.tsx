@@ -118,7 +118,7 @@ export const appNavigationGroups: AppNavigationGroup[] = [
       { title: "الموظفون", url: "/users", icon: Users, permission: "users.view" },
       { title: "صلاحيات الفريق", url: "/team-permissions", icon: KeyRound, permission: "permissions.view" },
       { title: "الإعدادات", url: "/settings", icon: Settings, permission: "settings.view" },
-      { title: "العروض والإعلانات", url: "/settings#marketing-campaigns", icon: Megaphone, permission: "settings.view" },
+      { title: "الإعلانات", url: "/ads", icon: Megaphone, permission: "settings.view" },
     ],
   },
 ];
@@ -137,7 +137,7 @@ export function AppSidebar() {
       try {
         const raw = window.localStorage.getItem("ras-custom-sidebar-items-v1");
         const parsed = raw ? JSON.parse(raw) : [];
-        const allowedRoutes = new Set(["/dashboard", "/pos", "/sales", "/products", "/inventory", "/purchases", "/reports", "/customers", "/branches", "/users", "/settings"]);
+        const allowedRoutes = new Set(["/dashboard", "/pos", "/sales", "/products", "/inventory", "/purchases", "/reports", "/customers", "/branches", "/users", "/settings", "/ads"]);
         setCustomItems(Array.isArray(parsed) ? parsed.filter((item) => item && typeof item.title === "string" && allowedRoutes.has(item.url)).slice(0, 12) : []);
       } catch { setCustomItems([]); }
     };
