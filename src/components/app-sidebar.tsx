@@ -74,6 +74,7 @@ const groups: Group[] = [
       { title: "الفواتير", url: "/sales", icon: Receipt, permission: "sales.view" },
       { title: "الورديات", url: "/cash-sessions", icon: Wallet, permission: "cash.view" },
       { title: "العملاء", url: "/customers", icon: UserSquare2, permission: "customers.view" },
+      { title: "الإشعارات", url: "/notifications", icon: Bell, permission: "notifications.view" },
     ],
   },
   {
