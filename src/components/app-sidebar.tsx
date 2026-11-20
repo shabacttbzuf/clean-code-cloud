@@ -37,6 +37,7 @@ import {
   Bookmark,
   Palette,
   Megaphone,
+  ChefHat,
 } from "lucide-react";
 import { useSuperOwner } from "@/hooks/use-super-owner";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
@@ -71,6 +72,12 @@ const groups: Group[] = [
       { title: "الفواتير", url: "/sales", icon: Receipt, permission: "sales.view" },
       { title: "الورديات", url: "/cash-sessions", icon: Wallet, permission: "cash.view" },
       { title: "العملاء", url: "/customers", icon: UserSquare2, permission: "customers.view" },
+    ],
+  },
+  {
+    label: "التشغيل",
+    items: [
+      { title: "شاشة المطبخ", url: "/kitchen", icon: ChefHat, permission: "kitchen.view" },
     ],
   },
   {
