@@ -159,14 +159,20 @@ test("custom sidebar tabs are owner-only shortcuts to an allowlisted existing ro
   assert.match(appSidebar, /ras-custom-tabs-updated/);
 });
 
-test("marketing campaigns have tenant isolation and owner-managed lifecycle controls", () => {
-  assert.match(settings, /إدارة العروض والإعلانات/);
-  assert.match(settings, /campaignCreate/);
-  assert.match(settings, /campaignUpdate/);
-  assert.match(settings, /campaignDelete/);
-  assert.match(settings, /uploadCampaignImage/);
-  assert.match(dashboard, /dashboard-marketing-campaigns/);
-  assert.match(dashboard, /campaignsQuery\.data\.map/);
+const adsRoute = readFileSync(new URL("../src/routes/_authenticated/ads.tsx", import.meta.url), "utf8");
+
+test("marketing campaigns have tenant isolation and owner-managed lifecycle controls on the dedicated ads route", () => {
+  assert.doesNotMatch(settings, /campaignCreate|campaignUpdate|campaignDelete|uploadCampaignImage|إدارة العروض والإعلانات/);
+  assert.match(adsRoute, /saveCampaign/);
+  assert.match(adsRoute, /uploadImage/);
+  assert.match(adsRoute, /starts_at/);
+  assert.match(adsRoute, /ends_at/);
+  assert.match(adsRoute, /updateStatus/);
+  assert.match(adsRoute, /deleteCampaign/);
+  assert.match(adsRoute, /get_my_permissions/);
+  assert.match(adsRoute, /permissions\.data\?\.includes\("settings\.manage"\) === true/);
+  assert.match(adsRoute, /\.eq\("tenant_id", tenantId!\)/);
+  assert.match(adsRoute, /\.eq\("company_id", membership\.company_id\)/);
   assert.match(campaignMigration, /enable row level security/);
   assert.match(campaignMigration, /private\.is_tenant_member/);
   assert.match(campaignMigration, /private\.is_tenant_admin/);

@@ -26,6 +26,10 @@ const settingsPage = readFileSync(
   new URL("../src/routes/_authenticated/settings.tsx", import.meta.url),
   "utf8",
 );
+const adsPage = readFileSync(
+  new URL("../src/routes/_authenticated/ads.tsx", import.meta.url),
+  "utf8",
+);
 const hrEmployeesPage = readFileSync(
   new URL("../src/routes/_authenticated/hr.employees.tsx", import.meta.url),
   "utf8",
@@ -70,7 +74,7 @@ test("company asset writes require the matching feature permission and include e
 });
 
 test("company campaign images use the company asset namespace", () => {
-  assert.match(settingsPage, /companies\/\$\{membership\.company_id\}\/marketing/);
-  assert.match(settingsPage, /marketingPermissions\.data\?\.includes\("settings\.manage"\) === true/);
-  assert.match(settingsPage, /const isTenantOwner = role === "owner" && !membership\?\.company_id/);
+  assert.match(adsPage, /companies\/\$\{membership\.company_id\}\/marketing/);
+  assert.match(adsPage, /permissions\.data\?\.includes\("settings\.manage"\) === true/);
+  assert.match(adsPage, /const isTenantOwner = role === "owner" && !membership\?\.company_id/);
 });

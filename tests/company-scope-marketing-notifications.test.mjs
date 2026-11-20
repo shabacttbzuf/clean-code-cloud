@@ -6,8 +6,8 @@ const migration = readFileSync(
   new URL("../supabase/migrations/20261119000006_company_scope_marketing_notifications.sql", import.meta.url),
   "utf8",
 );
-const settings = readFileSync(
-  new URL("../src/routes/_authenticated/settings.tsx", import.meta.url),
+const ads = readFileSync(
+  new URL("../src/routes/_authenticated/ads.tsx", import.meta.url),
   "utf8",
 );
 const enterprise = readFileSync(
@@ -44,11 +44,11 @@ test("marketing campaigns enforce company scope in RLS and on writes", () => {
   assert.match(migration, /campaign company must belong to the same tenant/i);
 });
 
-test("settings creates campaigns for the active company and hides cross-company editing", () => {
-  assert.match(settings, /membership\?\.company_id/);
-  assert.match(settings, /company_id: editingCampaignId \? editingCampaignCompanyId/);
-  assert.match(settings, /canManageCampaign\(campaign\)/);
-  assert.match(settings, /select\([^)]*company_id/);
+test("dedicated ads page creates campaigns for the active company and scopes company reads", () => {
+  assert.match(ads, /membership\?\.company_id/);
+  assert.match(ads, /company_id: editingId \? editingCompanyId/);
+  assert.match(ads, /query = query\.eq\("company_id", membership\.company_id\)/);
+  assert.match(ads, /select\("id,company_id,title/);
 });
 
 test("notification server function accepts only an explicit company scope that the database validates", () => {

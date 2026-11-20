@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet, redirect, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { AppSidebar } from "@/components/app-sidebar";
+import { AppSidebar, appNavigationGroups } from "@/components/app-sidebar";
 import { AppLauncher } from "@/components/app-launcher";
 import { WorkspaceTabs } from "@/components/workspace-tabs";
 import { SidebarProvider, SidebarTrigger, SidebarInset, useSidebar } from "@/components/ui/sidebar";
@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Moon, Sun, LogOut, User as UserIcon, Loader2, Bell, Maximize2, Minimize2, CalendarDays, Building2 } from "lucide-react";
+import { Moon, Sun, LogOut, User as UserIcon, Loader2, Bell, Maximize2, Minimize2, CalendarDays, Building2, Search } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthSession } from "@/hooks/use-auth-session";
@@ -133,6 +133,7 @@ const ROUTE_PERMISSION_RULES: Array<{ prefix: string; permission: string }> = [
   { prefix: "/notifications", permission: "notifications.view" },
   { prefix: "/login-history", permission: "login_history.view" },
   { prefix: "/audit-logs", permission: "audit.view" },
+  { prefix: "/ads", permission: "settings.view" },
   { prefix: "/settings", permission: "settings.view" },
 ];
 
@@ -184,6 +185,20 @@ function TopBar() {
   const { theme, toggle } = useTheme();
   const { tenantId, tenant, membership } = useActiveTenant();
   const { user } = useAuthSession();
+  const { isSuperOwner } = useSuperOwner();
+  const [globalSearch, setGlobalSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchPermissions = useQuery({
+    queryKey: ["topbar-search-permissions", tenantId, user?.id],
+    queryFn: async () => {
+      if (!tenantId) return new Set<string>();
+      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId });
+      if (error) throw error;
+      return new Set<string>((data ?? []) as string[]);
+    },
+    enabled: !!tenantId && !!user?.id && !isSuperOwner,
+    staleTime: 30_000,
+  });
   const branchQuery = useQuery({
     queryKey: ["topbar-active-branch", tenantId, membership?.branch_id],
     queryFn: async () => {
@@ -286,6 +301,12 @@ function TopBar() {
     }
   }
 
+  const searchItems = appNavigationGroups.flatMap((group) => group.items).filter((item) => {
+    const query = globalSearch.trim().toLocaleLowerCase("ar");
+    const permitted = isSuperOwner || (!!searchPermissions.data && (!item.permission || searchPermissions.data.has(item.permission)));
+    return permitted && query.length > 0 && item.title.toLocaleLowerCase("ar").includes(query);
+  }).slice(0, 8);
+
   const initial = displayName.charAt(0) || "?";
 
   return (
@@ -298,6 +319,15 @@ function TopBar() {
       </div>
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
         <div className="hidden items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 text-[11px] font-semibold text-[#425b7d] shadow-sm md:flex"><CalendarDays className="h-4 w-4 text-[#174b91]" />{clock.toLocaleDateString("ar-YE",{weekday:"long",day:"numeric",month:"long"})}</div>
+        <div className="relative hidden w-[min(28vw,300px)] lg:block">
+          <div className="flex items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 shadow-sm focus-within:border-primary/50">
+            <Search className="h-4 w-4 shrink-0 text-[#174b91]" />
+            <input value={globalSearch} onChange={(event) => setGlobalSearch(event.target.value)} onFocus={() => setSearchOpen(true)} onBlur={() => window.setTimeout(() => setSearchOpen(false), 150)} onKeyDown={(event) => { if (event.key === "Escape") { setGlobalSearch(""); setSearchOpen(false); } if (event.key === "Enter" && searchItems[0]) { navigate({ to: searchItems[0].url as any }); setGlobalSearch(""); setSearchOpen(false); } }} placeholder="البحث في النظام..." aria-label="البحث الشامل داخل النظام" className="min-w-0 flex-1 bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400" />
+          </div>
+          {searchOpen && globalSearch.trim() && <div className="absolute right-0 top-full z-50 mt-2 max-h-80 w-full overflow-y-auto rounded-xl border bg-white p-2 text-slate-800 shadow-xl" dir="rtl">
+            {searchPermissions.isError ? <p role="alert" className="p-3 text-xs text-destructive">تعذر التحقق من صلاحيات البحث.</p> : searchPermissions.isLoading && !isSuperOwner ? <p className="p-3 text-xs text-slate-500">جارٍ التحقق من الصلاحيات...</p> : searchItems.length ? searchItems.map((item) => <button key={item.url} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { navigate({ to: item.url as any }); setGlobalSearch(""); setSearchOpen(false); }} className="flex w-full items-center rounded-lg px-3 py-2 text-right text-sm hover:bg-blue-50">{item.title}</button>) : <p className="p-3 text-xs text-slate-500">لا توجد نتائج متاحة.</p>}
+          </div>}
+        </div>
         <Button type="button" variant="outline" size="icon" onClick={toggleFullscreen} aria-label={fullscreen ? "الخروج من ملء الشاشة" : "ملء الشاشة"} className="hidden rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm sm:inline-flex">{fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</Button>
         <Button variant="outline" size="icon" onClick={toggle} aria-label="تبديل الوضع" className="hidden rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm sm:inline-flex">{theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</Button>
         <AppLauncher />

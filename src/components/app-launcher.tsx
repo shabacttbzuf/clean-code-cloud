@@ -28,7 +28,7 @@ export function AppLauncher() {
       try {
         const raw = window.localStorage.getItem("ras-custom-sidebar-items-v1");
         const parsed = raw ? JSON.parse(raw) : [];
-        const allowedRoutes = new Set(["/dashboard", "/pos", "/sales", "/products", "/inventory", "/purchases", "/reports", "/customers", "/branches", "/users", "/settings"]);
+        const allowedRoutes = new Set(["/dashboard", "/pos", "/sales", "/products", "/inventory", "/purchases", "/reports", "/customers", "/branches", "/users", "/settings", "/ads"]);
         setCustomItems(Array.isArray(parsed)
           ? parsed.filter((item) => item && typeof item.title === "string" && allowedRoutes.has(item.url)).slice(0, 12)
           : []);
