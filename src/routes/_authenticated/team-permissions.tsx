@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, ShieldAlert, Eye, Lock } from "lucide-react";
+import { Loader2, ShieldAlert, Eye, Lock, Search } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 
@@ -29,6 +29,8 @@ function TeamPermissionsPage() {
   const qc = useQueryClient();
   const setPerm = useServerFn(setUserPermission);
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const [teamSearch, setTeamSearch] = useState("");
+  const [permissionSearch, setPermissionSearch] = useState("");
 
   const isOwner = role === "owner";
   const isManager = role === "manager";
@@ -107,16 +109,28 @@ function TeamPermissionsPage() {
     if (isManager) return list.filter((r) => r.hired_by === userId);
     return [];
   }, [team.data, isOwner, isManager, isSuperOwner, userId]);
+  const visibleTeam = useMemo(() => {
+    const term = teamSearch.trim().toLowerCase();
+    if (!term) return filteredTeam;
+    return filteredTeam.filter((member) =>
+      (member.full_name ?? "").toLowerCase().includes(term) ||
+      member.role.toLowerCase().includes(term) ||
+      (member.custom_role_name ?? "").toLowerCase().includes(term) ||
+      member.user_id.toLowerCase().includes(term)
+    );
+  }, [filteredTeam, teamSearch]);
 
   const grouped = useMemo(() => {
     const g = new Map<string, typeof permissions.data extends undefined ? never : NonNullable<typeof permissions.data>>();
+    const term = permissionSearch.trim().toLowerCase();
     for (const p of permissions.data ?? []) {
+      if (term && !p.label_ar.toLowerCase().includes(term) && !p.key.toLowerCase().includes(term)) continue;
       const arr = g.get(p.category) ?? [];
       arr.push(p);
       g.set(p.category, arr as never);
     }
     return Array.from(g.entries());
-  }, [permissions.data]);
+  }, [permissions.data, permissionSearch]);
 
   const selectedTeamMember = filteredTeam.find((r) => r.user_id === selectedUser) ?? null;
 
@@ -180,6 +194,30 @@ function TeamPermissionsPage() {
     },
   });
 
+  const bulkSet = useMutation({
+    mutationFn: async (input: { keys: string[]; granted: boolean }) => {
+      if (!selectedUser || !tenantId) throw new Error("اختر موظفاً أولاً");
+      const results = await Promise.allSettled(input.keys.map((permission_key) =>
+        setPerm({ data: {
+          tenant_id: tenantId,
+          user_id: selectedUser,
+          permission_key,
+          granted: input.granted,
+        } })
+      ));
+      const failed = results.filter((result) => result.status === "rejected");
+      if (failed.length) throw new Error("تعذر حفظ " + failed.length + " صلاحية من المجموعة. أعد المزامنة للتحقق من النتائج.");
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["upo", tenantId, selectedUser] });
+      toast.success("تم تحديث صلاحيات المجموعة");
+    },
+    onError: (error: Error) => {
+      void qc.invalidateQueries({ queryKey: ["upo", tenantId, selectedUser] });
+      toast.error(error.message);
+    },
+  });
+
   if (tLoading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 
   if (!canAccess) {
@@ -211,11 +249,12 @@ function TeamPermissionsPage() {
       <Card>
         <CardContent className="grid gap-4 p-4 md:grid-cols-[280px_1fr]">
           <div className="space-y-2">
-            <div className="text-xs font-semibold text-muted-foreground">اختر موظفاً</div>
+            <div className="text-xs font-semibold text-muted-foreground">اختر موظفاً ({visibleTeam.length})</div>
+            <div className="relative"><Search className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" /><input className="h-9 w-full rounded-md border bg-background pr-9 pl-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" placeholder="ابحث بالاسم أو الدور..." value={teamSearch} onChange={(e) => setTeamSearch(e.target.value)} /></div>
             <Select value={selectedUser ?? ""} onValueChange={(v) => setSelectedUser(v)}>
               <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
               <SelectContent>
-                {filteredTeam.map((m) => (
+                {visibleTeam.map((m) => (
                   <SelectItem key={m.user_id} value={m.user_id}>
                     <span className="flex items-center gap-2">
                       <span>{m.full_name ?? m.user_id.slice(0, 8)}</span>
@@ -225,7 +264,7 @@ function TeamPermissionsPage() {
                 ))}
               </SelectContent>
             </Select>
-            {filteredTeam.length === 0 && (
+            {visibleTeam.length === 0 && (
               <p className="text-xs text-muted-foreground">لا يوجد موظفون تحت إدارتك بعد.</p>
             )}
             {selectedTeamMember && (
@@ -252,9 +291,22 @@ function TeamPermissionsPage() {
               <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></div>
             ) : (
               <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-xs text-muted-foreground">الصلاحيات الفعّالة: {permissions.data?.filter((p) => {
+                    const override = overrideMap.get(p.key);
+                    return override === undefined ? roleDefaults.has(p.key) : override;
+                  }).length ?? 0} من {permissions.data?.length ?? 0} · المخصّصة: {overrideMap.size}</div>
+                  <div className="relative w-full max-w-sm"><Search className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" /><input className="h-9 w-full rounded-md border bg-background pr-9 pl-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" placeholder="ابحث عن صلاحية..." value={permissionSearch} onChange={(e) => setPermissionSearch(e.target.value)} /></div>
+                </div>
                 {grouped.map(([cat, perms]) => (
                   <div key={cat}>
-                    <div className="mb-2 text-xs font-semibold text-muted-foreground">{CATEGORY_LABELS[cat] ?? cat}</div>
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-xs font-semibold text-muted-foreground">{CATEGORY_LABELS[cat] ?? cat} ({perms.length})</div>
+                      {canEditSelected && <div className="flex gap-1">
+                        <button type="button" className="text-[10px] text-primary underline disabled:opacity-50" disabled={bulkSet.isPending || setMut.isPending} onClick={() => bulkSet.mutate({ keys: perms.map((p) => p.key), granted: true })}>تفعيل المجموعة</button>
+                        <button type="button" className="text-[10px] text-destructive underline disabled:opacity-50" disabled={bulkSet.isPending || setMut.isPending} onClick={() => bulkSet.mutate({ keys: perms.map((p) => p.key), granted: false })}>إيقاف المجموعة</button>
+                      </div>}
+                    </div>
                     <div className="grid gap-2 sm:grid-cols-2">
                       {(perms as Array<{ key: string; label_ar: string }>).map((p) => {
                         const isOverride = overrideMap.has(p.key);
