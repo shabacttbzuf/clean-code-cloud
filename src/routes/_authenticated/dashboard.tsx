@@ -25,7 +25,7 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 });
 
 function Dashboard() {
-  const { tenantId, tenant, user } = useActiveTenant();
+  const { tenantId, tenant, user, membership } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
   const profileQuery = useQuery({
     queryKey: ["dashboard-profile-name", user?.id],
@@ -47,15 +47,19 @@ function Dashboard() {
     : profileQuery.data?.full_name?.trim() || user?.user_metadata?.full_name?.trim() || profileQuery.data?.username?.trim() || "مستخدم";
 
   const campaignsQuery = useQuery({
-    queryKey: ["dashboard-marketing-campaigns", tenantId],
+    queryKey: ["dashboard-marketing-campaigns", tenantId, membership?.company_id ?? "tenant"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("marketing_campaigns")
+      let query = supabase.from("marketing_campaigns")
         .select("id,title,description,image_url,target_url,starts_at,ends_at,sort_order")
         .eq("tenant_id", tenantId!)
         .eq("status", "active")
         .in("placement", ["dashboard_banner", "dashboard_card"])
         .order("sort_order")
         .limit(6);
+      if (membership?.company_id) {
+        query = query.or(`company_id.is.null,company_id.eq.${membership.company_id}`);
+      }
+      const { data, error } = await query;
       if (error) throw error;
       const now = Date.now();
       return (data ?? []).filter((campaign) =>
@@ -211,6 +215,11 @@ function Dashboard() {
     <div className="space-y-6">
       <PageHeader title={`مرحبا ${displayName}`} subtitle={tenant?.name} />
 
+      {campaignsQuery.isError && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive" role="alert">
+          تعذر تحميل العروض والإعلانات. <button type="button" className="underline" onClick={() => campaignsQuery.refetch()}>إعادة المحاولة</button>
+        </div>
+      )}
       {campaignsQuery.data && campaignsQuery.data.length > 0 && (
         <div className="grid gap-3">
           {campaignsQuery.data.map((campaign) => {
