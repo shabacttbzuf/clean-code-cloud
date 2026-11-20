@@ -194,6 +194,9 @@ BEGIN
   IF _paid_amount IS NULL OR _paid_amount<0 OR _paid_amount>v_final_total THEN
     RAISE EXCEPTION 'Paid amount must be between zero and invoice total' USING ERRCODE='22023';
   END IF;
+  IF _customer_id IS NULL AND _paid_amount<>v_final_total THEN
+    RAISE EXCEPTION 'Select a customer when any part of the invoice remains unpaid' USING ERRCODE='22023';
+  END IF;
   v_base_paid := least(_paid_amount,v_base_total);
   v_extra_paid := greatest(_paid_amount-v_base_total,0);
 
