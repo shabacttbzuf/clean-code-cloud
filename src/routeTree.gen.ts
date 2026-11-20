@@ -352,6 +352,7 @@ export interface FileRoutesByTo {
   '/expense-categories': typeof AuthenticatedExpenseCategoriesRoute
   '/expenses': typeof AuthenticatedExpensesRoute
   '/job-titles': typeof AuthenticatedJobTitlesRoute
+  '/kitchen': typeof AuthenticatedKitchenRoute
   '/login-history': typeof AuthenticatedLoginHistoryRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/owner-center': typeof AuthenticatedOwnerCenterRoute
@@ -491,6 +492,7 @@ export interface FileRouteTypes {
     | '/expense-categories'
     | '/expenses'
     | '/job-titles'
+    | '/kitchen'
     | '/login-history'
     | '/notifications'
     | '/owner-center'
