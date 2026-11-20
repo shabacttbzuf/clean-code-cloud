@@ -18,8 +18,8 @@ const posPage = readFileSync(
   new URL("../src/routes/_authenticated/pos.tsx", import.meta.url),
   "utf8",
 );
-const settingsPage = readFileSync(
-  new URL("../src/routes/_authenticated/settings.tsx", import.meta.url),
+const adsPage = readFileSync(
+  new URL("../src/routes/_authenticated/ads.tsx", import.meta.url),
   "utf8",
 );
 
@@ -34,8 +34,8 @@ test("marketing campaign reads no longer have a permissive tenant-wide SELECT po
 });
 
 test("company-scoped administrators only query their own campaigns in the management UI", () => {
-  assert.match(settingsPage, /queryKey: \["marketing-campaigns", tenantId, membership\?\.company_id \?\? "tenant"\]/);
-  assert.match(settingsPage, /if \(!isSuperOwner && !isTenantOwner\)\s*\{\s*if \(!membership\?\.company_id\) return \[\];\s*query = query\.eq\("company_id", membership\.company_id\);/);
+  assert.match(adsPage, /queryKey: \["marketing-campaigns", tenantId, membership\?\.company_id \?\? "tenant"\]/);
+  assert.match(adsPage, /if \(!isSuperOwner && !isTenantOwner\)\s*\{\s*if \(!membership\?\.company_id\) return \[\];\s*query = query\.eq\("company_id", membership\.company_id\);/);
 });
 
 test("dashboard and POS promotions are filtered to the active company and expose retry on query failure", () => {
@@ -50,5 +50,5 @@ test("dashboard and POS promotions are filtered to the active company and expose
 });
 
 test("marketing management controls match the owner/manager role gate enforced by RLS", () => {
-  assert.match(settingsPage, /\(\(role === "owner" \|\| role === "manager"\) && !!membership\?\.company_id && marketingPermissions\.data\?\.includes\("settings\.manage"\) === true\)/);
+  assert.match(adsPage, /\(\(role === "owner" \|\| role === "manager"\) && !!membership\?\.company_id &&\s*permissions\.data\?\.includes\("settings\.manage"\) === true\)/);
 });
