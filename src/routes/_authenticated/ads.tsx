@@ -83,7 +83,14 @@ export function AdsPage() {
       const cleanTitle = title.trim();
       if (cleanTitle.length < 2 || cleanTitle.length > 120) throw new Error("عنوان الإعلان يجب أن يكون بين حرفين و120 حرفاً");
       if (description.length > 500) throw new Error("الوصف أطول من 500 حرف");
-      if (targetUrl && !/^https?:\\/\\//i.test(targetUrl)) throw new Error("رابط الوجهة يجب أن يبدأ بـ https:// أو http://");
+      if (targetUrl) {
+        try {
+          const parsedTarget = new URL(targetUrl);
+          if (parsedTarget.protocol !== "https:" && parsedTarget.protocol !== "http:") throw new Error("invalid protocol");
+        } catch {
+          throw new Error("رابط الوجهة يجب أن يكون صالحاً ويبدأ بـ https:// أو http://");
+        }
+      }
       if (startsAt && endsAt && new Date(endsAt) <= new Date(startsAt)) throw new Error("تاريخ النهاية يجب أن يكون بعد البداية");
       const payload = {
         company_id: editingId ? editingCompanyId : (membership?.company_id ?? null),
