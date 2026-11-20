@@ -66,7 +66,7 @@ function SaleDetailPage() {
 
   const sale = useQuery({
     queryKey: ["sale", id],
-    queryFn: async (): Promise<{ sale: Sale; items: Item[]; branch: Branch | null; cashier: string; refunds: Refund[]; paidAmount: number } | null> => {
+    queryFn: async (): Promise<{ sale: Sale; items: Item[]; branch: Branch | null; cashier: string; refunds: Refund[]; paidAmount: number | null } | null> => {
       const { data: s, error } = await supabase.from("sales").select("*").eq("id", id).maybeSingle();
       if (error) throw error;
       if (!s) return null;
@@ -104,8 +104,9 @@ function SaleDetailPage() {
         branch: (branchRes.data as Branch | null) ?? null,
         cashier: (profileRes.data?.full_name as string | undefined) ?? "—",
         refunds: refundRows,
-        paidAmount: (paymentsRes.data ?? []).reduce((sum, payment) => sum + Number(payment.amount), 0)
-          + (customerPaymentsRes.error ? 0 : (customerPaymentsRes.data ?? []).reduce((sum, payment) => sum + Number(payment.amount), 0)),
+        paidAmount: customerPaymentsRes.error ? null :
+          (paymentsRes.data ?? []).reduce((sum, payment) => sum + Number(payment.amount), 0)
+          + (customerPaymentsRes.data ?? []).reduce((sum, payment) => sum + Number(payment.amount), 0),
       };
     },
   });
@@ -193,8 +194,8 @@ function SaleDetailPage() {
     delivery_customer_name: s.delivery_customer_name,
     delivery_customer_phone: s.delivery_customer_phone,
     delivery_address: s.delivery_address,
-    paid_amount: paidAmount,
-    due_amount: Math.max(0, Number(s.total) - paidAmount),
+    paid_amount: paidAmount ?? undefined,
+    due_amount: paidAmount === null ? undefined : Math.max(0, Number(s.total) - paidAmount),
     items: items.map((i) => ({
       product_name: i.product_name,
       quantity: Number(i.quantity),
@@ -312,8 +313,10 @@ function SaleDetailPage() {
             <Row label="الهاتف" value={s.delivery_customer_phone ?? "—"} />
             <Row label="العنوان" value={s.delivery_address ?? "—"} />
           </>}
-          <Row label="المدفوع" value={formatMoney(paidAmount)} />
-          <Row label="المتبقي" value={formatMoney(Math.max(0, Number(s.total) - paidAmount))} />
+          {paidAmount !== null ? <>
+            <Row label="المدفوع" value={formatMoney(paidAmount)} />
+            <Row label="المتبقي" value={formatMoney(Math.max(0, Number(s.total) - paidAmount))} />
+          </> : <Row label="المدفوع والمتبقي" value="غير متاحين دون صلاحية سجل مدفوعات العميل" />}
           <div className="border-t pt-2">
             <Row label="الإجمالي" value={`${formatMoney(s.total)} ${tenant?.currency ?? ""}`} className="text-base font-bold text-primary" />
           </div>
