@@ -13586,11 +13586,35 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, public, private, pg_temp
 AS $$
+DECLARE
+  v_order record;
 BEGIN
-  IF NEW.status::text <> 'completed' AND OLD.status::text='completed' AND OLD.table_id IS NOT NULL THEN
-    UPDATE public.restaurant_tables
-       SET current_sale_id=NULL,updated_at=now()
-     WHERE id=OLD.table_id AND current_sale_id=OLD.id;
+  IF NEW.status::text <> 'completed' AND OLD.status::text='completed' THEN
+    -- Stop any outstanding kitchen ticket before freeing the table.
+    FOR v_order IN
+      SELECT id,tenant_id,branch_id,status
+        FROM public.kitchen_orders
+       WHERE sale_id=OLD.id AND status IN ('new','preparing','ready')
+       FOR UPDATE
+    LOOP
+      UPDATE public.kitchen_orders
+         SET status='cancelled',updated_at=now(),
+             notes=coalesce(notes,'') ||
+               CASE WHEN coalesce(notes,'')='' THEN '' ELSE E'\\n' END ||
+               'أُلغي البيع المرتبط بهذا الطلب'
+       WHERE id=v_order.id;
+      INSERT INTO public.kitchen_order_events
+        (tenant_id,branch_id,kitchen_order_id,actor_id,old_status,new_status,notes)
+      VALUES
+        (v_order.tenant_id,v_order.branch_id,v_order.id,auth.uid(),
+         v_order.status,'cancelled','أُلغي البيع المرتبط بهذا الطلب');
+    END LOOP;
+
+    IF OLD.table_id IS NOT NULL THEN
+      UPDATE public.restaurant_tables
+         SET current_sale_id=NULL,updated_at=now()
+       WHERE id=OLD.table_id AND current_sale_id=OLD.id;
+    END IF;
   END IF;
   RETURN NEW;
 END;
