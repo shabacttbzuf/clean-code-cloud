@@ -29,6 +29,7 @@ import { Route as AuthenticatedEmploymentTypesRouteImport } from './routes/_auth
 import { Route as AuthenticatedExpenseCategoriesRouteImport } from './routes/_authenticated/expense-categories'
 import { Route as AuthenticatedExpensesRouteImport } from './routes/_authenticated/expenses'
 import { Route as AuthenticatedJobTitlesRouteImport } from './routes/_authenticated/job-titles'
+import { Route as AuthenticatedKitchenRouteImport } from './routes/_authenticated/kitchen'
 import { Route as AuthenticatedLoginHistoryRouteImport } from './routes/_authenticated/login-history'
 import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
 import { Route as AuthenticatedOwnerCenterRouteImport } from './routes/_authenticated/owner-center'
@@ -154,6 +155,11 @@ const AuthenticatedExpensesRoute = AuthenticatedExpensesRouteImport.update({
 const AuthenticatedJobTitlesRoute = AuthenticatedJobTitlesRouteImport.update({
   id: '/job-titles',
   path: '/job-titles',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedKitchenRoute = AuthenticatedKitchenRouteImport.update({
+  id: '/kitchen',
+  path: '/kitchen',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedLoginHistoryRoute =
@@ -302,6 +308,7 @@ export interface FileRoutesByFullPath {
   '/expense-categories': typeof AuthenticatedExpenseCategoriesRoute
   '/expenses': typeof AuthenticatedExpensesRoute
   '/job-titles': typeof AuthenticatedJobTitlesRoute
+  '/kitchen': typeof AuthenticatedKitchenRoute
   '/login-history': typeof AuthenticatedLoginHistoryRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/owner-center': typeof AuthenticatedOwnerCenterRoute
@@ -345,6 +352,7 @@ export interface FileRoutesByTo {
   '/expense-categories': typeof AuthenticatedExpenseCategoriesRoute
   '/expenses': typeof AuthenticatedExpensesRoute
   '/job-titles': typeof AuthenticatedJobTitlesRoute
+  '/kitchen': typeof AuthenticatedKitchenRoute
   '/login-history': typeof AuthenticatedLoginHistoryRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/owner-center': typeof AuthenticatedOwnerCenterRoute
@@ -392,6 +400,7 @@ export interface FileRoutesById {
   '/_authenticated/expense-categories': typeof AuthenticatedExpenseCategoriesRoute
   '/_authenticated/expenses': typeof AuthenticatedExpensesRoute
   '/_authenticated/job-titles': typeof AuthenticatedJobTitlesRoute
+  '/_authenticated/kitchen': typeof AuthenticatedKitchenRoute
   '/_authenticated/login-history': typeof AuthenticatedLoginHistoryRoute
   '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
   '/_authenticated/owner-center': typeof AuthenticatedOwnerCenterRoute
@@ -438,6 +447,7 @@ export interface FileRouteTypes {
     | '/expense-categories'
     | '/expenses'
     | '/job-titles'
+    | '/kitchen'
     | '/login-history'
     | '/notifications'
     | '/owner-center'
@@ -482,6 +492,7 @@ export interface FileRouteTypes {
     | '/expense-categories'
     | '/expenses'
     | '/job-titles'
+    | '/kitchen'
     | '/login-history'
     | '/notifications'
     | '/owner-center'
@@ -866,6 +877,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedExpenseCategoriesRoute: typeof AuthenticatedExpenseCategoriesRoute
   AuthenticatedExpensesRoute: typeof AuthenticatedExpensesRoute
   AuthenticatedJobTitlesRoute: typeof AuthenticatedJobTitlesRoute
+  AuthenticatedKitchenRoute: typeof AuthenticatedKitchenRoute
   AuthenticatedLoginHistoryRoute: typeof AuthenticatedLoginHistoryRoute
   AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
   AuthenticatedOwnerCenterRoute: typeof AuthenticatedOwnerCenterRoute
@@ -907,6 +919,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedExpenseCategoriesRoute: AuthenticatedExpenseCategoriesRoute,
   AuthenticatedExpensesRoute: AuthenticatedExpensesRoute,
   AuthenticatedJobTitlesRoute: AuthenticatedJobTitlesRoute,
+  AuthenticatedKitchenRoute: AuthenticatedKitchenRoute,
   AuthenticatedLoginHistoryRoute: AuthenticatedLoginHistoryRoute,
   AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
   AuthenticatedOwnerCenterRoute: AuthenticatedOwnerCenterRoute,
@@ -955,6 +968,13 @@ declare module '@tanstack/react-router' {
       path: '/branches/$branchId'
       fullPath: '/branches/$branchId'
       preLoaderRoute: typeof AuthenticatedBranchesBranchIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/kitchen': {
+      id: '/_authenticated/kitchen'
+      path: '/kitchen'
+      fullPath: '/kitchen'
+      preLoaderRoute: typeof AuthenticatedKitchenRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/companies/$companyId': {
