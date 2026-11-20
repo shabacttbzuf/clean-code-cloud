@@ -15,7 +15,7 @@ test("sale table name is captured as a historical snapshot", () => {
 });
 
 test("sale detail receipts include order, delivery, table and paid/due information", () => {
-  for (const key of ["order_type", "table_name_snapshot", "delivery_customer_name", "delivery_customer_phone", "delivery_address", "delivery_fee"]) {
+  for (const key of ["order_type", "table_name_snapshot", "customer_name_snapshot", "customer_phone_snapshot", "delivery_customer_name", "delivery_customer_phone", "delivery_address", "delivery_fee"]) {
     assert.ok(detail.includes(key), "missing " + key);
   }
   assert.match(detail, /paidAmount/);
@@ -25,6 +25,8 @@ test("sale detail receipts include order, delivery, table and paid/due informati
   assert.match(invoice, /data\.paid_amount !== undefined/);
   assert.match(invoice, /data\.due_amount !== undefined/);
   assert.match(invoice, /نوع الطلب/);
+  assert.match(invoice, /customer_name/);
+  assert.match(invoice, /customer_phone/);
 });
 
 test("sales history displays the order type and table snapshot", () => {
