@@ -302,7 +302,7 @@ function RolesPage() {
               <Label>نسخ الصلاحيات من دور أساسي (اختياري)</Label>
               <Select
                 value={form.copy_from_builtin || "__none__"}
-                onValueChange={(v) => setForm({ ...form, copy_from_builtin: v === "__none__" ? "" : v })}
+                onValueChange={(v) => setForm({ ...form, copy_from_builtin: v === "__none__" ? "" : v, copy_from_custom: "" })}
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
