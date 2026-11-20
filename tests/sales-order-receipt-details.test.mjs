@@ -22,6 +22,8 @@ test("sale detail receipts include order, delivery, table and paid/due informati
   assert.match(detail, /due_amount/);
   assert.match(invoice, /المدفوع/);
   assert.match(invoice, /المتبقي/);
+  assert.match(invoice, /data\.paid_amount !== undefined/);
+  assert.match(invoice, /data\.due_amount !== undefined/);
   assert.match(invoice, /نوع الطلب/);
 });
 
