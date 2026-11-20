@@ -1163,6 +1163,8 @@ export type Database = {
           leave_type_id: string | null
           reason: string | null
           rejection_reason: string | null
+          rejected_at: string | null
+          rejected_by: string | null
           start_date: string
           status: string
           tenant_id: string
@@ -1180,6 +1182,8 @@ export type Database = {
           leave_type_id?: string | null
           reason?: string | null
           rejection_reason?: string | null
+          rejected_at?: string | null
+          rejected_by?: string | null
           start_date: string
           status?: string
           tenant_id: string
@@ -1197,6 +1201,8 @@ export type Database = {
           leave_type_id?: string | null
           reason?: string | null
           rejection_reason?: string | null
+          rejected_at?: string | null
+          rejected_by?: string | null
           start_date?: string
           status?: string
           tenant_id?: string
@@ -1584,6 +1590,8 @@ export type Database = {
           rejected_at: string | null
           rejected_by: string | null
           rejection_reason: string | null
+          rejected_at: string | null
+          rejected_by: string | null
           status: string
           tenant_id: string
           total_bonuses: number
@@ -1606,6 +1614,8 @@ export type Database = {
           rejected_at?: string | null
           rejected_by?: string | null
           rejection_reason?: string | null
+          rejected_at?: string | null
+          rejected_by?: string | null
           status?: string
           tenant_id: string
           total_bonuses?: number
@@ -1628,6 +1638,8 @@ export type Database = {
           rejected_at?: string | null
           rejected_by?: string | null
           rejection_reason?: string | null
+          rejected_at?: string | null
+          rejected_by?: string | null
           status?: string
           tenant_id?: string
           total_bonuses?: number
