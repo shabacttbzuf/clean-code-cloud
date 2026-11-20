@@ -6,6 +6,16 @@ BEGIN;
 DROP POLICY IF EXISTS "Tenant members read marketing campaigns"
   ON public.marketing_campaigns;
 
--- The restrictive company-scope SELECT policy installed by the earlier
--- migration remains the authoritative authenticated read boundary.
+-- Keep a permissive tenant-membership gate so RLS can evaluate SELECT;
+-- the existing restrictive company-scope policy is then AND-applied and is
+-- the actual row boundary.
+CREATE POLICY "Tenant members read scoped marketing campaigns"
+  ON public.marketing_campaigns
+  AS PERMISSIVE
+  FOR SELECT TO authenticated
+  USING (
+    private.is_tenant_member((select auth.uid()), tenant_id)
+    OR private.is_super_owner((select auth.uid()))
+  );
+
 COMMIT;
