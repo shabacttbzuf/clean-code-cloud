@@ -24,6 +24,14 @@ type Sale = {
   subtotal: number; discount: number; tax_amount: number; total: number;
   payment_method: string; status: string;
   branch_id: string; cashier_id: string; notes: string | null;
+  order_type: "dine_in" | "takeaway" | "delivery";
+  table_name_snapshot: string | null;
+  customer_name_snapshot: string | null;
+  customer_phone_snapshot: string | null;
+  delivery_customer_name: string | null;
+  delivery_customer_phone: string | null;
+  delivery_address: string | null;
+  delivery_fee: number;
 };
 type Item = {
   id: string; product_id: string | null; product_name: string;
@@ -60,19 +68,25 @@ function SaleDetailPage() {
 
   const sale = useQuery({
     queryKey: ["sale", id],
-    queryFn: async (): Promise<{ sale: Sale; items: Item[]; branch: Branch | null; cashier: string; refunds: Refund[] } | null> => {
+    queryFn: async (): Promise<{ sale: Sale; items: Item[]; branch: Branch | null; cashier: string; refunds: Refund[]; paidAmount: number | null } | null> => {
       const { data: s, error } = await supabase.from("sales").select("*").eq("id", id).maybeSingle();
       if (error) throw error;
       if (!s) return null;
 
-      const [itemsRes, branchRes, profileRes, refundsRes] = await Promise.all([
+      const [itemsRes, branchRes, profileRes, refundsRes, paymentsRes, customerPaymentsRes] = await Promise.all([
         supabase.from("sale_items").select("id, product_id, product_name, quantity, unit_price, line_total").eq("sale_id", id),
         supabase.from("branches").select("id, name, tax_number, company_id, logo_url, image_url, address, phone").eq("id", s.branch_id).maybeSingle(),
         supabase.from("profiles").select("full_name").eq("id", s.cashier_id).maybeSingle(),
         supabase.from("sale_refunds").select("id, total, reason, refund_method, created_at").eq("sale_id", id).order("created_at", { ascending: false }),
+        supabase.from("payments").select("amount").eq("sale_id", id),
+        (supabase.from("customer_payments" as any) as any).select("amount").eq("sale_id", id),
       ]);
       if (itemsRes.error) throw itemsRes.error;
       if (refundsRes.error) throw refundsRes.error;
+      if (paymentsRes.error) throw paymentsRes.error;
+      // Before the additive sale-scoped policy is deployed, sales viewers who
+      // lack customers.view may not read the customer's separate payment ledger.
+      if (customerPaymentsRes.error && customerPaymentsRes.error.code !== "42501") throw customerPaymentsRes.error;
       const refundRows = (refundsRes.data ?? []) as Refund[];
       const refundIds = refundRows.map((r) => r.id);
       const refundItemsRes = refundIds.length
@@ -84,7 +98,7 @@ function SaleDetailPage() {
         refundedByItem.set(row.sale_item_id, (refundedByItem.get(row.sale_item_id) ?? 0) + Number(row.quantity));
       }
       return {
-        sale: s as Sale,
+        sale: s as unknown as Sale,
         items: ((itemsRes.data ?? []) as Omit<Item, "refunded_quantity">[]).map((item) => ({
           ...item,
           refunded_quantity: refundedByItem.get(item.id) ?? 0,
@@ -92,6 +106,9 @@ function SaleDetailPage() {
         branch: (branchRes.data as Branch | null) ?? null,
         cashier: (profileRes.data?.full_name as string | undefined) ?? "—",
         refunds: refundRows,
+        paidAmount: customerPaymentsRes.error ? null :
+          (paymentsRes.data ?? []).reduce((sum: number, payment: { amount: number }) => sum + Number(payment.amount), 0)
+          + (customerPaymentsRes.data ?? []).reduce((sum: number, payment: { amount: number }) => sum + Number(payment.amount), 0),
       };
     },
   });
@@ -160,7 +177,7 @@ function SaleDetailPage() {
     return <Card><CardContent className="py-12 text-center text-muted-foreground">الفاتورة غير موجودة</CardContent></Card>;
   }
 
-  const { sale: s, items, branch, cashier, refunds } = sale.data;
+  const { sale: s, items, branch, cashier, refunds, paidAmount } = sale.data;
   const invoiceData: InvoiceData = {
     invoice_no: s.invoice_no,
     created_at: s.created_at,
@@ -173,6 +190,16 @@ function SaleDetailPage() {
     tax_amount: Number(s.tax_amount),
     total: Number(s.total),
     payment_method: s.payment_method,
+    order_type: s.order_type ?? "takeaway",
+    table_name: s.table_name_snapshot,
+    customer_name: s.customer_name_snapshot ?? s.delivery_customer_name,
+    customer_phone: s.customer_phone_snapshot ?? s.delivery_customer_phone,
+    delivery_fee: Number(s.delivery_fee ?? 0),
+    delivery_customer_name: s.delivery_customer_name,
+    delivery_customer_phone: s.delivery_customer_phone,
+    delivery_address: s.delivery_address,
+    paid_amount: paidAmount ?? undefined,
+    due_amount: paidAmount === null ? undefined : Math.max(0, Number(s.total) - paidAmount),
     items: items.map((i) => ({
       product_name: i.product_name,
       quantity: Number(i.quantity),
@@ -282,6 +309,20 @@ function SaleDetailPage() {
           <Row label="المجموع الفرعي" value={formatMoney(s.subtotal)} />
           {Number(s.discount) > 0 && <Row label="الخصم" value={`-${formatMoney(s.discount)}`} className="text-destructive" />}
           {Number(s.tax_amount) > 0 && <Row label="الضريبة" value={formatMoney(s.tax_amount)} />}
+          {Number(s.delivery_fee ?? 0) > 0 && <Row label="رسوم التوصيل" value={formatMoney(s.delivery_fee)} />}
+          <Row label="نوع الطلب" value={s.order_type === "dine_in" ? "محلي" : s.order_type === "delivery" ? "توصيل" : "سفري"} />
+          {s.table_name_snapshot && <Row label="الطاولة" value={s.table_name_snapshot} />}
+          {s.order_type !== "delivery" && s.customer_name_snapshot && <Row label="العميل" value={s.customer_name_snapshot} />}
+          {s.order_type !== "delivery" && s.customer_phone_snapshot && <Row label="هاتف العميل" value={s.customer_phone_snapshot} />}
+          {s.order_type === "delivery" && <>
+            <Row label="عميل التوصيل" value={s.delivery_customer_name ?? "—"} />
+            <Row label="الهاتف" value={s.delivery_customer_phone ?? "—"} />
+            <Row label="العنوان" value={s.delivery_address ?? "—"} />
+          </>}
+          {paidAmount !== null ? <>
+            <Row label="المدفوع" value={formatMoney(paidAmount)} />
+            <Row label="المتبقي" value={formatMoney(Math.max(0, Number(s.total) - paidAmount))} />
+          </> : <Row label="المدفوع والمتبقي" value="غير متاحين دون صلاحية سجل مدفوعات العميل" />}
           <div className="border-t pt-2">
             <Row label="الإجمالي" value={`${formatMoney(s.total)} ${tenant?.currency ?? ""}`} className="text-base font-bold text-primary" />
           </div>
