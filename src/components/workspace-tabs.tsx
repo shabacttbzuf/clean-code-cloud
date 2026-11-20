@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { X, Home, Pin } from "lucide-react";
+import { X, Home, Pin, PinOff } from "lucide-react";
 
 type WorkspaceTab = { path: string; title: string; pinned?: boolean };
 const STORAGE_KEY = "ras-workspace-tabs-v1";
+const MAX_TABS = 12;
 const ROUTE_TITLES: Array<[string, string]> = [
   ["/dashboard", "الرئيسية"], ["/pos", "نقطة البيع"], ["/sales", "المبيعات"],
   ["/tables", "الطاولات"], ["/kitchen", "المطبخ"], ["/inventory/movements", "حركات المخزون"],
@@ -27,30 +28,44 @@ function readTabs(): WorkspaceTab[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((tab): tab is WorkspaceTab =>
+    const valid = parsed.filter((tab): tab is WorkspaceTab =>
       !!tab && typeof tab.path === "string" && typeof tab.title === "string" &&
-      tab.path.startsWith("/") && !tab.path.startsWith("//")
-    ).slice(-12);
+      tab.path.startsWith("/") && !tab.path.startsWith("//") &&
+      (tab.pinned === undefined || typeof tab.pinned === "boolean")
+    );
+    return valid.slice(-MAX_TABS);
   } catch { return []; }
+}
+
+function limitTabs(tabs: WorkspaceTab[]) {
+  const unique = tabs.filter((tab, index, all) => all.findIndex((candidate) => candidate.path === tab.path) === index);
+  const pinned = unique.filter((tab) => tab.pinned);
+  const unpinned = unique.filter((tab) => !tab.pinned);
+  return [...pinned, ...unpinned.slice(-(MAX_TABS - pinned.length))];
 }
 
 export function WorkspaceTabs() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const navigate = useNavigate();
-  const [tabs, setTabs] = useState<WorkspaceTab[]>(() => [
+  const [tabs, setTabs] = useState<WorkspaceTab[]>(() => limitTabs([
     { path: "/dashboard", title: "الرئيسية", pinned: true },
     ...readTabs().filter((tab) => tab.path !== "/dashboard"),
-  ]);
+  ]));
+
+  function persist(nextTabs: WorkspaceTab[]) {
+    const limited = limitTabs(nextTabs);
+    setTabs(limited);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(limited)); } catch { /* storage is optional */ }
+  }
 
   useEffect(() => {
-    setTabs((current) => {
-      const existing = current.find((tab) => tab.path === pathname);
-      const next = existing
-        ? current.map((tab) => tab.path === pathname ? { ...tab, title: titleFor(pathname) } : tab)
-        : [...current, { path: pathname, title: titleFor(pathname) }].slice(-12);
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* storage is optional */ }
-      return next;
-    });
+    const existing = tabs.find((tab) => tab.path === pathname);
+    const next = existing
+      ? tabs.map((tab) => tab.path === pathname ? { ...tab, title: titleFor(pathname) } : tab)
+      : [...tabs, { path: pathname, title: titleFor(pathname) }];
+    persist(next);
+    // Read the current tab list to preserve pin state when the route changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
   const activePath = useMemo(() => pathname, [pathname]);
@@ -59,12 +74,17 @@ export function WorkspaceTabs() {
     const target = tabs.find((tab) => tab.path === path);
     if (!target || target.pinned) return;
     const next = tabs.filter((tab) => tab.path !== path);
-    setTabs(next);
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* storage is optional */ }
+    persist(next);
     if (activePath === path) {
       const fallback = next[next.length - 1]?.path ?? "/dashboard";
       navigate({ to: fallback as any });
     }
+  }
+
+  function togglePinned(path: string) {
+    const target = tabs.find((tab) => tab.path === path);
+    if (!target || path === "/dashboard") return;
+    persist(tabs.map((tab) => tab.path === path ? { ...tab, pinned: !tab.pinned } : tab));
   }
 
   return (
@@ -72,14 +92,18 @@ export function WorkspaceTabs() {
       {tabs.map((tab) => {
         const active = activePath === tab.path;
         return (
-          <div key={tab.path} className={`group inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-colors ${active ? "border-primary/30 bg-primary text-primary-foreground shadow-sm" : "border-border bg-card text-foreground hover:border-primary/30 hover:bg-primary/5"}`}>
+          <div key={tab.path} className={\`group inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-colors \${active ? "border-primary/30 bg-primary text-primary-foreground shadow-sm" : "border-border bg-card text-foreground hover:border-primary/30 hover:bg-primary/5"}\`}>
             <button type="button" onClick={() => navigate({ to: tab.path as any })} className="inline-flex items-center gap-2 whitespace-nowrap" aria-current={active ? "page" : undefined}>
               {tab.path === "/dashboard" ? <Home className="h-4 w-4" /> : null}
               <span>{tab.title}</span>
-              {tab.pinned ? <Pin className="h-3 w-3 opacity-70" /> : null}
             </button>
+            {tab.path !== "/dashboard" && (
+              <button type="button" onClick={() => togglePinned(tab.path)} className="rounded-full p-0.5 opacity-60 hover:bg-black/10 hover:opacity-100" aria-label={tab.pinned ? \`إلغاء تثبيت \${tab.title}\` : \`تثبيت \${tab.title}\`} title={tab.pinned ? "إلغاء التثبيت" : "تثبيت التبويب"}>
+                {tab.pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+              </button>
+            )}
             {!tab.pinned && (
-              <button type="button" onClick={() => closeTab(tab.path)} className="rounded-full p-0.5 opacity-60 hover:bg-black/10 hover:opacity-100" aria-label={`إغلاق تبويب ${tab.title}`}>
+              <button type="button" onClick={() => closeTab(tab.path)} className="rounded-full p-0.5 opacity-60 hover:bg-black/10 hover:opacity-100" aria-label={\`إغلاق تبويب \${tab.title}\`}>
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
