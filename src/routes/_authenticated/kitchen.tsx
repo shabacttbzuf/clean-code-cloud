@@ -69,7 +69,7 @@ function KitchenPage() {
       const saleIds = orders.map((order) => order.sale_id);
       if (!saleIds.length) return [];
       const [salesResult, itemsResult] = await Promise.all([
-        supabase.from("sales").select("id,invoice_no,created_at,notes,order_type,table_id,delivery_customer_name,delivery_customer_phone,delivery_address,delivery_fee").in("id", saleIds),
+        (supabase.from("sales" as any) as any).select("id,invoice_no,created_at,notes,order_type,table_id,delivery_customer_name,delivery_customer_phone,delivery_address,delivery_fee").in("id", saleIds),
         supabase.from("sale_items").select("sale_id,product_name,quantity").in("sale_id", saleIds),
       ]);
       if (salesResult.error) throw salesResult.error;
