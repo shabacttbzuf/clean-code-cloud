@@ -20,6 +20,34 @@ export const Route = createFileRoute("/_authenticated/profile")({
   component: ProfilePage,
 });
 
+function formatProfileDate(value?: string | null, dateOnly = false) {
+  if (!value) return "غير مسجل";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("ar-YE", dateOnly ? { year: "numeric", month: "long", day: "numeric" } : undefined);
+}
+
+function accountStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    active: "نشط",
+    suspended: "موقوف",
+    frozen: "مجمّد",
+    pending_approval: "بانتظار الاعتماد",
+    password_expired: "انتهت صلاحية كلمة المرور",
+    archived: "مؤرشف",
+  };
+  return labels[status] ?? "غير معروف";
+}
+
+function ProfileInfo({ label, value, direction = "auto" }: { label: string; value?: string | null; direction?: "ltr" | "rtl" | "auto" }) {
+  return (
+    <div className="min-w-0 rounded-lg border p-3">
+      <div className="mb-1 text-xs text-muted-foreground">{label}</div>
+      <div dir={direction} className="break-words text-sm font-semibold">{value || "غير مسجل"}</div>
+    </div>
+  );
+}
+
 function ProfilePage() {
   const { user } = useAuthSession();
   const { tenantId } = useActiveTenant();
