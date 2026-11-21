@@ -13,7 +13,7 @@ import { z } from "zod";
 import { PageHeader } from "@/components/page-header";
 import { useTheme, DEFAULT_DESIGN, type DesignSettings } from "@/lib/theme";
 import { useSuperOwner } from "@/hooks/use-super-owner";
-import { Palette, RotateCcw, Plus, Trash2, MonitorCog, Image, Megaphone } from "lucide-react";
+import { Palette, RotateCcw, Plus, Trash2, MonitorCog, Image, Building2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   component: SettingsPage,
@@ -21,10 +21,22 @@ export const Route = createFileRoute("/_authenticated/settings")({
 
 type NavOverride = { title?: string; hidden?: boolean };
 
+const CUSTOM_SHORTCUT_ROUTES = new Set([
+  "/dashboard", "/pos", "/sales", "/tables", "/kitchen", "/products", "/inventory",
+  "/inventory/movements", "/purchases", "/suppliers", "/reports", "/customers",
+  "/cash-sessions", "/expenses", "/expense-categories", "/branches", "/categories",
+  "/users", "/users-admin", "/companies", "/departments", "/job-titles",
+  "/employment-types", "/roles", "/team-permissions", "/notifications",
+  "/hr/employees", "/hr/attendance", "/hr/leaves", "/hr/compensation", "/hr/payroll",
+  "/ads", "/promotions", "/support", "/profile", "/settings",
+]);
+
 const MANAGEABLE_NAV_ITEMS = [
   { title: "لوحة التحكم", url: "/dashboard", protected: true },
   { title: "التقارير", url: "/reports" },
   { title: "نقطة البيع", url: "/pos", protected: true },
+  { title: "الطاولات", url: "/tables" },
+  { title: "شاشة المطبخ", url: "/kitchen" },
   { title: "الفواتير", url: "/sales" },
   { title: "الورديات", url: "/cash-sessions" },
   { title: "العملاء", url: "/customers" },
@@ -36,6 +48,7 @@ const MANAGEABLE_NAV_ITEMS = [
   { title: "الفروع", url: "/branches" },
   { title: "المنتجات", url: "/products" },
   { title: "الأقسام", url: "/categories" },
+  { title: "تصنيفات المصروفات", url: "/expense-categories" },
   { title: "الموظفون", url: "/users" },
   { title: "إدارة المستخدمين", url: "/users-admin" },
   { title: "الشركات", url: "/companies" },
@@ -50,6 +63,12 @@ const MANAGEABLE_NAV_ITEMS = [
   { title: "مركز تحكم المالك", url: "/owner-center", protected: true },
   { title: "إدارة النظام", url: "/admin", protected: true },
   { title: "سجل التدقيق", url: "/audit-logs", protected: true },
+  { title: "سجل الدخول", url: "/login-history" },
+  { title: "الحضور", url: "/hr/attendance" },
+  { title: "الإجازات", url: "/hr/leaves" },
+  { title: "المكافآت والحسميات", url: "/hr/compensation" },
+  { title: "الرواتب", url: "/hr/payroll" },
+  { title: "الملف الشخصي", url: "/profile" },
 ] as const;
 
 const schema = z.object({
@@ -60,7 +79,7 @@ const schema = z.object({
 });
 
 function SettingsPage() {
-  const { tenant, tenantId, isAdmin, role, membership } = useActiveTenant();
+  const { tenant, tenantId, role, membership } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
   const { design, saveDesign, resetDesign } = useTheme();
   const qc = useQueryClient();
@@ -102,7 +121,10 @@ function SettingsPage() {
       if (platformBrand.website_url) { try { new URL(platformBrand.website_url); } catch { throw new Error("رابط الموقع غير صالح"); } }
       const { data: authData } = await supabase.auth.getUser();
       const { error } = await (supabase.from("platform_branding" as any) as any).upsert({
-        id: true, ...platformBrand, updated_by: authData.user?.id ?? null, updated_at: new Date().toISOString(),
+        id: true, ...platformBrand, brand_name: brandName, phone: platformBrand.phone.trim() || null,
+        promotional_text: platformBrand.promotional_text.trim() || null,
+        website_url: platformBrand.website_url.trim() || null, logo_url: platformBrand.logo_url.trim() || null,
+        updated_by: authData.user.id, updated_at: new Date().toISOString(),
       }, { onConflict: "id" });
       if (error) throw error;
     },
@@ -127,7 +149,7 @@ function SettingsPage() {
     try {
       const rawTabs = window.localStorage.getItem("ras-custom-sidebar-items-v1");
       const parsedTabs = rawTabs ? JSON.parse(rawTabs) : [];
-      setCustomTabs(Array.isArray(parsedTabs) ? parsedTabs.filter((item) => item && typeof item.title === "string" && typeof item.url === "string").slice(0, 12) : []);
+      setCustomTabs(Array.isArray(parsedTabs) ? parsedTabs.filter((item) => item && typeof item.title === "string" && item.title.trim().length > 0 && item.title.length <= 28 && typeof item.url === "string" && CUSTOM_SHORTCUT_ROUTES.has(item.url)).slice(0, 12) : []);
       const rawOverrides = window.localStorage.getItem("ras-sidebar-overrides-v1");
       const parsedOverrides = rawOverrides ? JSON.parse(rawOverrides) : {};
       setNavOverrides(parsedOverrides && typeof parsedOverrides === "object" && !Array.isArray(parsedOverrides) ? parsedOverrides : {});
@@ -293,7 +315,7 @@ function SettingsPage() {
               {save.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
               حفظ التغييرات
             </Button>
-            {!isAdmin && (
+            {!canEdit && (
               <p className="text-xs text-muted-foreground">
                 * هذه الصفحة للعرض فقط بدورك الحالي.
               </p>
@@ -305,8 +327,8 @@ function SettingsPage() {
       {isSuperOwner && (
         <Card id="platform-branding">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Megaphone className="h-5 w-5 text-primary" /> هوية النظام والتسويق</CardTitle>
-            <CardDescription>هوية مالك المنصة مستقلة عن هوية الشركة والفرع.</CardDescription>
+            <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5 text-primary" /> هوية المنصة</CardTitle>
+            <CardDescription>بيانات العلامة التجارية التي تظهر في المطبوعات مستقلة عن هوية النشاط. إدارة الحملات الإعلانية والعروض الترويجية تتم في أقسامها المنفصلة.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -315,9 +337,9 @@ function SettingsPage() {
               <div className="space-y-2"><Label>رابط الموقع</Label><Input dir="ltr" value={platformBrand.website_url} onChange={(e) => setPlatformBrand({ ...platformBrand, website_url: e.target.value })} placeholder="https://" /></div>
               <div className="space-y-2"><Label>رابط شعار المنصة</Label><Input dir="ltr" value={platformBrand.logo_url} onChange={(e) => setPlatformBrand({ ...platformBrand, logo_url: e.target.value })} placeholder="https://" /></div>
             </div>
-            <div className="space-y-2"><Label>النص الإعلاني</Label><Input value={platformBrand.promotional_text} onChange={(e) => setPlatformBrand({ ...platformBrand, promotional_text: e.target.value })} maxLength={240} /></div>
+            <div className="space-y-2"><Label>عبارة تعريفية للمطبوعات</Label><Input value={platformBrand.promotional_text} onChange={(e) => setPlatformBrand({ ...platformBrand, promotional_text: e.target.value })} maxLength={240} /></div>
             <div className="flex flex-wrap items-center gap-4">
-              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={platformBrand.enabled} onChange={(e) => setPlatformBrand({ ...platformBrand, enabled: e.target.checked })} /> تفعيل الظهور في المطبوعات</label>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={platformBrand.enabled} onChange={(e) => setPlatformBrand({ ...platformBrand, enabled: e.target.checked })} /> تفعيل هوية المنصة في المطبوعات</label>
               <div className="flex items-center gap-2 text-sm"><Label>موضع الظهور</Label><select className="h-9 rounded-md border bg-background px-2" value={platformBrand.placement} onChange={(e) => setPlatformBrand({ ...platformBrand, placement: e.target.value })}><option value="footer">أسفل الصفحة</option><option value="header">أعلى الصفحة</option><option value="both">أعلى وأسفل الصفحة</option></select></div>
             </div>
             <Button onClick={() => savePlatformBrand.mutate()} disabled={savePlatformBrand.isPending}>{savePlatformBrand.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}حفظ هوية النظام</Button>
@@ -368,7 +390,7 @@ function SettingsPage() {
             </div>
             <section className="space-y-3 border-t pt-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="font-semibold">تعديل أسماء التبويبات وإظهارها</h3>
+                <h3 className="font-semibold">تعديل أسماء التطبيقات وإظهارها</h3>
                 <Button type="button" size="sm" variant="outline" onClick={resetNavOverrides}><RotateCcw className="ml-1 h-3 w-3" />إعادة ضبط القائمة</Button>
               </div>
               <p className="text-xs text-muted-foreground">يمكنك إعادة تسمية صفحات القائمة أو إخفاء الصفحات غير الأساسية. الإخفاء لا يحذف الصفحة أو بياناتها ولا يغير صلاحيات الوصول إليها. الصفحات الأساسية محمية.</p>
@@ -385,8 +407,8 @@ function SettingsPage() {
               </div>
             </section>
             <section className="space-y-3 border-t pt-5">
-              <h3 className="font-semibold">إدارة الاختصارات والتبويبات الجانبية</h3>
-              <p className="text-xs text-muted-foreground">أضف تبويباً باسم تختاره يفتح صفحة موجودة. لا ينشئ هذا محرراً لصفحات أو وظائف جديدة؛ إضافة وحدات تشغيلية جديدة تحتاج تطويراً وبرمجة وصلاحيات مستقلة.</p>
+              <h3 className="font-semibold">إدارة اختصارات التطبيقات</h3>
+              <p className="text-xs text-muted-foreground">أضف اختصاراً باسم تختاره إلى لوحة التطبيقات لفتح صفحة موجودة. لا ينشئ هذا محرراً لصفحات أو وظائف جديدة؛ إضافة وحدات تشغيلية جديدة تحتاج تطويراً وبرمجة وصلاحيات مستقلة.</p>
               <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
                 <Input value={newTabTitle} onChange={(e) => setNewTabTitle(e.target.value)} placeholder="اسم التبويب" maxLength={28} />
                 <select value={newTabUrl} onChange={(e) => setNewTabUrl(e.target.value)} className="h-10 rounded-md border bg-background px-3 text-sm">
@@ -397,6 +419,12 @@ function SettingsPage() {
                   <option value="/inventory">المخزون</option>
                   <option value="/purchases">المشتريات</option>
                   <option value="/reports">التقارير</option>
+                  <option value="/tables">الطاولات</option>
+                  <option value="/kitchen">شاشة المطبخ</option>
+                  <option value="/promotions">العروض الترويجية</option>
+                  <option value="/ads">الإعلانات</option>
+                  <option value="/notifications">الإشعارات</option>
+                  <option value="/support">مركز المساعدة</option>
                   <option value="/customers">العملاء</option>
                   <option value="/branches">الفروع</option>
                   <option value="/users">الموظفون</option>
