@@ -42,6 +42,7 @@ import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedRolesRouteImport } from './routes/_authenticated/roles'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedAdsRouteImport } from './routes/_authenticated/ads'
+import { Route as AuthenticatedPromotionsRouteImport } from './routes/_authenticated/promotions'
 import { Route as AuthenticatedSuppliersRouteImport } from './routes/_authenticated/suppliers'
 import { Route as AuthenticatedTeamPermissionsRouteImport } from './routes/_authenticated/team-permissions'
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated/users'
@@ -227,6 +228,11 @@ const AuthenticatedAdsRoute = AuthenticatedAdsRouteImport.update({
   path: '/ads',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPromotionsRoute = AuthenticatedPromotionsRouteImport.update({
+  id: '/promotions',
+  path: '/promotions',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedSuppliersRoute = AuthenticatedSuppliersRouteImport.update({
   id: '/suppliers',
   path: '/suppliers',
@@ -332,6 +338,8 @@ export interface FileRoutesByFullPath {
   '/reports': typeof AuthenticatedReportsRoute
   '/roles': typeof AuthenticatedRolesRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/ads': typeof AuthenticatedAdsRoute
+  '/promotions': typeof AuthenticatedPromotionsRoute
   '/suppliers': typeof AuthenticatedSuppliersRoute
   '/team-permissions': typeof AuthenticatedTeamPermissionsRoute
   '/users': typeof AuthenticatedUsersRoute
@@ -425,6 +433,8 @@ export interface FileRoutesById {
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/roles': typeof AuthenticatedRolesRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/ads': typeof AuthenticatedAdsRoute
+  '/_authenticated/promotions': typeof AuthenticatedPromotionsRoute
   '/_authenticated/suppliers': typeof AuthenticatedSuppliersRoute
   '/_authenticated/team-permissions': typeof AuthenticatedTeamPermissionsRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
@@ -473,6 +483,8 @@ export interface FileRouteTypes {
     | '/reports'
     | '/roles'
     | '/settings'
+    | '/ads'
+    | '/promotions'
     | '/suppliers'
     | '/team-permissions'
     | '/users'
@@ -518,6 +530,8 @@ export interface FileRouteTypes {
     | '/reports'
     | '/roles'
     | '/settings'
+    | '/ads'
+    | '/promotions'
     | '/suppliers'
     | '/team-permissions'
     | '/users'
@@ -563,6 +577,8 @@ export interface FileRouteTypes {
     | '/_authenticated/reports'
     | '/_authenticated/roles'
     | '/_authenticated/settings'
+    | '/_authenticated/ads'
+    | '/_authenticated/promotions'
     | '/_authenticated/suppliers'
     | '/_authenticated/team-permissions'
     | '/_authenticated/users'
@@ -791,6 +807,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/promotions': {
+      id: '/_authenticated/promotions'
+      path: '/promotions'
+      fullPath: '/promotions'
+      preLoaderRoute: typeof AuthenticatedPromotionsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/suppliers': {
       id: '/_authenticated/suppliers'
       path: '/suppliers'
@@ -912,6 +935,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedRolesRoute: typeof AuthenticatedRolesRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedAdsRoute: typeof AuthenticatedAdsRoute
+  AuthenticatedPromotionsRoute: typeof AuthenticatedPromotionsRoute
   AuthenticatedSuppliersRoute: typeof AuthenticatedSuppliersRoute
   AuthenticatedTeamPermissionsRoute: typeof AuthenticatedTeamPermissionsRoute
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
@@ -956,6 +980,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedRolesRoute: AuthenticatedRolesRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedAdsRoute: AuthenticatedAdsRoute,
+  AuthenticatedPromotionsRoute: AuthenticatedPromotionsRoute,
   AuthenticatedSuppliersRoute: AuthenticatedSuppliersRoute,
   AuthenticatedTeamPermissionsRoute: AuthenticatedTeamPermissionsRoute,
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,
