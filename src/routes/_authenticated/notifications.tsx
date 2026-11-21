@@ -21,8 +21,7 @@ function NotificationsPage() {
   const q = useQuery({
     queryKey: ["notifications-list", tenantId, user?.id],
     queryFn: async () => {
-      const [reads, items] = await Promise.all([
-        (supabase.from("notification_reads" as any) as any).select("notification_id").eq("user_id", user!.id),
+      const [items, readIds] = await Promise.all([
         (async () => {
           const rows: any[] = [];
           for (let from = 0; ; from += 500) {
@@ -34,12 +33,19 @@ function NotificationsPage() {
           }
           return rows;
         })(),
+        (async () => {
+          const ids = new Set<string>();
+          for (let from = 0; ; from += 500) {
+            const { data, error } = await (supabase.from("notification_reads" as any) as any)
+              .select("notification_id").eq("user_id", user!.id).range(from, from + 499);
+            if (error) throw error;
+            for (const row of data ?? []) ids.add(row.notification_id);
+            if ((data ?? []).length < 500) break;
+          }
+          return ids;
+        })(),
       ]);
-      if (reads.error) throw reads.error;
-      return {
-        items,
-        readIds: new Set<string>((reads.data ?? []).map((r: { notification_id: string }) => r.notification_id)),
-      };
+      return { items, readIds };
     },
     enabled: !!tenantId && !!user?.id,
     refetchInterval: 30_000,
