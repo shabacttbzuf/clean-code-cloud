@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, FileText, Download, Calendar, TrendingUp, Wallet, Package, Users, Printer } from "lucide-react";
 import { formatMoney, formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
+import { calculatePercentChange, calculateProfitMetrics, fetchAllRows } from "@/lib/report-analytics";
 
 export const Route = createFileRoute("/_authenticated/reports")({
   component: ReportsPage,
@@ -45,89 +46,104 @@ function ReportsPage() {
     queryKey: ["reports", tenantId, from, to, branchId],
     queryFn: async () => {
       if (!tenantId) return null;
+      if (from > to) throw new Error("تاريخ البداية يجب أن يسبق تاريخ النهاية أو يساويه.");
       const fromDate = `${from}T00:00:00.000Z`;
       const toDate = `${to}T23:59:59.999Z`;
 
-      const [salesRes, expensesRes, itemsRes, sessionsRes, inventoryRes, refundsRes] = await Promise.all([
-        supabase
-          .from("sales")
+      const [sales, expenses, items, sessions, inventory, refunds] = await Promise.all([
+        fetchAllRows((pageFrom, pageTo) => supabase.from("sales")
           .select("id, created_at, total, subtotal, discount, tax_amount, payment_method, cashier_id, branch_id, status")
-          .eq("tenant_id", tenantId)
-          .neq("status", "void")
-          .gte("created_at", fromDate)
-          .lte("created_at", toDate)
-          .order("created_at", { ascending: false })
-          .limit(5000),
-        supabase
-          .from("expenses")
+          .eq("tenant_id", tenantId).neq("status", "void")
+          .gte("created_at", fromDate).lte("created_at", toDate)
+          .order("created_at", { ascending: false }).range(pageFrom, pageTo)),
+        fetchAllRows((pageFrom, pageTo) => supabase.from("expenses")
           .select("id, paid_at, amount, category_id, description, branch_id")
-          .eq("tenant_id", tenantId)
-          .gte("paid_at", from)
-          .lte("paid_at", to)
-          .order("paid_at", { ascending: false })
-          .limit(5000),
-        supabase
-          .from("sale_items")
-          .select("product_name, quantity, line_total, sale_id, created_at")
-          .eq("tenant_id", tenantId)
-          .gte("created_at", fromDate)
-          .lte("created_at", toDate)
-          .limit(20000),
-        supabase
-          .from("cash_sessions")
+          .eq("tenant_id", tenantId).gte("paid_at", from).lte("paid_at", to)
+          .order("paid_at", { ascending: false }).range(pageFrom, pageTo)),
+        fetchAllRows((pageFrom, pageTo) => supabase.from("sale_items")
+          .select("product_name, quantity, line_total, sale_id, created_at, cost_price_snapshot")
+          .eq("tenant_id", tenantId).gte("created_at", fromDate).lte("created_at", toDate)
+          .range(pageFrom, pageTo)),
+        fetchAllRows((pageFrom, pageTo) => supabase.from("cash_sessions")
           .select("cashier_id, opening_balance, closing_balance, expected_cash, cash_difference, opened_at, closed_at, status, branch_id")
-          .eq("tenant_id", tenantId)
-          .gte("opened_at", fromDate)
-          .lte("opened_at", toDate)
-          .limit(5000),
-        supabase
-          .from("inventory")
-          .select("quantity, product_id, branch_id")
-          .eq("tenant_id", tenantId)
-          .limit(10000),
-        supabase
-          .from("sale_refunds")
+          .eq("tenant_id", tenantId).gte("opened_at", fromDate).lte("opened_at", toDate)
+          .range(pageFrom, pageTo)),
+        fetchAllRows((pageFrom, pageTo) => supabase.from("inventory")
+          .select("quantity, product_id, branch_id").eq("tenant_id", tenantId)
+          .range(pageFrom, pageTo)),
+        fetchAllRows((pageFrom, pageTo) => supabase.from("sale_refunds")
           .select("id, sale_id, subtotal, discount, tax_amount, total, refund_method, created_at, branch_id")
-          .eq("tenant_id", tenantId)
-          .gte("created_at", fromDate)
-          .lte("created_at", toDate)
-          .limit(5000),
+          .eq("tenant_id", tenantId).gte("created_at", fromDate).lte("created_at", toDate)
+          .range(pageFrom, pageTo)),
       ]);
 
-      if (salesRes.error) throw salesRes.error;
-      if (expensesRes.error) throw expensesRes.error;
-      if (itemsRes.error) throw itemsRes.error;
-      if (sessionsRes.error) throw sessionsRes.error;
-      if (inventoryRes.error) throw inventoryRes.error;
-      if (refundsRes.error) throw refundsRes.error;
-
-      const sales = (salesRes.data ?? []).filter((row) => row.status !== "void") as Array<{
-        id: string; created_at: string; total: number; subtotal: number; discount: number; tax_amount: number;
-        payment_method: string; cashier_id: string; branch_id: string; status: string;
-      }>;
-      const expenses = (expensesRes.data ?? []) as Array<{ id: string; paid_at: string; amount: number; category_id: string | null; description: string | null; branch_id: string | null }>;
-      const items = (itemsRes.data ?? []) as Array<{ product_name: string; quantity: number; line_total: number; sale_id: string; created_at: string }>;
-      const sessions = (sessionsRes.data ?? []) as Array<{
-        cashier_id: string; opening_balance: number; closing_balance: number | null;
-        expected_cash: number | null; cash_difference: number | null; opened_at: string; closed_at: string | null; status: string; branch_id: string | null;
-      }>;
-      const inventory = (inventoryRes.data ?? []) as Array<{ quantity: number; product_id: string; branch_id: string }>;
-      const refunds = (refundsRes.data ?? []) as Array<{
-        id: string; sale_id: string; subtotal: number; discount: number;
-        tax_amount: number; total: number; refund_method: string; created_at: string; branch_id: string | null;
-      }>;
-      const refundIds = refunds.map((refund) => refund.id);
-      const refundItemsRes = refundIds.length
-        ? await supabase.from("sale_refund_items")
-            .select("refund_id, product_name, quantity, subtotal_amount, discount_amount, tax_amount, restocked")
-            .in("refund_id", refundIds)
-        : { data: [], error: null };
-      if (refundItemsRes.error) throw refundItemsRes.error;
-      const saleIds = new Set(sales.map((sale) => sale.id));
+      const validSales = sales.filter((row) => row.status !== "void");
+      const saleIds = new Set(validSales.map((sale) => sale.id));
       const validItems = items.filter((item) => saleIds.has(item.sale_id));
-      const refundItems = refundItemsRes.data ?? [];
+      const refundIds = refunds.map((refund) => refund.id);
+      const refundItemGroups = await Promise.all(
+        Array.from({ length: Math.ceil(refundIds.length / 100) }, (_, index) => refundIds.slice(index * 100, (index + 1) * 100))
+          .map((ids) => fetchAllRows((pageFrom, pageTo) => supabase.from("sale_refund_items")
+            .select("refund_id, product_name, quantity, subtotal_amount, discount_amount, tax_amount, restocked, cost_price_snapshot")
+            .in("refund_id", ids).range(pageFrom, pageTo))),
+      );
+      const refundItems = refundItemGroups.flat();
 
-      return { sales, expenses, items: validItems, sessions, inventory, refunds, refundItems };
+      const inventoryProductIds = [...new Set(inventory.map((row) => row.product_id))];
+      const productGroups = await Promise.all(
+        Array.from({ length: Math.ceil(inventoryProductIds.length / 100) }, (_, index) => inventoryProductIds.slice(index * 100, (index + 1) * 100))
+          .map((ids) => fetchAllRows((pageFrom, pageTo) => supabase.from("products")
+            .select("id, name, sku, cost_price, min_stock").eq("tenant_id", tenantId)
+            .in("id", ids).range(pageFrom, pageTo))),
+      );
+      const inventoryProducts = productGroups.flat();
+
+      const periodStart = Date.parse(fromDate);
+      const periodEnd = Date.parse(toDate);
+      const periodLength = periodEnd - periodStart + 1;
+      const previousFrom = new Date(periodStart - periodLength).toISOString();
+      const previousTo = new Date(periodStart - 1).toISOString();
+      const [previousSales, previousExpenses, previousRefunds] = await Promise.all([
+        fetchAllRows((pageFrom, pageTo) => {
+          let query = supabase.from("sales").select("id,total")
+            .eq("tenant_id", tenantId).neq("status", "void")
+            .gte("created_at", previousFrom).lte("created_at", previousTo);
+          if (branchId !== "all") query = query.eq("branch_id", branchId);
+          return query.range(pageFrom, pageTo);
+        }),
+        fetchAllRows((pageFrom, pageTo) => {
+          let query = supabase.from("expenses").select("amount")
+            .eq("tenant_id", tenantId)
+            .gte("paid_at", previousFrom.slice(0, 10)).lte("paid_at", previousTo.slice(0, 10));
+          if (branchId !== "all") query = query.eq("branch_id", branchId);
+          return query.range(pageFrom, pageTo);
+        }),
+        fetchAllRows((pageFrom, pageTo) => {
+          let query = supabase.from("sale_refunds").select("total")
+            .eq("tenant_id", tenantId)
+            .gte("created_at", previousFrom).lte("created_at", previousTo);
+          if (branchId !== "all") query = query.eq("branch_id", branchId);
+          return query.range(pageFrom, pageTo);
+        }),
+      ]);
+      const previousPeriod = {
+        salesTotal: previousSales.reduce((sum, row) => sum + Number(row.total), 0)
+          - previousRefunds.reduce((sum, row) => sum + Number(row.total), 0),
+        expensesTotal: previousExpenses.reduce((sum, row) => sum + Number(row.amount), 0),
+        invoiceCount: previousSales.length,
+      };
+
+      return {
+        sales: validSales,
+        expenses,
+        items: validItems,
+        sessions,
+        inventory,
+        inventoryProducts,
+        refunds,
+        refundItems,
+        previousPeriod,
+      };
     },
     enabled: !!tenantId,
     staleTime: 60_000,
@@ -137,7 +153,7 @@ function ReportsPage() {
 
   const data = report.data;
   const safe = useMemo(() => {
-    const raw = data ?? { sales: [] as any[], expenses: [] as any[], items: [] as any[], sessions: [] as any[], inventory: [] as any[], refunds: [] as any[], refundItems: [] as any[] };
+    const raw = data ?? { sales: [] as any[], expenses: [] as any[], items: [] as any[], sessions: [] as any[], inventory: [] as any[], inventoryProducts: [] as any[], refunds: [] as any[], refundItems: [] as any[] };
     if (branchId === "all") return raw;
     const sales = raw.sales.filter((row: any) => row.branch_id === branchId);
     const refunds = raw.refunds.filter((row: any) => row.branch_id === branchId);
@@ -155,6 +171,43 @@ function ReportsPage() {
     };
   }, [data, branchId]);
 
+  const profitMetrics = useMemo(() => calculateProfitMetrics({
+    sales: safe.sales,
+    refunds: safe.refunds,
+    saleItems: safe.items,
+    refundItems: safe.refundItems,
+    expenses: safe.expenses,
+  }), [safe]);
+
+  const inventoryRows = useMemo(() => {
+    const products = new Map((safe.inventoryProducts ?? []).map((product: any) => [product.id, product]));
+    const branches = new Map((branchesQuery.data ?? []).map((branch) => [branch.id, branch.name]));
+    return safe.inventory.map((row: any) => {
+      const product = products.get(row.product_id);
+      return product ? {
+        productId: row.product_id,
+        productName: product.name,
+        sku: product.sku,
+        branchId: row.branch_id,
+        branchName: branches.get(row.branch_id) ?? "—",
+        quantity: Number(row.quantity),
+        minimum: Number(product.min_stock ?? 0),
+        costPrice: Number(product.cost_price ?? 0),
+        estimatedValue: Number(row.quantity) * Number(product.cost_price ?? 0),
+      } : null;
+    }).filter((row: any): row is NonNullable<typeof row> => row !== null)
+      .sort((a: any, b: any) => (a.quantity - a.minimum) - (b.quantity - b.minimum));
+  }, [safe.inventory, safe.inventoryProducts, branchesQuery.data]);
+
+  const lowStockRows = useMemo(
+    () => inventoryRows.filter((row: any) => row.quantity <= row.minimum),
+    [inventoryRows],
+  );
+  const inventoryValue = useMemo(
+    () => inventoryRows.reduce((sum: number, row: any) => sum + row.estimatedValue, 0),
+    [inventoryRows],
+  );
+
   const totals = useMemo(() => {
     const grossSalesTotal = safe.sales.reduce((s: number, r: any) => s + Number(r.total), 0);
     const refundsTotal = safe.refunds.reduce((s: number, r: any) => s + Number(r.total), 0);
@@ -167,6 +220,12 @@ function ReportsPage() {
     const net = salesTotal - expensesTotal;
     return { salesTotal, grossSalesTotal, refundsTotal, expensesTotal, discountTotal, taxTotal, net };
   }, [safe]);
+
+  const comparison = {
+    sales: calculatePercentChange(totals.salesTotal, data?.previousPeriod.salesTotal ?? 0),
+    expenses: calculatePercentChange(totals.expensesTotal, data?.previousPeriod.expensesTotal ?? 0),
+    invoices: calculatePercentChange(safe.sales.length, data?.previousPeriod.invoiceCount ?? 0),
+  };
 
   const groupedSales = useMemo(() => {
     const map = new Map<string, { label: string; sales: number; count: number; expenses: number }>();
@@ -242,7 +301,19 @@ function ReportsPage() {
     return Array.from(map.values()).sort((a, b) => b.sales - a.sales);
   }, [safe.sales, safe.refunds]);
 
-  if (!data) {
+  if (report.isError) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="التقارير" subtitle="تعذر تحميل بيانات التقرير." />
+        <Card><CardContent className="flex flex-col items-center gap-3 p-6 text-center">
+          <p role="alert" className="text-sm text-destructive">{report.error instanceof Error ? report.error.message : "حدث خطأ أثناء تحميل التقارير."}</p>
+          <Button variant="outline" onClick={() => void report.refetch()}>إعادة المحاولة</Button>
+        </CardContent></Card>
+      </div>
+    );
+  }
+
+  if (report.isLoading || !data) {
     return (
       <div className="space-y-6">
         <PageHeader title="التقارير" subtitle="تقارير مبيعات، مصروفات، مخزون وموظفين" />
@@ -317,18 +388,40 @@ function ReportsPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi icon={<TrendingUp className="h-5 w-5" />} label="إجمالي المبيعات" value={`${formatMoney(totals.salesTotal)} ${tenant?.currency ?? ""}`} tone="primary" />
-        <Kpi icon={<Wallet className="h-5 w-5" />} label="إجمالي المصروفات" value={`${formatMoney(totals.expensesTotal)} ${tenant?.currency ?? ""}`} tone="destructive" />
-        <Kpi icon={<FileText className="h-5 w-5" />} label="الفائض قبل تكلفة البضاعة" value={`${formatMoney(totals.net)} ${tenant?.currency ?? ""}`} tone={totals.net >= 0 ? "success" : "destructive"} />
-        <Kpi icon={<Package className="h-5 w-5" />} label="عدد الفواتير" value={String(safe.sales.length)} tone="primary" />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+        <Kpi icon={<TrendingUp className="h-5 w-5" />} label="المبيعات بعد المرتجعات" value={`${formatMoney(totals.salesTotal)} ${tenant?.currency ?? ""}`} tone="primary" />
+        <Kpi icon={<Wallet className="h-5 w-5" />} label="المصروفات" value={`${formatMoney(totals.expensesTotal)} ${tenant?.currency ?? ""}`} tone="destructive" />
+        <Kpi icon={<Package className="h-5 w-5" />} label="تكلفة البضاعة" value={profitMetrics.costOfGoods === null ? "غير مكتملة" : `${formatMoney(profitMetrics.costOfGoods)} ${tenant?.currency ?? ""}`} tone="primary" />
+        <Kpi icon={<FileText className="h-5 w-5" />} label="مجمل الربح" value={profitMetrics.grossProfit === null ? "غير متاح" : `${formatMoney(profitMetrics.grossProfit)} ${tenant?.currency ?? ""}`} tone={profitMetrics.grossProfit !== null && profitMetrics.grossProfit >= 0 ? "success" : "destructive"} />
+        <Kpi icon={<Wallet className="h-5 w-5" />} label="صافي الربح التشغيلي" value={profitMetrics.netProfit === null ? "غير متاح" : `${formatMoney(profitMetrics.netProfit)} ${tenant?.currency ?? ""}`} tone={profitMetrics.netProfit !== null && profitMetrics.netProfit >= 0 ? "success" : "destructive"} />
+        <Kpi icon={<Users className="h-5 w-5" />} label="عدد الفواتير" value={String(safe.sales.length)} tone="primary" />
       </div>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border bg-card px-4 py-3 text-xs">
+        <span className="font-semibold text-foreground">مقارنة بالفترة السابقة المماثلة:</span>
+        {([
+          ["المبيعات", comparison.sales],
+          ["المصروفات", comparison.expenses],
+          ["الفواتير", comparison.invoices],
+        ] as Array<[string, number | null]>).map(([label, change]) => (
+          <span key={label} className="text-muted-foreground">
+            {label}: <strong className={change === null ? "text-muted-foreground" : change >= 0 ? "text-success" : "text-destructive"}>
+              {change === null ? "لا توجد قاعدة مقارنة" : `${change > 0 ? "+" : ""}${change.toFixed(1)}%`}
+            </strong>
+          </span>
+        ))}
+      </div>
+      {profitMetrics.unknownCostItems > 0 && (
+        <div role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-800 dark:text-amber-300">
+          لا يمكن اعتماد الربحية بدقة: توجد {profitMetrics.unknownCostItems} بنود بيع أو مرتجعات مستردة بلا تكلفة محفوظة وقت البيع. لم يتم تقديرها من سعر المنتج الحالي.
+        </div>
+      )}
 
       <Tabs defaultValue="sales">
-        <TabsList className="grid w-full grid-cols-3 sm:w-auto sm:inline-grid">
+        <TabsList className="grid w-full grid-cols-4 sm:w-auto sm:inline-grid">
           <TabsTrigger value="sales">المبيعات</TabsTrigger>
           <TabsTrigger value="products">المنتجات</TabsTrigger>
           <TabsTrigger value="staff">الموظفون</TabsTrigger>
+          <TabsTrigger value="inventory">المخزون</TabsTrigger>
         </TabsList>
 
         <TabsContent value="sales" className="space-y-4 pt-2">
@@ -489,6 +582,61 @@ function ReportsPage() {
                   </tbody>
                 </table>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="inventory" className="space-y-4 pt-2">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Kpi icon={<Package className="h-5 w-5" />} label="قيمة المخزون الحالية بالتكلفة" value={`${formatMoney(inventoryValue)} ${tenant?.currency ?? ""}`} tone="primary" />
+            <Kpi icon={<Package className="h-5 w-5" />} label="أصناف عند حد إعادة الطلب أو أقل" value={String(lowStockRows.length)} tone={lowStockRows.length ? "destructive" : "success"} />
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="font-semibold">تفاصيل أرصدة المخزون</h3>
+              <p className="text-xs text-muted-foreground">القيمة تقديرية وفق تكلفة المنتج الحالية، وليست تكلفة تاريخية للمبيعات.</p>
+            </div>
+            {canExportReports && <Button variant="outline" size="sm" onClick={() => exportCsv(
+              inventoryRows.map((row: any) => ({
+                المنتج: row.productName, الرمز: row.sku ?? "", الفرع: row.branchName,
+                الكمية: row.quantity, "حد إعادة الطلب": row.minimum,
+                "تكلفة الوحدة الحالية": row.costPrice, "القيمة التقديرية": row.estimatedValue,
+              })),
+              `inventory-report-${from}-${to}.csv`,
+            )}><Download className="ml-2 h-4 w-4" />تصدير CSV</Button>}
+          </div>
+          <Card>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 text-right">
+                    <tr>
+                      <th className="p-3 font-medium">المنتج</th>
+                      <th className="p-3 font-medium">الفرع</th>
+                      <th className="p-3 font-medium">الرصيد</th>
+                      <th className="p-3 font-medium">حد إعادة الطلب</th>
+                      <th className="p-3 font-medium">قيمة المخزون</th>
+                      <th className="p-3 font-medium">الحالة</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inventoryRows.slice(0, 100).map((row: any) => (
+                      <tr key={`${row.productId}-${row.branchId}`} className="border-t hover:bg-muted/30">
+                        <td className="p-3 font-medium">{row.productName}{row.sku && <span className="mr-2 text-xs text-muted-foreground">{row.sku}</span>}</td>
+                        <td className="p-3">{row.branchName}</td>
+                        <td className="p-3 num">{formatMoney(row.quantity, 3)}</td>
+                        <td className="p-3 num">{formatMoney(row.minimum, 3)}</td>
+                        <td className="p-3 num">{formatMoney(row.estimatedValue)}</td>
+                        <td className="p-3">{row.quantity <= row.minimum
+                          ? <span className="font-semibold text-destructive">يحتاج إعادة طلب</span>
+                          : <span className="text-success">متوفر</span>}</td>
+                      </tr>
+                    ))}
+                    {inventoryRows.length === 0 && <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">لا توجد أرصدة مخزون ضمن نطاق الصلاحيات الحالي.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+              {inventoryRows.length > 100 && <p className="border-t p-3 text-center text-xs text-muted-foreground">يتم عرض أول 100 صنف حسب أولوية النقص؛ التصدير يتضمن جميع الأصناف.</p>}
             </CardContent>
           </Card>
         </TabsContent>
