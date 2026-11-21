@@ -117,18 +117,46 @@ function SettingsPage() {
   }, [platformBrandQuery.data]);
   const savePlatformBrand = useMutation({
     mutationFn: async () => {
-      if (!platformBrand.brand_name.trim()) throw new Error("أدخل اسم العلامة التجارية");
-      if (platformBrand.website_url) { try { new URL(platformBrand.website_url); } catch { throw new Error("رابط الموقع غير صالح"); } }
-      const { data: authData } = await supabase.auth.getUser();
+      const brandName = platformBrand.brand_name.trim();
+      if (brandName.length < 2 || brandName.length > 100) {
+        throw new Error("اسم العلامة التجارية يجب أن يكون بين حرفين و100 حرف.");
+      }
+      if (platformBrand.phone.trim().length > 30) throw new Error("رقم التواصل أطول من المسموح.");
+      if (platformBrand.promotional_text.length > 240) throw new Error("العبارة التعريفية يجب ألا تتجاوز 240 حرفاً.");
+      if (!["footer", "header", "both"].includes(platformBrand.placement)) throw new Error("موضع الظهور غير صالح.");
+
+      for (const [field, value] of [["الموقع", platformBrand.website_url], ["الشعار", platformBrand.logo_url]] as const) {
+        if (!value.trim()) continue;
+        try {
+          const parsed = new URL(value.trim());
+          if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error();
+        } catch {
+          throw new Error(`رابط ${field} غير صالح؛ استخدم http أو https.`);
+        }
+      }
+
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!authData.user) throw new Error("انتهت جلسة الدخول؛ أعد تسجيل الدخول.");
+
       const { error } = await (supabase.from("platform_branding" as any) as any).upsert({
-        id: true, ...platformBrand, brand_name: brandName, phone: platformBrand.phone.trim() || null,
+        id: true,
+        brand_name: brandName,
+        phone: platformBrand.phone.trim() || null,
         promotional_text: platformBrand.promotional_text.trim() || null,
-        website_url: platformBrand.website_url.trim() || null, logo_url: platformBrand.logo_url.trim() || null,
-        updated_by: authData.user.id, updated_at: new Date().toISOString(),
+        website_url: platformBrand.website_url.trim() || null,
+        logo_url: platformBrand.logo_url.trim() || null,
+        enabled: platformBrand.enabled,
+        placement: platformBrand.placement,
+        updated_by: authData.user.id,
+        updated_at: new Date().toISOString(),
       }, { onConflict: "id" });
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["platform-branding"] }); toast.success("تم حفظ هوية النظام"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["platform-branding"] });
+      toast.success("تم حفظ هوية المنصة");
+    },
     onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر حفظ الهوية"),
   });
 
@@ -161,16 +189,19 @@ function SettingsPage() {
 
   const save = useMutation({
     mutationFn: async () => {
+      if (!tenantId) throw new Error("لا توجد شركة نشطة لحفظ الإعدادات.");
       const v = schema.parse({ name, currency, tax_rate: tax, logo_url: logoUrl.trim() || null });
-      const { error } = await supabase.from("tenants").update(v).eq("id", tenantId!);
+      const { data, error } = await supabase.from("tenants")
+        .update(v).eq("id", tenantId).select("id").maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error("لم يتم حفظ الإعدادات؛ تحقق من صلاحية إدارة الشركة.");
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tenant", tenantId] });
       toast.success("تم حفظ الإعدادات");
     },
-    onError: (e) => {
-      const msg = e instanceof z.ZodError ? e.issues[0].message : e instanceof Error ? e.message : "فشل الحفظ";
+    onError: (error) => {
+      const msg = error instanceof z.ZodError ? error.issues[0].message : error instanceof Error ? error.message : "فشل الحفظ";
       toast.error(msg);
     },
   });
@@ -240,8 +271,7 @@ function SettingsPage() {
 
   function addCustomTab() {
     const title = newTabTitle.trim();
-    const allowedRoutes = ["/dashboard", "/pos", "/sales", "/products", "/inventory", "/purchases", "/reports", "/customers", "/branches", "/users", "/settings"];
-    if (!title || title.length > 28 || !allowedRoutes.includes(newTabUrl)) { toast.error("أدخل اسماً صالحاً واختر صفحة موجودة"); return; }
+    if (!title || title.length > 28 || !CUSTOM_SHORTCUT_ROUTES.has(newTabUrl)) { toast.error("أدخل اسماً صالحاً واختر صفحة موجودة"); return; }
     if (customTabs.some((item) => item.url === newTabUrl)) { toast.error("هذا الاختصار مضاف بالفعل"); return; }
     if (customTabs.length >= 12) { toast.error("الحد الأقصى 12 اختصاراً"); return; }
     persistCustomTabs([...customTabs, { title, url: newTabUrl }]);
