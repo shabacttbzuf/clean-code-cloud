@@ -13,7 +13,8 @@ import { z } from "zod";
 import { PageHeader } from "@/components/page-header";
 import { useTheme, DEFAULT_DESIGN, type DesignSettings } from "@/lib/theme";
 import { useSuperOwner } from "@/hooks/use-super-owner";
-import { Palette, RotateCcw, Plus, Trash2, MonitorCog, Image, Megaphone } from "lucide-react";
+import { isAllowedCustomShortcutRoute, normalizeCustomShortcuts } from "@/lib/navigation-shortcuts";
+import { Palette, RotateCcw, Plus, Trash2, MonitorCog, Image, Building2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   component: SettingsPage,
@@ -21,10 +22,14 @@ export const Route = createFileRoute("/_authenticated/settings")({
 
 type NavOverride = { title?: string; hidden?: boolean };
 
+
+
 const MANAGEABLE_NAV_ITEMS = [
   { title: "لوحة التحكم", url: "/dashboard", protected: true },
   { title: "التقارير", url: "/reports" },
   { title: "نقطة البيع", url: "/pos", protected: true },
+  { title: "الطاولات", url: "/tables" },
+  { title: "شاشة المطبخ", url: "/kitchen" },
   { title: "الفواتير", url: "/sales" },
   { title: "الورديات", url: "/cash-sessions" },
   { title: "العملاء", url: "/customers" },
@@ -36,7 +41,9 @@ const MANAGEABLE_NAV_ITEMS = [
   { title: "الفروع", url: "/branches" },
   { title: "المنتجات", url: "/products" },
   { title: "الأقسام", url: "/categories" },
+  { title: "تصنيفات المصروفات", url: "/expense-categories" },
   { title: "الموظفون", url: "/users" },
+  { title: "ملفات الموظفين", url: "/hr/employees" },
   { title: "إدارة المستخدمين", url: "/users-admin" },
   { title: "الشركات", url: "/companies" },
   { title: "الأقسام الإدارية", url: "/departments" },
@@ -45,11 +52,19 @@ const MANAGEABLE_NAV_ITEMS = [
   { title: "إدارة الأدوار", url: "/roles" },
   { title: "صلاحيات الفريق", url: "/team-permissions" },
   { title: "الإشعارات", url: "/notifications" },
+  { title: "مركز المساعدة والدعم", url: "/support" },
   { title: "الإعلانات", url: "/ads" },
+  { title: "العروض الترويجية", url: "/promotions" },
   { title: "الإعدادات", url: "/settings", protected: true },
   { title: "مركز تحكم المالك", url: "/owner-center", protected: true },
   { title: "إدارة النظام", url: "/admin", protected: true },
   { title: "سجل التدقيق", url: "/audit-logs", protected: true },
+  { title: "سجل الدخول", url: "/login-history" },
+  { title: "الحضور", url: "/hr/attendance" },
+  { title: "الإجازات", url: "/hr/leaves" },
+  { title: "المكافآت والحسميات", url: "/hr/compensation" },
+  { title: "الرواتب", url: "/hr/payroll" },
+  { title: "الملف الشخصي", url: "/profile" },
 ] as const;
 
 const schema = z.object({
@@ -60,7 +75,7 @@ const schema = z.object({
 });
 
 function SettingsPage() {
-  const { tenant, tenantId, isAdmin, role, membership } = useActiveTenant();
+  const { tenant, tenantId, role, membership } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
   const { design, saveDesign, resetDesign } = useTheme();
   const qc = useQueryClient();
@@ -98,15 +113,46 @@ function SettingsPage() {
   }, [platformBrandQuery.data]);
   const savePlatformBrand = useMutation({
     mutationFn: async () => {
-      if (!platformBrand.brand_name.trim()) throw new Error("أدخل اسم العلامة التجارية");
-      if (platformBrand.website_url) { try { new URL(platformBrand.website_url); } catch { throw new Error("رابط الموقع غير صالح"); } }
-      const { data: authData } = await supabase.auth.getUser();
+      const brandName = platformBrand.brand_name.trim();
+      if (brandName.length < 2 || brandName.length > 100) {
+        throw new Error("اسم العلامة التجارية يجب أن يكون بين حرفين و100 حرف.");
+      }
+      if (platformBrand.phone.trim().length > 30) throw new Error("رقم التواصل أطول من المسموح.");
+      if (platformBrand.promotional_text.length > 240) throw new Error("العبارة التعريفية يجب ألا تتجاوز 240 حرفاً.");
+      if (!["footer", "header", "both"].includes(platformBrand.placement)) throw new Error("موضع الظهور غير صالح.");
+
+      for (const [field, value] of [["الموقع", platformBrand.website_url], ["الشعار", platformBrand.logo_url]] as const) {
+        if (!value.trim()) continue;
+        try {
+          const parsed = new URL(value.trim());
+          if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error();
+        } catch {
+          throw new Error(`رابط ${field} غير صالح؛ استخدم http أو https.`);
+        }
+      }
+
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!authData.user) throw new Error("انتهت جلسة الدخول؛ أعد تسجيل الدخول.");
+
       const { error } = await (supabase.from("platform_branding" as any) as any).upsert({
-        id: true, ...platformBrand, updated_by: authData.user?.id ?? null, updated_at: new Date().toISOString(),
+        id: true,
+        brand_name: brandName,
+        phone: platformBrand.phone.trim() || null,
+        promotional_text: platformBrand.promotional_text.trim() || null,
+        website_url: platformBrand.website_url.trim() || null,
+        logo_url: platformBrand.logo_url.trim() || null,
+        enabled: platformBrand.enabled,
+        placement: platformBrand.placement,
+        updated_by: authData.user.id,
+        updated_at: new Date().toISOString(),
       }, { onConflict: "id" });
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["platform-branding"] }); toast.success("تم حفظ هوية النظام"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["platform-branding"] });
+      toast.success("تم حفظ هوية المنصة");
+    },
     onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر حفظ الهوية"),
   });
 
@@ -127,7 +173,7 @@ function SettingsPage() {
     try {
       const rawTabs = window.localStorage.getItem("ras-custom-sidebar-items-v1");
       const parsedTabs = rawTabs ? JSON.parse(rawTabs) : [];
-      setCustomTabs(Array.isArray(parsedTabs) ? parsedTabs.filter((item) => item && typeof item.title === "string" && typeof item.url === "string").slice(0, 12) : []);
+      setCustomTabs(normalizeCustomShortcuts(parsedTabs));
       const rawOverrides = window.localStorage.getItem("ras-sidebar-overrides-v1");
       const parsedOverrides = rawOverrides ? JSON.parse(rawOverrides) : {};
       setNavOverrides(parsedOverrides && typeof parsedOverrides === "object" && !Array.isArray(parsedOverrides) ? parsedOverrides : {});
@@ -139,16 +185,19 @@ function SettingsPage() {
 
   const save = useMutation({
     mutationFn: async () => {
+      if (!tenantId) throw new Error("لا توجد شركة نشطة لحفظ الإعدادات.");
       const v = schema.parse({ name, currency, tax_rate: tax, logo_url: logoUrl.trim() || null });
-      const { error } = await supabase.from("tenants").update(v).eq("id", tenantId!);
+      const { data, error } = await supabase.from("tenants")
+        .update(v).eq("id", tenantId).select("id").maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error("لم يتم حفظ الإعدادات؛ تحقق من صلاحية إدارة الشركة.");
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tenant", tenantId] });
       toast.success("تم حفظ الإعدادات");
     },
-    onError: (e) => {
-      const msg = e instanceof z.ZodError ? e.issues[0].message : e instanceof Error ? e.message : "فشل الحفظ";
+    onError: (error) => {
+      const msg = error instanceof z.ZodError ? error.issues[0].message : error instanceof Error ? error.message : "فشل الحفظ";
       toast.error(msg);
     },
   });
@@ -186,9 +235,10 @@ function SettingsPage() {
   }
 
   function persistCustomTabs(next: Array<{ title: string; url: string }>) {
-    setCustomTabs(next);
+    const safeNext = normalizeCustomShortcuts(next);
+    setCustomTabs(safeNext);
     try {
-      window.localStorage.setItem("ras-custom-sidebar-items-v1", JSON.stringify(next));
+      window.localStorage.setItem("ras-custom-sidebar-items-v1", JSON.stringify(safeNext));
       window.dispatchEvent(new Event("ras-custom-tabs-updated"));
       toast.success("تم تحديث الاختصارات");
     } catch { toast.error("تعذر حفظ الاختصارات على هذا الجهاز"); }
@@ -218,8 +268,7 @@ function SettingsPage() {
 
   function addCustomTab() {
     const title = newTabTitle.trim();
-    const allowedRoutes = ["/dashboard", "/pos", "/sales", "/products", "/inventory", "/purchases", "/reports", "/customers", "/branches", "/users", "/settings"];
-    if (!title || title.length > 28 || !allowedRoutes.includes(newTabUrl)) { toast.error("أدخل اسماً صالحاً واختر صفحة موجودة"); return; }
+    if (!title || title.length > 28 || !isAllowedCustomShortcutRoute(newTabUrl)) { toast.error("أدخل اسماً صالحاً واختر صفحة موجودة"); return; }
     if (customTabs.some((item) => item.url === newTabUrl)) { toast.error("هذا الاختصار مضاف بالفعل"); return; }
     if (customTabs.length >= 12) { toast.error("الحد الأقصى 12 اختصاراً"); return; }
     persistCustomTabs([...customTabs, { title, url: newTabUrl }]);
@@ -293,7 +342,7 @@ function SettingsPage() {
               {save.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
               حفظ التغييرات
             </Button>
-            {!isAdmin && (
+            {!canEdit && (
               <p className="text-xs text-muted-foreground">
                 * هذه الصفحة للعرض فقط بدورك الحالي.
               </p>
@@ -305,22 +354,29 @@ function SettingsPage() {
       {isSuperOwner && (
         <Card id="platform-branding">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Megaphone className="h-5 w-5 text-primary" /> هوية النظام والتسويق</CardTitle>
-            <CardDescription>هوية مالك المنصة مستقلة عن هوية الشركة والفرع.</CardDescription>
+            <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5 text-primary" /> هوية المنصة</CardTitle>
+            <CardDescription>بيانات العلامة التجارية التي تظهر في المطبوعات مستقلة عن هوية النشاط. إدارة الحملات الإعلانية والعروض الترويجية تتم في أقسامها المنفصلة.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {platformBrandQuery.isLoading && <p className="text-sm text-muted-foreground">جارٍ تحميل هوية المنصة...</p>}
+            {platformBrandQuery.isError && (
+              <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
+                <span className="text-destructive">تعذر تحميل بيانات الهوية؛ لم يتم تمكين الحفظ حتى لا تُستبدل بيانات غير محملة.</span>
+                <Button type="button" size="sm" variant="outline" onClick={() => void platformBrandQuery.refetch()}>إعادة المحاولة</Button>
+              </div>
+            )}
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2"><Label>اسم العلامة التجارية</Label><Input value={platformBrand.brand_name} onChange={(e) => setPlatformBrand({ ...platformBrand, brand_name: e.target.value })} /></div>
               <div className="space-y-2"><Label>رقم التواصل</Label><Input dir="ltr" value={platformBrand.phone} onChange={(e) => setPlatformBrand({ ...platformBrand, phone: e.target.value })} /></div>
               <div className="space-y-2"><Label>رابط الموقع</Label><Input dir="ltr" value={platformBrand.website_url} onChange={(e) => setPlatformBrand({ ...platformBrand, website_url: e.target.value })} placeholder="https://" /></div>
               <div className="space-y-2"><Label>رابط شعار المنصة</Label><Input dir="ltr" value={platformBrand.logo_url} onChange={(e) => setPlatformBrand({ ...platformBrand, logo_url: e.target.value })} placeholder="https://" /></div>
             </div>
-            <div className="space-y-2"><Label>النص الإعلاني</Label><Input value={platformBrand.promotional_text} onChange={(e) => setPlatformBrand({ ...platformBrand, promotional_text: e.target.value })} maxLength={240} /></div>
+            <div className="space-y-2"><Label>عبارة تعريفية للمطبوعات</Label><Input value={platformBrand.promotional_text} onChange={(e) => setPlatformBrand({ ...platformBrand, promotional_text: e.target.value })} maxLength={240} /></div>
             <div className="flex flex-wrap items-center gap-4">
-              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={platformBrand.enabled} onChange={(e) => setPlatformBrand({ ...platformBrand, enabled: e.target.checked })} /> تفعيل الظهور في المطبوعات</label>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={platformBrand.enabled} onChange={(e) => setPlatformBrand({ ...platformBrand, enabled: e.target.checked })} /> تفعيل هوية المنصة في المطبوعات</label>
               <div className="flex items-center gap-2 text-sm"><Label>موضع الظهور</Label><select className="h-9 rounded-md border bg-background px-2" value={platformBrand.placement} onChange={(e) => setPlatformBrand({ ...platformBrand, placement: e.target.value })}><option value="footer">أسفل الصفحة</option><option value="header">أعلى الصفحة</option><option value="both">أعلى وأسفل الصفحة</option></select></div>
             </div>
-            <Button onClick={() => savePlatformBrand.mutate()} disabled={savePlatformBrand.isPending}>{savePlatformBrand.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}حفظ هوية النظام</Button>
+            <Button type="button" onClick={() => savePlatformBrand.mutate()} disabled={savePlatformBrand.isPending || platformBrandQuery.isLoading || platformBrandQuery.isError}>{savePlatformBrand.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}حفظ هوية النظام</Button>
           </CardContent>
         </Card>
       )}
@@ -368,10 +424,10 @@ function SettingsPage() {
             </div>
             <section className="space-y-3 border-t pt-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="font-semibold">تعديل أسماء التبويبات وإظهارها</h3>
-                <Button type="button" size="sm" variant="outline" onClick={resetNavOverrides}><RotateCcw className="ml-1 h-3 w-3" />إعادة ضبط القائمة</Button>
+                <h3 className="font-semibold">تعديل أسماء التطبيقات وإظهارها</h3>
+                <Button type="button" size="sm" variant="outline" onClick={resetNavOverrides}><RotateCcw className="ml-1 h-3 w-3" />إعادة ضبط لوحة التطبيقات</Button>
               </div>
-              <p className="text-xs text-muted-foreground">يمكنك إعادة تسمية صفحات القائمة أو إخفاء الصفحات غير الأساسية. الإخفاء لا يحذف الصفحة أو بياناتها ولا يغير صلاحيات الوصول إليها. الصفحات الأساسية محمية.</p>
+              <p className="text-xs text-muted-foreground">يمكنك إعادة تسمية صفحات القائمة أو إخفاء الصفحات غير الأساسية. الإخفاء يزيل الاختصار من لوحة التطبيقات فقط؛ لا يحذف الصفحة أو بياناتها ولا يغير صلاحيات الوصول إليها. الصفحات الأساسية محمية.</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {MANAGEABLE_NAV_ITEMS.map((item) => (
                   <div key={item.url} className="flex items-center gap-2 rounded-md border p-2">
@@ -385,10 +441,10 @@ function SettingsPage() {
               </div>
             </section>
             <section className="space-y-3 border-t pt-5">
-              <h3 className="font-semibold">إدارة الاختصارات والتبويبات الجانبية</h3>
-              <p className="text-xs text-muted-foreground">أضف تبويباً باسم تختاره يفتح صفحة موجودة. لا ينشئ هذا محرراً لصفحات أو وظائف جديدة؛ إضافة وحدات تشغيلية جديدة تحتاج تطويراً وبرمجة وصلاحيات مستقلة.</p>
+              <h3 className="font-semibold">إدارة اختصارات التطبيقات</h3>
+              <p className="text-xs text-muted-foreground">أضف اختصاراً باسم تختاره إلى لوحة التطبيقات لفتح صفحة موجودة. لا ينشئ هذا محرراً لصفحات أو وظائف جديدة؛ إضافة وحدات تشغيلية جديدة تحتاج تطويراً وبرمجة وصلاحيات مستقلة.</p>
               <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-                <Input value={newTabTitle} onChange={(e) => setNewTabTitle(e.target.value)} placeholder="اسم التبويب" maxLength={28} />
+                <Input value={newTabTitle} onChange={(e) => setNewTabTitle(e.target.value)} placeholder="اسم الاختصار" maxLength={28} />
                 <select value={newTabUrl} onChange={(e) => setNewTabUrl(e.target.value)} className="h-10 rounded-md border bg-background px-3 text-sm">
                   <option value="/dashboard">لوحة التحكم</option>
                   <option value="/pos">نقطة البيع</option>
@@ -397,6 +453,12 @@ function SettingsPage() {
                   <option value="/inventory">المخزون</option>
                   <option value="/purchases">المشتريات</option>
                   <option value="/reports">التقارير</option>
+                  <option value="/tables">الطاولات</option>
+                  <option value="/kitchen">شاشة المطبخ</option>
+                  <option value="/promotions">العروض الترويجية</option>
+                  <option value="/ads">الإعلانات</option>
+                  <option value="/notifications">الإشعارات</option>
+                  <option value="/support">مركز المساعدة</option>
                   <option value="/customers">العملاء</option>
                   <option value="/branches">الفروع</option>
                   <option value="/users">الموظفون</option>

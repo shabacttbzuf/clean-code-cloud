@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 import { useSuperOwner } from "@/hooks/use-super-owner";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
+import { normalizeCustomShortcuts } from "@/lib/navigation-shortcuts";
 import {
   Sidebar,
   SidebarContent,
@@ -145,8 +146,7 @@ export function AppSidebar() {
       try {
         const raw = window.localStorage.getItem("ras-custom-sidebar-items-v1");
         const parsed = raw ? JSON.parse(raw) : [];
-        const allowedRoutes = new Set(["/dashboard", "/pos", "/sales", "/products", "/inventory", "/purchases", "/reports", "/customers", "/branches", "/users", "/settings", "/ads", "/promotions"]);
-        setCustomItems(Array.isArray(parsed) ? parsed.filter((item) => item && typeof item.title === "string" && allowedRoutes.has(item.url)).slice(0, 12) : []);
+        setCustomItems(normalizeCustomShortcuts(parsed));
       } catch { setCustomItems([]); }
     };
     read();

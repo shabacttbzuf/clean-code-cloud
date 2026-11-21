@@ -10,7 +10,10 @@ const sidebar = readFileSync(new URL("../src/components/app-sidebar.tsx", import
 test("platform branding is owner-managed and separate from tenant branding", () => {
   assert.ok(migration.includes("create table if not exists public.platform_branding"));
   assert.ok(migration.includes("public.is_super_owner"));
-  assert.ok(settings.includes("هوية النظام والتسويق"));
+  assert.ok(settings.includes("هوية المنصة"));
+  assert.ok(settings.includes("إدارة الحملات الإعلانية والعروض الترويجية تتم في أقسامها المنفصلة"));
+  assert.ok(!settings.includes('from("marketing_campaigns")'));
+  assert.ok(!settings.includes('from("promotional_offers")'));
   assert.ok(settings.includes("...platformBrand"));
 });
 
