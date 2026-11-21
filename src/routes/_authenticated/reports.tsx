@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, FileText, Download, Calendar, TrendingUp, Wallet, Package, Users, Printer } from "lucide-react";
 import { formatMoney, formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
+import { calculateProfitMetrics, fetchAllRows } from "@/lib/report-analytics";
 
 export const Route = createFileRoute("/_authenticated/reports")({
   component: ReportsPage,
@@ -48,86 +49,64 @@ function ReportsPage() {
       const fromDate = `${from}T00:00:00.000Z`;
       const toDate = `${to}T23:59:59.999Z`;
 
-      const [salesRes, expensesRes, itemsRes, sessionsRes, inventoryRes, refundsRes] = await Promise.all([
-        supabase
-          .from("sales")
+      const [sales, expenses, items, sessions, inventory, refunds] = await Promise.all([
+        fetchAllRows((pageFrom, pageTo) => supabase.from("sales")
           .select("id, created_at, total, subtotal, discount, tax_amount, payment_method, cashier_id, branch_id, status")
-          .eq("tenant_id", tenantId)
-          .neq("status", "void")
-          .gte("created_at", fromDate)
-          .lte("created_at", toDate)
-          .order("created_at", { ascending: false })
-          .limit(5000),
-        supabase
-          .from("expenses")
+          .eq("tenant_id", tenantId).neq("status", "void")
+          .gte("created_at", fromDate).lte("created_at", toDate)
+          .order("created_at", { ascending: false }).range(pageFrom, pageTo)),
+        fetchAllRows((pageFrom, pageTo) => supabase.from("expenses")
           .select("id, paid_at, amount, category_id, description, branch_id")
-          .eq("tenant_id", tenantId)
-          .gte("paid_at", from)
-          .lte("paid_at", to)
-          .order("paid_at", { ascending: false })
-          .limit(5000),
-        supabase
-          .from("sale_items")
-          .select("product_name, quantity, line_total, sale_id, created_at")
-          .eq("tenant_id", tenantId)
-          .gte("created_at", fromDate)
-          .lte("created_at", toDate)
-          .limit(20000),
-        supabase
-          .from("cash_sessions")
+          .eq("tenant_id", tenantId).gte("paid_at", from).lte("paid_at", to)
+          .order("paid_at", { ascending: false }).range(pageFrom, pageTo)),
+        fetchAllRows((pageFrom, pageTo) => supabase.from("sale_items")
+          .select("product_name, quantity, line_total, sale_id, created_at, cost_price_snapshot")
+          .eq("tenant_id", tenantId).gte("created_at", fromDate).lte("created_at", toDate)
+          .range(pageFrom, pageTo)),
+        fetchAllRows((pageFrom, pageTo) => supabase.from("cash_sessions")
           .select("cashier_id, opening_balance, closing_balance, expected_cash, cash_difference, opened_at, closed_at, status, branch_id")
-          .eq("tenant_id", tenantId)
-          .gte("opened_at", fromDate)
-          .lte("opened_at", toDate)
-          .limit(5000),
-        supabase
-          .from("inventory")
-          .select("quantity, product_id, branch_id")
-          .eq("tenant_id", tenantId)
-          .limit(10000),
-        supabase
-          .from("sale_refunds")
+          .eq("tenant_id", tenantId).gte("opened_at", fromDate).lte("opened_at", toDate)
+          .range(pageFrom, pageTo)),
+        fetchAllRows((pageFrom, pageTo) => supabase.from("inventory")
+          .select("quantity, product_id, branch_id").eq("tenant_id", tenantId)
+          .range(pageFrom, pageTo)),
+        fetchAllRows((pageFrom, pageTo) => supabase.from("sale_refunds")
           .select("id, sale_id, subtotal, discount, tax_amount, total, refund_method, created_at, branch_id")
-          .eq("tenant_id", tenantId)
-          .gte("created_at", fromDate)
-          .lte("created_at", toDate)
-          .limit(5000),
+          .eq("tenant_id", tenantId).gte("created_at", fromDate).lte("created_at", toDate)
+          .range(pageFrom, pageTo)),
       ]);
 
-      if (salesRes.error) throw salesRes.error;
-      if (expensesRes.error) throw expensesRes.error;
-      if (itemsRes.error) throw itemsRes.error;
-      if (sessionsRes.error) throw sessionsRes.error;
-      if (inventoryRes.error) throw inventoryRes.error;
-      if (refundsRes.error) throw refundsRes.error;
-
-      const sales = (salesRes.data ?? []).filter((row) => row.status !== "void") as Array<{
-        id: string; created_at: string; total: number; subtotal: number; discount: number; tax_amount: number;
-        payment_method: string; cashier_id: string; branch_id: string; status: string;
-      }>;
-      const expenses = (expensesRes.data ?? []) as Array<{ id: string; paid_at: string; amount: number; category_id: string | null; description: string | null; branch_id: string | null }>;
-      const items = (itemsRes.data ?? []) as Array<{ product_name: string; quantity: number; line_total: number; sale_id: string; created_at: string }>;
-      const sessions = (sessionsRes.data ?? []) as Array<{
-        cashier_id: string; opening_balance: number; closing_balance: number | null;
-        expected_cash: number | null; cash_difference: number | null; opened_at: string; closed_at: string | null; status: string; branch_id: string | null;
-      }>;
-      const inventory = (inventoryRes.data ?? []) as Array<{ quantity: number; product_id: string; branch_id: string }>;
-      const refunds = (refundsRes.data ?? []) as Array<{
-        id: string; sale_id: string; subtotal: number; discount: number;
-        tax_amount: number; total: number; refund_method: string; created_at: string; branch_id: string | null;
-      }>;
-      const refundIds = refunds.map((refund) => refund.id);
-      const refundItemsRes = refundIds.length
-        ? await supabase.from("sale_refund_items")
-            .select("refund_id, product_name, quantity, subtotal_amount, discount_amount, tax_amount, restocked")
-            .in("refund_id", refundIds)
-        : { data: [], error: null };
-      if (refundItemsRes.error) throw refundItemsRes.error;
-      const saleIds = new Set(sales.map((sale) => sale.id));
+      const validSales = sales.filter((row) => row.status !== "void");
+      const saleIds = new Set(validSales.map((sale) => sale.id));
       const validItems = items.filter((item) => saleIds.has(item.sale_id));
-      const refundItems = refundItemsRes.data ?? [];
+      const refundIds = refunds.map((refund) => refund.id);
+      const refundItemGroups = await Promise.all(
+        Array.from({ length: Math.ceil(refundIds.length / 100) }, (_, index) => refundIds.slice(index * 100, (index + 1) * 100))
+          .map((ids) => fetchAllRows((pageFrom, pageTo) => supabase.from("sale_refund_items")
+            .select("refund_id, product_name, quantity, subtotal_amount, discount_amount, tax_amount, restocked, cost_price_snapshot")
+            .in("refund_id", ids).range(pageFrom, pageTo))),
+      );
+      const refundItems = refundItemGroups.flat();
 
-      return { sales, expenses, items: validItems, sessions, inventory, refunds, refundItems };
+      const inventoryProductIds = [...new Set(inventory.map((row) => row.product_id))];
+      const productGroups = await Promise.all(
+        Array.from({ length: Math.ceil(inventoryProductIds.length / 100) }, (_, index) => inventoryProductIds.slice(index * 100, (index + 1) * 100))
+          .map((ids) => fetchAllRows((pageFrom, pageTo) => supabase.from("products")
+            .select("id, name, sku, cost_price, min_stock").eq("tenant_id", tenantId)
+            .in("id", ids).range(pageFrom, pageTo))),
+      );
+      const inventoryProducts = productGroups.flat();
+
+      return {
+        sales: validSales,
+        expenses,
+        items: validItems,
+        sessions,
+        inventory,
+        inventoryProducts,
+        refunds,
+        refundItems,
+      };
     },
     enabled: !!tenantId,
     staleTime: 60_000,
