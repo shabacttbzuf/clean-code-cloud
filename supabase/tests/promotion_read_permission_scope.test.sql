@@ -1,0 +1,33 @@
+BEGIN;
+CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
+SELECT plan(3);
+
+SELECT ok(
+  (SELECT relrowsecurity FROM pg_class WHERE oid='public.promotional_offers'::regclass)
+  AND EXISTS (
+    SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='promotional_offers'
+      AND policyname='Tenant members read promotional offers' AND cmd='SELECT'
+      AND qual LIKE '%promotions.manage%' AND qual LIKE '%active%'
+  ),
+  'Staff can read only active in-window offers while managers with promotions.manage can review all states'
+);
+
+SELECT ok(
+  EXISTS (
+    SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='promotion_redemptions'
+      AND policyname='Promotion managers read redemptions' AND cmd='SELECT'
+      AND qual LIKE '%promotions.manage%'
+  ),
+  'Promotion redemption analytics require the dedicated management permission'
+);
+
+SELECT ok(
+  NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='promotion_redemptions'
+      AND cmd='SELECT' AND policyname <> 'Promotion managers read redemptions'
+  ),
+  'No alternate broad redemption read policy bypasses the manager gate'
+);
+
+SELECT * FROM finish();
+ROLLBACK;
