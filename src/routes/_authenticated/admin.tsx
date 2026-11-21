@@ -83,12 +83,27 @@ const rolePermsQO = {
 };
 
 function AdminPage() {
-  const { isSuperOwner, totalCount, loading, refetch } = useSuperOwner();
+  const { isSuperOwner, totalCount, loading, statusKnown, statusError, refetch } = useSuperOwner();
 
   if (loading) {
     return (
       <div className="flex justify-center py-12">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!statusKnown) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-4">
+        <PageHeader title="لوحة إدارة النظام" subtitle="تم إيقاف شاشة الإدارة احتياطياً لأن حالة المالك الرئيسي لم يتم التحقق منها." />
+        <Card className="border-destructive/30">
+          <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
+            <ShieldAlert className="h-8 w-8 text-destructive" />
+            <p role="alert" className="text-sm text-destructive">{statusError instanceof Error ? statusError.message : "تعذر التحقق من حالة المالك الرئيسي."}</p>
+            <Button variant="outline" onClick={() => void refetch()}>إعادة التحقق</Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
