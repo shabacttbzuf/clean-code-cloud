@@ -1,10 +1,9 @@
 import { createFileRoute, Outlet, redirect, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { AppSidebar, appNavigationGroups } from "@/components/app-sidebar";
+import { appNavigationGroups } from "@/components/app-sidebar";
 import { AppLauncher } from "@/components/app-launcher";
 import { WorkspaceTabs } from "@/components/workspace-tabs";
-import { SidebarProvider, SidebarTrigger, SidebarInset, useSidebar } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -68,33 +67,15 @@ function AuthLayout() {
 
 function AuthShell() {
   return (
-    <SidebarProvider defaultOpen={true}>
-      <div className="flex min-h-screen w-full">
-        <SidebarRouteSync />
-        <AppSidebar />
-        <SidebarInset className="workspace-surface min-w-0">
-          <TopBar />
-          <WorkspaceTabs />
-          <main className="min-w-0 flex-1 p-4 md:p-6">
-            <PermissionRouteGuard />
-          </main>
-        </SidebarInset>
-      </div>
-    </SidebarProvider>
+    <div className="workspace-surface flex min-h-screen w-full flex-col">
+      <TopBar />
+      <WorkspaceTabs />
+      <main className="min-w-0 flex-1 p-3 sm:p-4 md:p-6">
+        <PermissionRouteGuard />
+      </main>
+    </div>
   );
 }
-
-function SidebarRouteSync() {
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const { setOpenMobile } = useSidebar();
-  // Close the mobile drawer after navigation, but never collapse the desktop
-  // navigation as a side effect of changing routes.
-  useEffect(() => {
-    setOpenMobile(false);
-  }, [pathname, setOpenMobile]);
-  return null;
-}
-
 
 /**
  * UI route checks complement (never replace) the database RLS and server-action
@@ -388,7 +369,7 @@ function TopBar() {
   return (
     <header className="sticky top-0 z-30 flex min-h-[68px] items-center justify-between gap-3 border-b border-[#dbe5f4] bg-[rgba(248,250,255,.96)] px-3 py-2 shadow-[0_3px_14px_rgba(16,47,92,.06)] backdrop-blur-xl sm:px-5" dir="rtl">
       <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-        <SidebarTrigger className="rounded-xl border border-[#dce5f3] bg-white text-[#174b91] shadow-sm" />
+        <AppLauncher />
         <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#174b91] to-[#102f5c] text-[#f5c65b] shadow-sm"><Building2 className="h-5 w-5" /></div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -429,7 +410,6 @@ function TopBar() {
         </div>
         <Button type="button" variant="outline" size="icon" onClick={toggleFullscreen} aria-label={fullscreen ? "الخروج من ملء الشاشة" : "ملء الشاشة"} className="hidden rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm sm:inline-flex">{fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</Button>
         <Button variant="outline" size="icon" onClick={toggle} aria-label="تبديل الوضع" className="hidden rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm sm:inline-flex">{theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</Button>
-        <AppLauncher />
         <DropdownMenu>
           <DropdownMenuTrigger asChild><Button variant="outline" size="icon" className="relative rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm" aria-label="الإشعارات"><Bell className="h-5 w-5" />{unreadCount > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full border-2 border-white bg-red-500 px-1 text-[10px] font-bold text-white">{unreadCount > 9 ? "9+" : unreadCount}</span>}</Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-[min(92vw,360px)]">
