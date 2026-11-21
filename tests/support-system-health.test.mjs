@@ -10,7 +10,7 @@ const routeTree = readFileSync(new URL("../src/routeTree.gen.ts", import.meta.ur
 
 test("support center contains searchable practical guides and no fake ticket submission", () => {
   assert.match(support, /useMemo/);
-  assert.match(support, /ابحث في أدلة/);
+  assert.match(support, /ابحث في الأدلة/);
   assert.match(support, /نسخ معلومات التشخيص/);
   assert.match(support, /لا ترسل كلمة المرور/);
   assert.match(support, /إدارة الفروع/);
