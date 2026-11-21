@@ -55,7 +55,7 @@ export async function fetchAllRows<T>(
   const rows: T[] = [];
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await loadPage(from, from + pageSize - 1);
-    if (error) throw error;
+    if (error) throw new Error(error.message);
     const page = data ?? [];
     rows.push(...page);
     if (page.length < pageSize) return rows;
