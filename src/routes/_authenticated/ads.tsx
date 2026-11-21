@@ -239,8 +239,23 @@ export function AdsPage() {
                 {campaign.image_url && <img src={campaign.image_url} alt="" className="h-14 w-20 rounded object-cover" />}
                 <div className="min-w-0 flex-1"><div className="font-medium">{campaign.title}</div><div className="text-xs text-muted-foreground">{campaign.placement === "dashboard_banner" ? "الشريط الرئيسي" : campaign.placement === "dashboard_card" ? "بطاقة لوحة التحكم" : "نقطة البيع"} · {campaign.status === "active" ? "نشط" : campaign.status === "paused" ? "متوقف" : campaign.status === "archived" ? "مؤرشف" : "مسودة"}{campaign.starts_at ? ` · يبدأ ${new Date(campaign.starts_at).toLocaleString("ar")}` : ""}{campaign.ends_at ? ` · ينتهي ${new Date(campaign.ends_at).toLocaleString("ar")}` : ""}</div></div>
                 <Button type="button" size="sm" variant="ghost" disabled={!canEdit} onClick={() => editCampaign(campaign)}>تعديل</Button>
-                <Button type="button" size="sm" variant="outline" disabled={!canEdit || updateStatus.isPending} onClick={() => updateStatus.mutate({ id: campaign.id, status: campaign.status === "active" ? "paused" : "active" })}>{campaign.status === "active" ? "إيقاف" : "تفعيل"}</Button>
-                <Button type="button" size="icon" variant="ghost" aria-label={`حذف ${campaign.title}`} disabled={!canEdit || deleteCampaign.isPending} onClick={() => { if (window.confirm("هل تريد حذف هذه الحملة؟")) deleteCampaign.mutate(campaign.id); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                <Button type="button" size="sm" variant="outline" disabled={!canEdit || updateStatus.isPending} onClick={() => updateStatus.mutate({
+                  id: campaign.id,
+                  status: campaign.status === "active" ? "paused" : campaign.status === "archived" ? "draft" : "active",
+                })}>
+                  {campaign.status === "active" ? "إيقاف" : campaign.status === "archived" ? "استعادة كمسودة" : "تفعيل"}
+                </Button>
+                {campaign.status !== "archived" && (
+                  <Button type="button" size="sm" variant="ghost" disabled={!canEdit || updateStatus.isPending}
+                    onClick={() => {
+                      if (window.confirm("ستُوقف هذه الحملة وتُنقل إلى الأرشيف. هل تريد المتابعة؟")) {
+                        updateStatus.mutate({ id: campaign.id, status: "archived" });
+                      }
+                    }}>
+                    أرشفة
+                  </Button>
+                )}
+                <Button type="button" size="icon" variant="ghost" aria-label={"حذف " + campaign.title} disabled={!canEdit || deleteCampaign.isPending} onClick={() => { if (window.confirm("هل تريد حذف هذه الحملة نهائياً؟")) deleteCampaign.mutate(campaign.id); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
               </div>;
             }) : <p className="text-sm text-muted-foreground">لا توجد حملات إعلانية حتى الآن.</p>}
         </CardContent>
