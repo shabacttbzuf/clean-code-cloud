@@ -39,6 +39,7 @@ import {
   Megaphone,
   Armchair,
   ChefHat,
+  CircleHelp,
 } from "lucide-react";
 import { useSuperOwner } from "@/hooks/use-super-owner";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
