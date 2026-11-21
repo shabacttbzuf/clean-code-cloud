@@ -14356,7 +14356,6 @@ GRANT EXECUTE ON FUNCTION public.create_pos_order(uuid,uuid,uuid,uuid,numeric,uu
 COMMIT;
 -- END MIGRATION: 20261121020000_promotional_offers_and_pos_redemptions.sql
 
-
 -- SOURCE MIGRATION: 20261121030000_notification_deep_links.sql
 -- Stage 10: safe internal notification deep links and actionable kitchen alerts.
 BEGIN;
@@ -14383,6 +14382,7 @@ BEGIN
           AND position(chr(92) in action_path)=0
           AND position(chr(10) in action_path)=0
           AND position(chr(13) in action_path)=0
+          AND action_path !~ '[[:cntrl:]]'
         )
       );
   END IF;
