@@ -333,18 +333,26 @@ function ReportsPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi icon={<TrendingUp className="h-5 w-5" />} label="إجمالي المبيعات" value={`${formatMoney(totals.salesTotal)} ${tenant?.currency ?? ""}`} tone="primary" />
-        <Kpi icon={<Wallet className="h-5 w-5" />} label="إجمالي المصروفات" value={`${formatMoney(totals.expensesTotal)} ${tenant?.currency ?? ""}`} tone="destructive" />
-        <Kpi icon={<FileText className="h-5 w-5" />} label="الفائض قبل تكلفة البضاعة" value={`${formatMoney(totals.net)} ${tenant?.currency ?? ""}`} tone={totals.net >= 0 ? "success" : "destructive"} />
-        <Kpi icon={<Package className="h-5 w-5" />} label="عدد الفواتير" value={String(safe.sales.length)} tone="primary" />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+        <Kpi icon={<TrendingUp className="h-5 w-5" />} label="المبيعات بعد المرتجعات" value={`${formatMoney(totals.salesTotal)} ${tenant?.currency ?? ""}`} tone="primary" />
+        <Kpi icon={<Wallet className="h-5 w-5" />} label="المصروفات" value={`${formatMoney(totals.expensesTotal)} ${tenant?.currency ?? ""}`} tone="destructive" />
+        <Kpi icon={<Package className="h-5 w-5" />} label="تكلفة البضاعة" value={profitMetrics.costOfGoods === null ? "غير مكتملة" : `${formatMoney(profitMetrics.costOfGoods)} ${tenant?.currency ?? ""}`} tone="primary" />
+        <Kpi icon={<FileText className="h-5 w-5" />} label="مجمل الربح" value={profitMetrics.grossProfit === null ? "غير متاح" : `${formatMoney(profitMetrics.grossProfit)} ${tenant?.currency ?? ""}`} tone={profitMetrics.grossProfit !== null && profitMetrics.grossProfit >= 0 ? "success" : "destructive"} />
+        <Kpi icon={<Wallet className="h-5 w-5" />} label="صافي الربح التشغيلي" value={profitMetrics.netProfit === null ? "غير متاح" : `${formatMoney(profitMetrics.netProfit)} ${tenant?.currency ?? ""}`} tone={profitMetrics.netProfit !== null && profitMetrics.netProfit >= 0 ? "success" : "destructive"} />
+        <Kpi icon={<Users className="h-5 w-5" />} label="عدد الفواتير" value={String(safe.sales.length)} tone="primary" />
       </div>
+      {profitMetrics.unknownCostItems > 0 && (
+        <div role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-800 dark:text-amber-300">
+          لا يمكن اعتماد الربحية بدقة: توجد {profitMetrics.unknownCostItems} بنود بيع أو مرتجعات مستردة بلا تكلفة محفوظة وقت البيع. لم يتم تقديرها من سعر المنتج الحالي.
+        </div>
+      )}
 
       <Tabs defaultValue="sales">
-        <TabsList className="grid w-full grid-cols-3 sm:w-auto sm:inline-grid">
+        <TabsList className="grid w-full grid-cols-4 sm:w-auto sm:inline-grid">
           <TabsTrigger value="sales">المبيعات</TabsTrigger>
           <TabsTrigger value="products">المنتجات</TabsTrigger>
           <TabsTrigger value="staff">الموظفون</TabsTrigger>
+          <TabsTrigger value="inventory">المخزون</TabsTrigger>
         </TabsList>
 
         <TabsContent value="sales" className="space-y-4 pt-2">
@@ -505,6 +513,61 @@ function ReportsPage() {
                   </tbody>
                 </table>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="inventory" className="space-y-4 pt-2">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Kpi icon={<Package className="h-5 w-5" />} label="قيمة المخزون الحالية بالتكلفة" value={`${formatMoney(inventoryValue)} ${tenant?.currency ?? ""}`} tone="primary" />
+            <Kpi icon={<Package className="h-5 w-5" />} label="أصناف عند حد إعادة الطلب أو أقل" value={String(lowStockRows.length)} tone={lowStockRows.length ? "destructive" : "success"} />
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="font-semibold">تفاصيل أرصدة المخزون</h3>
+              <p className="text-xs text-muted-foreground">القيمة تقديرية وفق تكلفة المنتج الحالية، وليست تكلفة تاريخية للمبيعات.</p>
+            </div>
+            {canExportReports && <Button variant="outline" size="sm" onClick={() => exportCsv(
+              inventoryRows.map((row: any) => ({
+                المنتج: row.productName, الرمز: row.sku ?? "", الفرع: row.branchName,
+                الكمية: row.quantity, "حد إعادة الطلب": row.minimum,
+                "تكلفة الوحدة الحالية": row.costPrice, "القيمة التقديرية": row.estimatedValue,
+              })),
+              `inventory-report-${from}-${to}.csv`,
+            )}><Download className="ml-2 h-4 w-4" />تصدير CSV</Button>}
+          </div>
+          <Card>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 text-right">
+                    <tr>
+                      <th className="p-3 font-medium">المنتج</th>
+                      <th className="p-3 font-medium">الفرع</th>
+                      <th className="p-3 font-medium">الرصيد</th>
+                      <th className="p-3 font-medium">حد إعادة الطلب</th>
+                      <th className="p-3 font-medium">قيمة المخزون</th>
+                      <th className="p-3 font-medium">الحالة</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inventoryRows.slice(0, 100).map((row: any) => (
+                      <tr key={`${row.productId}-${row.branchId}`} className="border-t hover:bg-muted/30">
+                        <td className="p-3 font-medium">{row.productName}{row.sku && <span className="mr-2 text-xs text-muted-foreground">{row.sku}</span>}</td>
+                        <td className="p-3">{row.branchName}</td>
+                        <td className="p-3 num">{formatMoney(row.quantity, 3)}</td>
+                        <td className="p-3 num">{formatMoney(row.minimum, 3)}</td>
+                        <td className="p-3 num">{formatMoney(row.estimatedValue)}</td>
+                        <td className="p-3">{row.quantity <= row.minimum
+                          ? <span className="font-semibold text-destructive">يحتاج إعادة طلب</span>
+                          : <span className="text-success">متوفر</span>}</td>
+                      </tr>
+                    ))}
+                    {inventoryRows.length === 0 && <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">لا توجد أرصدة مخزون ضمن نطاق الصلاحيات الحالي.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+              {inventoryRows.length > 100 && <p className="border-t p-3 text-center text-xs text-muted-foreground">يتم عرض أول 100 صنف حسب أولوية النقص؛ التصدير يتضمن جميع الأصناف.</p>}
             </CardContent>
           </Card>
         </TabsContent>
