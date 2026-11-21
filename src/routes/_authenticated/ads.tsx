@@ -57,7 +57,7 @@ export function AdsPage() {
   });
   const canManage = isSuperOwner || isTenantOwner ||
     ((role === "owner" || role === "manager") && !!membership?.company_id &&
-      permissions.data?.includes("settings.manage") === true);
+      permissions.data?.includes("ads.manage") === true);
 
   const campaigns = useQuery({
     queryKey: ["marketing-campaigns", tenantId, membership?.company_id ?? "tenant"],
@@ -192,7 +192,7 @@ export function AdsPage() {
   }
 
   if (!canManage && !permissions.isLoading) {
-    return <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">لا تملك صلاحية إدارة الحملات الإعلانية. تتطلب إدارة حملات الشركة صلاحية إعدادات الإدارة وفق سياسات النظام.</CardContent></Card>;
+    return <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">لا تملك صلاحية إدارة الحملات الإعلانية. تتطلب إدارة حملات الشركة صلاحية إدارة الإعلانات المستقلة عن إعدادات النظام.</CardContent></Card>;
   }
 
   return (

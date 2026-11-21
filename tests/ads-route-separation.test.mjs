@@ -17,7 +17,7 @@ test("advertising management is a dedicated authenticated route", () => {
 
 test("advertising management preserves tenant and company scope and permission checks", () => {
   assert.match(ads, /get_my_permissions/);
-  assert.match(ads, /settings\.manage/);
+  assert.match(ads, /ads\.manage/);
   assert.match(ads, /\.eq\("tenant_id", tenantId!\)/);
   assert.match(ads, /\.eq\("company_id", membership\.company_id\)/);
 });
