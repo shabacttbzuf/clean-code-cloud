@@ -13938,7 +13938,6 @@ USING (
 COMMIT;
 -- END MIGRATION: 20261121010000_separate_ads_management_permission.sql
 
-
 -- SOURCE MIGRATION: 20261121020000_promotional_offers_and_pos_redemptions.sql
 -- Stage 9: promotional offers, scoped access, redemption analytics, and POS validation.
 BEGIN;
@@ -14174,7 +14173,7 @@ USING (
 
 -- POS redemption is validated server-side. The existing 15-argument POS RPC stays
 -- untouched for backward compatibility; this overload adds an optional offer ID.
-CREATE OR REPLACE FUNCTION public.create_pos_order(
+CREATE OR REPLACE FUNCTION private.create_pos_order_with_promotion(
   _tenant_id uuid,
   _branch_id uuid,
   _cashier_id uuid,
@@ -14315,6 +14314,40 @@ BEGIN
 
   RETURN v_sale;
 END;
+$function$;
+
+REVOKE ALL ON FUNCTION private.create_pos_order_with_promotion(uuid,uuid,uuid,uuid,numeric,uuid,numeric,public.payment_method,jsonb,text,uuid,text,text,text,numeric,uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION private.create_pos_order_with_promotion(uuid,uuid,uuid,uuid,numeric,uuid,numeric,public.payment_method,jsonb,text,uuid,text,text,text,numeric,uuid) TO authenticated;
+
+-- Exposed RPC remains SECURITY INVOKER, matching the repository's private-wrapper security model.
+CREATE OR REPLACE FUNCTION public.create_pos_order(
+  _tenant_id uuid,
+  _branch_id uuid,
+  _cashier_id uuid,
+  _session_id uuid,
+  _discount numeric,
+  _customer_id uuid,
+  _paid_amount numeric,
+  _paid_method public.payment_method,
+  _items jsonb,
+  _order_type text,
+  _table_id uuid,
+  _delivery_customer_name text,
+  _delivery_customer_phone text,
+  _delivery_address text,
+  _delivery_fee numeric,
+  _promotion_id uuid
+)
+RETURNS public.sales
+LANGUAGE sql
+SECURITY INVOKER
+SET search_path = pg_catalog, public, private
+AS $function$
+  SELECT private.create_pos_order_with_promotion(
+    _tenant_id,_branch_id,_cashier_id,_session_id,_discount,_customer_id,
+    _paid_amount,_paid_method,_items,_order_type,_table_id,
+    _delivery_customer_name,_delivery_customer_phone,_delivery_address,_delivery_fee,_promotion_id
+  );
 $function$;
 
 REVOKE ALL ON FUNCTION public.create_pos_order(uuid,uuid,uuid,uuid,numeric,uuid,numeric,public.payment_method,jsonb,text,uuid,text,text,text,numeric,uuid) FROM PUBLIC, anon;
