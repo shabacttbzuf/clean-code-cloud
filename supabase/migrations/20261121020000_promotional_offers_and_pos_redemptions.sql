@@ -243,12 +243,12 @@ CREATE OR REPLACE FUNCTION public.create_pos_order(
   _paid_method public.payment_method,
   _items jsonb,
   _order_type text,
-  _table_id uuid DEFAULT NULL,
-  _delivery_customer_name text DEFAULT NULL,
-  _delivery_customer_phone text DEFAULT NULL,
-  _delivery_address text DEFAULT NULL,
-  _delivery_fee numeric DEFAULT 0,
-  _promotion_id uuid DEFAULT NULL
+  _table_id uuid,
+  _delivery_customer_name text,
+  _delivery_customer_phone text,
+  _delivery_address text,
+  _delivery_fee numeric,
+  _promotion_id uuid
 )
 RETURNS public.sales
 LANGUAGE plpgsql
