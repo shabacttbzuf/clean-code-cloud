@@ -136,7 +136,7 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { isSuperOwner, totalCount } = useSuperOwner();
+  const { isSuperOwner, totalCount, statusKnown } = useSuperOwner();
   const { tenantId, userId } = useActiveTenant();
   const [customItems, setCustomItems] = useState<Array<{ title: string; url: string }>>([]);
   const [navOverrides, setNavOverrides] = useState<Record<string, { title?: string; hidden?: boolean }>>({});
@@ -196,7 +196,7 @@ export function AppSidebar() {
     ],
   };
 
-  const showAdmin = isSuperOwner || totalCount === 0;
+  const showAdmin = isSuperOwner || (statusKnown && totalCount === 0);
   const systemItems: AppNavigationItem[] = [];
   if (isSuperOwner) systemItems.push({ title: "مركز تحكم المالك", url: "/owner-center", icon: Crown });
   if (isSuperOwner) systemItems.push({ title: "استوديو تطوير النظام", url: "/settings#developer-studio", icon: Palette });
