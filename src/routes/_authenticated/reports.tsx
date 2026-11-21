@@ -142,6 +142,7 @@ function ReportsPage() {
         inventoryProducts,
         refunds,
         refundItems,
+        previousPeriod,
       };
     },
     enabled: !!tenantId,
