@@ -32,3 +32,12 @@ test("system settings no longer contains advertising campaign management", () =>
   assert.doesNotMatch(settings, /marketing-campaigns|campaignCreate|campaignDelete|إدارة العروض والإعلانات/);
   assert.match(settings, /إعدادات النشاط التجاري|البيانات الأساسية|استوديو تطوير/);
 });
+
+
+test("archived campaigns cannot be accidentally reactivated and can be restored as drafts", () => {
+  assert.match(ads, /campaign\.status === "archived" \? "draft" : "active"/);
+  assert.match(ads, /status: "archived"/);
+  assert.match(ads, /campaign\.status !== "archived"/);
+  assert.match(ads, /استعادة كمسودة/);
+  assert.match(ads, /أرشفة/);
+});
