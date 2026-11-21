@@ -75,6 +75,6 @@ test("company asset writes require the matching feature permission and include e
 
 test("company campaign images use the company asset namespace", () => {
   assert.match(adsPage, /companies\/\$\{membership\.company_id\}\/marketing/);
-  assert.match(adsPage, /permissions\.data\?\.includes\("settings\.manage"\) === true/);
+  assert.match(adsPage, /permissions\.data\?\.includes\("ads\.manage"\) === true/);
   assert.match(adsPage, /const isTenantOwner = role === "owner" && !membership\?\.company_id/);
 });
