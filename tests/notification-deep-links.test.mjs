@@ -21,7 +21,8 @@ test("topbar deep links require the destination route permission and mark receip
   assert.match(topbar, /safeInternalNotificationPath/);
   assert.match(topbar, /permissionForPath\(targetPath\)/);
   assert.match(topbar, /openNotification\(n\)/);
-  assert.match(topbar, /notificationIds/);
+  assert.match(topbar, /unreadCount/);
+  assert.match(topbar, /count: "exact"/);
   assert.match(topbar, /markAllNotificationsRead/);
 });
 
