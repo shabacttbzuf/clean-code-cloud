@@ -14522,6 +14522,8 @@ USING (
 COMMIT;
 
 
+-- END MIGRATION: 20261121025000_promotions_read_permission_scope.sql
+
 
 -- SOURCE MIGRATION: 20261121030000_notification_deep_links.sql
 -- Stage 10: safe internal notification deep links and actionable kitchen alerts.
