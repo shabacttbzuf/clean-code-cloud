@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, FileText, Download, Calendar, TrendingUp, Wallet, Package, Users, Printer } from "lucide-react";
 import { formatMoney, formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
-import { calculateProfitMetrics, fetchAllRows } from "@/lib/report-analytics";
+import { calculatePercentChange, calculateProfitMetrics, fetchAllRows } from "@/lib/report-analytics";
 
 export const Route = createFileRoute("/_authenticated/reports")({
   component: ReportsPage,
@@ -97,6 +97,41 @@ function ReportsPage() {
             .in("id", ids).range(pageFrom, pageTo))),
       );
       const inventoryProducts = productGroups.flat();
+
+      const periodStart = Date.parse(fromDate);
+      const periodEnd = Date.parse(toDate);
+      const periodLength = periodEnd - periodStart + 1;
+      const previousFrom = new Date(periodStart - periodLength).toISOString();
+      const previousTo = new Date(periodStart - 1).toISOString();
+      const [previousSales, previousExpenses, previousRefunds] = await Promise.all([
+        fetchAllRows((pageFrom, pageTo) => {
+          let query = supabase.from("sales").select("id,total")
+            .eq("tenant_id", tenantId).neq("status", "void")
+            .gte("created_at", previousFrom).lte("created_at", previousTo);
+          if (branchId !== "all") query = query.eq("branch_id", branchId);
+          return query.range(pageFrom, pageTo);
+        }),
+        fetchAllRows((pageFrom, pageTo) => {
+          let query = supabase.from("expenses").select("amount")
+            .eq("tenant_id", tenantId)
+            .gte("paid_at", previousFrom.slice(0, 10)).lte("paid_at", previousTo.slice(0, 10));
+          if (branchId !== "all") query = query.eq("branch_id", branchId);
+          return query.range(pageFrom, pageTo);
+        }),
+        fetchAllRows((pageFrom, pageTo) => {
+          let query = supabase.from("sale_refunds").select("total")
+            .eq("tenant_id", tenantId)
+            .gte("created_at", previousFrom).lte("created_at", previousTo);
+          if (branchId !== "all") query = query.eq("branch_id", branchId);
+          return query.range(pageFrom, pageTo);
+        }),
+      ]);
+      const previousPeriod = {
+        salesTotal: previousSales.reduce((sum, row) => sum + Number(row.total), 0)
+          - previousRefunds.reduce((sum, row) => sum + Number(row.total), 0),
+        expensesTotal: previousExpenses.reduce((sum, row) => sum + Number(row.amount), 0),
+        invoiceCount: previousSales.length,
+      };
 
       return {
         sales: validSales,
@@ -184,6 +219,12 @@ function ReportsPage() {
     const net = salesTotal - expensesTotal;
     return { salesTotal, grossSalesTotal, refundsTotal, expensesTotal, discountTotal, taxTotal, net };
   }, [safe]);
+
+  const comparison = {
+    sales: calculatePercentChange(totals.salesTotal, data?.previousPeriod.salesTotal ?? 0),
+    expenses: calculatePercentChange(totals.expensesTotal, data?.previousPeriod.expensesTotal ?? 0),
+    invoices: calculatePercentChange(safe.sales.length, data?.previousPeriod.invoiceCount ?? 0),
+  };
 
   const groupedSales = useMemo(() => {
     const map = new Map<string, { label: string; sales: number; count: number; expenses: number }>();
@@ -353,6 +394,20 @@ function ReportsPage() {
         <Kpi icon={<FileText className="h-5 w-5" />} label="مجمل الربح" value={profitMetrics.grossProfit === null ? "غير متاح" : `${formatMoney(profitMetrics.grossProfit)} ${tenant?.currency ?? ""}`} tone={profitMetrics.grossProfit !== null && profitMetrics.grossProfit >= 0 ? "success" : "destructive"} />
         <Kpi icon={<Wallet className="h-5 w-5" />} label="صافي الربح التشغيلي" value={profitMetrics.netProfit === null ? "غير متاح" : `${formatMoney(profitMetrics.netProfit)} ${tenant?.currency ?? ""}`} tone={profitMetrics.netProfit !== null && profitMetrics.netProfit >= 0 ? "success" : "destructive"} />
         <Kpi icon={<Users className="h-5 w-5" />} label="عدد الفواتير" value={String(safe.sales.length)} tone="primary" />
+      </div>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border bg-card px-4 py-3 text-xs">
+        <span className="font-semibold text-foreground">مقارنة بالفترة السابقة المماثلة:</span>
+        {([
+          ["المبيعات", comparison.sales],
+          ["المصروفات", comparison.expenses],
+          ["الفواتير", comparison.invoices],
+        ] as Array<[string, number | null]>).map(([label, change]) => (
+          <span key={label} className="text-muted-foreground">
+            {label}: <strong className={change === null ? "text-muted-foreground" : change >= 0 ? "text-success" : "text-destructive"}>
+              {change === null ? "لا توجد قاعدة مقارنة" : `${change > 0 ? "+" : ""}${change.toFixed(1)}%`}
+            </strong>
+          </span>
+        ))}
       </div>
       {profitMetrics.unknownCostItems > 0 && (
         <div role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-800 dark:text-amber-300">
