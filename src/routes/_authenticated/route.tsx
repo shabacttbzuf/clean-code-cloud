@@ -79,7 +79,7 @@ function AuthShell() {
 
 /**
  * UI route checks complement (never replace) the database RLS and server-action
- * permission checks. Keep this map aligned with public.permissions and the sidebar.
+ * permission checks. Keep this map aligned with public.permissions and the applications launcher.
  */
 const ROUTE_PERMISSION_RULES: Array<{ prefix: string; permission: string }> = [
   { prefix: "/dashboard", permission: "dashboard.view" },
