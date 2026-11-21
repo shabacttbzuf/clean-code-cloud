@@ -50,5 +50,5 @@ test("dashboard and POS promotions are filtered to the active company and expose
 });
 
 test("marketing management controls match the owner/manager role gate enforced by RLS", () => {
-  assert.match(adsPage, /\(\(role === "owner" \|\| role === "manager"\) && !!membership\?\.company_id &&\s*permissions\.data\?\.includes\("settings\.manage"\) === true\)/);
+  assert.match(adsPage, /\(\(role === "owner" \|\| role === "manager"\) && !!membership\?\.company_id &&\s*permissions\.data\?\.includes\("ads\.manage"\) === true\)/);
 });
