@@ -23,6 +23,7 @@ BEGIN
           AND position(chr(92) in action_path)=0
           AND position(chr(10) in action_path)=0
           AND position(chr(13) in action_path)=0
+          AND action_path !~ '[[:cntrl:]]'
         )
       );
   END IF;
