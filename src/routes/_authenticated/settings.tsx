@@ -13,6 +13,7 @@ import { z } from "zod";
 import { PageHeader } from "@/components/page-header";
 import { useTheme, DEFAULT_DESIGN, type DesignSettings } from "@/lib/theme";
 import { useSuperOwner } from "@/hooks/use-super-owner";
+import { isAllowedCustomShortcutRoute, normalizeCustomShortcuts } from "@/lib/navigation-shortcuts";
 import { Palette, RotateCcw, Plus, Trash2, MonitorCog, Image, Building2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/settings")({
@@ -21,15 +22,7 @@ export const Route = createFileRoute("/_authenticated/settings")({
 
 type NavOverride = { title?: string; hidden?: boolean };
 
-const CUSTOM_SHORTCUT_ROUTES = new Set([
-  "/dashboard", "/pos", "/sales", "/tables", "/kitchen", "/products", "/inventory",
-  "/inventory/movements", "/purchases", "/suppliers", "/reports", "/customers",
-  "/cash-sessions", "/expenses", "/expense-categories", "/branches", "/categories",
-  "/users", "/users-admin", "/companies", "/departments", "/job-titles",
-  "/employment-types", "/roles", "/team-permissions", "/notifications",
-  "/hr/employees", "/hr/attendance", "/hr/leaves", "/hr/compensation", "/hr/payroll",
-  "/ads", "/promotions", "/support", "/profile", "/settings",
-]);
+
 
 const MANAGEABLE_NAV_ITEMS = [
   { title: "لوحة التحكم", url: "/dashboard", protected: true },
@@ -177,7 +170,7 @@ function SettingsPage() {
     try {
       const rawTabs = window.localStorage.getItem("ras-custom-sidebar-items-v1");
       const parsedTabs = rawTabs ? JSON.parse(rawTabs) : [];
-      setCustomTabs(Array.isArray(parsedTabs) ? parsedTabs.filter((item) => item && typeof item.title === "string" && item.title.trim().length > 0 && item.title.length <= 28 && typeof item.url === "string" && CUSTOM_SHORTCUT_ROUTES.has(item.url)).slice(0, 12) : []);
+      setCustomTabs(normalizeCustomShortcuts(parsedTabs));
       const rawOverrides = window.localStorage.getItem("ras-sidebar-overrides-v1");
       const parsedOverrides = rawOverrides ? JSON.parse(rawOverrides) : {};
       setNavOverrides(parsedOverrides && typeof parsedOverrides === "object" && !Array.isArray(parsedOverrides) ? parsedOverrides : {});
@@ -239,9 +232,10 @@ function SettingsPage() {
   }
 
   function persistCustomTabs(next: Array<{ title: string; url: string }>) {
-    setCustomTabs(next);
+    const safeNext = normalizeCustomShortcuts(next);
+    setCustomTabs(safeNext);
     try {
-      window.localStorage.setItem("ras-custom-sidebar-items-v1", JSON.stringify(next));
+      window.localStorage.setItem("ras-custom-sidebar-items-v1", JSON.stringify(safeNext));
       window.dispatchEvent(new Event("ras-custom-tabs-updated"));
       toast.success("تم تحديث الاختصارات");
     } catch { toast.error("تعذر حفظ الاختصارات على هذا الجهاز"); }
@@ -271,7 +265,7 @@ function SettingsPage() {
 
   function addCustomTab() {
     const title = newTabTitle.trim();
-    if (!title || title.length > 28 || !CUSTOM_SHORTCUT_ROUTES.has(newTabUrl)) { toast.error("أدخل اسماً صالحاً واختر صفحة موجودة"); return; }
+    if (!title || title.length > 28 || !isAllowedCustomShortcutRoute(newTabUrl)) { toast.error("أدخل اسماً صالحاً واختر صفحة موجودة"); return; }
     if (customTabs.some((item) => item.url === newTabUrl)) { toast.error("هذا الاختصار مضاف بالفعل"); return; }
     if (customTabs.length >= 12) { toast.error("الحد الأقصى 12 اختصاراً"); return; }
     persistCustomTabs([...customTabs, { title, url: newTabUrl }]);
