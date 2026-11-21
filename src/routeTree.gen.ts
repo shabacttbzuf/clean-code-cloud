@@ -33,6 +33,7 @@ import { Route as AuthenticatedTablesRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedKitchenRouteImport } from './routes/_authenticated/kitchen'
 import { Route as AuthenticatedLoginHistoryRouteImport } from './routes/_authenticated/login-history'
 import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
+import { Route as AuthenticatedSupportRouteImport } from './routes/_authenticated/support'
 import { Route as AuthenticatedOwnerCenterRouteImport } from './routes/_authenticated/owner-center'
 import { Route as AuthenticatedPosRouteImport } from './routes/_authenticated/pos'
 import { Route as AuthenticatedProductsRouteImport } from './routes/_authenticated/products'
@@ -182,6 +183,11 @@ const AuthenticatedNotificationsRoute =
     path: '/notifications',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSupportRoute = AuthenticatedSupportRouteImport.update({
+  id: '/support',
+  path: '/support',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedOwnerCenterRoute =
   AuthenticatedOwnerCenterRouteImport.update({
     id: '/owner-center',
@@ -330,6 +336,7 @@ export interface FileRoutesByFullPath {
   '/kitchen': typeof AuthenticatedKitchenRoute
   '/login-history': typeof AuthenticatedLoginHistoryRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
+  '/support': typeof AuthenticatedSupportRoute
   '/owner-center': typeof AuthenticatedOwnerCenterRoute
   '/pos': typeof AuthenticatedPosRoute
   '/products': typeof AuthenticatedProductsRoute
@@ -376,6 +383,7 @@ export interface FileRoutesByTo {
   '/kitchen': typeof AuthenticatedKitchenRoute
   '/login-history': typeof AuthenticatedLoginHistoryRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
+  '/support': typeof AuthenticatedSupportRoute
   '/owner-center': typeof AuthenticatedOwnerCenterRoute
   '/pos': typeof AuthenticatedPosRoute
   '/products': typeof AuthenticatedProductsRoute
@@ -425,6 +433,7 @@ export interface FileRoutesById {
   '/_authenticated/kitchen': typeof AuthenticatedKitchenRoute
   '/_authenticated/login-history': typeof AuthenticatedLoginHistoryRoute
   '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
+  '/_authenticated/support': typeof AuthenticatedSupportRoute
   '/_authenticated/owner-center': typeof AuthenticatedOwnerCenterRoute
   '/_authenticated/pos': typeof AuthenticatedPosRoute
   '/_authenticated/products': typeof AuthenticatedProductsRoute
@@ -475,6 +484,7 @@ export interface FileRouteTypes {
     | '/kitchen'
     | '/login-history'
     | '/notifications'
+    | '/support'
     | '/owner-center'
     | '/pos'
     | '/products'
@@ -522,6 +532,7 @@ export interface FileRouteTypes {
     | '/kitchen'
     | '/login-history'
     | '/notifications'
+    | '/support'
     | '/owner-center'
     | '/pos'
     | '/products'
@@ -569,6 +580,7 @@ export interface FileRouteTypes {
     | '/_authenticated/job-titles'
     | '/_authenticated/login-history'
     | '/_authenticated/notifications'
+    | '/_authenticated/support'
     | '/_authenticated/owner-center'
     | '/_authenticated/pos'
     | '/_authenticated/products'
@@ -742,6 +754,13 @@ declare module '@tanstack/react-router' {
       path: '/notifications'
       fullPath: '/notifications'
       preLoaderRoute: typeof AuthenticatedNotificationsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/support': {
+      id: '/_authenticated/support'
+      path: '/support'
+      fullPath: '/support'
+      preLoaderRoute: typeof AuthenticatedSupportRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/owner-center': {
@@ -971,6 +990,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedKitchenRoute: AuthenticatedKitchenRoute,
   AuthenticatedLoginHistoryRoute: AuthenticatedLoginHistoryRoute,
   AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
+  AuthenticatedSupportRoute: AuthenticatedSupportRoute,
   AuthenticatedOwnerCenterRoute: AuthenticatedOwnerCenterRoute,
   AuthenticatedPosRoute: AuthenticatedPosRoute,
   AuthenticatedProductsRoute: AuthenticatedProductsRoute,
