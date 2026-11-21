@@ -149,7 +149,7 @@ test("workspace tabs preserve pinned pages and enforce a stable maximum", () => 
 
 test("custom sidebar tabs are owner-only shortcuts to an allowlisted existing route", () => {
   assert.match(settings, /ras-custom-sidebar-items-v1/);
-  assert.match(settings, /allowedRoutes/);
+  assert.match(settings, /normalizeCustomShortcuts/);
   assert.match(settings, /الحد الأقصى 12 اختصاراً/);
   assert.match(appSidebar, /اختصارات مخصصة/);
   assert.match(appSidebar, /isSuperOwner && customItems.length/);
@@ -208,7 +208,7 @@ test("POS supports scheduled promotional placements without changing checkout lo
 test("developer studio can rename or hide non-critical built-in tabs and restores defaults", () => {
   assert.match(settings, /MANAGEABLE_NAV_ITEMS/);
   assert.match(settings, /ras-sidebar-overrides-v1/);
-  assert.match(settings, /تعديل أسماء التبويبات وإظهارها/);
+  assert.match(settings, /تعديل أسماء التطبيقات وإظهارها/);
   assert.match(settings, /protected: true/);
   assert.match(settings, /resetNavOverrides/);
   assert.match(appSidebar, /navOverrides\[item\.url\.split\("#"\)\[0\]\]/);
