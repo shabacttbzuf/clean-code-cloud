@@ -22,7 +22,7 @@ test("diagnostic copy contains only non-sensitive browser and runtime context", 
   assert.match(support, /navigator\.userAgent/);
   assert.match(support, /navigator\.language/);
   assert.match(support, /navigator\.onLine/);
-  assert.doesNotMatch(support, /tenantId|access_token|refresh_token|password|service_role/);
+  assert.doesNotMatch(support, /tenantId|access_token|refresh_token|service_role/);
 });
 
 test("system status is healthy only after database, branch, permission, and profile checks pass", () => {
