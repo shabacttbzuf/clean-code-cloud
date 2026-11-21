@@ -130,9 +130,9 @@ function permissionForPath(pathname: string): string | null {
 function PermissionRouteGuard() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const { tenantId, userId, loading: tenantLoading } = useActiveTenant();
-  const { isSuperOwner, totalCount, loading: ownerLoading } = useSuperOwner();
+  const { isSuperOwner, totalCount, loading: ownerLoading, statusKnown: superOwnerStatusKnown, statusError: superOwnerStatusError, refetch: refetchSuperOwnerStatus } = useSuperOwner();
   const requiredPermission = permissionForPath(pathname);
-  const ownerOnly = pathname === "/owner-center" || (pathname === "/admin" && totalCount > 0);
+  const ownerOnly = pathname === "/owner-center" || (pathname === "/admin" && (!superOwnerStatusKnown || totalCount > 0));
 
   const permissionsQuery = useQuery({
     queryKey: ["route-effective-permissions", tenantId, userId],
@@ -148,6 +148,16 @@ function PermissionRouteGuard() {
 
   if (tenantLoading || ownerLoading || (!!requiredPermission && !isSuperOwner && permissionsQuery.isLoading)) {
     return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
+  }
+
+  if (pathname === "/admin" && !superOwnerStatusKnown) {
+    return (
+      <div role="alert" className="mx-auto max-w-xl rounded-lg border border-destructive/30 p-6 text-center text-sm">
+        <p>تعذر التحقق من حالة المالك الرئيسي. تم إيقاف الوصول إلى شاشة الإدارة احتياطياً.</p>
+        {superOwnerStatusError instanceof Error && <p className="mt-2 text-xs text-muted-foreground">{superOwnerStatusError.message}</p>}
+        <Button type="button" variant="outline" className="mt-3" onClick={() => void refetchSuperOwnerStatus()}>إعادة التحقق</Button>
+      </div>
+    );
   }
 
   if (ownerOnly && !isSuperOwner) {
