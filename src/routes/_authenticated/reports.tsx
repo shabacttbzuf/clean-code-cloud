@@ -116,7 +116,7 @@ function ReportsPage() {
 
   const data = report.data;
   const safe = useMemo(() => {
-    const raw = data ?? { sales: [] as any[], expenses: [] as any[], items: [] as any[], sessions: [] as any[], inventory: [] as any[], refunds: [] as any[], refundItems: [] as any[] };
+    const raw = data ?? { sales: [] as any[], expenses: [] as any[], items: [] as any[], sessions: [] as any[], inventory: [] as any[], inventoryProducts: [] as any[], refunds: [] as any[], refundItems: [] as any[] };
     if (branchId === "all") return raw;
     const sales = raw.sales.filter((row: any) => row.branch_id === branchId);
     const refunds = raw.refunds.filter((row: any) => row.branch_id === branchId);
@@ -133,6 +133,43 @@ function ReportsPage() {
       refundItems: raw.refundItems.filter((row: any) => refundIds.has(row.refund_id)),
     };
   }, [data, branchId]);
+
+  const profitMetrics = useMemo(() => calculateProfitMetrics({
+    sales: safe.sales,
+    refunds: safe.refunds,
+    saleItems: safe.items,
+    refundItems: safe.refundItems,
+    expenses: safe.expenses,
+  }), [safe]);
+
+  const inventoryRows = useMemo(() => {
+    const products = new Map((safe.inventoryProducts ?? []).map((product: any) => [product.id, product]));
+    const branches = new Map((branchesQuery.data ?? []).map((branch) => [branch.id, branch.name]));
+    return safe.inventory.map((row: any) => {
+      const product = products.get(row.product_id);
+      return product ? {
+        productId: row.product_id,
+        productName: product.name,
+        sku: product.sku,
+        branchId: row.branch_id,
+        branchName: branches.get(row.branch_id) ?? "—",
+        quantity: Number(row.quantity),
+        minimum: Number(product.min_stock ?? 0),
+        costPrice: Number(product.cost_price ?? 0),
+        estimatedValue: Number(row.quantity) * Number(product.cost_price ?? 0),
+      } : null;
+    }).filter((row: any): row is NonNullable<typeof row> => row !== null)
+      .sort((a: any, b: any) => (a.quantity - a.minimum) - (b.quantity - b.minimum));
+  }, [safe.inventory, safe.inventoryProducts, branchesQuery.data]);
+
+  const lowStockRows = useMemo(
+    () => inventoryRows.filter((row: any) => row.quantity <= row.minimum),
+    [inventoryRows],
+  );
+  const inventoryValue = useMemo(
+    () => inventoryRows.reduce((sum: number, row: any) => sum + row.estimatedValue, 0),
+    [inventoryRows],
+  );
 
   const totals = useMemo(() => {
     const grossSalesTotal = safe.sales.reduce((s: number, r: any) => s + Number(r.total), 0);
