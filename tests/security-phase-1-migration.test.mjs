@@ -712,3 +712,33 @@ test("POS receipt printing uses the user gesture and includes cashier identity",
   assert.match(invoicePrintSource, /targetWindow === undefined/);
   assert.match(invoicePrintSource, /if \(!w \|\| w\.closed\) return false/);
 });
+
+
+const stage15IndexMigration = readFileSync(
+  new URL("../supabase/migrations/20261122010000_stage15_fk_index_and_security_regression_guards.sql", import.meta.url),
+  "utf8",
+);
+
+test("stage 15 adds only non-destructive indexes for the remaining uncovered foreign keys", () => {
+  for (const indexName of [
+    "idx_kitchen_order_events_actor_id_fk",
+    "idx_kitchen_order_events_branch_id_fk",
+    "idx_kitchen_order_events_tenant_id_fk",
+    "idx_kitchen_orders_branch_id_fk",
+    "idx_leave_requests_rejected_by_fk",
+    "idx_restaurant_tables_branch_id_fk",
+    "idx_sales_table_id_fk",
+  ]) {
+    assert.ok(stage15IndexMigration.includes(indexName), indexName);
+  }
+  assert.match(stage15IndexMigration, /CREATE INDEX IF NOT EXISTS/);
+  assert.doesNotMatch(stage15IndexMigration, /DROP POLICY|DELETE FROM|TRUNCATE|DROP TABLE/i);
+});
+
+test("complete database snapshot includes stage 15 migration exactly once", () => {
+  const snapshot = readFileSync(
+    new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url),
+    "utf8",
+  );
+  assert.equal(snapshot.split("SOURCE MIGRATION: 20261122010000_stage15_fk_index_and_security_regression_guards.sql").length - 1, 1);
+});
