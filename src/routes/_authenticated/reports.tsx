@@ -46,6 +46,7 @@ function ReportsPage() {
     queryKey: ["reports", tenantId, from, to, branchId],
     queryFn: async () => {
       if (!tenantId) return null;
+      if (from > to) throw new Error("تاريخ البداية يجب أن يسبق تاريخ النهاية أو يساويه.");
       const fromDate = `${from}T00:00:00.000Z`;
       const toDate = `${to}T23:59:59.999Z`;
 
@@ -258,7 +259,19 @@ function ReportsPage() {
     return Array.from(map.values()).sort((a, b) => b.sales - a.sales);
   }, [safe.sales, safe.refunds]);
 
-  if (!data) {
+  if (report.isError) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="التقارير" subtitle="تعذر تحميل بيانات التقرير." />
+        <Card><CardContent className="flex flex-col items-center gap-3 p-6 text-center">
+          <p role="alert" className="text-sm text-destructive">{report.error instanceof Error ? report.error.message : "حدث خطأ أثناء تحميل التقارير."}</p>
+          <Button variant="outline" onClick={() => void report.refetch()}>إعادة المحاولة</Button>
+        </CardContent></Card>
+      </div>
+    );
+  }
+
+  if (report.isLoading || !data) {
     return (
       <div className="space-y-6">
         <PageHeader title="التقارير" subtitle="تقارير مبيعات، مصروفات، مخزون وموظفين" />
