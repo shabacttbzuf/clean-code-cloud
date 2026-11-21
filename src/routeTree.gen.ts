@@ -337,7 +337,6 @@ export interface FileRoutesByFullPath {
   '/login-history': typeof AuthenticatedLoginHistoryRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/support': typeof AuthenticatedSupportRoute
-  '/support': typeof AuthenticatedSupportRoute
   '/owner-center': typeof AuthenticatedOwnerCenterRoute
   '/pos': typeof AuthenticatedPosRoute
   '/products': typeof AuthenticatedProductsRoute
@@ -384,6 +383,7 @@ export interface FileRoutesByTo {
   '/kitchen': typeof AuthenticatedKitchenRoute
   '/login-history': typeof AuthenticatedLoginHistoryRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
+  '/support': typeof AuthenticatedSupportRoute
   '/owner-center': typeof AuthenticatedOwnerCenterRoute
   '/pos': typeof AuthenticatedPosRoute
   '/products': typeof AuthenticatedProductsRoute
