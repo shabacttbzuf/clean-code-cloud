@@ -22,7 +22,7 @@ export function AppLauncher() {
   const [customItems, setCustomItems] = useState<CustomShortcut[]>([]);
   const [navOverrides, setNavOverrides] = useState<Record<string, NavOverride>>({});
   const { tenantId, userId } = useActiveTenant();
-  const { isSuperOwner, totalCount } = useSuperOwner();
+  const { isSuperOwner, totalCount, statusKnown } = useSuperOwner();
 
   useEffect(() => {
     const read = () => {
@@ -78,7 +78,7 @@ export function AppLauncher() {
     const systemItems = [];
     if (isSuperOwner) systemItems.push({ title: "مركز تحكم المالك", url: "/owner-center", icon: Crown });
     if (isSuperOwner) systemItems.push({ title: "استوديو تطوير النظام", url: "/settings#developer-studio", icon: Palette });
-    if (isSuperOwner || totalCount === 0) systemItems.push({ title: "إدارة النظام", url: "/admin", icon: ShieldCheck });
+    if (isSuperOwner || (statusKnown && totalCount === 0)) systemItems.push({ title: "إدارة النظام", url: "/admin", icon: ShieldCheck });
     systemItems.push({ title: "سجل التدقيق", url: "/audit-logs", icon: ScrollText, permission: "audit.view" });
 
     const sourceGroups: AppNavigationGroup[] = [
@@ -105,7 +105,7 @@ export function AppLauncher() {
           title: navOverrides[item.url.split("#")[0]]?.title?.trim() || item.title,
         })),
     })).filter((group) => group.items.length);
-  }, [isSuperOwner, totalCount, permissions.data, customItems, navOverrides, search]);
+  }, [isSuperOwner, totalCount, statusKnown, permissions.data, customItems, navOverrides, search]);
 
   return (
     <div className="relative">
