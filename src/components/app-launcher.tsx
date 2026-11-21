@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
-  Search, LayoutGrid, ChevronDown, Crown, Building, Briefcase, BadgeCheck,
+  Search, LayoutGrid, Crown, Building, Briefcase, BadgeCheck,
   KeyRound, History, UsersRound, ShieldCheck, ScrollText, Palette, Bookmark,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
