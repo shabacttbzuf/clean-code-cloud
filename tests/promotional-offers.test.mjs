@@ -51,7 +51,7 @@ test("active offer visibility and redemption analytics enforce dedicated permiss
   assert.match(readScopeMigration, /status='active'/);
   assert.match(readScopeMigration, /promotions\.manage/);
   assert.match(readScopeMigration, /Promotion managers read redemptions/);
-  assert.match(readScopeMigration, /private\\.can_access_branch/);
+  assert.match(readScopeMigration, /private\.can_access_branch/);
   assert.match(readScopeMigration, /Promotion managers insert offers/);
   assert.ok(snapshot.includes("-- SOURCE MIGRATION: 20261121025000_promotions_read_permission_scope.sql"));
 });
