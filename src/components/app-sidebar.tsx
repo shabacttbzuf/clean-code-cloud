@@ -39,6 +39,7 @@ import {
   Megaphone,
   Armchair,
   ChefHat,
+  CircleHelp,
 } from "lucide-react";
 import { useSuperOwner } from "@/hooks/use-super-owner";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
@@ -107,6 +108,12 @@ export const appNavigationGroups: AppNavigationGroup[] = [
       { title: "الإجازات", url: "/hr/leaves", icon: CalendarDays, permission: "hr.leaves.view" },
       { title: "المكافآت والحسميات", url: "/hr/compensation", icon: Gift, permission: "hr.compensation.view" },
       { title: "الرواتب", url: "/hr/payroll", icon: Wallet2, permission: "hr.payroll.view" },
+    ],
+  },
+  {
+    label: "المساعدة",
+    items: [
+      { title: "مركز المساعدة والدعم", url: "/support", icon: CircleHelp },
     ],
   },
   {

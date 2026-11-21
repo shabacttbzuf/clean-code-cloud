@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet, redirect, useNavigate, useRouterState } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, redirect, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { appNavigationGroups } from "@/components/app-sidebar";
@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Moon, Sun, LogOut, User as UserIcon, Loader2, Bell, Maximize2, Minimize2, CalendarDays, Building2, Search } from "lucide-react";
+import { Moon, Sun, LogOut, User as UserIcon, Loader2, Bell, Maximize2, Minimize2, CalendarDays, Building2, Search, CircleHelp } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthSession } from "@/hooks/use-auth-session";
@@ -369,6 +369,11 @@ function TopBar() {
   return (
     <header className="sticky top-0 z-30 flex min-h-[68px] items-center justify-between gap-3 border-b border-[#dbe5f4] bg-[rgba(248,250,255,.96)] px-3 py-2 shadow-[0_3px_14px_rgba(16,47,92,.06)] backdrop-blur-xl sm:px-5" dir="rtl">
       <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+        <Link to="/support" aria-label="مركز المساعدة والدعم" title="مركز المساعدة والدعم">
+          <Button variant="outline" size="icon" className="rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm">
+            <CircleHelp className="h-5 w-5" />
+          </Button>
+        </Link>
         <AppLauncher />
         <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#174b91] to-[#102f5c] text-[#f5c65b] shadow-sm"><Building2 className="h-5 w-5" /></div>
         <DropdownMenu>
