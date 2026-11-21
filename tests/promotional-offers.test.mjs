@@ -9,6 +9,7 @@ const pos = readFileSync(new URL("../src/routes/_authenticated/pos.tsx", import.
 const sidebar = readFileSync(new URL("../src/components/app-sidebar.tsx", import.meta.url), "utf8");
 const tabs = readFileSync(new URL("../src/components/workspace-tabs.tsx", import.meta.url), "utf8");
 const guard = readFileSync(new URL("../src/routes/_authenticated/route.tsx", import.meta.url), "utf8");
+const routeTree = readFileSync(new URL("../src/routeTree.gen.ts", import.meta.url), "utf8");
 
 test("promotional offers have a dedicated schema and independent permission", () => {
   assert.match(migration, /'promotions\.manage'/);
@@ -25,6 +26,8 @@ test("POS promotion redemption is validated server-side and recorded atomically"
   assert.match(migration, /FOR UPDATE/);
   assert.match(migration, /usage_limit/);
   assert.match(migration, /INSERT INTO public\.promotion_redemptions/);
+  assert.match(migration, /private\.create_pos_order_with_promotion/);
+  assert.match(migration, /LANGUAGE sql\s+SECURITY INVOKER/);
   assert.match(pos, /pos-active-promotions/);
   assert.match(pos, /_promotion_id: selectedPromotionId/);
   assert.match(pos, /خصم العرض الترويجي/);
@@ -38,6 +41,8 @@ test("promotions are separate from advertising and have their own navigation and
   assert.match(sidebar, /title: "العروض الترويجية", url: "\/promotions".*promotions\.manage/);
   assert.match(tabs, /\["\/promotions", "العروض الترويجية"\]/);
   assert.match(guard, /prefix: "\/promotions", permission: "promotions\.manage"/);
+  assert.match(routeTree, /AuthenticatedPromotionsRouteImport/);
+  assert.ok(routeTree.includes("fullPath: '/promotions'"));
 });
 
 test("complete database snapshot contains the exact promotions migration", () => {
