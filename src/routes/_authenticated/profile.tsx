@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Save, KeyRound, Upload } from "lucide-react";
+import { Loader2, Save, KeyRound, Upload, Eye, EyeOff, ShieldCheck, Briefcase, Building2, CalendarDays, Monitor, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { updateMyProfile, updateUserPassword } from "@/lib/users.functions";
@@ -20,6 +20,34 @@ export const Route = createFileRoute("/_authenticated/profile")({
   component: ProfilePage,
 });
 
+function formatProfileDate(value?: string | null, dateOnly = false) {
+  if (!value) return "غير مسجل";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("ar-YE", dateOnly ? { year: "numeric", month: "long", day: "numeric" } : undefined);
+}
+
+function accountStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    active: "نشط",
+    suspended: "موقوف",
+    frozen: "مجمّد",
+    pending_approval: "بانتظار الاعتماد",
+    password_expired: "انتهت صلاحية كلمة المرور",
+    archived: "مؤرشف",
+  };
+  return labels[status] ?? "غير معروف";
+}
+
+function ProfileInfo({ label, value, direction = "auto" }: { label: string; value?: string | null; direction?: "ltr" | "rtl" | "auto" }) {
+  return (
+    <div className="min-w-0 rounded-lg border p-3">
+      <div className="mb-1 text-xs text-muted-foreground">{label}</div>
+      <div dir={direction} className="break-words text-sm font-semibold">{value || "غير مسجل"}</div>
+    </div>
+  );
+}
+
 function ProfilePage() {
   const { user } = useAuthSession();
   const { tenantId } = useActiveTenant();
@@ -27,34 +55,59 @@ function ProfilePage() {
   const updateFn = useServerFn(updateMyProfile);
   const pwdFn = useServerFn(updateUserPassword);
 
-  const { data: profile, isLoading } = useQuery({
-    queryKey: ["my-profile", user?.id],
+  const profileQuery = useQuery({
+    queryKey: ["my-profile", user?.id, tenantId],
     queryFn: async () => {
+      if (!user?.id) throw new Error("لا يوجد مستخدم مسجل الدخول.");
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, full_name, username, phone, avatar_url, last_login_at, tenant_id, branch_id")
-        .eq("id", user!.id)
+        .select("id, full_name, username, phone, email, avatar_url, last_login_at, last_device, last_ip, created_at, tenant_id, branch_id, company_id, department_id, job_title, employee_no, national_id, employment_date, status, is_active, must_change_password, approved_at, password_changed_at")
+        .eq("id", user.id)
         .maybeSingle();
       if (error) throw error;
-      return data;
+      if (!data) throw new Error("لم يتم العثور على ملف المستخدم.");
+
+      const [branchResult, companyResult, departmentResult] = await Promise.all([
+        data.branch_id && data.tenant_id
+          ? supabase.from("branches").select("name").eq("id", data.branch_id).eq("tenant_id", data.tenant_id).maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+        data.company_id && data.tenant_id
+          ? supabase.from("companies").select("name").eq("id", data.company_id).eq("tenant_id", data.tenant_id).maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+        data.department_id && data.tenant_id
+          ? supabase.from("departments").select("name").eq("id", data.department_id).eq("tenant_id", data.tenant_id).maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+      ]);
+
+      return {
+        ...data,
+        branch_name: branchResult.error ? null : branchResult.data?.name ?? null,
+        company_name: companyResult.error ? null : companyResult.data?.name ?? null,
+        department_name: departmentResult.error ? null : departmentResult.data?.name ?? null,
+        assignment_lookup_incomplete: !!(branchResult.error || companyResult.error || departmentResult.error),
+      };
     },
     enabled: !!user?.id,
+    staleTime: 30_000,
   });
+  const { data: profile, isLoading, isError, error: profileError } = profileQuery;
 
   const [form, setForm] = useState({ full_name: "", username: "", phone: "", avatar_url: "" });
   const [pwd, setPwd] = useState({ next: "", confirm: "" });
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [showNationalId, setShowNationalId] = useState(false);
 
   async function uploadAvatar(file?: File) {
-    if (!file || !user?.id || !tenantId) return;
+    const avatarTenantId = profile?.tenant_id ?? tenantId;
+    if (!file || !user?.id || !avatarTenantId) return;
     const allowed = ["image/jpeg", "image/png", "image/webp", "image/avif"];
     if (!allowed.includes(file.type)) { toast.error("صيغة الصورة غير مدعومة"); return; }
     if (file.size > 5 * 1024 * 1024) { toast.error("الحجم الأقصى للصورة 5MB"); return; }
     setUploadingAvatar(true);
     try {
       const ext = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif" } as Record<string, string>)[file.type];
-      const path = `${tenantId}/profiles/${user.id}/${crypto.randomUUID()}.${ext}`;
+      const path = `${avatarTenantId}/profiles/${user.id}/${crypto.randomUUID()}.${ext}`;
       const { error } = await supabase.storage.from("restaurant-private-assets").upload(path, file, { upsert: false, contentType: file.type, cacheControl: "3600" });
       if (error) throw error;
       const { data, error: signedError } = await supabase.storage.from("restaurant-private-assets").createSignedUrl(path, 60 * 60 * 24);
@@ -118,12 +171,20 @@ function ProfilePage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشل التغيير"),
   });
 
-  if (isLoading) {
+  if (isError) {
     return (
-      <div className="flex justify-center py-12">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      <div className="mx-auto max-w-3xl space-y-4">
+        <PageHeader title="ملفي الشخصي" subtitle="تعذر تحميل بيانات الحساب." />
+        <Card><CardContent className="flex flex-col items-center gap-3 p-6 text-center">
+          <p role="alert" className="text-sm text-destructive">{profileError instanceof Error ? profileError.message : "حدث خطأ أثناء تحميل الملف الشخصي."}</p>
+          <Button variant="outline" onClick={() => void profileQuery.refetch()}>إعادة المحاولة</Button>
+        </CardContent></Card>
       </div>
     );
+  }
+
+  if (isLoading || !profile) {
+    return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
   }
 
   const initial = (form.full_name || user?.email || "?").charAt(0).toUpperCase();
@@ -199,6 +260,46 @@ function ProfilePage() {
               حفظ التغييرات
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Briefcase className="h-5 w-5 text-primary" /> بيانات العمل والنطاق</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <ProfileInfo label="الرقم الوظيفي" value={profile.employee_no} />
+          <ProfileInfo label="المسمى الوظيفي" value={profile.job_title} />
+          <ProfileInfo label="القسم" value={profile.department_name} />
+          <ProfileInfo label="الشركة" value={profile.company_name ?? (profile.company_id ? "غير متاح ضمن الصلاحيات" : "نطاق الشركة العام")} />
+          <ProfileInfo label="الفرع" value={profile.branch_name ?? (profile.branch_id ? "غير متاح ضمن الصلاحيات" : "حسب نطاق الصلاحيات")} />
+          <ProfileInfo label="تاريخ التوظيف" value={formatProfileDate(profile.employment_date, true)} />
+          <div className="rounded-lg border p-3">
+            <div className="mb-1 text-xs text-muted-foreground">رقم الهوية الوطنية</div>
+            <div className="flex items-center justify-between gap-2">
+              <span dir="ltr" className="font-medium">{profile.national_id ? (showNationalId ? profile.national_id : `••••••${profile.national_id.slice(-4)}`) : "غير مسجل"}</span>
+              {profile.national_id && <Button type="button" variant="ghost" size="icon" className="h-7 w-7" aria-label={showNationalId ? "إخفاء رقم الهوية" : "إظهار رقم الهوية"} onClick={() => setShowNationalId((value) => !value)}>{showNationalId ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</Button>}
+            </div>
+          </div>
+          <ProfileInfo label="حالة الحساب" value={accountStatusLabel(profile.status)} />
+          <ProfileInfo label="حالة التفعيل" value={profile.is_active ? "مفعّل" : "غير مفعّل"} />
+        </CardContent>
+        {profile.assignment_lookup_incomplete && <p className="px-6 pb-4 text-xs text-amber-700">تعذر تحميل اسم أحد عناصر النطاق؛ لا يؤثر ذلك في بيانات الحساب أو صلاحياته.</p>}
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-primary" /> معلومات الحساب والأمان</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <ProfileInfo label="البريد الإلكتروني" value={user?.email ?? profile.email} direction="ltr" />
+          <ProfileInfo label="تاريخ إنشاء الحساب" value={formatProfileDate(profile.created_at)} />
+          <ProfileInfo label="آخر تسجيل دخول" value={formatProfileDate(profile.last_login_at)} />
+          <ProfileInfo label="آخر جهاز مسجل" value={profile.last_device} />
+          <ProfileInfo label="آخر عنوان IP" value={profile.last_ip} direction="ltr" />
+          <ProfileInfo label="آخر تغيير لكلمة المرور" value={formatProfileDate(profile.password_changed_at)} />
+          <ProfileInfo label="اعتماد الحساب" value={formatProfileDate(profile.approved_at)} />
+          <ProfileInfo label="تغيير كلمة المرور مطلوب" value={profile.must_change_password ? "نعم — يلزم التغيير" : "لا"} />
         </CardContent>
       </Card>
 

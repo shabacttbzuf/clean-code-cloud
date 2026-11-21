@@ -622,11 +622,14 @@ export const updateMyProfile = createServerFn({ method: "POST" })
     if (data.phone !== undefined) patch.phone = data.phone;
     if (data.avatar_url !== undefined) patch.avatar_url = data.avatar_url;
     if (Object.keys(patch).length === 0) return { ok: true };
-    const { error } = await context.supabase
+    const { data: updatedProfile, error } = await context.supabase
       .from("profiles")
       .update(patch)
-      .eq("id", context.userId);
+      .eq("id", context.userId)
+      .select("id")
+      .maybeSingle();
     if (error) throw new Error(error.message);
+    if (!updatedProfile) throw new Error("لم يتم تحديث الملف الشخصي؛ تحقق من حالة الحساب.");
     return { ok: true };
   });
 
