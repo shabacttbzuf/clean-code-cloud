@@ -259,14 +259,18 @@ function TopBar() {
     queryKey: ["topbar-notifications", tenantId, user?.id],
     queryFn: async () => {
       if (!tenantId || !user?.id) return { items: [], readIds: new Set<string>() };
-      const [itemsResult, readsResult] = await Promise.all([
-        supabase.from("notifications").select("id,title,body,urgency,kind,created_at,audience_type,action_path,action_label")
-          .eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(12),
-        (supabase.from("notification_reads" as any) as any).select("notification_id").eq("user_id", user.id),
-      ]);
+      const itemsResult = await supabase.from("notifications")
+        .select("id,title,body,urgency,kind,created_at,audience_type,action_path,action_label")
+        .eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(12);
       if (itemsResult.error) throw itemsResult.error;
-      if (readsResult.error) throw readsResult.error;
-      const readIds = new Set<string>((readsResult.data ?? []).map((r: { notification_id: string }) => r.notification_id));
+      const readIds = new Set<string>();
+      for (let from = 0; ; from += 500) {
+        const { data, error } = await (supabase.from("notification_reads" as any) as any)
+          .select("notification_id").eq("user_id", user.id).range(from, from + 499);
+        if (error) throw error;
+        for (const row of data ?? []) readIds.add(row.notification_id);
+        if ((data ?? []).length < 500) break;
+      }
       const notificationIds: string[] = [];
       for (let from = 0; ; from += 500) {
         const { data, error } = await supabase.from("notifications").select("id")
