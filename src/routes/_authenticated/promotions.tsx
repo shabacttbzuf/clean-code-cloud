@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
@@ -35,10 +35,14 @@ function PromotionsPage() {
   const { tenantId, role, membership, isSuperOwner, hasPermission } = useActiveTenant();
   const qc = useQueryClient();
   const isTenantOwner = role === "owner" && !membership?.company_id;
-  const canManage = isSuperOwner || isTenantOwner ||
-    ((role === "owner" || role === "manager") && !!membership?.company_id && hasPermission("promotions.manage"));
-  const [form, setForm] = useState(emptyForm);
+  const canManage = isSuperOwner || isTenantOwner || hasPermission("promotions.manage");
+  const [form, setForm] = useState({ ...emptyForm, branch_id: membership?.branch_id && !membership?.company_id ? membership.branch_id : "" });
   const [editing, setEditing] = useState<string | null>(null);
+  useEffect(() => {
+    if (membership?.branch_id && !membership.company_id && !editing) {
+      setForm((current) => current.branch_id ? current : { ...current, branch_id: membership.branch_id! });
+    }
+  }, [membership?.branch_id, membership?.company_id, editing]);
 
   const products = useQuery({
     queryKey: ["promotion-products", tenantId],
@@ -166,7 +170,7 @@ function PromotionsPage() {
     onError: (error) => toast.error(error instanceof Error ? error.message : "لا يمكن حذف عرض مستخدم؛ قم بأرشفته"),
   });
 
-  function resetForm() { setForm(emptyForm); setEditing(null); }
+  function resetForm() { setForm({ ...emptyForm, branch_id: membership?.branch_id && !membership?.company_id ? membership.branch_id : "" }); setEditing(null); }
   function editOffer(offer: Offer) {
     const local = (v: string | null) => v ? new Date(new Date(v).getTime() - new Date(v).getTimezoneOffset() * 60000).toISOString().slice(0,16) : "";
     setEditing(offer.id);

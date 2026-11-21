@@ -1363,6 +1363,8 @@ export type Database = {
       }
       notifications: {
         Row: {
+          action_label: string | null
+          action_path: string | null
           audience_id: string | null
           audience_type: string
           body: string | null
@@ -1380,6 +1382,8 @@ export type Database = {
           urgency: string
         }
         Insert: {
+          action_label?: string | null
+          action_path?: string | null
           audience_id?: string | null
           audience_type: string
           body?: string | null
@@ -1397,6 +1401,8 @@ export type Database = {
           urgency?: string
         }
         Update: {
+          action_label?: string | null
+          action_path?: string | null
           audience_id?: string | null
           audience_type?: string
           body?: string | null

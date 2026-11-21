@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const migration = readFileSync(new URL("../supabase/migrations/20261121020000_promotional_offers_and_pos_redemptions.sql", import.meta.url), "utf8");
+const readScopeMigration = readFileSync(new URL("../supabase/migrations/20261121025000_promotions_read_permission_scope.sql", import.meta.url), "utf8");
 const snapshot = readFileSync(new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url), "utf8");
 const page = readFileSync(new URL("../src/routes/_authenticated/promotions.tsx", import.meta.url), "utf8");
 const pos = readFileSync(new URL("../src/routes/_authenticated/pos.tsx", import.meta.url), "utf8");
@@ -43,6 +44,16 @@ test("promotions are separate from advertising and have their own navigation and
   assert.match(guard, /prefix: "\/promotions", permission: "promotions\.manage"/);
   assert.match(routeTree, /AuthenticatedPromotionsRouteImport/);
   assert.ok(routeTree.includes("fullPath: '/promotions'"));
+});
+
+
+test("active offer visibility and redemption analytics enforce dedicated permission scopes", () => {
+  assert.match(readScopeMigration, /status='active'/);
+  assert.match(readScopeMigration, /promotions\.manage/);
+  assert.match(readScopeMigration, /Promotion managers read redemptions/);
+  assert.match(readScopeMigration, /private\.can_access_branch/);
+  assert.match(readScopeMigration, /Promotion managers insert offers/);
+  assert.ok(snapshot.includes("-- SOURCE MIGRATION: 20261121025000_promotions_read_permission_scope.sql"));
 });
 
 test("complete database snapshot contains the exact promotions migration", () => {

@@ -23,6 +23,7 @@ import { useMemberships } from "@/hooks/use-tenant";
 import { toast } from "sonner";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { useSuperOwner } from "@/hooks/use-super-owner";
+import { safeInternalNotificationPath } from "@/lib/notification-links";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -257,36 +258,98 @@ function TopBar() {
   const notificationsQuery = useQuery({
     queryKey: ["topbar-notifications", tenantId, user?.id],
     queryFn: async () => {
-      if (!tenantId || !user?.id) return { items: [], readIds: new Set<string>() };
-      const [itemsResult, readsResult] = await Promise.all([
-        supabase.from("notifications").select("id,title,body,urgency,kind,created_at,audience_type")
+      if (!tenantId || !user?.id) return { items: [], readIds: new Set<string>(), unreadCount: 0 };
+      const [itemsResult, totalResult, readCountResult] = await Promise.all([
+        supabase.from("notifications")
+          .select("id,title,body,urgency,kind,created_at,audience_type,action_path,action_label")
           .eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(12),
-        (supabase.from("notification_reads" as any) as any).select("notification_id").eq("user_id", user.id),
+        supabase.from("notifications").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
+        (supabase.from("notification_reads" as any) as any)
+          .select("notification_id,notifications!inner(tenant_id)", { count: "exact", head: true })
+          .eq("user_id", user.id).eq("notifications.tenant_id", tenantId),
       ]);
       if (itemsResult.error) throw itemsResult.error;
-      if (readsResult.error) throw readsResult.error;
-      return { items: itemsResult.data ?? [], readIds: new Set<string>((readsResult.data ?? []).map((r: { notification_id: string }) => r.notification_id)) };
+      if (totalResult.error) throw totalResult.error;
+      if (readCountResult.error) throw readCountResult.error;
+      const recentIds = (itemsResult.data ?? []).map((row) => row.id);
+      const recentReads = recentIds.length
+        ? await (supabase.from("notification_reads" as any) as any)
+            .select("notification_id").eq("user_id", user.id).in("notification_id", recentIds)
+        : { data: [], error: null };
+      if (recentReads.error) throw recentReads.error;
+      return {
+        items: itemsResult.data ?? [],
+        readIds: new Set<string>((recentReads.data ?? []).map((row: { notification_id: string }) => row.notification_id)),
+        unreadCount: Math.max(0, (totalResult.count ?? 0) - (readCountResult.count ?? 0)),
+      };
     },
     enabled: !!tenantId && !!user?.id,
     refetchInterval: 30_000,
     staleTime: 10_000,
   });
-  const unreadCount = (notificationsQuery.data?.items ?? []).filter((n: any) => !notificationsQuery.data?.readIds.has(n.id)).length;
-  async function markNotificationRead(notificationId: string) {
-    if (!user?.id) return;
+  const unreadCount = notificationsQuery.data?.unreadCount ?? 0;
+  async function markNotificationRead(notificationId: string): Promise<boolean> {
+    if (!user?.id) return false;
     const { error } = await (supabase.from("notification_reads" as any) as any)
       .upsert({ notification_id: notificationId, user_id: user.id }, { onConflict: "notification_id,user_id" });
-    if (error) { toast.error("تعذر تحديث حالة الإشعار"); return; }
-    await qc.invalidateQueries({ queryKey: ["topbar-notifications", tenantId, user.id] });
+    if (error) { toast.error("تعذر تحديث حالة الإشعار"); return false; }
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["topbar-notifications", tenantId, user.id] }),
+      qc.invalidateQueries({ queryKey: ["notifications-list", tenantId, user.id] }),
+    ]);
+    return true;
   }
   async function markAllNotificationsRead() {
-    if (!user?.id) return;
-    const unread = (notificationsQuery.data?.items ?? []).filter((n: any) => !notificationsQuery.data?.readIds.has(n.id));
-    if (!unread.length) return;
-    const { error } = await (supabase.from("notification_reads" as any) as any).upsert(
-      unread.map((n: any) => ({ notification_id: n.id, user_id: user.id })), { onConflict: "notification_id,user_id" });
-    if (error) { toast.error("تعذر تحديث الإشعارات"); return; }
-    await qc.invalidateQueries({ queryKey: ["topbar-notifications", tenantId, user.id] });
+    if (!user?.id || !tenantId) return;
+    try {
+      const allIds: string[] = [];
+      for (let from = 0; ; from += 500) {
+        const { data, error } = await supabase.from("notifications").select("id")
+          .eq("tenant_id", tenantId).order("created_at", { ascending: false }).range(from, from + 499);
+        if (error) throw error;
+        allIds.push(...(data ?? []).map((row) => row.id));
+        if ((data ?? []).length < 500) break;
+      }
+      const readIds = new Set<string>();
+      for (let from = 0; ; from += 500) {
+        const { data, error } = await (supabase.from("notification_reads" as any) as any)
+          .select("notification_id").eq("user_id", user.id).range(from, from + 499);
+        if (error) throw error;
+        for (const row of data ?? []) readIds.add(row.notification_id);
+        if ((data ?? []).length < 500) break;
+      }
+      const unreadIds = allIds.filter((id) => !readIds.has(id));
+      for (let i = 0; i < unreadIds.length; i += 500) {
+        const { error } = await (supabase.from("notification_reads" as any) as any).upsert(
+          unreadIds.slice(i, i + 500).map((notification_id) => ({ notification_id, user_id: user.id })),
+          { onConflict: "notification_id,user_id" },
+        );
+        if (error) throw error;
+      }
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["topbar-notifications", tenantId, user.id] }),
+        qc.invalidateQueries({ queryKey: ["notifications-list", tenantId, user.id] }),
+      ]);
+    } catch {
+      toast.error("تعذر تحديث الإشعارات");
+    }
+  }
+  async function openNotification(notification: any) {
+    const target = safeInternalNotificationPath(notification.action_path);
+    if (!target) {
+      await markNotificationRead(notification.id);
+      return;
+    }
+    const targetPath = target.split(/[?#]/, 1)[0];
+    const requiredPermission = permissionForPath(targetPath);
+    const allowed = isSuperOwner || (requiredPermission
+      ? searchPermissions.data?.has(requiredPermission) === true
+      : targetPath === "/profile" || targetPath === "/notifications");
+    if (!allowed) {
+      toast.error("لا تملك صلاحية فتح وجهة هذا الإشعار.");
+      return;
+    }
+    if (await markNotificationRead(notification.id)) navigate({ to: target as any });
   }
 
   async function handleSignOut() {
@@ -371,7 +434,7 @@ function TopBar() {
           <DropdownMenuTrigger asChild><Button variant="outline" size="icon" className="relative rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm" aria-label="الإشعارات"><Bell className="h-5 w-5" />{unreadCount > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full border-2 border-white bg-red-500 px-1 text-[10px] font-bold text-white">{unreadCount > 9 ? "9+" : unreadCount}</span>}</Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-[min(92vw,360px)]">
             <div className="flex items-center justify-between px-2 py-1.5"><DropdownMenuLabel className="p-0">الإشعارات {unreadCount > 0 ? "(" + unreadCount + ")" : ""}</DropdownMenuLabel><Button size="sm" variant="ghost" className="h-7 text-xs" onClick={markAllNotificationsRead}>قراءة الكل</Button></div><DropdownMenuSeparator />
-            {(notificationsQuery.data?.items ?? []).length === 0 ? <div className="px-3 py-6 text-center text-sm text-muted-foreground">لا توجد إشعارات جديدة</div> : (notificationsQuery.data?.items ?? []).map((n: any) => { const isRead = notificationsQuery.data?.readIds.has(n.id); return <DropdownMenuItem key={n.id} className="block cursor-pointer whitespace-normal py-2" onSelect={() => markNotificationRead(n.id)}><div className="flex items-start gap-2">{!isRead && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-500" />}<div className="min-w-0 flex-1"><div className={isRead ? "text-sm font-normal" : "text-sm font-semibold"}>{n.title}</div>{n.body && <div className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{n.body}</div>}<div className="mt-1 text-[10px] text-muted-foreground">{new Date(n.created_at).toLocaleString("ar-YE")}</div></div></div></DropdownMenuItem>; })}
+            {(notificationsQuery.data?.items ?? []).length === 0 ? <div className="px-3 py-6 text-center text-sm text-muted-foreground">لا توجد إشعارات جديدة</div> : (notificationsQuery.data?.items ?? []).map((n: any) => { const isRead = notificationsQuery.data?.readIds.has(n.id); return <DropdownMenuItem key={n.id} className="block cursor-pointer whitespace-normal py-2" onSelect={() => { void openNotification(n); }}><div className="flex items-start gap-2">{!isRead && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-500" />}<div className="min-w-0 flex-1"><div className={isRead ? "text-sm font-normal" : "text-sm font-semibold"}>{n.title}</div>{n.body && <div className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{n.body}</div>}<div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-muted-foreground"><span>{new Date(n.created_at).toLocaleString("ar-YE")}</span>{n.action_path && <span className="font-semibold text-primary">{n.action_label || "فتح"}</span>}</div></div></div></DropdownMenuItem>; })}
             <DropdownMenuSeparator /><DropdownMenuItem onSelect={() => navigate({ to: "/notifications" })} className="justify-center text-primary">عرض كل الإشعارات</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
