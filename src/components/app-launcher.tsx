@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
-  Search, LayoutGrid, ChevronDown, Crown, Building, Briefcase, BadgeCheck,
+  Search, LayoutGrid, Crown, Building, Briefcase, BadgeCheck,
   KeyRound, History, UsersRound, ShieldCheck, ScrollText, Palette, Bookmark,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -111,13 +111,11 @@ export function AppLauncher() {
 
   return (
     <div className="relative">
-      <Button type="button" variant="outline" size="sm" className="gap-2 border-primary/20" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-        <LayoutGrid className="h-4 w-4" />
-        <span className="hidden sm:inline">التطبيقات</span>
-        <ChevronDown className="h-3.5 w-3.5" />
+      <Button type="button" variant="outline" size="icon" title="التطبيقات" aria-label="فتح التطبيقات" className="h-10 w-10 shrink-0 rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm transition hover:border-[#174b91] hover:bg-blue-50" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+        <LayoutGrid className="h-[18px] w-[18px]" />
       </Button>
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-[min(92vw,420px)] rounded-2xl border bg-popover p-3 text-popover-foreground shadow-xl" dir="rtl">
+        <div className="absolute right-0 top-full z-50 mt-2 max-h-[min(78vh,680px)] w-[min(92vw,460px)] overflow-y-auto rounded-2xl border bg-popover p-3 text-popover-foreground shadow-2xl ring-1 ring-black/5" dir="rtl">
           <div className="mb-3 flex items-center gap-2">
             <Search className="h-4 w-4 text-muted-foreground" />
             <Input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ابحث عن تطبيق..." aria-label="البحث عن تطبيق" />

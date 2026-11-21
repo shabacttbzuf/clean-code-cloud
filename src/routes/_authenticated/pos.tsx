@@ -772,7 +772,7 @@ function POSPage() {
                 <h2 className="text-xs font-bold">الأقسام</h2>
                 <span className="text-[10px] text-muted-foreground">{(categories.data?.length ?? 0) + 1} قسم</span>
               </div>
-              <div className="grid grid-cols-5 gap-1 sm:grid-cols-6 xl:grid-cols-9">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]">
                 <CategoryTile label="الكل" active={catFilter === "all"} onClick={() => setCatFilter("all")} />
                 {(categories.data ?? []).map((category) => (
                   <CategoryTile key={category.id} label={category.name} active={catFilter === category.id} onClick={() => setCatFilter(category.id)} />
@@ -800,7 +800,7 @@ function POSPage() {
                   لا يوجد رصيد متاح في هذا الفرع. سجّل الكميات الافتتاحية من شاشة المخزون قبل البيع.
                 </div>
               ) : null}
-              <div className="grid min-h-0 flex-1 content-start grid-cols-4 gap-1 overflow-y-auto p-0.5 sm:grid-cols-5 md:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8">
+              <div className="grid min-h-0 flex-1 content-start grid-cols-2 gap-2 overflow-y-auto p-1 sm:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4">
                 {filteredProducts.map((product) => {
                   const available = stockByProduct.get(product.id);
                   const stockUnavailable = inventory.isLoading || inventory.isError || available === undefined || available <= 0;
@@ -819,14 +819,16 @@ function POSPage() {
                     <button key={product.id} type="button" onClick={() => addToCart(product)}
                       disabled={stockUnavailable || checkoutMut.isPending}
                       title={stockLabel}
-                      className="flex min-h-[52px] flex-col items-center justify-center rounded-md border bg-card p-0.5 text-center text-[9px] font-semibold leading-tight shadow-sm transition hover:border-primary hover:bg-primary/5 active:scale-95 disabled:cursor-not-allowed disabled:opacity-55 sm:min-h-[58px] sm:p-1 sm:text-[10px]">
-                      <span className="relative mb-0.5 grid h-5 w-5 place-items-center overflow-hidden rounded bg-muted text-[10px] font-black text-muted-foreground sm:h-6 sm:w-6">
+                      className="flex min-h-[76px] flex-row items-center gap-2 rounded-xl border bg-card p-2 text-right text-xs font-semibold leading-tight shadow-sm transition hover:border-primary hover:bg-primary/5 active:scale-[.99] disabled:cursor-not-allowed disabled:opacity-55 sm:min-h-[84px]">
+                      <span className="relative grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-muted text-sm font-black text-muted-foreground">
                         {product.name.slice(0, 1)}
                         {product.image_url && <img src={product.image_url} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} />}
                       </span>
-                      <span className="line-clamp-1 w-full">{product.name}</span>
-                      <span className="mt-0.5 text-[9px] font-bold text-primary num">{formatMoney(Number(product.sale_price))}</span>
-                      <span className={`mt-0.5 text-[9px] font-semibold ${available !== undefined && available > 0 ? "text-success" : "text-destructive"}`}>{stockLabel}</span>
+                      <span className="flex min-w-0 flex-1 flex-col items-start gap-1">
+                        <span className="line-clamp-2 w-full text-[11px] font-bold sm:text-xs">{product.name}</span>
+                        <span className="text-xs font-extrabold text-primary num">{formatMoney(Number(product.sale_price))}</span>
+                        <span className={`text-[10px] font-semibold ${available !== undefined && available > 0 ? "text-success" : "text-destructive"}`}>{stockLabel}</span>
+                      </span>
                     </button>
                   );
                 })}
@@ -1029,8 +1031,8 @@ function CategoryTile({ label, active, onClick }: { label: string; active: boole
       type="button"
       onClick={onClick}
       className={active
-        ? "inline-flex min-h-7 w-full items-center justify-center rounded-md border border-primary bg-primary px-1 py-0.5 text-center text-[9px] font-semibold leading-tight text-primary-foreground shadow transition active:scale-95 sm:min-h-8 sm:text-[10px]"
-        : "inline-flex min-h-7 w-full items-center justify-center rounded-md border bg-card px-1 py-0.5 text-center text-[9px] font-semibold leading-tight transition hover:border-primary hover:bg-primary/5 active:scale-95 sm:min-h-8 sm:text-[10px]"}
+        ? "inline-flex h-9 min-w-[92px] shrink-0 items-center justify-center rounded-full border border-primary bg-primary px-4 text-center text-xs font-bold text-primary-foreground shadow-sm transition active:scale-95"
+        : "inline-flex h-9 min-w-[92px] shrink-0 items-center justify-center rounded-full border bg-card px-4 text-center text-xs font-semibold transition hover:border-primary hover:bg-primary/5 active:scale-95"}
       title={label}
     >
       <span className="line-clamp-1">{label}</span>

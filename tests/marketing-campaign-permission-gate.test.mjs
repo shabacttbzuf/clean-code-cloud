@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("../src/routes/_authenticated/ads.tsx", import.meta.url), "utf8");
 const migration = readFileSync(new URL("../supabase/migrations/20261121010000_separate_ads_management_permission.sql", import.meta.url), "utf8");
+const repairMigration = readFileSync(new URL("../supabase/migrations/20261121040000_reconcile_ads_campaign_write_permissions.sql", import.meta.url), "utf8");
 
 test("company-scoped marketing controls require the dedicated ads.manage permission", () => {
   assert.match(source, /permissions = useQuery/);
@@ -25,4 +26,18 @@ test("database grants dedicated ads permission without changing company-scope bo
   assert.match(migration, /company_scope_marketing_campaigns_update/);
   assert.match(migration, /company_scope_marketing_campaigns_delete/);
   assert.doesNotMatch(migration, /DROP POLICY IF EXISTS company_scope_marketing_campaigns_select/);
+});
+
+test("follow-up migration reconciles ads.manage writes without weakening company isolation", () => {
+  assert.ok(repairMigration.includes("'ads.manage'"));
+  assert.match(repairMigration, /company_scope_marketing_campaigns_insert/);
+  assert.match(repairMigration, /company_scope_marketing_campaigns_update/);
+  assert.match(repairMigration, /company_scope_marketing_campaigns_delete/);
+  assert.match(repairMigration, /FOR INSERT TO authenticated/);
+  assert.match(repairMigration, /FOR UPDATE TO authenticated/);
+  assert.match(repairMigration, /FOR DELETE TO authenticated/);
+  assert.doesNotMatch(repairMigration, /DROP POLICY IF EXISTS company_scope_marketing_campaigns_select/);
+  assert.match(source, /created_by: userId/);
+  assert.match(source, /select\("id"\)\.single\(\)/);
+  assert.match(source, /Marketing campaign RLS failure/);
 });

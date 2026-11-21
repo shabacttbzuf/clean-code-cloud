@@ -75,7 +75,6 @@ test("purchasing loads the full history and batches supplier, branch, and return
 });
 
 const authLayout = readFileSync(new URL("../src/routes/_authenticated/route.tsx", import.meta.url), "utf8");
-const sidebar = readFileSync(new URL("../src/components/ui/sidebar.tsx", import.meta.url), "utf8");
 const sonner = readFileSync(new URL("../src/components/ui/sonner.tsx", import.meta.url), "utf8");
 const userAdmin = readFileSync(new URL("../src/routes/_authenticated/users-admin.tsx", import.meta.url), "utf8");
 
@@ -88,12 +87,10 @@ test("dashboard and account menu show profile names, including the platform owne
   assert.doesNotMatch(userAdmin, /u\.email \?\? u\.username/);
 });
 
-test("mobile sidebar supports RTL edge swipes and closes after route navigation", () => {
-  assert.match(sidebar, /Edge-swipe navigation for RTL mobile layouts/);
-  assert.match(sidebar, /setOpenMobile\(true\)/);
-  assert.match(sidebar, /setOpenMobile\(false\)/);
-  assert.match(authLayout, /SidebarRouteSync/);
-  assert.match(authLayout, /setOpenMobile\(false\)/);
+test("authenticated workspace removes the side drawer and keeps applications navigation in the top bar", () => {
+  assert.doesNotMatch(authLayout, /SidebarProvider|SidebarTrigger|SidebarInset|AppSidebar|SidebarRouteSync/);
+  assert.match(authLayout, /<AppLauncher \/>/);
+  assert.match(authLayout, /<WorkspaceTabs \/>/);
 });
 
 test("user edit dialog remains scrollable on short mobile screens", () => {
