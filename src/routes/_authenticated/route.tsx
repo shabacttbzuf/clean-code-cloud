@@ -258,32 +258,29 @@ function TopBar() {
   const notificationsQuery = useQuery({
     queryKey: ["topbar-notifications", tenantId, user?.id],
     queryFn: async () => {
-      if (!tenantId || !user?.id) return { items: [], readIds: new Set<string>() };
-      const itemsResult = await supabase.from("notifications")
-        .select("id,title,body,urgency,kind,created_at,audience_type,action_path,action_label")
-        .eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(12);
+      if (!tenantId || !user?.id) return { items: [], readIds: new Set<string>(), unreadCount: 0 };
+      const [itemsResult, totalResult, readCountResult] = await Promise.all([
+        supabase.from("notifications")
+          .select("id,title,body,urgency,kind,created_at,audience_type,action_path,action_label")
+          .eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(12),
+        supabase.from("notifications").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
+        (supabase.from("notification_reads" as any) as any)
+          .select("notification_id,notifications!inner(tenant_id)", { count: "exact", head: true })
+          .eq("user_id", user.id).eq("notifications.tenant_id", tenantId),
+      ]);
       if (itemsResult.error) throw itemsResult.error;
-      const readIds = new Set<string>();
-      for (let from = 0; ; from += 500) {
-        const { data, error } = await (supabase.from("notification_reads" as any) as any)
-          .select("notification_id").eq("user_id", user.id).range(from, from + 499);
-        if (error) throw error;
-        for (const row of data ?? []) readIds.add(row.notification_id);
-        if ((data ?? []).length < 500) break;
-      }
-      const notificationIds: string[] = [];
-      for (let from = 0; ; from += 500) {
-        const { data, error } = await supabase.from("notifications").select("id")
-          .eq("tenant_id", tenantId).order("created_at", { ascending: false }).range(from, from + 499);
-        if (error) throw error;
-        notificationIds.push(...(data ?? []).map((row) => row.id));
-        if ((data ?? []).length < 500) break;
-      }
+      if (totalResult.error) throw totalResult.error;
+      if (readCountResult.error) throw readCountResult.error;
+      const recentIds = (itemsResult.data ?? []).map((row) => row.id);
+      const recentReads = recentIds.length
+        ? await (supabase.from("notification_reads" as any) as any)
+            .select("notification_id").eq("user_id", user.id).in("notification_id", recentIds)
+        : { data: [], error: null };
+      if (recentReads.error) throw recentReads.error;
       return {
         items: itemsResult.data ?? [],
-        readIds,
-        notificationIds,
-        unreadCount: notificationIds.filter((id) => !readIds.has(id)).length,
+        readIds: new Set<string>((recentReads.data ?? []).map((row: { notification_id: string }) => row.notification_id)),
+        unreadCount: Math.max(0, (totalResult.count ?? 0) - (readCountResult.count ?? 0)),
       };
     },
     enabled: !!tenantId && !!user?.id,
@@ -304,13 +301,27 @@ function TopBar() {
   }
   async function markAllNotificationsRead() {
     if (!user?.id || !tenantId) return;
-    const unreadIds = (notificationsQuery.data?.notificationIds ?? [])
-      .filter((id: string) => !notificationsQuery.data?.readIds.has(id));
-    if (!unreadIds.length) return;
     try {
+      const allIds: string[] = [];
+      for (let from = 0; ; from += 500) {
+        const { data, error } = await supabase.from("notifications").select("id")
+          .eq("tenant_id", tenantId).order("created_at", { ascending: false }).range(from, from + 499);
+        if (error) throw error;
+        allIds.push(...(data ?? []).map((row) => row.id));
+        if ((data ?? []).length < 500) break;
+      }
+      const readIds = new Set<string>();
+      for (let from = 0; ; from += 500) {
+        const { data, error } = await (supabase.from("notification_reads" as any) as any)
+          .select("notification_id").eq("user_id", user.id).range(from, from + 499);
+        if (error) throw error;
+        for (const row of data ?? []) readIds.add(row.notification_id);
+        if ((data ?? []).length < 500) break;
+      }
+      const unreadIds = allIds.filter((id) => !readIds.has(id));
       for (let i = 0; i < unreadIds.length; i += 500) {
         const { error } = await (supabase.from("notification_reads" as any) as any).upsert(
-          unreadIds.slice(i, i + 500).map((notification_id: string) => ({ notification_id, user_id: user.id })),
+          unreadIds.slice(i, i + 500).map((notification_id) => ({ notification_id, user_id: user.id })),
           { onConflict: "notification_id,user_id" },
         );
         if (error) throw error;
