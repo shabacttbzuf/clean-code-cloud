@@ -532,6 +532,7 @@ export interface FileRouteTypes {
     | '/kitchen'
     | '/login-history'
     | '/notifications'
+    | '/support'
     | '/owner-center'
     | '/pos'
     | '/products'
