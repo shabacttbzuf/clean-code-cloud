@@ -14,7 +14,7 @@ const ROUTE_TITLES: Array<[string, string]> = [
   ["/hr/employees", "الموظفون"], ["/hr/attendance", "الحضور"], ["/hr/leaves", "الإجازات"],
   ["/hr/payroll", "الرواتب"], ["/branches", "الفروع"], ["/companies", "الشركات"],
   ["/users", "المستخدمون"], ["/team-permissions", "الصلاحيات"], ["/notifications", "الإشعارات"],
-  ["/settings", "الإعدادات"], ["/profile", "الملف الشخصي"], ["/ads", "الإعلانات"],
+  ["/settings", "الإعدادات"], ["/profile", "الملف الشخصي"], ["/ads", "الإعلانات"], ["/promotions", "العروض الترويجية"],
 ];
 
 function titleFor(path: string) {

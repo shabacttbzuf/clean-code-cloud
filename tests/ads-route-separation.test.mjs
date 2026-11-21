@@ -10,9 +10,9 @@ const authLayout = readFileSync(new URL("../src/routes/_authenticated/route.tsx"
 
 test("advertising management is a dedicated authenticated route", () => {
   assert.match(ads, /createFileRoute\("\/_authenticated\/ads"\)/);
-  assert.match(sidebar, /title: "الإعلانات", url: "\/ads"/);
+  assert.match(sidebar, /title: "الإعلانات", url: "\/ads", icon: Megaphone, permission: "ads.manage"/);
   assert.match(workspaceTabs, /\["\/ads", "الإعلانات"\]/);
-  assert.match(authLayout, /prefix: "\/ads", permission: "settings.view"/);
+  assert.match(authLayout, /prefix: "\/ads", permission: "ads.manage"/);
 });
 
 test("advertising management preserves tenant and company scope and permission checks", () => {

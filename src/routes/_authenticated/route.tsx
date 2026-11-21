@@ -133,7 +133,8 @@ const ROUTE_PERMISSION_RULES: Array<{ prefix: string; permission: string }> = [
   { prefix: "/notifications", permission: "notifications.view" },
   { prefix: "/login-history", permission: "login_history.view" },
   { prefix: "/audit-logs", permission: "audit.view" },
-  { prefix: "/ads", permission: "settings.view" },
+  { prefix: "/ads", permission: "ads.manage" },
+  { prefix: "/promotions", permission: "promotions.manage" },
   { prefix: "/settings", permission: "settings.view" },
 ];
 

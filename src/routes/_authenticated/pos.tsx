@@ -60,6 +60,12 @@ type Session = { id: string; branch_id: string; status: string };
 type CustomerOption = { id: string; name: string; phone: string | null; credit_limit: number };
 
 type CartItem = { product_id: string; name: string; unit_price: number; quantity: number };
+type PromotionOffer = {
+  id: string; name: string; offer_type: "percentage" | "fixed" | "buy_x_get_y";
+  discount_value: number; minimum_subtotal: number; max_discount: number | null;
+  product_id: string | null; reward_product_id: string | null;
+  buy_quantity: number; get_quantity: number;
+};
 
 type PaymentUI = "cash" | "card" | "wallet";
 const paymentToDb: Record<PaymentUI, "cash" | "card" | "transfer"> = {
@@ -122,6 +128,7 @@ function POSPage() {
   const [catFilter, setCatFilter] = useState<string>("all");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [discount, setDiscount] = useState("0");
+  const [selectedPromotionId, setSelectedPromotionId] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("none");
   const [orderType, setOrderType] = useState<"dine_in" | "takeaway" | "delivery">("takeaway");
   const [selectedTableId, setSelectedTableId] = useState<string>("none");
@@ -178,6 +185,28 @@ function POSPage() {
     () => branches.data?.find((b) => b.id === branchId) ?? null,
     [branches.data, branchId],
   );
+
+  const activePromotions = useQuery({
+    queryKey: ["pos-active-promotions", tenantId, branchId],
+    queryFn: async (): Promise<PromotionOffer[]> => {
+      const now = new Date().toISOString();
+      const { data, error } = await (supabase.from("promotional_offers" as any) as any)
+        .select("id,name,offer_type,discount_value,minimum_subtotal,max_discount,product_id,reward_product_id,buy_quantity,get_quantity")
+        .eq("tenant_id", tenantId!).eq("status", "active")
+        .or(`branch_id.is.null,branch_id.eq.${branchId}`)
+        .or(`starts_at.is.null,starts_at.lte.${now}`)
+        .or(`ends_at.is.null,ends_at.gt.${now}`)
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as PromotionOffer[];
+    },
+    enabled: !!tenantId && !!branchId,
+    staleTime: 15_000,
+  });
+
+  useEffect(() => { setSelectedPromotionId(""); }, [branchId]);
+
+  const selectedPromotion = activePromotions.data?.find((offer) => offer.id === selectedPromotionId) ?? null;
 
   useEffect(() => {
     setSelectedTableId("none");
@@ -340,7 +369,28 @@ function POSPage() {
 
   const totalQty = useMemo(() => cart.reduce((s, i) => s + i.quantity, 0), [cart]);
   const subtotal = useMemo(() => cart.reduce((s, i) => s + i.unit_price * i.quantity, 0), [cart]);
-  const disc = Math.max(0, Number(discount) || 0);
+  const manualDiscount = Math.max(0, Number(discount) || 0);
+  const promotionDiscount = useMemo(() => {
+    const offer = selectedPromotion;
+    if (!offer || subtotal < Number(offer.minimum_subtotal)) return 0;
+    const eligible = cart.filter((item) => !offer.product_id || item.product_id === offer.product_id);
+    const eligibleSubtotal = eligible.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
+    if (eligibleSubtotal <= 0) return 0;
+    let amount = 0;
+    if (offer.offer_type === "percentage") amount = eligibleSubtotal * Number(offer.discount_value) / 100;
+    else if (offer.offer_type === "fixed") amount = Math.min(eligibleSubtotal, Number(offer.discount_value));
+    else {
+      const rewardId = offer.reward_product_id || offer.product_id;
+      const buyQty = cart.filter((item) => item.product_id === offer.product_id).reduce((sum, item) => sum + item.quantity, 0);
+      const reward = cart.find((item) => item.product_id === rewardId);
+      const rewardQty = cart.filter((item) => item.product_id === rewardId).reduce((sum, item) => sum + item.quantity, 0);
+      const freeQty = Math.min(rewardQty, Math.floor(buyQty / Math.max(1, Number(offer.buy_quantity))) * Number(offer.get_quantity));
+      amount = freeQty * (reward?.unit_price ?? 0);
+    }
+    if (offer.max_discount !== null) amount = Math.min(amount, Number(offer.max_discount));
+    return Math.max(0, Math.min(amount, subtotal - manualDiscount));
+  }, [selectedPromotion, cart, subtotal, manualDiscount]);
+  const disc = Math.min(subtotal, manualDiscount + promotionDiscount);
   const taxable = Math.max(0, subtotal - disc);
   const taxRate = Number(tenant?.tax_rate ?? 0);
   const taxAmount = +(taxable * (taxRate / 100)).toFixed(2);
@@ -441,7 +491,7 @@ function POSPage() {
         _branch_id: branchId,
         _cashier_id: userId,
         _session_id: openSession.data.id,
-        _discount: disc,
+        _discount: manualDiscount,
         _customer_id: selectedCustomerId === "none" ? null : selectedCustomerId,
         _paid_amount: initialPaid,
         _paid_method: dbMethod,
@@ -455,6 +505,7 @@ function POSPage() {
         _delivery_customer_phone: orderType === "delivery" ? deliveryPhone.trim() : null,
         _delivery_address: orderType === "delivery" ? deliveryAddress.trim() : null,
         _delivery_fee: deliveryFee,
+        ...(selectedPromotionId ? { _promotion_id: selectedPromotionId } : {}),
       });
 
       // Keep legacy takeaway checkout operational until the additive database
@@ -464,6 +515,9 @@ function POSPage() {
         /could not find the function|function public\.create_pos_order.*does not exist/i.test(saleErr.message ?? "")
       );
       if (missingOrderRpc) {
+        if (selectedPromotionId) {
+          throw new Error("يتطلب تطبيق العروض الترويجية تحديث قاعدة البيانات أولاً؛ لم يتم إصدار الفاتورة دون التحقق من العرض.");
+        }
         if (orderType !== "takeaway" || deliveryFee > 0) {
           throw new Error("يتطلب الطلب المحلي والتوصيل تطبيق تحديث قاعدة البيانات أولاً. يمكنك إكمال الطلب السفري حالياً.");
         }
@@ -472,7 +526,7 @@ function POSPage() {
           _branch_id: branchId,
           _cashier_id: userId,
           _session_id: openSession.data.id,
-          _discount: disc,
+          _discount: manualDiscount,
           _customer_id: selectedCustomerId === "none" ? null : selectedCustomerId,
           _paid_amount: initialPaid,
           _paid_method: dbMethod,
@@ -522,6 +576,7 @@ function POSPage() {
       }
       setCart([]);
       setDiscount("0");
+      setSelectedPromotionId("");
       setSelectedCustomerId("none");
       setPaidAmount("");
       setOrderType("takeaway");
@@ -814,9 +869,12 @@ function POSPage() {
               </table>
             </div>
             <div className="mt-1.5 rounded-md border bg-muted/30 p-2 text-xs">
-              <div className="mb-1.5 flex items-center gap-2"><Label className="shrink-0 text-[10px] text-muted-foreground">الخصم</Label><Input type="number" min="0" max={subtotal} step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} className="h-7 text-xs" disabled={checkoutMut.isPending} /></div>
+              <div className="mb-1.5 flex items-center gap-2"><Label className="shrink-0 text-[10px] text-muted-foreground">الخصم اليدوي</Label><Input type="number" min="0" max={subtotal} step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} className="h-7 text-xs" disabled={checkoutMut.isPending} /></div>
+              <div className="mb-2 space-y-1"><Label className="text-[10px] text-muted-foreground">العروض الترويجية المتاحة</Label><select className="h-8 w-full rounded-md border bg-background px-2 text-xs" value={selectedPromotionId} onChange={e=>setSelectedPromotionId(e.target.value)} disabled={checkoutMut.isPending || activePromotions.isLoading}><option value="">بدون عرض ترويجي</option>{(activePromotions.data??[]).map(offer=><option key={offer.id} value={offer.id}>{offer.name}</option>)}</select>{selectedPromotionId && !selectedPromotion && <span className="text-[10px] text-destructive">العرض المحدد لم يعد متاحاً لهذا الفرع.</span>}{selectedPromotion && promotionDiscount<=0 && <span className="text-[10px] text-destructive">السلة لا تحقق شروط العرض المحدد.</span>}</div>
               <div className="flex justify-between text-muted-foreground"><span>المجموع الفرعي</span><span className="num">{formatMoney(subtotal)}</span></div>
-              {disc > 0 && <div className="flex justify-between text-destructive"><span>الخصم</span><span className="num">-{formatMoney(disc)}</span></div>}
+              {promotionDiscount > 0 && <div className="flex justify-between text-emerald-600"><span>خصم العرض الترويجي</span><span className="num">-{formatMoney(promotionDiscount)}</span></div>}
+              {manualDiscount > 0 && <div className="flex justify-between text-destructive"><span>الخصم اليدوي</span><span className="num">-{formatMoney(manualDiscount)}</span></div>}
+              {disc > 0 && <div className="flex justify-between font-medium text-destructive"><span>إجمالي الخصم</span><span className="num">-{formatMoney(disc)}</span></div>}
               {taxRate > 0 && <div className="flex justify-between text-muted-foreground"><span>الضريبة ({taxRate}%)</span><span className="num">{formatMoney(taxAmount)}</span></div>}
               <div className="mt-1 flex items-baseline justify-between border-t pt-1 text-lg font-black"><span>الإجمالي</span><span className="num text-primary">{formatMoney(total)} <span className="text-[10px] font-normal text-muted-foreground">{currency}</span></span></div>
             </div>
