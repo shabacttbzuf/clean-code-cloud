@@ -38,6 +38,15 @@ WITH CHECK (
       AND ur.role='owner' AND ur.company_id IS NULL
   )
   OR (
+    company_id IS NULL AND branch_id IS NULL
+    AND public.has_permission((select auth.uid()), tenant_id, 'promotions.manage')
+    AND EXISTS (
+      SELECT 1 FROM public.user_roles ur
+      WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=promotional_offers.tenant_id
+        AND ur.company_id IS NULL
+    )
+  )
+  OR (
     company_id IS NOT NULL
     AND public.has_permission((select auth.uid()), tenant_id, 'promotions.manage')
     AND (
@@ -59,6 +68,15 @@ USING (
       AND ur.role='owner' AND ur.company_id IS NULL
   )
   OR (
+    company_id IS NULL AND branch_id IS NULL
+    AND public.has_permission((select auth.uid()), tenant_id, 'promotions.manage')
+    AND EXISTS (
+      SELECT 1 FROM public.user_roles ur
+      WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=promotional_offers.tenant_id
+        AND ur.company_id IS NULL
+    )
+  )
+  OR (
     company_id IS NOT NULL
     AND public.has_permission((select auth.uid()), tenant_id, 'promotions.manage')
     AND (
@@ -74,6 +92,15 @@ WITH CHECK (
     SELECT 1 FROM public.user_roles ur
     WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=promotional_offers.tenant_id
       AND ur.role='owner' AND ur.company_id IS NULL
+  )
+  OR (
+    company_id IS NULL AND branch_id IS NULL
+    AND public.has_permission((select auth.uid()), tenant_id, 'promotions.manage')
+    AND EXISTS (
+      SELECT 1 FROM public.user_roles ur
+      WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=promotional_offers.tenant_id
+        AND ur.company_id IS NULL
+    )
   )
   OR (
     company_id IS NOT NULL
@@ -95,6 +122,15 @@ USING (
     SELECT 1 FROM public.user_roles ur
     WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=promotional_offers.tenant_id
       AND ur.role='owner' AND ur.company_id IS NULL
+  )
+  OR (
+    company_id IS NULL AND branch_id IS NULL
+    AND public.has_permission((select auth.uid()), tenant_id, 'promotions.manage')
+    AND EXISTS (
+      SELECT 1 FROM public.user_roles ur
+      WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=promotional_offers.tenant_id
+        AND ur.company_id IS NULL
+    )
   )
   OR (
     company_id IS NOT NULL
