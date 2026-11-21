@@ -16,3 +16,20 @@ test("the applications launcher replaces the former sidebar control in the top b
   assert.match(launcher, /size="icon".*aria-label="فتح التطبيقات"/);
   assert.match(launcher, /max-h-\[min\(78vh,680px\)\]/);
 });
+
+
+const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+
+test("global theme uses the approved deep navy, white and gold brand", () => {
+  assert.match(styles, /--primary:\s*oklch\([^;]+255\)/);
+  assert.match(styles, /--accent:\s*oklch\([^;]+85\)/);
+  assert.match(styles, /--background:\s*oklch\(0\.985/);
+  assert.doesNotMatch(styles.slice(0, styles.indexOf("@layer base")), /Deep forest green/);
+});
+
+test("workspace navigation and content include compact-screen safeguards", () => {
+  assert.match(styles, /\.workspace-tabs\s*\{[^}]*overflow-x-auto|\.workspace-tabs\s*\{[^}]*overscroll-behavior-inline/s);
+  assert.match(styles, /@media \(max-width: 640px\)/);
+  assert.match(styles, /env\(safe-area-inset-left\)/);
+  assert.match(styles, /prefers-reduced-motion: reduce/);
+});
