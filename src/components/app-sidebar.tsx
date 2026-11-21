@@ -110,6 +110,12 @@ export const appNavigationGroups: AppNavigationGroup[] = [
     ],
   },
   {
+    label: "المساعدة",
+    items: [
+      { title: "مركز المساعدة والدعم", url: "/support", icon: CircleHelp },
+    ],
+  },
+  {
     label: "الإعداد",
     items: [
       { title: "الفروع", url: "/branches", icon: Building2, permission: "branches.view" },
