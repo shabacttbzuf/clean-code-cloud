@@ -29,7 +29,7 @@ test("database grants dedicated ads permission without changing company-scope bo
 });
 
 test("follow-up migration reconciles ads.manage writes without weakening company isolation", () => {
-  assert.match(repairMigration, /'ads\\.manage'/);
+  assert.ok(repairMigration.includes("'ads.manage'"));
   assert.match(repairMigration, /company_scope_marketing_campaigns_insert/);
   assert.match(repairMigration, /company_scope_marketing_campaigns_update/);
   assert.match(repairMigration, /company_scope_marketing_campaigns_delete/);
