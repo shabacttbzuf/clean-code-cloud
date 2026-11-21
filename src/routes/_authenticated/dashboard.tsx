@@ -73,16 +73,48 @@ function Dashboard() {
   });
 
   const systemStatusQuery = useQuery({
-    queryKey: ["dashboard-system-status", tenantId],
+    queryKey: ["dashboard-system-status", tenantId, user?.id],
     queryFn: async () => {
-      if (!tenantId) throw new Error("No active tenant");
+      if (!tenantId || !user?.id) throw new Error("لا يوجد نطاق شركة أو مستخدم نشط.");
       const checkedAt = new Date().toISOString();
-      const { data, error } = await supabase.from("tenants").select("id").eq("id", tenantId).maybeSingle();
-      if (error) throw error;
-      if (!data) throw new Error("Active organization is not accessible");
-      return { checkedAt };
+      const [tenantResult, branchesResult, profileResult, permissionsResult] = await Promise.all([
+        supabase.from("tenants").select("id").eq("id", tenantId).maybeSingle(),
+        supabase.from("branches").select("id").eq("tenant_id", tenantId).limit(1),
+        supabase.from("profiles").select("id").eq("id", user.id).maybeSingle(),
+        supabase.rpc("get_my_permissions", { _tenant_id: tenantId }),
+      ]);
+      const checks = [
+        {
+          key: "database",
+          label: "اتصال قاعدة البيانات",
+          status: tenantResult.error || !tenantResult.data ? "failed" : "ok",
+          detail: tenantResult.error?.message ?? (tenantResult.data ? "تم الوصول إلى سجل الشركة." : "لم يتم العثور على الشركة النشطة."),
+        },
+        {
+          key: "branch",
+          label: "بيانات الفروع",
+          status: branchesResult.error ? "failed" : (branchesResult.data?.length ? "ok" : "warning"),
+          detail: branchesResult.error?.message ?? (branchesResult.data?.length ? "تم التحقق من إمكانية قراءة بيانات الفروع." : "لم يتم العثور على فرع متاح ضمن نطاق الحساب."),
+        },
+        {
+          key: "authorization",
+          label: "خدمة الصلاحيات",
+          status: permissionsResult.error ? "failed" : "ok",
+          detail: permissionsResult.error?.message ?? "تم تنفيذ فحص الصلاحيات بنجاح.",
+        },
+        {
+          key: "profile",
+          label: "ملف المستخدم",
+          status: profileResult.error ? "failed" : (profileResult.data ? "ok" : "warning"),
+          detail: profileResult.error?.message ?? (profileResult.data ? "ملف المستخدم قابل للقراءة." : "ملف المستخدم غير مكتمل أو غير متاح."),
+        },
+      ];
+      const overall = checks.some((check) => check.status === "failed")
+        ? "degraded"
+        : checks.every((check) => check.status === "ok") ? "healthy" : "warning";
+      return { checkedAt, checks, overall };
     },
-    enabled: !!tenantId,
+    enabled: !!tenantId && !!user?.id,
     refetchInterval: 30_000,
     retry: 1,
   });
@@ -460,11 +492,39 @@ function Dashboard() {
         </Card>}
         <Card className="overflow-hidden border-[#dce5f3] shadow-sm">
           <CardContent className="p-0">
-            <div className="border-b border-[#e7edf6] bg-gradient-to-l from-[#f4f7fc] to-white px-4 py-3"><div className="flex items-center gap-2"><Wifi className="h-5 w-5 text-[#174b91]" /><h2 className="font-extrabold text-[#102f5c]">حالة النظام</h2></div><p className="mt-1 text-[11px] text-slate-500">فحص اتصال قاعدة بيانات الشركة</p></div>
+            <div className="border-b border-[#e7edf6] bg-gradient-to-l from-[#f4f7fc] to-white px-4 py-3">
+              <div className="flex items-center gap-2"><Wifi className="h-5 w-5 text-[#174b91]" /><h2 className="font-extrabold text-[#102f5c]">حالة النظام</h2></div>
+              <p className="mt-1 text-[11px] text-slate-500">فحص فعلي لقاعدة البيانات ونطاق الشركة والصلاحيات والملف الشخصي</p>
+            </div>
             <div className="space-y-3 p-4">
-              <div className="flex items-center justify-between gap-2"><span className="text-sm text-slate-600">قاعدة البيانات</span>{systemStatusQuery.isError ? <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-1 text-xs font-bold text-rose-700"><WifiOff className="h-3.5 w-3.5" /> غير متاحة</span> : systemStatusQuery.isLoading || !systemStatusQuery.data ? <span className="text-xs text-slate-500">لم يتم التحقق</span> : <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700"><Wifi className="h-3.5 w-3.5" /> متصلة</span>}</div>
-              <div className="flex items-center justify-between gap-2 text-xs text-slate-500"><span>آخر تحقق</span><span>{systemStatusQuery.data?.checkedAt ? new Date(systemStatusQuery.data.checkedAt).toLocaleTimeString("ar-YE") : "—"}</span></div>
-              <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => void systemStatusQuery.refetch()} disabled={systemStatusQuery.isFetching}>{systemStatusQuery.isFetching && <Loader2 className="ml-2 h-3.5 w-3.5 animate-spin" />}تحديث الحالة</Button>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-slate-700">الحالة العامة</span>
+                {systemStatusQuery.isLoading || !systemStatusQuery.data
+                  ? <span className="text-xs text-slate-500">لم يكتمل التحقق</span>
+                  : systemStatusQuery.isError || systemStatusQuery.data.overall === "degraded"
+                    ? <span className="rounded-full bg-rose-50 px-2 py-1 text-xs font-bold text-rose-700">يحتاج مراجعة</span>
+                    : systemStatusQuery.data.overall === "healthy"
+                      ? <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">سليم — تم اجتياز الفحوصات</span>
+                      : <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">تحقق جزئي — توجد ملاحظات</span>}
+              </div>
+              {systemStatusQuery.isError && <p role="alert" className="text-xs text-destructive">{systemStatusQuery.error instanceof Error ? systemStatusQuery.error.message : "تعذر إكمال فحص النظام."}</p>}
+              {(systemStatusQuery.data?.checks ?? []).map((check) => (
+                <div key={check.key} className="flex items-start justify-between gap-3 border-t border-slate-100 pt-2">
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-slate-700">{check.label}</div>
+                    <div className="mt-0.5 break-words text-[10px] text-slate-500">{check.detail}</div>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${check.status === "ok" ? "bg-emerald-50 text-emerald-700" : check.status === "warning" ? "bg-amber-50 text-amber-700" : "bg-rose-50 text-rose-700"}`}>
+                    {check.status === "ok" ? "ناجح" : check.status === "warning" ? "ملاحظة" : "فشل"}
+                  </span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between gap-2 text-[10px] text-slate-500">
+                <span>آخر تحقق</span><span>{systemStatusQuery.data?.checkedAt ? new Date(systemStatusQuery.data.checkedAt).toLocaleTimeString("ar-YE") : "—"}</span>
+              </div>
+              <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => void systemStatusQuery.refetch()} disabled={systemStatusQuery.isFetching}>
+                {systemStatusQuery.isFetching && <Loader2 className="ml-2 h-3.5 w-3.5 animate-spin" />}إعادة فحص النظام
+              </Button>
             </div>
           </CardContent>
         </Card>
