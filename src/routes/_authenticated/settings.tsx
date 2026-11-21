@@ -43,6 +43,7 @@ const MANAGEABLE_NAV_ITEMS = [
   { title: "الأقسام", url: "/categories" },
   { title: "تصنيفات المصروفات", url: "/expense-categories" },
   { title: "الموظفون", url: "/users" },
+  { title: "ملفات الموظفين", url: "/hr/employees" },
   { title: "إدارة المستخدمين", url: "/users-admin" },
   { title: "الشركات", url: "/companies" },
   { title: "الأقسام الإدارية", url: "/departments" },
@@ -51,7 +52,9 @@ const MANAGEABLE_NAV_ITEMS = [
   { title: "إدارة الأدوار", url: "/roles" },
   { title: "صلاحيات الفريق", url: "/team-permissions" },
   { title: "الإشعارات", url: "/notifications" },
+  { title: "مركز المساعدة والدعم", url: "/support" },
   { title: "الإعلانات", url: "/ads" },
+  { title: "العروض الترويجية", url: "/promotions" },
   { title: "الإعدادات", url: "/settings", protected: true },
   { title: "مركز تحكم المالك", url: "/owner-center", protected: true },
   { title: "إدارة النظام", url: "/admin", protected: true },
@@ -355,6 +358,13 @@ function SettingsPage() {
             <CardDescription>بيانات العلامة التجارية التي تظهر في المطبوعات مستقلة عن هوية النشاط. إدارة الحملات الإعلانية والعروض الترويجية تتم في أقسامها المنفصلة.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {platformBrandQuery.isLoading && <p className="text-sm text-muted-foreground">جارٍ تحميل هوية المنصة...</p>}
+            {platformBrandQuery.isError && (
+              <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
+                <span className="text-destructive">تعذر تحميل بيانات الهوية؛ لم يتم تمكين الحفظ حتى لا تُستبدل بيانات غير محملة.</span>
+                <Button type="button" size="sm" variant="outline" onClick={() => void platformBrandQuery.refetch()}>إعادة المحاولة</Button>
+              </div>
+            )}
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2"><Label>اسم العلامة التجارية</Label><Input value={platformBrand.brand_name} onChange={(e) => setPlatformBrand({ ...platformBrand, brand_name: e.target.value })} /></div>
               <div className="space-y-2"><Label>رقم التواصل</Label><Input dir="ltr" value={platformBrand.phone} onChange={(e) => setPlatformBrand({ ...platformBrand, phone: e.target.value })} /></div>
@@ -366,7 +376,7 @@ function SettingsPage() {
               <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={platformBrand.enabled} onChange={(e) => setPlatformBrand({ ...platformBrand, enabled: e.target.checked })} /> تفعيل هوية المنصة في المطبوعات</label>
               <div className="flex items-center gap-2 text-sm"><Label>موضع الظهور</Label><select className="h-9 rounded-md border bg-background px-2" value={platformBrand.placement} onChange={(e) => setPlatformBrand({ ...platformBrand, placement: e.target.value })}><option value="footer">أسفل الصفحة</option><option value="header">أعلى الصفحة</option><option value="both">أعلى وأسفل الصفحة</option></select></div>
             </div>
-            <Button onClick={() => savePlatformBrand.mutate()} disabled={savePlatformBrand.isPending}>{savePlatformBrand.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}حفظ هوية النظام</Button>
+            <Button type="button" onClick={() => savePlatformBrand.mutate()} disabled={savePlatformBrand.isPending || platformBrandQuery.isLoading || platformBrandQuery.isError}>{savePlatformBrand.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}حفظ هوية النظام</Button>
           </CardContent>
         </Card>
       )}
@@ -415,9 +425,9 @@ function SettingsPage() {
             <section className="space-y-3 border-t pt-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="font-semibold">تعديل أسماء التطبيقات وإظهارها</h3>
-                <Button type="button" size="sm" variant="outline" onClick={resetNavOverrides}><RotateCcw className="ml-1 h-3 w-3" />إعادة ضبط القائمة</Button>
+                <Button type="button" size="sm" variant="outline" onClick={resetNavOverrides}><RotateCcw className="ml-1 h-3 w-3" />إعادة ضبط لوحة التطبيقات</Button>
               </div>
-              <p className="text-xs text-muted-foreground">يمكنك إعادة تسمية صفحات القائمة أو إخفاء الصفحات غير الأساسية. الإخفاء لا يحذف الصفحة أو بياناتها ولا يغير صلاحيات الوصول إليها. الصفحات الأساسية محمية.</p>
+              <p className="text-xs text-muted-foreground">يمكنك إعادة تسمية صفحات القائمة أو إخفاء الصفحات غير الأساسية. الإخفاء يزيل الاختصار من لوحة التطبيقات فقط؛ لا يحذف الصفحة أو بياناتها ولا يغير صلاحيات الوصول إليها. الصفحات الأساسية محمية.</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {MANAGEABLE_NAV_ITEMS.map((item) => (
                   <div key={item.url} className="flex items-center gap-2 rounded-md border p-2">
@@ -434,7 +444,7 @@ function SettingsPage() {
               <h3 className="font-semibold">إدارة اختصارات التطبيقات</h3>
               <p className="text-xs text-muted-foreground">أضف اختصاراً باسم تختاره إلى لوحة التطبيقات لفتح صفحة موجودة. لا ينشئ هذا محرراً لصفحات أو وظائف جديدة؛ إضافة وحدات تشغيلية جديدة تحتاج تطويراً وبرمجة وصلاحيات مستقلة.</p>
               <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-                <Input value={newTabTitle} onChange={(e) => setNewTabTitle(e.target.value)} placeholder="اسم التبويب" maxLength={28} />
+                <Input value={newTabTitle} onChange={(e) => setNewTabTitle(e.target.value)} placeholder="اسم الاختصار" maxLength={28} />
                 <select value={newTabUrl} onChange={(e) => setNewTabUrl(e.target.value)} className="h-10 rounded-md border bg-background px-3 text-sm">
                   <option value="/dashboard">لوحة التحكم</option>
                   <option value="/pos">نقطة البيع</option>
