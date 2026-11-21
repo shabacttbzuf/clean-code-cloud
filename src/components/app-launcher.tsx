@@ -7,6 +7,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
+import { normalizeCustomShortcuts } from "@/lib/navigation-shortcuts";
 import { useSuperOwner } from "@/hooks/use-super-owner";
 import { appNavigationGroups, type AppNavigationGroup } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
@@ -28,10 +29,7 @@ export function AppLauncher() {
       try {
         const raw = window.localStorage.getItem("ras-custom-sidebar-items-v1");
         const parsed = raw ? JSON.parse(raw) : [];
-        const allowedRoutes = new Set(["/dashboard", "/pos", "/sales", "/products", "/inventory", "/purchases", "/reports", "/customers", "/branches", "/users", "/settings", "/ads"]);
-        setCustomItems(Array.isArray(parsed)
-          ? parsed.filter((item) => item && typeof item.title === "string" && allowedRoutes.has(item.url)).slice(0, 12)
-          : []);
+        setCustomItems(normalizeCustomShortcuts(parsed));
       } catch { setCustomItems([]); }
       try {
         const raw = window.localStorage.getItem("ras-sidebar-overrides-v1");
