@@ -18,9 +18,15 @@ export function useSuperOwner() {
       if (!data || typeof data !== "object" || Array.isArray(data)) {
         throw new Error("Invalid super owner status");
       }
+      if (!Number.isSafeInteger(data.totalCount) || data.totalCount < 0 || typeof data.isSuperOwner !== "boolean") {
+        throw new Error("Invalid super owner status payload");
+      }
+      if (data.isSuperOwner && data.totalCount === 0) {
+        throw new Error("Inconsistent super owner status payload");
+      }
       return {
-        totalCount: typeof data.totalCount === "number" ? data.totalCount : 0,
-        isSuperOwner: data.isSuperOwner === true,
+        totalCount: data.totalCount as number,
+        isSuperOwner: data.isSuperOwner,
       };
     },
     enabled: !!user?.id,
