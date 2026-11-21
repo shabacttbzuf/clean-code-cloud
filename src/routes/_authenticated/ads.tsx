@@ -103,16 +103,27 @@ export function AdsPage() {
         ends_at: endsAt ? new Date(endsAt).toISOString() : null,
       };
       const result = editingId
-        ? await supabase.from("marketing_campaigns").update(payload).eq("id", editingId).eq("tenant_id", tenantId!)
-        : await supabase.from("marketing_campaigns").insert({ ...payload, tenant_id: tenantId!, status: "draft" });
+        ? await supabase.from("marketing_campaigns").update(payload).eq("id", editingId).eq("tenant_id", tenantId!).select("id").maybeSingle()
+        : await supabase.from("marketing_campaigns").insert({ ...payload, tenant_id: tenantId!, created_by: userId, status: "draft" }).select("id").single();
       if (result.error) throw result.error;
+      if (!result.data?.id) throw new Error("لم يتم العثور على الحملة ضمن نطاق الشركة الحالي؛ لم يُنفّذ الحفظ.");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["marketing-campaigns", tenantId] });
       resetForm();
       toast.success("تم حفظ الحملة الإعلانية كمسودة");
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر حفظ الحملة"),
+    onError: (error) => {
+      const dbError = error as { code?: string; message?: string; details?: string; hint?: string };
+      const raw = [dbError.message, dbError.details, dbError.hint].filter(Boolean).join(" — ");
+      if (dbError.code === "42501" || /row-level security|permission denied/i.test(raw)) {
+        toast.error("رفضت قاعدة البيانات حفظ الحملة بسبب الصلاحيات. يلزم تطبيق ترحيل صلاحية ads.manage على قاعدة البيانات، مع التأكد من أن حسابك يملكها ضمن شركته.");
+        console.error("Marketing campaign RLS failure", { code: dbError.code, message: raw });
+        return;
+      }
+      toast.error(raw ? `تعذر حفظ الحملة: ${raw}` : "تعذر حفظ الحملة الإعلانية. تحقق من البيانات ثم أعد المحاولة.");
+      console.error("Marketing campaign save failed", error);
+    },
   });
 
   const updateStatus = useMutation({
