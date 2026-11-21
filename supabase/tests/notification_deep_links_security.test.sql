@@ -3,8 +3,10 @@ CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SELECT plan(5);
 
 SELECT ok(
-  has_column('public','notifications','action_path')
-  AND has_column('public','notifications','action_label'),
+  EXISTS (SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='notifications' AND column_name='action_path')
+  AND EXISTS (SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='notifications' AND column_name='action_label'),
   'Notifications expose optional action path and label fields'
 );
 
