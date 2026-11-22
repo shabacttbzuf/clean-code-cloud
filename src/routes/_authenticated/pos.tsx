@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,11 +24,13 @@ import {
   Save,
   X,
   CheckCircle2,
+  KeyRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatMoney } from "@/lib/format";
 import { printInvoiceHTML, type InvoiceData } from "@/lib/invoice-pdf";
 import { PageHeader } from "@/components/page-header";
+import { getMyPosAccessStatus, verifyMyPosPasscode } from "@/lib/pos-access.functions";
 
 export const Route = createFileRoute("/_authenticated/pos")({
   component: POSPage,
@@ -76,6 +79,137 @@ const paymentToDb: Record<PaymentUI, "cash" | "card" | "transfer"> = {
 
 const DRAFTS_KEY = "pos-drafts-v1";
 type Draft = { id: string; cart: CartItem[]; discount: string; created_at: string };
+type POSWorkspaceSnapshot = {
+  branchId: string | null; search: string; catFilter: string; cart: CartItem[];
+  discount: string; selectedPromotionId: string; selectedCustomerId: string;
+  orderType: "dine_in" | "takeaway" | "delivery"; selectedTableId: string;
+  deliveryName: string; deliveryPhone: string; deliveryAddress: string;
+  deliveryFeeInput: string; paidAmount: string; openingBalance: string;
+  paperSize: "58mm" | "80mm" | "A4"; reviewOpen: boolean; reviewMethod: PaymentUI; draftsOpen: boolean;
+};
+function readPOSWorkspaceSnapshot(key: string): Partial<POSWorkspaceSnapshot> {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return {};
+    const value = JSON.parse(raw) as Partial<POSWorkspaceSnapshot>;
+    const validCart = Array.isArray(value.cart) ? value.cart.filter((item) =>
+      !!item && typeof item.product_id === "string" && typeof item.name === "string" &&
+      Number.isFinite(item.unit_price) && item.unit_price >= 0 &&
+      Number.isInteger(item.quantity) && item.quantity > 0
+    ).slice(0, 300) : [];
+    return {
+      ...value,
+      cart: validCart,
+      branchId: typeof value.branchId === "string" ? value.branchId : null,
+      search: typeof value.search === "string" ? value.search.slice(0, 200) : "",
+      catFilter: typeof value.catFilter === "string" ? value.catFilter : "all",
+      discount: typeof value.discount === "string" ? value.discount : "0",
+      selectedPromotionId: typeof value.selectedPromotionId === "string" ? value.selectedPromotionId : "",
+      selectedCustomerId: typeof value.selectedCustomerId === "string" ? value.selectedCustomerId : "none",
+      orderType: ["dine_in", "takeaway", "delivery"].includes(value.orderType ?? "") ? value.orderType : "takeaway",
+      selectedTableId: typeof value.selectedTableId === "string" ? value.selectedTableId : "none",
+      deliveryName: typeof value.deliveryName === "string" ? value.deliveryName.slice(0, 120) : "",
+      deliveryPhone: typeof value.deliveryPhone === "string" ? value.deliveryPhone.slice(0, 40) : "",
+      deliveryAddress: typeof value.deliveryAddress === "string" ? value.deliveryAddress.slice(0, 500) : "",
+      deliveryFeeInput: typeof value.deliveryFeeInput === "string" ? value.deliveryFeeInput : "0",
+      paidAmount: typeof value.paidAmount === "string" ? value.paidAmount : "",
+      openingBalance: typeof value.openingBalance === "string" ? value.openingBalance : "0",
+      paperSize: ["58mm", "80mm", "A4"].includes(value.paperSize ?? "") ? value.paperSize : "80mm",
+      reviewOpen: value.reviewOpen === true,
+      draftsOpen: value.draftsOpen === true,
+      reviewMethod: ["cash", "card", "wallet"].includes(value.reviewMethod ?? "") ? value.reviewMethod : "cash",
+    };
+  } catch { return {}; }
+}
+function savePOSWorkspaceSnapshot(key: string, snapshot: POSWorkspaceSnapshot) {
+  try { sessionStorage.setItem(key, JSON.stringify(snapshot)); } catch { /* session storage is best-effort */ }
+}
+
+function POSPage() {
+  const { tenantId, userId } = useActiveTenant();
+  const getStatus = useServerFn(getMyPosAccessStatus);
+  const verifyPasscode = useServerFn(verifyMyPosPasscode);
+  const [passcode, setPasscode] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [unlocked, setUnlocked] = useState(false);
+  const [checkingUnlock, setCheckingUnlock] = useState(true);
+  const unlockStorageKey = `pos-access-unlocked-v1:${tenantId ?? "none"}:${userId ?? "none"}`;
+  const accessStatus = useQuery({
+    queryKey: ["pos-access-status", tenantId, userId],
+    queryFn: () => getStatus({ data: { tenant_id: tenantId! } }),
+    enabled: !!tenantId && !!userId,
+    staleTime: 30_000,
+  });
+  useEffect(() => {
+    setCheckingUnlock(true);
+    try {
+      setUnlocked(typeof window !== "undefined" && window.sessionStorage.getItem(unlockStorageKey) === "1");
+    } catch { setUnlocked(false); }
+    setPasscode("");
+    setCheckingUnlock(false);
+  }, [unlockStorageKey]);
+
+  async function unlockPOS() {
+    if (!tenantId || !passcode || verifying) return;
+    setVerifying(true);
+    try {
+      const result = await verifyPasscode({ data: { tenant_id: tenantId, passcode } });
+      if (result.ok) {
+        window.sessionStorage.setItem(unlockStorageKey, "1");
+        setUnlocked(true);
+        setPasscode("");
+      } else {
+        toast.error(result.locked
+          ? "تم إيقاف المحاولة مؤقتاً لكثرة المحاولات. حاول لاحقاً."
+          : "كلمة مرور نقطة البيع غير صحيحة.");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "تعذر التحقق من كلمة المرور.");
+    } finally { setVerifying(false); }
+  }
+
+  if (checkingUnlock || accessStatus.isLoading || !userId || !tenantId) {
+    return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
+  }
+  if (accessStatus.isError) {
+    return <Card className="mx-auto max-w-lg"><CardContent className="space-y-3 p-6 text-center">
+      <PageHeader title="تعذر التحقق من حماية نقطة البيع" />
+      <p role="alert" className="text-sm text-destructive">{accessStatus.error instanceof Error ? accessStatus.error.message : "حدث خطأ غير متوقع."}</p>
+      <Button variant="outline" onClick={() => void accessStatus.refetch()}>إعادة المحاولة</Button>
+    </CardContent></Card>;
+  }
+  if (!accessStatus.data?.configured) {
+    return <div className="mx-auto max-w-lg space-y-4">
+      <PageHeader title="حماية نقطة البيع" subtitle="يجب أن يضع كل مستخدم كلمة مرور خاصة به من ملفه الشخصي قبل فتح نقطة البيع." />
+      <Card><CardContent className="space-y-4 p-6 text-center">
+        <KeyRound className="mx-auto h-10 w-10 text-primary" />
+        <p className="text-sm text-muted-foreground">لم يتم إعداد كلمة مرور نقطة البيع لهذا الحساب بعد. افتح ملفك الشخصي وأنشئ كلمة مرور لا تقل عن 8 أحرف.</p>
+        <Button asChild className="w-full"><Link to="/profile">الانتقال إلى الملف الشخصي</Link></Button>
+      </CardContent></Card>
+    </div>;
+  }
+  if (!unlocked) {
+    return <div className="mx-auto max-w-md space-y-4" dir="rtl">
+      <PageHeader title="فتح نقطة البيع" subtitle="أدخل كلمة المرور الشخصية التي أعددتها في ملفك الشخصي." />
+      <Card><CardContent className="space-y-4 p-6">
+        <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-primary"><KeyRound className="h-7 w-7" /></div>
+        <div className="space-y-2"><Label htmlFor="pos-access-passcode">كلمة مرور نقطة البيع</Label>
+          <Input id="pos-access-passcode" type="password" autoComplete="current-password" value={passcode}
+            onChange={(event) => setPasscode(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") void unlockPOS(); }}
+            placeholder="أدخل كلمة المرور" disabled={verifying} />
+        </div>
+        <Button className="w-full" onClick={() => void unlockPOS()} disabled={verifying || !passcode}>
+          {verifying ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : <KeyRound className="ml-2 h-4 w-4" />}
+          فتح نقطة البيع
+        </Button>
+        <Button variant="ghost" asChild className="w-full"><Link to="/profile">إدارة كلمة المرور من ملفي الشخصي</Link></Button>
+        <p className="text-center text-xs text-muted-foreground">تبقى نقطة البيع مفتوحة أثناء التنقل بين تبويبات النظام في جلسة المتصفح الحالية.</p>
+      </CardContent></Card>
+    </div>;
+  }
+  return <POSWorkspace />;
+}
 
 function loadDrafts(storageKey: string): Draft[] {
   try {
@@ -105,9 +239,11 @@ function saveDrafts(list: Draft[], storageKey: string) {
   }
 }
 
-function POSPage() {
+function POSWorkspace() {
   const { tenantId, tenant, userId, membership, isAdmin, isSuperOwner } = useActiveTenant();
   const qc = useQueryClient();
+  const workspaceStorageKey = `pos-workspace-v1:${tenantId ?? "none"}:${userId ?? "none"}`;
+  const restoredWorkspace = useMemo(() => readPOSWorkspaceSnapshot(workspaceStorageKey), [workspaceStorageKey]);
 
   const cashierProfile = useQuery({
     queryKey: ["pos-cashier-profile", userId],
@@ -123,33 +259,43 @@ function POSPage() {
     enabled: !!userId,
   });
 
-  const [branchId, setBranchId] = useState<string | null>(membership?.branch_id ?? null);
-  const [search, setSearch] = useState("");
-  const [catFilter, setCatFilter] = useState<string>("all");
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [discount, setDiscount] = useState("0");
-  const [selectedPromotionId, setSelectedPromotionId] = useState("");
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>("none");
-  const [orderType, setOrderType] = useState<"dine_in" | "takeaway" | "delivery">("takeaway");
-  const [selectedTableId, setSelectedTableId] = useState<string>("none");
-  const [deliveryName, setDeliveryName] = useState("");
-  const [deliveryPhone, setDeliveryPhone] = useState("");
-  const [deliveryAddress, setDeliveryAddress] = useState("");
-  const [deliveryFeeInput, setDeliveryFeeInput] = useState("0");
-  const [paidAmount, setPaidAmount] = useState("");
+  const [branchId, setBranchId] = useState<string | null>(membership?.branch_id ?? restoredWorkspace.branchId ?? null);
+  const [search, setSearch] = useState(restoredWorkspace.search ?? "");
+  const [catFilter, setCatFilter] = useState<string>(restoredWorkspace.catFilter ?? "all");
+  const [cart, setCart] = useState<CartItem[]>(restoredWorkspace.cart ?? []);
+  const [discount, setDiscount] = useState(restoredWorkspace.discount ?? "0");
+  const [selectedPromotionId, setSelectedPromotionId] = useState(restoredWorkspace.selectedPromotionId ?? "");
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(restoredWorkspace.selectedCustomerId ?? "none");
+  const [orderType, setOrderType] = useState<"dine_in" | "takeaway" | "delivery">(restoredWorkspace.orderType ?? "takeaway");
+  const [selectedTableId, setSelectedTableId] = useState<string>(restoredWorkspace.selectedTableId ?? "none");
+  const [deliveryName, setDeliveryName] = useState(restoredWorkspace.deliveryName ?? "");
+  const [deliveryPhone, setDeliveryPhone] = useState(restoredWorkspace.deliveryPhone ?? "");
+  const [deliveryAddress, setDeliveryAddress] = useState(restoredWorkspace.deliveryAddress ?? "");
+  const [deliveryFeeInput, setDeliveryFeeInput] = useState(restoredWorkspace.deliveryFeeInput ?? "0");
+  const [paidAmount, setPaidAmount] = useState(restoredWorkspace.paidAmount ?? "");
   const [openSessionDialog, setOpenSessionDialog] = useState(false);
-  const [openingBalance, setOpeningBalance] = useState("0");
+  const [openingBalance, setOpeningBalance] = useState(restoredWorkspace.openingBalance ?? "0");
   // Keep paused invoices isolated per signed-in user, tenant, and branch on shared devices.
   const draftsStorageKey = `${DRAFTS_KEY}:${tenantId ?? "none"}:${userId ?? "none"}:${branchId ?? "none"}`;
   const [drafts, setDrafts] = useState<Draft[]>([]);
-  const [draftsOpen, setDraftsOpen] = useState(false);
+  const [draftsOpen, setDraftsOpen] = useState(restoredWorkspace.draftsOpen ?? false);
   useEffect(() => {
     setDrafts(loadDrafts(draftsStorageKey));
   }, [draftsStorageKey]);
-  const [paperSize, setPaperSize] = useState<"58mm" | "80mm" | "A4">("80mm");
-  const [reviewOpen, setReviewOpen] = useState(false);
-  const [reviewMethod, setReviewMethod] = useState<PaymentUI>("cash");
+  const [paperSize, setPaperSize] = useState<"58mm" | "80mm" | "A4">(restoredWorkspace.paperSize ?? "80mm");
+  const [reviewOpen, setReviewOpen] = useState(restoredWorkspace.reviewOpen ?? false);
+  const [reviewMethod, setReviewMethod] = useState<PaymentUI>(restoredWorkspace.reviewMethod ?? "cash");
   const printWindowRef = useRef<Window | null>(null);
+  useEffect(() => {
+    savePOSWorkspaceSnapshot(workspaceStorageKey, {
+      branchId, search, catFilter, cart, discount, selectedPromotionId, selectedCustomerId,
+      orderType, selectedTableId, deliveryName, deliveryPhone, deliveryAddress,
+      deliveryFeeInput, paidAmount, openingBalance, paperSize, reviewOpen, reviewMethod, draftsOpen,
+    });
+  }, [workspaceStorageKey, branchId, search, catFilter, cart, discount, selectedPromotionId,
+    selectedCustomerId, orderType, selectedTableId, deliveryName, deliveryPhone, deliveryAddress,
+    deliveryFeeInput, paidAmount, openingBalance, paperSize, reviewOpen, reviewMethod, draftsOpen]);
+
   const beginCheckout = (method: PaymentUI) => {
     if (cart.length === 0) return toast.info("الفاتورة فارغة");
     setReviewMethod(method);
@@ -176,10 +322,24 @@ function POSPage() {
   });
 
   useEffect(() => {
+    if (membership?.branch_id && !isAdmin && !isSuperOwner && branchId !== membership.branch_id) {
+      setBranchId(membership.branch_id);
+    }
+  }, [membership?.branch_id, isAdmin, isSuperOwner, branchId]);
+
+  useEffect(() => {
     if (branchId) return;
     if (membership?.branch_id) setBranchId(membership.branch_id);
     else if (branches.data && branches.data.length > 0) setBranchId(branches.data[0].id);
   }, [branches.data, membership, branchId]);
+
+  const previousBranchIdRef = useRef(branchId);
+  useEffect(() => {
+    if (previousBranchIdRef.current === branchId) return;
+    previousBranchIdRef.current = branchId;
+    setSelectedPromotionId("");
+    setSelectedTableId("none");
+  }, [branchId]);
 
   const currentBranch = useMemo(
     () => branches.data?.find((b) => b.id === branchId) ?? null,
@@ -204,13 +364,11 @@ function POSPage() {
     staleTime: 15_000,
   });
 
-  useEffect(() => { setSelectedPromotionId(""); }, [branchId]);
+
 
   const selectedPromotion = activePromotions.data?.find((offer) => offer.id === selectedPromotionId) ?? null;
 
-  useEffect(() => {
-    setSelectedTableId("none");
-  }, [branchId]);
+
 
   const restaurantTables = useQuery({
     queryKey: ["pos-restaurant-tables", tenantId, branchId],

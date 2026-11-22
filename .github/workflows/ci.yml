@@ -39,6 +39,7 @@ jobs:
           src/lib/super-owner.functions.ts
           src/lib/hr.functions.ts
           src/lib/enterprise.functions.ts
+          src/lib/pos-access.functions.ts
           --rule 'prettier/prettier: off'
           --rule '@typescript-eslint/no-explicit-any: off'
 

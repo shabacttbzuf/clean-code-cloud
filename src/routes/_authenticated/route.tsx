@@ -348,6 +348,12 @@ function TopBar() {
       } catch (historyError) {
         console.warn("Could not record logout history", historyError);
       }
+      try {
+        for (let index = window.sessionStorage.length - 1; index >= 0; index--) {
+          const key = window.sessionStorage.key(index);
+          if (key?.startsWith("pos-access-unlocked-v1:")) window.sessionStorage.removeItem(key);
+        }
+      } catch { /* session storage may be unavailable */ }
       await supabase.auth.signOut();
       navigate({ to: "/auth", replace: true });
       toast.success("تم تسجيل الخروج");
