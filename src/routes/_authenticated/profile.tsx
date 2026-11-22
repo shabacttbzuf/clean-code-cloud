@@ -14,6 +14,7 @@ import { Loader2, Save, KeyRound, Upload, Eye, EyeOff, ShieldCheck, Briefcase, B
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { updateMyProfile, updateUserPassword } from "@/lib/users.functions";
+import { getMyPosAccessStatus, setMyPosPasscode } from "@/lib/pos-access.functions";
 import { resolveAvatarUrl } from "@/lib/storage";
 
 export const Route = createFileRoute("/_authenticated/profile")({
@@ -54,6 +55,14 @@ function ProfilePage() {
   const qc = useQueryClient();
   const updateFn = useServerFn(updateMyProfile);
   const pwdFn = useServerFn(updateUserPassword);
+  const getPosAccessStatus = useServerFn(getMyPosAccessStatus);
+  const setPosPasscode = useServerFn(setMyPosPasscode);
+  const posAccessQuery = useQuery({
+    queryKey: ["pos-access-status", tenantId, user?.id],
+    queryFn: () => getPosAccessStatus({ data: { tenant_id: tenantId! } }),
+    enabled: !!tenantId && !!user?.id,
+    staleTime: 30_000,
+  });
 
   const profileQuery = useQuery({
     queryKey: ["my-profile", user?.id, tenantId],
@@ -97,6 +106,26 @@ function ProfilePage() {
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [showNationalId, setShowNationalId] = useState(false);
+  const [posPasscode, setPosPasscode] = useState("");
+  const [posPasscodeConfirm, setPosPasscodeConfirm] = useState("");
+  const posPasscodeMut = useMutation({
+    mutationFn: () => {
+      if (!tenantId) throw new Error("لا توجد مؤسسة نشطة.");
+      if (posPasscode.length < 8) throw new Error("كلمة المرور يجب أن تكون 8 أحرف على الأقل.");
+      if (posPasscode !== posPasscodeConfirm) throw new Error("كلمتا المرور غير متطابقتين.");
+      return setPosPasscode({ data: { tenant_id: tenantId, passcode: posPasscode } });
+    },
+    onSuccess: () => {
+      setPosPasscode("");
+      setPosPasscodeConfirm("");
+      if (user?.id && tenantId) {
+        window.sessionStorage.removeItem(`pos-access-unlocked-v1:${tenantId}:${user.id}`);
+      }
+      void qc.invalidateQueries({ queryKey: ["pos-access-status", tenantId, user?.id] });
+      toast.success("تم حفظ كلمة مرور نقطة البيع الخاصة بحسابك.");
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر حفظ كلمة المرور."),
+  });
 
   async function uploadAvatar(file?: File) {
     const avatarTenantId = profile?.tenant_id ?? tenantId;
@@ -300,6 +329,44 @@ function ProfilePage() {
           <ProfileInfo label="آخر تغيير لكلمة المرور" value={formatProfileDate(profile.password_changed_at)} />
           <ProfileInfo label="اعتماد الحساب" value={formatProfileDate(profile.approved_at)} />
           <ProfileInfo label="تغيير كلمة المرور مطلوب" value={profile.must_change_password ? "نعم — يلزم التغيير" : "لا"} />
+        </CardContent>
+      </Card>
+
+      
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><KeyRound className="h-5 w-5 text-primary" /> كلمة مرور نقطة البيع</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            كلمة مرور مستقلة وخاصة بحسابك. يطلبها النظام عند فتح نقطة البيع لأول مرة في جلسة المتصفح، ولا يطلبها مجدداً عند الرجوع إليها بين التبويبات.
+          </p>
+          {posAccessQuery.isLoading ? <p className="text-sm text-muted-foreground">جارٍ التحقق من إعداد كلمة المرور...</p> :
+            posAccessQuery.isError ? <div role="alert" className="space-y-2 text-sm text-destructive">
+              <p>تعذر التحقق من إعداد كلمة مرور نقطة البيع.</p>
+              <Button type="button" variant="outline" size="sm" onClick={() => void posAccessQuery.refetch()}>إعادة المحاولة</Button>
+            </div> :
+            <p className="text-sm font-semibold">{posAccessQuery.data?.configured ? "تم إعداد كلمة مرور نقطة البيع لهذا الحساب." : "لم يتم إعداد كلمة مرور نقطة البيع بعد."}</p>}
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="profile-pos-passcode">كلمة مرور نقطة البيع الجديدة</Label>
+              <Input id="profile-pos-passcode" type="password" autoComplete="new-password" minLength={8} maxLength={128}
+                value={posPasscode} onChange={(event) => setPosPasscode(event.target.value)} placeholder="8 أحرف على الأقل" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="profile-pos-passcode-confirm">تأكيد كلمة المرور</Label>
+              <Input id="profile-pos-passcode-confirm" type="password" autoComplete="new-password" minLength={8} maxLength={128}
+                value={posPasscodeConfirm} onChange={(event) => setPosPasscodeConfirm(event.target.value)} />
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button type="button" onClick={() => posPasscodeMut.mutate()}
+              disabled={posPasscodeMut.isPending || posPasscode.length < 8 || posPasscode !== posPasscodeConfirm}>
+              {posPasscodeMut.isPending ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : <Save className="ml-2 h-4 w-4" />}
+              {posAccessQuery.data?.configured ? "تغيير كلمة مرور نقطة البيع" : "إنشاء كلمة مرور نقطة البيع"}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">لا تُحفظ كلمة المرور كنص مكشوف؛ تُشتق لها بصمة تشفيرية على الخادم، مع تقييد المحاولات الخاطئة.</p>
         </CardContent>
       </Card>
 
