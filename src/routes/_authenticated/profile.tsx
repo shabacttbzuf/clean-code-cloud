@@ -355,7 +355,7 @@ function ProfilePage() {
             </div>
             <div className="space-y-1">
               <Label htmlFor="profile-pos-passcode-confirm">تأكيد كلمة المرور</Label>
-              <Input id="profile-pos-passcode-confirm" type="password" autoComplete="new-password" minLength={8} maxLength={128}
+              <Input id="profile-pos-passcode-confirm" type="password" autoComplete="new-password" maxLength={128}
                 value={posPasscodeConfirm} onChange={(event) => setPosPasscodeConfirm(event.target.value)} />
             </div>
           </div>
