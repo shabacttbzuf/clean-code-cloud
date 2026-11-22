@@ -27,12 +27,21 @@ test("each user configures their own POS passphrase from the personal profile", 
   assert.match(profile, /posAccessQuery\.data\?\.configured/);
 });
 
-test("POS requires the signed-in user's passphrase before mounting the checkout workspace", () => {
-  assert.match(pos, /function POSPage\(\)/);
+test("POS asks for a passphrase only after the user explicitly chooses to open the POS or start a shift", () => {
+  assert.match(pos, /function POSPage\(\) \{\s*return <POSWorkspace \/>/);
+  assert.match(pos, /requestPosUnlock\(true\)/);
+  assert.match(pos, /requestPosUnlock\(false\)/);
   assert.match(pos, /verifyMyPosPasscode/);
-  assert.match(pos, /if \(!unlocked\)/);
-  assert.match(pos, /return <POSWorkspace \/>/);
+  assert.match(pos, /POSPasscodeDialog/);
   assert.match(pos, /pos-access-unlocked-v1/);
+  assert.doesNotMatch(pos.slice(pos.indexOf("function POSPage"), pos.indexOf("function loadDrafts")), /verifyMyPosPasscode|if \(!unlocked\)/);
+});
+
+test("POS passphrase accepts any non-empty value up to 128 characters", () => {
+  assert.match(server, /passcode: z\.string\(\)\.min\(1/);
+  assert.doesNotMatch(server, /passcode: z\.string\(\)\.min\(8/);
+  assert.match(profile, /!posPasscode/);
+  assert.doesNotMatch(profile, /posPasscode\.length < 8|minLength=\{8\}/);
 });
 
 test("POS workspace restores cart and checkout state after navigating between workspace tabs", () => {
