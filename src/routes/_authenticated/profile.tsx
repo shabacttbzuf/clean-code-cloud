@@ -56,7 +56,7 @@ function ProfilePage() {
   const updateFn = useServerFn(updateMyProfile);
   const pwdFn = useServerFn(updateUserPassword);
   const getPosAccessStatus = useServerFn(getMyPosAccessStatus);
-  const setPosPasscode = useServerFn(setMyPosPasscode);
+  const setPosPasscodeFn = useServerFn(setMyPosPasscode);
   const posAccessQuery = useQuery({
     queryKey: ["pos-access-status", tenantId, user?.id],
     queryFn: () => getPosAccessStatus({ data: { tenant_id: tenantId! } }),
@@ -113,13 +113,13 @@ function ProfilePage() {
       if (!tenantId) throw new Error("لا توجد مؤسسة نشطة.");
       if (posPasscode.length < 8) throw new Error("كلمة المرور يجب أن تكون 8 أحرف على الأقل.");
       if (posPasscode !== posPasscodeConfirm) throw new Error("كلمتا المرور غير متطابقتين.");
-      return setPosPasscode({ data: { tenant_id: tenantId, passcode: posPasscode } });
+      return setPosPasscodeFn({ data: { tenant_id: tenantId, passcode: posPasscode } });
     },
     onSuccess: () => {
       setPosPasscode("");
       setPosPasscodeConfirm("");
       if (user?.id && tenantId) {
-        window.sessionStorage.removeItem(`pos-access-unlocked-v1:${tenantId}:${user.id}`);
+        try { window.sessionStorage.removeItem(`pos-access-unlocked-v1:${tenantId}:${user.id}`); } catch { /* storage may be disabled */ }
       }
       void qc.invalidateQueries({ queryKey: ["pos-access-status", tenantId, user?.id] });
       toast.success("تم حفظ كلمة مرور نقطة البيع الخاصة بحسابك.");
