@@ -213,7 +213,6 @@ function POSWorkspace() {
   const [deliveryAddress, setDeliveryAddress] = useState(restoredWorkspace.deliveryAddress ?? "");
   const [deliveryFeeInput, setDeliveryFeeInput] = useState(restoredWorkspace.deliveryFeeInput ?? "0");
   const [paidAmount, setPaidAmount] = useState(restoredWorkspace.paidAmount ?? "");
-  const [openSessionDialog, setOpenSessionDialog] = useState(false);
   const [openingBalance, setOpeningBalance] = useState(restoredWorkspace.openingBalance ?? "0");
   // Keep paused invoices isolated per signed-in user, tenant, and branch on shared devices.
   const draftsStorageKey = `${DRAFTS_KEY}:${tenantId ?? "none"}:${userId ?? "none"}:${branchId ?? "none"}`;
@@ -863,7 +862,7 @@ function POSWorkspace() {
               <Label>رصيد بداية الوردية</Label>
               <Input type="number" min="0" step="0.01" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} />
             </div>
-            <Button className="w-full" disabled={!branchId || openSess.isPending || posAccessStatus.isLoading} onClick={() => requestPosUnlock(true)}>
+            <Button className="w-full" disabled={!branchId || openSess.isPending || posAccessStatus.isLoading} onClick={() => unlocked ? openSess.mutate() : requestPosUnlock(true)}>
               {openSess.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
               موافق — فتح الوردية والبدء بالبيع
             </Button>
