@@ -126,88 +126,6 @@ function savePOSWorkspaceSnapshot(key: string, snapshot: POSWorkspaceSnapshot) {
 }
 
 function POSPage() {
-  const { tenantId, userId } = useActiveTenant();
-  const getStatus = useServerFn(getMyPosAccessStatus);
-  const verifyPasscode = useServerFn(verifyMyPosPasscode);
-  const [passcode, setPasscode] = useState("");
-  const [verifying, setVerifying] = useState(false);
-  const [unlocked, setUnlocked] = useState(false);
-  const [checkingUnlock, setCheckingUnlock] = useState(true);
-  const unlockStorageKey = `pos-access-unlocked-v1:${tenantId ?? "none"}:${userId ?? "none"}`;
-  const accessStatus = useQuery({
-    queryKey: ["pos-access-status", tenantId, userId],
-    queryFn: () => getStatus({ data: { tenant_id: tenantId! } }),
-    enabled: !!tenantId && !!userId,
-    staleTime: 30_000,
-  });
-  useEffect(() => {
-    setCheckingUnlock(true);
-    try {
-      setUnlocked(typeof window !== "undefined" && window.sessionStorage.getItem(unlockStorageKey) === "1");
-    } catch { setUnlocked(false); }
-    setPasscode("");
-    setCheckingUnlock(false);
-  }, [unlockStorageKey]);
-
-  async function unlockPOS() {
-    if (!tenantId || !passcode || verifying) return;
-    setVerifying(true);
-    try {
-      const result = await verifyPasscode({ data: { tenant_id: tenantId, passcode } });
-      if (result.ok) {
-        window.sessionStorage.setItem(unlockStorageKey, "1");
-        setUnlocked(true);
-        setPasscode("");
-      } else {
-        toast.error(result.locked
-          ? "تم إيقاف المحاولة مؤقتاً لكثرة المحاولات. حاول لاحقاً."
-          : "كلمة مرور نقطة البيع غير صحيحة.");
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "تعذر التحقق من كلمة المرور.");
-    } finally { setVerifying(false); }
-  }
-
-  if (checkingUnlock || accessStatus.isLoading || !userId || !tenantId) {
-    return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
-  }
-  if (accessStatus.isError) {
-    return <Card className="mx-auto max-w-lg"><CardContent className="space-y-3 p-6 text-center">
-      <PageHeader title="تعذر التحقق من حماية نقطة البيع" />
-      <p role="alert" className="text-sm text-destructive">{accessStatus.error instanceof Error ? accessStatus.error.message : "حدث خطأ غير متوقع."}</p>
-      <Button variant="outline" onClick={() => void accessStatus.refetch()}>إعادة المحاولة</Button>
-    </CardContent></Card>;
-  }
-  if (!accessStatus.data?.configured) {
-    return <div className="mx-auto max-w-lg space-y-4">
-      <PageHeader title="حماية نقطة البيع" subtitle="يجب أن يضع كل مستخدم كلمة مرور خاصة به من ملفه الشخصي قبل فتح نقطة البيع." />
-      <Card><CardContent className="space-y-4 p-6 text-center">
-        <KeyRound className="mx-auto h-10 w-10 text-primary" />
-        <p className="text-sm text-muted-foreground">لم يتم إعداد كلمة مرور نقطة البيع لهذا الحساب بعد. افتح ملفك الشخصي وأنشئ كلمة مرور لا تقل عن 8 أحرف.</p>
-        <Button asChild className="w-full"><Link to="/profile">الانتقال إلى الملف الشخصي</Link></Button>
-      </CardContent></Card>
-    </div>;
-  }
-  if (!unlocked) {
-    return <div className="mx-auto max-w-md space-y-4" dir="rtl">
-      <PageHeader title="فتح نقطة البيع" subtitle="أدخل كلمة المرور الشخصية التي أعددتها في ملفك الشخصي." />
-      <Card><CardContent className="space-y-4 p-6">
-        <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-primary"><KeyRound className="h-7 w-7" /></div>
-        <div className="space-y-2"><Label htmlFor="pos-access-passcode">كلمة مرور نقطة البيع</Label>
-          <Input id="pos-access-passcode" type="password" autoComplete="current-password" value={passcode}
-            onChange={(event) => setPasscode(event.target.value)}
-            onKeyDown={(event) => { if (event.key === "Enter") void unlockPOS(); }}
-            placeholder="أدخل كلمة المرور" disabled={verifying} />
-        </div>
-        <Button className="w-full" onClick={() => void unlockPOS()} disabled={verifying || !passcode}>
-          {verifying ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : <KeyRound className="ml-2 h-4 w-4" />}
-          فتح نقطة البيع
-        </Button>
-        <Button variant="ghost" asChild className="w-full"><Link to="/profile">إدارة كلمة المرور من ملفي الشخصي</Link></Button>
-        <p className="text-center text-xs text-muted-foreground">تبقى نقطة البيع مفتوحة أثناء التنقل بين تبويبات النظام في جلسة المتصفح الحالية.</p>
-      </CardContent></Card>
-    </div>;
-  }
   return <POSWorkspace />;
 }
 
@@ -242,6 +160,28 @@ function saveDrafts(list: Draft[], storageKey: string) {
 function POSWorkspace() {
   const { tenantId, tenant, userId, membership, isAdmin, isSuperOwner } = useActiveTenant();
   const qc = useQueryClient();
+  const getPosAccessStatus = useServerFn(getMyPosAccessStatus);
+  const verifyPosPasscode = useServerFn(verifyMyPosPasscode);
+  const [posPasscode, setPosPasscode] = useState("");
+  const [passcodeDialogOpen, setPasscodeDialogOpen] = useState(false);
+  const [verifyingPasscode, setVerifyingPasscode] = useState(false);
+  const [unlocked, setUnlocked] = useState(false);
+  const [pendingOpenShift, setPendingOpenShift] = useState(false);
+  const unlockStorageKey = `pos-access-unlocked-v1:${tenantId ?? "none"}:${userId ?? "none"}`;
+  const posAccessStatus = useQuery({
+    queryKey: ["pos-access-status", tenantId, userId],
+    queryFn: () => getPosAccessStatus({ data: { tenant_id: tenantId! } }),
+    enabled: !!tenantId && !!userId,
+    staleTime: 30_000,
+  });
+  useEffect(() => {
+    try {
+      setUnlocked(typeof window !== "undefined" && window.sessionStorage.getItem(unlockStorageKey) === "1");
+    } catch {
+      setUnlocked(false);
+    }
+    setPosPasscode("");
+  }, [unlockStorageKey]);
   const workspaceStorageKey = `pos-workspace-v1:${tenantId ?? "none"}:${userId ?? "none"}`;
   const restoredWorkspace = useMemo(() => readPOSWorkspaceSnapshot(workspaceStorageKey), [workspaceStorageKey]);
 
@@ -273,7 +213,6 @@ function POSWorkspace() {
   const [deliveryAddress, setDeliveryAddress] = useState(restoredWorkspace.deliveryAddress ?? "");
   const [deliveryFeeInput, setDeliveryFeeInput] = useState(restoredWorkspace.deliveryFeeInput ?? "0");
   const [paidAmount, setPaidAmount] = useState(restoredWorkspace.paidAmount ?? "");
-  const [openSessionDialog, setOpenSessionDialog] = useState(false);
   const [openingBalance, setOpeningBalance] = useState(restoredWorkspace.openingBalance ?? "0");
   // Keep paused invoices isolated per signed-in user, tenant, and branch on shared devices.
   const draftsStorageKey = `${DRAFTS_KEY}:${tenantId ?? "none"}:${userId ?? "none"}:${branchId ?? "none"}`;
@@ -571,10 +510,53 @@ function POSWorkspace() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["open-session"] });
       toast.success("تم فتح الوردية");
-      setOpenSessionDialog(false);
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشل فتح الوردية"),
   });
+
+  const requestPosUnlock = (openShiftAfterUnlock = false) => {
+    if (posAccessStatus.isLoading) {
+      toast.info("انتظر حتى يكتمل التحقق من إعداد كلمة المرور.");
+      return;
+    }
+    if (posAccessStatus.isError) {
+      toast.error("تعذر التحقق من إعداد كلمة مرور نقطة البيع. أعد المحاولة.");
+      return;
+    }
+    if (!posAccessStatus.data?.configured) {
+      toast.error("أنشئ كلمة مرور نقطة البيع أولاً من ملفك الشخصي.");
+      return;
+    }
+    setPendingOpenShift(openShiftAfterUnlock);
+    setPosPasscode("");
+    setPasscodeDialogOpen(true);
+  };
+
+  const verifyAndOpenPos = async () => {
+    if (!tenantId || !posPasscode || verifyingPasscode) return;
+    setVerifyingPasscode(true);
+    try {
+      const result = await verifyPosPasscode({ data: { tenant_id: tenantId, passcode: posPasscode } });
+      if (!result.ok) {
+        toast.error(result.locked
+          ? "تم إيقاف المحاولة مؤقتاً لكثرة المحاولات. حاول لاحقاً."
+          : "كلمة مرور نقطة البيع غير صحيحة.");
+        return;
+      }
+      try { window.sessionStorage.setItem(unlockStorageKey, "1"); } catch { /* session storage is optional */ }
+      setUnlocked(true);
+      setPasscodeDialogOpen(false);
+      setPosPasscode("");
+      if (pendingOpenShift) {
+        setPendingOpenShift(false);
+        await openSess.mutateAsync();
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "تعذر التحقق من كلمة المرور.");
+    } finally {
+      setVerifyingPasscode(false);
+    }
+  };
 
   const buildInvoice = (
     sale: {
@@ -834,6 +816,33 @@ function POSWorkspace() {
     );
   }
 
+  if (openSession.data && !unlocked) {
+    return (
+      <div className="mx-auto max-w-md space-y-4" dir="rtl">
+        <PageHeader title="نقطة البيع جاهزة" subtitle="اضغط فتح نقطة البيع ثم أدخل كلمة المرور الخاصة بك للبدء." />
+        <Card><CardContent className="space-y-4 p-6 text-center">
+          <KeyRound className="mx-auto h-10 w-10 text-primary" />
+          <p className="text-sm text-muted-foreground">لن تظهر نافذة كلمة المرور عند مجرد عرض التبويب؛ ستظهر فقط عند اختيار فتح نقطة البيع.</p>
+          <Button className="w-full" onClick={() => requestPosUnlock(false)} disabled={posAccessStatus.isLoading}>
+            <KeyRound className="ml-2 h-4 w-4" /> فتح نقطة البيع
+          </Button>
+          {posAccessStatus.isError && <p role="alert" className="text-xs text-destructive">تعذر التحقق من إعداد كلمة المرور. أعد المحاولة.</p>}
+          {!posAccessStatus.data?.configured && !posAccessStatus.isLoading && (
+            <Link to="/profile" className="text-sm text-primary underline">إعداد كلمة المرور من ملفي الشخصي</Link>
+          )}
+        </CardContent></Card>
+        <POSPasscodeDialog
+          open={passcodeDialogOpen}
+          onOpenChange={setPasscodeDialogOpen}
+          passcode={posPasscode}
+          onPasscodeChange={setPosPasscode}
+          verifying={verifyingPasscode}
+          onSubmit={() => void verifyAndOpenPos()}
+        />
+      </div>
+    );
+  }
+
   if (!openSession.data) {
     return (
       <div className="space-y-4">
@@ -853,10 +862,22 @@ function POSWorkspace() {
               <Label>رصيد بداية الوردية</Label>
               <Input type="number" min="0" step="0.01" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} />
             </div>
-            <Button className="w-full" disabled={!branchId || openSess.isPending} onClick={() => openSess.mutate()}>
+            <Button className="w-full" disabled={!branchId || openSess.isPending || posAccessStatus.isLoading} onClick={() => unlocked ? openSess.mutate() : requestPosUnlock(true)}>
               {openSess.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
-              فتح الوردية والبدء بالبيع
+              موافق — فتح الوردية والبدء بالبيع
             </Button>
+            {posAccessStatus.isError && <p role="alert" className="text-xs text-destructive">تعذر التحقق من إعداد كلمة المرور. أعد المحاولة.</p>}
+            {!posAccessStatus.data?.configured && !posAccessStatus.isLoading && !posAccessStatus.isError && (
+              <Link to="/profile" className="block text-center text-xs text-primary underline">إعداد كلمة مرور نقطة البيع من الملف الشخصي</Link>
+            )}
+            <POSPasscodeDialog
+              open={passcodeDialogOpen}
+              onOpenChange={setPasscodeDialogOpen}
+              passcode={posPasscode}
+              onPasscodeChange={setPosPasscode}
+              verifying={verifyingPasscode}
+              onSubmit={() => void verifyAndOpenPos()}
+            />
           </CardContent>
         </Card>
         {drafts.length > 0 && (
@@ -1180,6 +1201,54 @@ function POSWorkspace() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function POSPasscodeDialog({
+  open,
+  onOpenChange,
+  passcode,
+  onPasscodeChange,
+  verifying,
+  onSubmit,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  passcode: string;
+  onPasscodeChange: (value: string) => void;
+  verifying: boolean;
+  onSubmit: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!verifying) onOpenChange(nextOpen); }}>
+      <DialogContent dir="rtl" className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>تأكيد فتح نقطة البيع</DialogTitle>
+          <DialogDescription>أدخل كلمة مرور نقطة البيع التي أنشأتها من ملفك الشخصي.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          <Label htmlFor="pos-access-passcode">كلمة المرور</Label>
+          <Input
+            id="pos-access-passcode"
+            type="password"
+            autoComplete="current-password"
+            value={passcode}
+            onChange={(event) => onPasscodeChange(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") onSubmit(); }}
+            placeholder="أدخل كلمة المرور التي اخترتها"
+            disabled={verifying}
+            autoFocus
+          />
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={verifying}>إلغاء</Button>
+          <Button type="button" onClick={onSubmit} disabled={verifying || !passcode}>
+            {verifying ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : <KeyRound className="ml-2 h-4 w-4" />}
+            تأكيد وفتح نقطة البيع
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

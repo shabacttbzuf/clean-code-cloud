@@ -5,7 +5,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 const tenantInput = z.object({ tenant_id: z.string().uuid() });
 const passcodeInput = z.object({
   tenant_id: z.string().uuid(),
-  passcode: z.string().min(8).max(128),
+  passcode: z.string().min(1, "أدخل كلمة المرور").max(128),
 });
 
 async function assertOwnTenantAccess(supabase: any, userId: string, tenantId: string) {
