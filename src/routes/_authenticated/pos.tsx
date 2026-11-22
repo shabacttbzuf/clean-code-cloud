@@ -85,7 +85,7 @@ type POSWorkspaceSnapshot = {
   orderType: "dine_in" | "takeaway" | "delivery"; selectedTableId: string;
   deliveryName: string; deliveryPhone: string; deliveryAddress: string;
   deliveryFeeInput: string; paidAmount: string; openingBalance: string;
-  paperSize: "58mm" | "80mm" | "A4"; reviewOpen: boolean; reviewMethod: PaymentUI;
+  paperSize: "58mm" | "80mm" | "A4"; reviewOpen: boolean; reviewMethod: PaymentUI; draftsOpen: boolean;
 };
 function readPOSWorkspaceSnapshot(key: string): Partial<POSWorkspaceSnapshot> {
   try {
@@ -116,6 +116,7 @@ function readPOSWorkspaceSnapshot(key: string): Partial<POSWorkspaceSnapshot> {
       openingBalance: typeof value.openingBalance === "string" ? value.openingBalance : "0",
       paperSize: ["58mm", "80mm", "A4"].includes(value.paperSize ?? "") ? value.paperSize : "80mm",
       reviewOpen: value.reviewOpen === true,
+      draftsOpen: value.draftsOpen === true,
       reviewMethod: ["cash", "card", "wallet"].includes(value.reviewMethod ?? "") ? value.reviewMethod : "cash",
     };
   } catch { return {}; }
@@ -277,7 +278,7 @@ function POSWorkspace() {
   // Keep paused invoices isolated per signed-in user, tenant, and branch on shared devices.
   const draftsStorageKey = `${DRAFTS_KEY}:${tenantId ?? "none"}:${userId ?? "none"}:${branchId ?? "none"}`;
   const [drafts, setDrafts] = useState<Draft[]>([]);
-  const [draftsOpen, setDraftsOpen] = useState(false);
+  const [draftsOpen, setDraftsOpen] = useState(restoredWorkspace.draftsOpen ?? false);
   useEffect(() => {
     setDrafts(loadDrafts(draftsStorageKey));
   }, [draftsStorageKey]);
@@ -289,11 +290,11 @@ function POSWorkspace() {
     savePOSWorkspaceSnapshot(workspaceStorageKey, {
       branchId, search, catFilter, cart, discount, selectedPromotionId, selectedCustomerId,
       orderType, selectedTableId, deliveryName, deliveryPhone, deliveryAddress,
-      deliveryFeeInput, paidAmount, openingBalance, paperSize, reviewOpen, reviewMethod,
+      deliveryFeeInput, paidAmount, openingBalance, paperSize, reviewOpen, reviewMethod, draftsOpen,
     });
   }, [workspaceStorageKey, branchId, search, catFilter, cart, discount, selectedPromotionId,
     selectedCustomerId, orderType, selectedTableId, deliveryName, deliveryPhone, deliveryAddress,
-    deliveryFeeInput, paidAmount, openingBalance, paperSize, reviewOpen, reviewMethod]);
+    deliveryFeeInput, paidAmount, openingBalance, paperSize, reviewOpen, reviewMethod, draftsOpen]);
 
   const beginCheckout = (method: PaymentUI) => {
     if (cart.length === 0) return toast.info("الفاتورة فارغة");
@@ -332,6 +333,14 @@ function POSWorkspace() {
     else if (branches.data && branches.data.length > 0) setBranchId(branches.data[0].id);
   }, [branches.data, membership, branchId]);
 
+  const previousBranchIdRef = useRef(branchId);
+  useEffect(() => {
+    if (previousBranchIdRef.current === branchId) return;
+    previousBranchIdRef.current = branchId;
+    setSelectedPromotionId("");
+    setSelectedTableId("none");
+  }, [branchId]);
+
   const currentBranch = useMemo(
     () => branches.data?.find((b) => b.id === branchId) ?? null,
     [branches.data, branchId],
@@ -355,13 +364,11 @@ function POSWorkspace() {
     staleTime: 15_000,
   });
 
-  useEffect(() => { setSelectedPromotionId(""); }, [branchId]);
+
 
   const selectedPromotion = activePromotions.data?.find((offer) => offer.id === selectedPromotionId) ?? null;
 
-  useEffect(() => {
-    setSelectedTableId("none");
-  }, [branchId]);
+
 
   const restaurantTables = useQuery({
     queryKey: ["pos-restaurant-tables", tenantId, branchId],
