@@ -26,7 +26,7 @@ export const getMyPosAccessStatus = createServerFn({ method: "GET" })
   .handler(async ({ data, context }) => {
     await assertOwnTenantAccess(context.supabase, context.userId, data.tenant_id);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: credential, error } = await supabaseAdmin.from("pos_access_credentials")
+    const { data: credential, error } = await (supabaseAdmin.from("pos_access_credentials" as any) as any)
       .select("user_id").eq("tenant_id", data.tenant_id).eq("user_id", context.userId).maybeSingle();
     if (error) throw new Error(error.message);
     return { configured: !!credential };
@@ -42,7 +42,7 @@ export const setMyPosPasscode = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const salt = randomBytes(16).toString("hex");
     const passwordHash = scryptSync(data.passcode, salt, 64).toString("hex");
-    const { error } = await supabaseAdmin.from("pos_access_credentials").upsert({
+    const { error } = await (supabaseAdmin.from("pos_access_credentials" as any) as any).upsert({
       tenant_id: data.tenant_id,
       user_id: context.userId,
       password_salt: salt,
@@ -63,7 +63,7 @@ export const verifyMyPosPasscode = createServerFn({ method: "POST" })
     await assertOwnTenantAccess(context.supabase, context.userId, data.tenant_id);
     const { scryptSync, timingSafeEqual } = await import("node:crypto");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: credential, error } = await supabaseAdmin.from("pos_access_credentials")
+    const { data: credential, error } = await (supabaseAdmin.from("pos_access_credentials" as any) as any)
       .select("password_salt,password_hash,failed_attempts,locked_until")
       .eq("tenant_id", data.tenant_id).eq("user_id", context.userId).maybeSingle();
     if (error) throw new Error(error.message);
@@ -81,7 +81,7 @@ export const verifyMyPosPasscode = createServerFn({ method: "POST" })
     if (!matches) {
       const failedAttempts = Number(credential.failed_attempts ?? 0) + 1;
       const nextLock = failedAttempts >= 5 ? new Date(now + 15 * 60 * 1000).toISOString() : null;
-      const { error: updateError } = await supabaseAdmin.from("pos_access_credentials").update({
+      const { error: updateError } = await (supabaseAdmin.from("pos_access_credentials" as any) as any).update({
         failed_attempts: failedAttempts >= 5 ? 0 : failedAttempts,
         locked_until: nextLock,
         updated_at: new Date().toISOString(),
@@ -90,7 +90,7 @@ export const verifyMyPosPasscode = createServerFn({ method: "POST" })
       return { ok: false, locked: !!nextLock, retry_after: nextLock };
     }
 
-    const { error: resetError } = await supabaseAdmin.from("pos_access_credentials").update({
+    const { error: resetError } = await (supabaseAdmin.from("pos_access_credentials" as any) as any).update({
       failed_attempts: 0, locked_until: null, updated_at: new Date().toISOString(),
     }).eq("tenant_id", data.tenant_id).eq("user_id", context.userId);
     if (resetError) throw new Error(resetError.message);
