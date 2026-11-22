@@ -131,6 +131,7 @@ function POSPage() {
   const [passcode, setPasscode] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
+  const [checkingUnlock, setCheckingUnlock] = useState(true);
   const unlockStorageKey = `pos-access-unlocked-v1:${tenantId ?? "none"}:${userId ?? "none"}`;
   const accessStatus = useQuery({
     queryKey: ["pos-access-status", tenantId, userId],
@@ -139,10 +140,12 @@ function POSPage() {
     staleTime: 30_000,
   });
   useEffect(() => {
+    setCheckingUnlock(true);
     try {
       setUnlocked(typeof window !== "undefined" && window.sessionStorage.getItem(unlockStorageKey) === "1");
     } catch { setUnlocked(false); }
     setPasscode("");
+    setCheckingUnlock(false);
   }, [unlockStorageKey]);
 
   async function unlockPOS() {
@@ -164,7 +167,7 @@ function POSPage() {
     } finally { setVerifying(false); }
   }
 
-  if (accessStatus.isLoading || !userId || !tenantId) {
+  if (checkingUnlock || accessStatus.isLoading || !userId || !tenantId) {
     return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
   }
   if (accessStatus.isError) {
