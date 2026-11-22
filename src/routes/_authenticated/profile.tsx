@@ -111,7 +111,7 @@ function ProfilePage() {
   const posPasscodeMut = useMutation({
     mutationFn: () => {
       if (!tenantId) throw new Error("لا توجد مؤسسة نشطة.");
-      if (posPasscode.length < 8) throw new Error("كلمة المرور يجب أن تكون 8 أحرف على الأقل.");
+      if (!posPasscode) throw new Error("أدخل كلمة مرور نقطة البيع.");
       if (posPasscode !== posPasscodeConfirm) throw new Error("كلمتا المرور غير متطابقتين.");
       return setPosPasscodeFn({ data: { tenant_id: tenantId, passcode: posPasscode } });
     },
@@ -339,7 +339,7 @@ function ProfilePage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            كلمة مرور مستقلة وخاصة بحسابك. يطلبها النظام عند فتح نقطة البيع لأول مرة في جلسة المتصفح، ولا يطلبها مجدداً عند الرجوع إليها بين التبويبات.
+            كلمة مرور مستقلة وخاصة بحسابك. تظهر نافذة التحقق فقط عندما تختار فتح نقطة البيع، وليس عند مجرد عرض تبويبها. ويمكنك استخدام أي كلمة مرور تختارها حتى 128 حرفاً.
           </p>
           {posAccessQuery.isLoading ? <p className="text-sm text-muted-foreground">جارٍ التحقق من إعداد كلمة المرور...</p> :
             posAccessQuery.isError ? <div role="alert" className="space-y-2 text-sm text-destructive">
@@ -350,8 +350,8 @@ function ProfilePage() {
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="profile-pos-passcode">كلمة مرور نقطة البيع الجديدة</Label>
-              <Input id="profile-pos-passcode" type="password" autoComplete="new-password" minLength={8} maxLength={128}
-                value={posPasscode} onChange={(event) => setPosPasscode(event.target.value)} placeholder="8 أحرف على الأقل" />
+              <Input id="profile-pos-passcode" type="password" autoComplete="new-password" maxLength={128}
+                value={posPasscode} onChange={(event) => setPosPasscode(event.target.value)} placeholder="اختر كلمة المرور التي تناسبك" />
             </div>
             <div className="space-y-1">
               <Label htmlFor="profile-pos-passcode-confirm">تأكيد كلمة المرور</Label>
@@ -361,7 +361,7 @@ function ProfilePage() {
           </div>
           <div className="flex justify-end">
             <Button type="button" onClick={() => posPasscodeMut.mutate()}
-              disabled={posPasscodeMut.isPending || posPasscode.length < 8 || posPasscode !== posPasscodeConfirm}>
+              disabled={posPasscodeMut.isPending || !posPasscode || posPasscode !== posPasscodeConfirm}>
               {posPasscodeMut.isPending ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : <Save className="ml-2 h-4 w-4" />}
               {posAccessQuery.data?.configured ? "تغيير كلمة مرور نقطة البيع" : "إنشاء كلمة مرور نقطة البيع"}
             </Button>
