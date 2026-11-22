@@ -138,7 +138,9 @@ function POSPage() {
     staleTime: 30_000,
   });
   useEffect(() => {
-    setUnlocked(typeof window !== "undefined" && window.sessionStorage.getItem(unlockStorageKey) === "1");
+    try {
+      setUnlocked(typeof window !== "undefined" && window.sessionStorage.getItem(unlockStorageKey) === "1");
+    } catch { setUnlocked(false); }
     setPasscode("");
   }, [unlockStorageKey]);
 
@@ -313,6 +315,12 @@ function POSWorkspace() {
     },
     enabled: !!tenantId,
   });
+
+  useEffect(() => {
+    if (membership?.branch_id && !isAdmin && !isSuperOwner && branchId !== membership.branch_id) {
+      setBranchId(membership.branch_id);
+    }
+  }, [membership?.branch_id, isAdmin, isSuperOwner, branchId]);
 
   useEffect(() => {
     if (branchId) return;
