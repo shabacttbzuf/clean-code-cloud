@@ -13,6 +13,7 @@ type DirtyState = { path: string; dirty: boolean };
 // Pages dispatch ras-workspace-dirty-change with { path, dirty } when edits are pending.
 const STORAGE_KEY = "ras-workspace-tabs-v1";
 const MAX_TABS = 12;
+const MAX_PINNED_TABS = 6;
 const ROUTE_TITLES: Array<[string, string]> = [
   ["/dashboard", "الرئيسية"], ["/pos", "نقطة البيع"], ["/sales", "المبيعات"],
   ["/tables", "الطاولات"], ["/kitchen", "المطبخ"], ["/inventory/movements", "حركات المخزون"],
@@ -82,7 +83,7 @@ function readTabs(): WorkspaceTab[] {
 function limitTabs(tabs: WorkspaceTab[]) {
   const unique = tabs.filter((tab, index, all) => all.findIndex((candidate) => candidate.path === tab.path) === index);
   // Keep the dashboard pinned and reserve capacity for the active working tabs.
-  const pinned = unique.filter((tab) => tab.pinned).slice(0, MAX_TABS - 1);
+  const pinned = unique.filter((tab) => tab.pinned).slice(0, MAX_PINNED_TABS);
   const unpinned = unique.filter((tab) => !tab.pinned);
   return [...pinned, ...unpinned.slice(-(MAX_TABS - pinned.length))];
 }
@@ -160,7 +161,7 @@ export function WorkspaceTabs() {
   function togglePinned(path: string) {
     const target = tabs.find((tab) => tab.path === path);
     if (!target || path === "/dashboard") return;
-    if (!target.pinned && tabs.filter((tab) => tab.pinned).length >= MAX_TABS - 1) {
+    if (!target.pinned && tabs.filter((tab) => tab.pinned).length >= MAX_PINNED_TABS) {
       window.alert("يمكن تثبيت ستة تبويبات كحد أقصى حتى تبقى مساحة كافية لصفحات العمل.");
       return;
     }
