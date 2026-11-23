@@ -174,7 +174,8 @@ function ProfilePage() {
     const dirty = form.full_name !== (profile.full_name ?? "") ||
       form.username !== (profile.username ?? "") ||
       form.phone !== (profile.phone ?? "") ||
-      form.avatar_url !== (profile.avatar_url ?? "");
+      form.avatar_url !== (profile.avatar_url ?? "") ||
+      !!pwd.next || !!pwd.confirm || !!posPasscode || !!posPasscodeConfirm;
     window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
       detail: { path: "/profile", dirty },
     }));
@@ -183,7 +184,7 @@ function ProfilePage() {
         detail: { path: "/profile", dirty: false },
       }));
     };
-  }, [form, profile, isLoading]);
+  }, [form, profile, isLoading, pwd.next, pwd.confirm, posPasscode, posPasscodeConfirm]);
 
   const saveMut = useMutation({
     mutationFn: () =>
