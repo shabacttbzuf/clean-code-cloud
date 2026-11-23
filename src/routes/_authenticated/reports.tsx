@@ -18,6 +18,14 @@ export const Route = createFileRoute("/_authenticated/reports")({
   component: ReportsPage,
 });
 
+function localDateKey(date: Date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
 function ReportsPage() {
   const { tenantId, tenant, userId, membership, isSuperOwner } = useActiveTenant();
   const permissionsQuery = useQuery({
@@ -35,9 +43,9 @@ function ReportsPage() {
   const [from, setFrom] = useState(() => {
     const d = new Date();
     d.setMonth(d.getMonth() - 1);
-    return d.toISOString().slice(0, 10);
+    return localDateKey(d);
   });
-  const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [to, setTo] = useState(() => localDateKey(new Date()));
   const [groupBy, setGroupBy] = useState<"day" | "month" | "year">("day");
   const [branchId, setBranchId] = useState("all");
   const branchesQuery = useQuery({ queryKey: ["report-branches", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
