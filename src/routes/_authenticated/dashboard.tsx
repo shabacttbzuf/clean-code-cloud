@@ -181,7 +181,7 @@ function Dashboard() {
   });
 
   const stats = useQuery({
-    queryKey: ["dashboard-stats", tenantId],
+    queryKey: ["dashboard-stats", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
       if (!tenantId) return null;
       const now = new Date();
@@ -190,17 +190,44 @@ function Dashboard() {
       const last30 = new Date(now.getTime() - 29 * 86400000);
       const last30ISO = new Date(last30.getFullYear(), last30.getMonth(), last30.getDate()).toISOString();
 
+      // Apply the active branch/company scope to every branch-owned dashboard metric.
+      // null means tenant-wide access; an empty list deliberately returns no branch-owned rows.
+      let scopedBranchIds: string[] | null = null;
+      if (!isSuperOwner && membership?.branch_id) {
+        scopedBranchIds = [membership.branch_id];
+      } else if (!isSuperOwner && membership?.company_id) {
+        const { data: companyBranches, error: branchScopeError } = await supabase.from("branches")
+          .select("id").eq("tenant_id", tenantId).eq("company_id", membership.company_id);
+        if (branchScopeError) throw branchScopeError;
+        scopedBranchIds = (companyBranches ?? []).map((row) => row.id);
+      }
+
+      let salesTodayQuery = supabase.from("sales").select("total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfDay);
+      let salesMonthQuery = supabase.from("sales").select("id, total, subtotal, discount").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfMonth);
+      let salesTrendQuery = supabase.from("sales").select("total, created_at").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", last30ISO);
+      let refundsTodayQuery = supabase.from("sale_refunds").select("total").eq("tenant_id", tenantId).gte("created_at", startOfDay);
+      let refundsMonthQuery = supabase.from("sale_refunds").select("id, total, subtotal, discount").eq("tenant_id", tenantId).gte("created_at", startOfMonth);
+      let refundsTrendQuery = supabase.from("sale_refunds").select("total, created_at").eq("tenant_id", tenantId).gte("created_at", last30ISO);
+      let expensesMonthQuery = supabase.from("expenses").select("amount").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10));
+      let expensesByCategoryQuery = supabase.from("expenses").select("amount, category_id").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10));
+      let lowStockQuery = supabase.from("inventory").select("quantity, product_id").eq("tenant_id", tenantId);
+      let sessionsQuery = supabase.from("cash_sessions").select("id").eq("tenant_id", tenantId).eq("status", "open");
+      if (scopedBranchIds !== null) {
+        salesTodayQuery = salesTodayQuery.in("branch_id", scopedBranchIds);
+        salesMonthQuery = salesMonthQuery.in("branch_id", scopedBranchIds);
+        salesTrendQuery = salesTrendQuery.in("branch_id", scopedBranchIds);
+        refundsTodayQuery = refundsTodayQuery.in("branch_id", scopedBranchIds);
+        refundsMonthQuery = refundsMonthQuery.in("branch_id", scopedBranchIds);
+        refundsTrendQuery = refundsTrendQuery.in("branch_id", scopedBranchIds);
+        expensesMonthQuery = expensesMonthQuery.in("branch_id", scopedBranchIds);
+        expensesByCategoryQuery = expensesByCategoryQuery.in("branch_id", scopedBranchIds);
+        lowStockQuery = lowStockQuery.in("branch_id", scopedBranchIds);
+        sessionsQuery = sessionsQuery.in("branch_id", scopedBranchIds);
+      }
+
       const [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount] = await Promise.all([
-        supabase.from("sales").select("total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfDay),
-        supabase.from("sales").select("id, total, subtotal, discount").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfMonth),
-        supabase.from("sales").select("total, created_at").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", last30ISO),
-        supabase.from("sale_refunds").select("total").eq("tenant_id", tenantId).gte("created_at", startOfDay),
-        supabase.from("sale_refunds").select("id, total, subtotal, discount").eq("tenant_id", tenantId).gte("created_at", startOfMonth),
-        supabase.from("sale_refunds").select("total, created_at").eq("tenant_id", tenantId).gte("created_at", last30ISO),
-        supabase.from("expenses").select("amount").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10)),
-        supabase.from("expenses").select("amount, category_id").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10)),
-        supabase.from("inventory").select("quantity, product_id").eq("tenant_id", tenantId),
-        supabase.from("cash_sessions").select("id").eq("tenant_id", tenantId).eq("status", "open"),
+        salesTodayQuery, salesMonthQuery, salesTrendQuery, refundsTodayQuery, refundsMonthQuery,
+        refundsTrendQuery, expensesMonthQuery, expensesByCategoryQuery, lowStockQuery, sessionsQuery,
         supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
       ]);
       for (const result of [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount]) {
