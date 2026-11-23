@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Moon, Sun, LogOut, User as UserIcon, Loader2, Bell, Maximize2, Minimize2, CalendarDays, Building2, Search, CircleHelp } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { useSuperOwner } from "@/hooks/use-super-owner";
 import { safeInternalNotificationPath } from "@/lib/notification-links";
+import { resolveAvatarUrl } from "@/lib/storage";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -224,13 +225,23 @@ function TopBar() {
     queryKey: ["topbar-profile-name", user?.id],
     queryFn: async () => {
       if (!user?.id) return null;
-      const { data, error } = await supabase.from("profiles").select("full_name, username").eq("id", user.id).maybeSingle();
+      const { data, error } = await supabase.from("profiles").select("full_name, username, avatar_url").eq("id", user.id).maybeSingle();
       if (error) throw error;
       return data;
     },
     enabled: !!user?.id,
     staleTime: 60_000,
   });
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void resolveAvatarUrl(currentProfile?.avatar_url ?? null).then((url) => {
+      if (!cancelled) setAvatarUrl(url);
+    }).catch(() => {
+      if (!cancelled) setAvatarUrl(null);
+    });
+    return () => { cancelled = true; };
+  }, [currentProfile?.avatar_url]);
   const displayName =
     currentProfile?.full_name?.trim() ||
     user?.user_metadata?.full_name?.trim() ||
@@ -438,7 +449,7 @@ function TopBar() {
             <DropdownMenuSeparator /><DropdownMenuItem onSelect={() => navigate({ to: "/notifications" })} className="justify-center text-primary">عرض كل الإشعارات</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" className="h-11 gap-2 rounded-full px-1.5 sm:px-2"><Avatar className="h-9 w-9 border-2 border-[#dce5f3]"><AvatarFallback className="bg-[#e8effb] font-bold text-[#174b91]">{initial}</AvatarFallback></Avatar><span className="hidden min-w-0 text-right sm:block"><span className="block max-w-28 truncate text-xs font-extrabold text-[#102f5c]">{displayName}</span><span className="block text-[10px] text-slate-500">حساب المستخدم</span></span></Button></DropdownMenuTrigger>
+        <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" className="h-11 gap-2 rounded-full px-1.5 sm:px-2"><Avatar className="h-9 w-9 border-2 border-[#dce5f3]"><AvatarImage src={avatarUrl ?? undefined} alt="" /><AvatarFallback className="bg-[#e8effb] font-bold text-[#174b91]">{initial}</AvatarFallback></Avatar><span className="hidden min-w-0 text-right sm:block"><span className="block max-w-28 truncate text-xs font-extrabold text-[#102f5c]">{displayName}</span><span className="block text-[10px] text-slate-500">حساب المستخدم</span></span></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end"><DropdownMenuLabel className="text-sm font-semibold">{displayName}</DropdownMenuLabel><DropdownMenuSeparator /><DropdownMenuItem onClick={() => navigate({ to: "/profile" })}><UserIcon className="ml-2 h-4 w-4" />ملفي الشخصي</DropdownMenuItem><DropdownMenuItem onClick={() => navigate({ to: "/settings" })}><UserIcon className="ml-2 h-4 w-4" />الإعدادات</DropdownMenuItem><DropdownMenuItem onClick={handleSignOut} disabled={signingOut}><LogOut className="ml-2 h-4 w-4" />تسجيل الخروج</DropdownMenuItem></DropdownMenuContent>
         </DropdownMenu>
       </div>
