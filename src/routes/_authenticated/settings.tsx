@@ -204,6 +204,23 @@ function SettingsPage() {
 
   const canEdit = isSuperOwner || (role === "owner" && !membership?.company_id);
 
+  useEffect(() => {
+    if (!tenant) return;
+    const dirty = name !== tenant.name ||
+      currency !== tenant.currency ||
+      tax !== String(tenant.tax_rate) ||
+      logoUrl !== (tenant.logo_url ?? "") ||
+      JSON.stringify(designDraft) !== JSON.stringify(design);
+    window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/settings", dirty },
+    }));
+    return () => {
+      window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+        detail: { path: "/settings", dirty: false },
+      }));
+    };
+  }, [tenant, name, currency, tax, logoUrl, designDraft, design]);
+
   async function uploadBackground(file?: File) {
     if (!file || !tenantId || !isSuperOwner) return;
     const allowed = ["image/jpeg", "image/png", "image/webp", "image/avif"];
