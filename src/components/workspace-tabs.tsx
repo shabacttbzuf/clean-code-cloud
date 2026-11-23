@@ -8,6 +8,9 @@ import {
 } from "lucide-react";
 
 type WorkspaceTab = { path: string; title: string; pinned?: boolean };
+type DirtyState = { path: string; dirty: boolean };
+
+// Pages dispatch ras-workspace-dirty-change with { path, dirty } when edits are pending.
 const STORAGE_KEY = "ras-workspace-tabs-v1";
 const MAX_TABS = 12;
 const ROUTE_TITLES: Array<[string, string]> = [
@@ -85,6 +88,7 @@ function limitTabs(tabs: WorkspaceTab[]) {
 export function WorkspaceTabs() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const navigate = useNavigate();
+  const [dirtyPaths, setDirtyPaths] = useState<Set<string>>(() => new Set());
   const [tabs, setTabs] = useState<WorkspaceTab[]>(() => limitTabs([
     { path: "/dashboard", title: "الرئيسية", pinned: true },
     ...readTabs().filter((tab) => tab.path !== "/dashboard"),
@@ -110,10 +114,40 @@ export function WorkspaceTabs() {
 
   const activePath = useMemo(() => pathname, [pathname]);
 
+  useEffect(() => {
+    const onDirtyChange = (event: Event) => {
+      const detail = (event as CustomEvent<DirtyState>).detail;
+      if (!detail || typeof detail.path !== "string" || typeof detail.dirty !== "boolean") return;
+      setDirtyPaths((current) => {
+        const next = new Set(current);
+        if (detail.dirty) next.add(detail.path);
+        else next.delete(detail.path);
+        return next;
+      });
+    };
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!dirtyPaths.size) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("ras-workspace-dirty-change", onDirtyChange);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("ras-workspace-dirty-change", onDirtyChange);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, [dirtyPaths]);
+
   function closeTab(path: string) {
     const target = tabs.find((tab) => tab.path === path);
     if (!target || target.pinned) return;
+    if (dirtyPaths.has(path) && !window.confirm("توجد تغييرات غير محفوظة في هذه الصفحة. هل تريد إغلاق التبويب رغم ذلك؟")) return;
     const next = tabs.filter((tab) => tab.path !== path);
+    setDirtyPaths((current) => {
+      const updated = new Set(current);
+      updated.delete(path);
+      return updated;
+    });
     persist(next);
     if (activePath === path) {
       const fallback = next[next.length - 1]?.path ?? "/dashboard";
@@ -136,6 +170,7 @@ export function WorkspaceTabs() {
             <button type="button" onClick={() => navigate({ to: tab.path as any })} className="inline-flex items-center gap-2 whitespace-nowrap" aria-current={active ? "page" : undefined}>
               {(() => { const TabIcon = iconFor(tab.path); return <TabIcon className="h-4 w-4 shrink-0" aria-hidden="true" />; })()}
               <span>{tab.title}</span>
+              {dirtyPaths.has(tab.path) && <span className="h-2 w-2 rounded-full bg-amber-400" title="تغييرات غير محفوظة" aria-label="تغييرات غير محفوظة" />}
             </button>
             {tab.path !== "/dashboard" && (
               <button type="button" onClick={() => togglePinned(tab.path)} className="rounded-full p-0.5 opacity-60 hover:bg-black/10 hover:opacity-100" aria-label={tab.pinned ? `إلغاء تثبيت ${tab.title}` : `تثبيت ${tab.title}`} title={tab.pinned ? "إلغاء التثبيت" : "تثبيت التبويب"}>
