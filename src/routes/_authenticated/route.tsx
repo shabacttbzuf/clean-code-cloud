@@ -230,9 +230,12 @@ function TopBar() {
     enabled: !!user?.id,
     staleTime: 60_000,
   });
-  const displayName = user?.email?.toLowerCase() === "shafiqalwatiry@gmail.com"
-    ? "شفيق الوتيري"
-    : currentProfile?.full_name?.trim() || user?.user_metadata?.full_name?.trim() || currentProfile?.username?.trim() || "مستخدم";
+  const displayName =
+    currentProfile?.full_name?.trim() ||
+    user?.user_metadata?.full_name?.trim() ||
+    currentProfile?.username?.trim() ||
+    user?.email?.split("@")[0]?.trim() ||
+    "مستخدم";
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [signingOut, setSigningOut] = useState(false);
