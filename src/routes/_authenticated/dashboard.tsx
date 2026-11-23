@@ -94,7 +94,8 @@ function Dashboard() {
 
   useEffect(() => {
     const campaignCount = campaignsQuery.data?.length ?? 0;
-    if (campaignRotationPaused || campaignCount < 2) return;
+    if (campaignRotationPaused || campaignCount < 2 ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const timer = window.setInterval(() => {
       setActiveCampaignIndex((current) => (current + 1) % campaignCount);
     }, 7000);
