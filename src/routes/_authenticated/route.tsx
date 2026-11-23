@@ -171,6 +171,7 @@ function TopBar() {
   const { isSuperOwner } = useSuperOwner();
   const [globalSearch, setGlobalSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const searchPermissions = useQuery({
     queryKey: ["topbar-search-permissions", tenantId, user?.id],
     queryFn: async () => {
@@ -413,6 +414,11 @@ function TopBar() {
       </div>
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
         <div className="hidden items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 text-[11px] font-semibold text-[#425b7d] shadow-sm md:flex"><CalendarDays className="h-4 w-4 text-[#174b91]" />{clock.toLocaleDateString("ar-YE",{weekday:"long",day:"numeric",month:"long"})}</div>
+        <Button type="button" variant="outline" size="icon" className="rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm lg:hidden" aria-label="فتح البحث الشامل" aria-expanded={mobileSearchOpen} onClick={() => setMobileSearchOpen((value) => !value)}><Search className="h-4 w-4" /></Button>
+        {mobileSearchOpen && <div className="absolute right-2 left-2 top-full z-50 mt-2 rounded-2xl border bg-white p-3 text-slate-800 shadow-xl lg:hidden" dir="rtl">
+          <div className="flex items-center gap-2 rounded-xl border px-3 py-2"><Search className="h-4 w-4 shrink-0 text-primary" /><input autoFocus value={globalSearch} onChange={(event) => setGlobalSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { setMobileSearchOpen(false); setGlobalSearch(""); } if (event.key === "Enter" && searchItems[0]) { navigate({ to: searchItems[0].url as any }); setGlobalSearch(""); setMobileSearchOpen(false); } }} placeholder="ابحث عن صفحة أو قسم..." aria-label="البحث الشامل داخل النظام" className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></div>
+          {globalSearch.trim() && <div className="mt-2 max-h-60 overflow-y-auto">{searchPermissions.isError ? <p role="alert" className="p-3 text-xs text-destructive">تعذر التحقق من صلاحيات البحث.</p> : searchPermissions.isLoading && !isSuperOwner ? <p className="p-3 text-xs text-muted-foreground">جارٍ التحقق من الصلاحيات...</p> : searchItems.length ? searchItems.map((item) => <button key={item.url} type="button" onClick={() => { navigate({ to: item.url as any }); setGlobalSearch(""); setMobileSearchOpen(false); }} className="flex w-full items-center rounded-lg px-3 py-3 text-right text-sm hover:bg-blue-50">{item.title}</button>) : <p className="p-3 text-xs text-muted-foreground">لا توجد نتائج متاحة.</p>}</div>}
+        </div>}
         <div className="relative hidden w-[min(28vw,300px)] lg:block">
           <div className="flex items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 shadow-sm focus-within:border-primary/50">
             <Search className="h-4 w-4 shrink-0 text-[#174b91]" />
