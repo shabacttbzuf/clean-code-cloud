@@ -19,7 +19,7 @@ export const Route = createFileRoute("/_authenticated/reports")({
 });
 
 function ReportsPage() {
-  const { tenantId, tenant, userId } = useActiveTenant();
+  const { tenantId, tenant, userId, membership, isSuperOwner } = useActiveTenant();
   const permissionsQuery = useQuery({
     queryKey: ["reports-permissions", tenantId, userId],
     queryFn: async () => {
@@ -40,10 +40,18 @@ function ReportsPage() {
   const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [groupBy, setGroupBy] = useState<"day" | "month" | "year">("day");
   const [branchId, setBranchId] = useState("all");
-  const branchesQuery = useQuery({ queryKey: ["report-branches", tenantId], queryFn: async () => { const { data, error } = await supabase.from("branches").select("id,name").eq("tenant_id", tenantId!).order("name"); if (error) throw error; return data ?? []; }, enabled: !!tenantId });
+  const branchesQuery = useQuery({ queryKey: ["report-branches", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryFn: async () => {
+      let query = supabase.from("branches").select("id,name").eq("tenant_id", tenantId!).order("name");
+      if (!isSuperOwner && membership?.branch_id) query = query.eq("id", membership.branch_id);
+      else if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
+      const { data, error } = await query;
+      if (error) throw error;
+      return data ?? [];
+    }, enabled: !!tenantId });
 
   const report = useQuery({
-    queryKey: ["reports", tenantId, from, to, branchId],
+    queryKey: ["reports", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner, from, to, branchId],
     queryFn: async () => {
       if (!tenantId) return null;
       if (from > to) throw new Error("تاريخ البداية يجب أن يسبق تاريخ النهاية أو يساويه.");
@@ -51,30 +59,45 @@ function ReportsPage() {
       const toDate = `${to}T23:59:59.999Z`;
 
       const [sales, expenses, items, sessions, inventory, refunds] = await Promise.all([
-        fetchAllRows((pageFrom, pageTo) => supabase.from("sales")
-          .select("id, created_at, total, subtotal, discount, tax_amount, payment_method, cashier_id, branch_id, status")
-          .eq("tenant_id", tenantId).neq("status", "void")
-          .gte("created_at", fromDate).lte("created_at", toDate)
-          .order("created_at", { ascending: false }).range(pageFrom, pageTo)),
-        fetchAllRows((pageFrom, pageTo) => supabase.from("expenses")
-          .select("id, paid_at, amount, category_id, description, branch_id")
-          .eq("tenant_id", tenantId).gte("paid_at", from).lte("paid_at", to)
-          .order("paid_at", { ascending: false }).range(pageFrom, pageTo)),
+        fetchAllRows((pageFrom, pageTo) => {
+          let query = supabase.from("sales")
+            .select("id, created_at, total, subtotal, discount, tax_amount, payment_method, cashier_id, branch_id, status")
+            .eq("tenant_id", tenantId).neq("status", "void")
+            .gte("created_at", fromDate).lte("created_at", toDate);
+          if (branchId !== "all") query = query.eq("branch_id", branchId);
+          return query.order("created_at", { ascending: false }).range(pageFrom, pageTo);
+        }),
+        fetchAllRows((pageFrom, pageTo) => {
+          let query = supabase.from("expenses")
+            .select("id, paid_at, amount, category_id, description, branch_id")
+            .eq("tenant_id", tenantId).gte("paid_at", from).lte("paid_at", to);
+          if (branchId !== "all") query = query.eq("branch_id", branchId);
+          return query.order("paid_at", { ascending: false }).range(pageFrom, pageTo);
+        }),
         fetchAllRows((pageFrom, pageTo) => supabase.from("sale_items")
           .select("product_name, quantity, line_total, sale_id, created_at, cost_price_snapshot")
           .eq("tenant_id", tenantId).gte("created_at", fromDate).lte("created_at", toDate)
           .range(pageFrom, pageTo)),
-        fetchAllRows((pageFrom, pageTo) => supabase.from("cash_sessions")
-          .select("cashier_id, opening_balance, closing_balance, expected_cash, cash_difference, opened_at, closed_at, status, branch_id")
-          .eq("tenant_id", tenantId).gte("opened_at", fromDate).lte("opened_at", toDate)
-          .range(pageFrom, pageTo)),
-        fetchAllRows((pageFrom, pageTo) => supabase.from("inventory")
-          .select("quantity, product_id, branch_id").eq("tenant_id", tenantId)
-          .range(pageFrom, pageTo)),
-        fetchAllRows((pageFrom, pageTo) => supabase.from("sale_refunds")
-          .select("id, sale_id, subtotal, discount, tax_amount, total, refund_method, created_at, branch_id")
-          .eq("tenant_id", tenantId).gte("created_at", fromDate).lte("created_at", toDate)
-          .range(pageFrom, pageTo)),
+        fetchAllRows((pageFrom, pageTo) => {
+          let query = supabase.from("cash_sessions")
+            .select("cashier_id, opening_balance, closing_balance, expected_cash, cash_difference, opened_at, closed_at, status, branch_id")
+            .eq("tenant_id", tenantId).gte("opened_at", fromDate).lte("opened_at", toDate);
+          if (branchId !== "all") query = query.eq("branch_id", branchId);
+          return query.range(pageFrom, pageTo);
+        }),
+        fetchAllRows((pageFrom, pageTo) => {
+          let query = supabase.from("inventory")
+            .select("quantity, product_id, branch_id").eq("tenant_id", tenantId);
+          if (branchId !== "all") query = query.eq("branch_id", branchId);
+          return query.range(pageFrom, pageTo);
+        }),
+        fetchAllRows((pageFrom, pageTo) => {
+          let query = supabase.from("sale_refunds")
+            .select("id, sale_id, subtotal, discount, tax_amount, total, refund_method, created_at, branch_id")
+            .eq("tenant_id", tenantId).gte("created_at", fromDate).lte("created_at", toDate);
+          if (branchId !== "all") query = query.eq("branch_id", branchId);
+          return query.range(pageFrom, pageTo);
+        }),
       ]);
 
       const validSales = sales.filter((row) => row.status !== "void");
