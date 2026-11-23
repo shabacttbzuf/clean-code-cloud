@@ -77,13 +77,22 @@ function Dashboard() {
     queryFn: async () => {
       if (!tenantId || !user?.id) throw new Error("لا يوجد نطاق شركة أو مستخدم نشط.");
       const checkedAt = new Date().toISOString();
-      const [tenantResult, branchesResult, profileResult, permissionsResult] = await Promise.all([
+      const [authResult, tenantResult, branchesResult, profileResult, permissionsResult] = await Promise.all([
+        supabase.auth.getUser(),
         supabase.from("tenants").select("id").eq("id", tenantId).maybeSingle(),
         supabase.from("branches").select("id").eq("tenant_id", tenantId).limit(1),
         supabase.from("profiles").select("id").eq("id", user.id).maybeSingle(),
         supabase.rpc("get_my_permissions", { _tenant_id: tenantId }),
       ]);
       const checks = [
+        {
+          key: "authentication",
+          label: "خدمة المصادقة وتحقق الجلسة",
+          status: authResult.error || authResult.data.user?.id !== user.id ? "failed" : "ok",
+          detail: authResult.error?.message ?? (authResult.data.user?.id === user.id
+            ? "تم التحقق من جلسة المستخدم عبر خدمة المصادقة."
+            : "جلسة المصادقة لا تطابق المستخدم النشط."),
+        },
         {
           key: "database",
           label: "اتصال قاعدة البيانات",
