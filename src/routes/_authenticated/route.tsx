@@ -379,11 +379,30 @@ function TopBar() {
     }
   }
 
-  const searchItems = appNavigationGroups.flatMap((group) => group.items).filter((item) => {
-    const query = globalSearch.trim().toLocaleLowerCase("ar");
-    const permitted = isSuperOwner || (!!searchPermissions.data && (!item.permission || searchPermissions.data.has(item.permission)));
-    return permitted && query.length > 0 && item.title.toLocaleLowerCase("ar").includes(query);
-  }).slice(0, 8);
+  const globalSearchCatalog = [
+    ...appNavigationGroups.flatMap((group) => group.items),
+    { title: "إدارة المستخدمين", url: "/users-admin", permission: "users.manage" },
+    { title: "الشركات", url: "/companies", permission: "companies.view" },
+    { title: "الأقسام الإدارية", url: "/departments", permission: "departments.view" },
+    { title: "المسميات الوظيفية", url: "/job-titles", permission: "job_titles.view" },
+    { title: "أنواع التوظيف", url: "/employment-types", permission: "employment_types.view" },
+    { title: "إدارة الأدوار", url: "/roles", permission: "roles.view" },
+    { title: "سجل التدقيق", url: "/audit-logs", permission: "audit.view" },
+    { title: "سجل الدخول", url: "/login-history", permission: "login_history.view" },
+    { title: "الإشعارات", url: "/notifications", permission: "notifications.view" },
+    { title: "الإعدادات", url: "/settings", permission: "settings.view" },
+    { title: "ملفي الشخصي", url: "/profile", permission: undefined },
+    { title: "مركز المساعدة والدعم", url: "/support", permission: undefined },
+  ];
+  const searchQuery = globalSearch.trim().toLocaleLowerCase("ar");
+  const searchItems = globalSearchCatalog
+    .filter((item, index, all) => all.findIndex((candidate) => candidate.url === item.url) === index)
+    .filter((item) => {
+      const permitted = isSuperOwner || (item.permission
+        ? !!searchPermissions.data?.has(item.permission)
+        : item.url === "/profile" || item.url === "/support");
+      return permitted && searchQuery.length > 0 && item.title.toLocaleLowerCase("ar").includes(searchQuery);
+    }).slice(0, 10);
 
   const initial = displayName.charAt(0) || "?";
 
@@ -421,7 +440,7 @@ function TopBar() {
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
-        <div className="hidden items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 text-xs font-bold text-[#174b91] shadow-sm lg:flex"><Building2 className="h-4 w-4" />{branchQuery.data?.name || (membership?.branch_id ? "الفرع المحدد" : "جميع الفروع")}</div>
+        <div className="hidden items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 text-xs font-bold text-[#174b91] shadow-sm lg:flex"><Building2 className="h-4 w-4" />{branchQuery.data?.name || (membership?.branch_id ? "الفرع المحدد" : membership?.company_id ? "فروع الشركة" : "جميع الفروع")}</div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
         <div className="hidden items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 text-[11px] font-semibold text-[#425b7d] shadow-sm md:flex" aria-label={clock.toLocaleString("ar-YE")}><CalendarDays className="h-4 w-4 text-[#174b91]" /><span>{clock.toLocaleDateString("ar-YE",{weekday:"long",day:"numeric",month:"long"})}</span><span aria-hidden="true" className="text-slate-300">•</span><time dateTime={clock.toISOString()}>{clock.toLocaleTimeString("ar-YE",{hour:"2-digit",minute:"2-digit"})}</time></div>
