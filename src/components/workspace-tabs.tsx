@@ -18,8 +18,13 @@ const ROUTE_TITLES: Array<[string, string]> = [
   ["/cash-sessions", "الورديات"], ["/expenses", "المصروفات"], ["/reports", "التقارير"],
   ["/hr/employees", "الموظفون"], ["/hr/attendance", "الحضور"], ["/hr/leaves", "الإجازات"],
   ["/hr/payroll", "الرواتب"], ["/branches", "الفروع"], ["/companies", "الشركات"],
-  ["/users", "المستخدمون"], ["/team-permissions", "الصلاحيات"], ["/notifications", "الإشعارات"],
-  ["/settings", "الإعدادات"], ["/profile", "الملف الشخصي"], ["/ads", "الإعلانات"], ["/promotions", "العروض الترويجية"],
+  ["/users", "المستخدمون"], ["/users-admin", "إدارة المستخدمين"], ["/team-permissions", "صلاحيات الفرق"],
+  ["/roles", "الأدوار والصلاحيات"], ["/companies", "الشركات"], ["/departments", "الأقسام الإدارية"],
+  ["/job-titles", "المسميات الوظيفية"], ["/employment-types", "أنواع التوظيف"],
+  ["/notifications", "الإشعارات"], ["/settings", "الإعدادات"], ["/profile", "الملف الشخصي"],
+  ["/ads", "الإعلانات"], ["/promotions", "العروض الترويجية"], ["/support", "الدعم والمساعدة"],
+  ["/audit-logs", "سجل التدقيق"], ["/login-history", "سجل تسجيل الدخول"],
+  ["/owner-center", "مركز المالك"], ["/admin", "إدارة النظام"], ["/expense-categories", "تصنيفات المصروفات"],
 ];
 
 function iconFor(path: string) {
