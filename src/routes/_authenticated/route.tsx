@@ -404,6 +404,8 @@ function TopBar() {
       return permitted && searchQuery.length > 0 && item.title.toLocaleLowerCase("ar").includes(searchQuery);
     }).slice(0, 10);
 
+  const activeBranchLabel = branchQuery.data?.name || (membership?.branch_id ? "الفرع المحدد" : membership?.company_id ? "فروع الشركة" : "جميع الفروع");
+
   const initial = displayName.charAt(0) || "?";
 
   return (
@@ -420,7 +422,7 @@ function TopBar() {
           <DropdownMenuTrigger asChild>
             <button type="button" className="min-w-0 rounded-lg px-1 text-right outline-none transition hover:bg-blue-50 focus-visible:ring-2 focus-visible:ring-[#174b91]" aria-label="اختيار الشركة">
               <span className="block truncate text-sm font-extrabold text-[#102f5c] sm:text-base">{tenant?.name || "نظام إدارة المطاعم"}</span>
-              <span className="block text-[10px] text-slate-500">{memberships.length > 1 ? "تبديل الشركة" : "نظام إدارة المطاعم المتكامل"}</span>
+              <span className="block max-w-44 truncate text-[10px] text-slate-500">{memberships.length > 1 ? `تبديل الشركة · ${activeBranchLabel}` : activeBranchLabel}</span>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-64">
@@ -440,7 +442,7 @@ function TopBar() {
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
-        <div className="hidden items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 text-xs font-bold text-[#174b91] shadow-sm lg:flex"><Building2 className="h-4 w-4" />{branchQuery.data?.name || (membership?.branch_id ? "الفرع المحدد" : membership?.company_id ? "فروع الشركة" : "جميع الفروع")}</div>
+        <div className="hidden items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 text-xs font-bold text-[#174b91] shadow-sm lg:flex"><Building2 className="h-4 w-4" />{activeBranchLabel}</div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
         <div className="hidden items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 text-[11px] font-semibold text-[#425b7d] shadow-sm md:flex" aria-label={clock.toLocaleString("ar-YE")}><CalendarDays className="h-4 w-4 text-[#174b91]" /><span>{clock.toLocaleDateString("ar-YE",{weekday:"long",day:"numeric",month:"long"})}</span><span aria-hidden="true" className="text-slate-300">•</span><time dateTime={clock.toISOString()}>{clock.toLocaleTimeString("ar-YE",{hour:"2-digit",minute:"2-digit"})}</time></div>
