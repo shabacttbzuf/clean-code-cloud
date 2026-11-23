@@ -26,6 +26,9 @@ test("diagnostic copy contains only non-sensitive browser and runtime context", 
 });
 
 test("system status is healthy only after database, branch, permission, and profile checks pass", () => {
+  assert.match(dashboard, /supabase\.auth\.getUser\(\)/);
+  assert.match(dashboard, /key: "authentication"/);
+  assert.match(dashboard, /authResult\.data\.user\?\.id !== user\.id/);
   assert.match(dashboard, /supabase\.from\("tenants"\)/);
   assert.match(dashboard, /supabase\.from\("branches"\)/);
   assert.match(dashboard, /supabase\.from\("profiles"\)/);
