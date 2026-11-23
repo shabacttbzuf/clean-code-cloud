@@ -43,9 +43,12 @@ function Dashboard() {
     enabled: !!user?.id,
     staleTime: 60_000,
   });
-  const displayName = user?.email?.toLowerCase() === "shafiqalwatiry@gmail.com"
-    ? "شفيق الوتيري"
-    : profileQuery.data?.full_name?.trim() || user?.user_metadata?.full_name?.trim() || profileQuery.data?.username?.trim() || "مستخدم";
+  const displayName =
+    profileQuery.data?.full_name?.trim() ||
+    user?.user_metadata?.full_name?.trim() ||
+    profileQuery.data?.username?.trim() ||
+    user?.email?.split("@")[0]?.trim() ||
+    "مستخدم";
 
   const campaignsQuery = useQuery({
     queryKey: ["dashboard-marketing-campaigns", tenantId, membership?.company_id ?? "tenant"],
