@@ -38,6 +38,15 @@ function PromotionsPage() {
   const canManage = isSuperOwner || isTenantOwner || hasPermission("promotions.manage");
   const [form, setForm] = useState({ ...emptyForm, branch_id: membership?.branch_id && !membership?.company_id ? membership.branch_id : "" });
   const [editing, setEditing] = useState<string | null>(null);
+  const [formTouched, setFormTouched] = useState(false);
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/promotions", dirty: formTouched },
+    }));
+    return () => window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/promotions", dirty: false },
+    }));
+  }, [formTouched]);
   useEffect(() => {
     if (membership?.branch_id && !membership.company_id && !editing) {
       setForm((current) => current.branch_id ? current : { ...current, branch_id: membership.branch_id! });
@@ -170,8 +179,9 @@ function PromotionsPage() {
     onError: (error) => toast.error(error instanceof Error ? error.message : "لا يمكن حذف عرض مستخدم؛ قم بأرشفته"),
   });
 
-  function resetForm() { setForm({ ...emptyForm, branch_id: membership?.branch_id && !membership?.company_id ? membership.branch_id : "" }); setEditing(null); }
+  function resetForm() { setFormTouched(false); setForm({ ...emptyForm, branch_id: membership?.branch_id && !membership?.company_id ? membership.branch_id : "" }); setEditing(null); }
   function editOffer(offer: Offer) {
+    setFormTouched(false);
     const local = (v: string | null) => v ? new Date(new Date(v).getTime() - new Date(v).getTimezoneOffset() * 60000).toISOString().slice(0,16) : "";
     setEditing(offer.id);
     setForm({
@@ -194,7 +204,7 @@ function PromotionsPage() {
     <PageHeader title="العروض الترويجية" subtitle="إنشاء الخصومات وعروض اشترِ واحصل، وتحديد المنتجات والفروع والجدولة، ومتابعة الاستخدام من نقطة البيع." />
     <Card>
       <CardHeader><CardTitle className="flex items-center gap-2"><Gift className="h-5 w-5 text-primary" />{editing ? "تعديل عرض ترويجي" : "إنشاء عرض ترويجي"}</CardTitle><CardDescription>يحفظ العرض كمسودة أولاً، ولا يُطبق في نقطة البيع إلا بعد تفعيله واستيفاء شروطه.</CardDescription></CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4" onChangeCapture={() => setFormTouched(true)}>
         <div className="grid gap-3 md:grid-cols-2">
           <div className="space-y-2"><Label>اسم العرض</Label><Input value={form.name} maxLength={120} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="مثال: خصم نهاية الأسبوع" /></div>
           <div className="space-y-2"><Label>نوع العرض</Label><select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={form.offer_type} onChange={e=>setForm(p=>({...p,offer_type:e.target.value as Offer["offer_type"]}))}><option value="percentage">خصم نسبة مئوية</option><option value="fixed">خصم مبلغ ثابت</option><option value="buy_x_get_y">اشترِ واحصل</option></select></div>
