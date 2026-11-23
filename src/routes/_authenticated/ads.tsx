@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { useSuperOwner } from "@/hooks/use-super-owner";
@@ -42,6 +42,16 @@ export function AdsPage() {
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [formTouched, setFormTouched] = useState(false);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/ads", dirty: formTouched },
+    }));
+    return () => window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/ads", dirty: false },
+    }));
+  }, [formTouched]);
 
   const isTenantOwner = role === "owner" && !membership?.company_id;
   const permissions = useQuery({
@@ -148,6 +158,7 @@ export function AdsPage() {
   });
 
   function resetForm() {
+    setFormTouched(false);
     setEditingId(null);
     setEditingCompanyId(null);
     setTitle("");
@@ -186,6 +197,7 @@ export function AdsPage() {
   }
 
   function editCampaign(campaign: Campaign) {
+    setFormTouched(false);
     setEditingId(campaign.id);
     setEditingCompanyId(campaign.company_id);
     setTitle(campaign.title);
@@ -216,22 +228,22 @@ export function AdsPage() {
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-2"><Label>عنوان الإعلان</Label><Input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} placeholder="مثال: عروض نهاية الأسبوع" /></div>
+            <div className="space-y-2"><Label>عنوان الإعلان</Label><Input value={title} onChange={(event) => { setTitle(event.target.value); setFormTouched(true); }} maxLength={120} placeholder="مثال: عروض نهاية الأسبوع" /></div>
             <div className="space-y-2"><Label>المساحة الإعلانية</Label>
-              <select value={placement} onChange={(event) => setPlacement(event.target.value)} className="h-10 w-full rounded-md border bg-background px-3 text-sm">
+              <select value={placement} onChange={(event) => { setPlacement(event.target.value); setFormTouched(true); }} className="h-10 w-full rounded-md border bg-background px-3 text-sm">
                 <option value="dashboard_banner">الشريط الرئيسي في لوحة التحكم</option>
                 <option value="dashboard_card">بطاقة إعلانية في لوحة التحكم</option>
                 <option value="pos_promo">المساحة الترويجية في نقطة البيع</option>
               </select>
             </div>
-            <div className="space-y-2 md:col-span-2"><Label>وصف الإعلان</Label><Input value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} placeholder="اكتب تفاصيل الإعلان" /></div>
-            <div className="space-y-2"><Label>رابط الوجهة (اختياري)</Label><Input dir="ltr" value={targetUrl} onChange={(event) => setTargetUrl(event.target.value)} placeholder="https://example.com" /></div>
+            <div className="space-y-2 md:col-span-2"><Label>وصف الإعلان</Label><Input value={description} onChange={(event) => { setDescription(event.target.value); setFormTouched(true); }} maxLength={500} placeholder="اكتب تفاصيل الإعلان" /></div>
+            <div className="space-y-2"><Label>رابط الوجهة (اختياري)</Label><Input dir="ltr" value={targetUrl} onChange={(event) => { setTargetUrl(event.target.value); setFormTouched(true); }} placeholder="https://example.com" /></div>
             <div className="space-y-2"><Label>صورة الإعلان</Label><div className="flex items-center gap-3">
               <div className="grid h-14 w-20 shrink-0 place-items-center overflow-hidden rounded-md border bg-muted">{imageUrl ? <img src={imageUrl} alt="معاينة الإعلان" className="h-full w-full object-cover" /> : <Image className="h-5 w-5 text-muted-foreground" />}</div>
               <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-muted">{uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}{uploading ? "جارٍ الرفع..." : "اختيار صورة"}<input className="hidden" type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={uploading} onChange={(event) => { void uploadImage(event.target.files?.[0]); event.currentTarget.value = ""; }} /></label>
             </div></div>
-            <div className="space-y-2"><Label>تاريخ ووقت البداية</Label><Input type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} /></div>
-            <div className="space-y-2"><Label>تاريخ ووقت النهاية</Label><Input type="datetime-local" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} /></div>
+            <div className="space-y-2"><Label>تاريخ ووقت البداية</Label><Input type="datetime-local" value={startsAt} onChange={(event) => { setStartsAt(event.target.value); setFormTouched(true); }} /></div>
+            <div className="space-y-2"><Label>تاريخ ووقت النهاية</Label><Input type="datetime-local" value={endsAt} onChange={(event) => { setEndsAt(event.target.value); setFormTouched(true); }} /></div>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={() => saveCampaign.mutate()} disabled={saveCampaign.isPending || !title.trim()}>{saveCampaign.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}<Plus className="ml-1 h-4 w-4" />{editingId ? "حفظ التعديلات" : "حفظ كمسودة"}</Button>
