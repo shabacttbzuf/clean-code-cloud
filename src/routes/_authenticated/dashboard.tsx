@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
@@ -9,7 +10,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { Loader2, TrendingUp, TrendingDown, Receipt, Wallet, Package, Crown, Building2, Users as UsersIcon, Bell, Wifi, WifiOff, CircleHelp, ClipboardList, ChefHat } from "lucide-react";
 import { formatMoney } from "@/lib/format";
 import { Link } from "@tanstack/react-router";
-import { Sparkles, ShoppingBag, ArrowLeft } from "lucide-react";
+import { Sparkles, ShoppingBag, ArrowLeft, ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -25,7 +26,19 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
   }),
 });
 
+function safeCampaignTarget(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 function Dashboard() {
+  const [activeCampaignIndex, setActiveCampaignIndex] = useState(0);
+  const [campaignRotationPaused, setCampaignRotationPaused] = useState(false);
   const { tenantId, tenant, user, membership, hasPermission } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
   const profileQuery = useQuery({
@@ -74,6 +87,21 @@ function Dashboard() {
     enabled: !!tenantId,
     staleTime: 60_000,
   });
+
+  useEffect(() => {
+    setActiveCampaignIndex(0);
+  }, [tenantId, membership?.company_id]);
+
+  useEffect(() => {
+    const campaignCount = campaignsQuery.data?.length ?? 0;
+    if (campaignRotationPaused || campaignCount < 2) return;
+    const timer = window.setInterval(() => {
+      setActiveCampaignIndex((current) => (current + 1) % campaignCount);
+    }, 7000);
+    return () => window.clearInterval(timer);
+  }, [campaignRotationPaused, campaignsQuery.data?.length]);
+
+  const activeCampaign = campaignsQuery.data?.[activeCampaignIndex] ?? campaignsQuery.data?.[0] ?? null;
 
   const systemStatusQuery = useQuery({
     queryKey: ["dashboard-system-status", tenantId, user?.id],
@@ -398,22 +426,32 @@ function Dashboard() {
           تعذر تحميل العروض والإعلانات. <button type="button" className="underline" onClick={() => campaignsQuery.refetch()}>إعادة المحاولة</button>
         </div>
       )}
-      {campaignsQuery.data && campaignsQuery.data.length > 0 && (
-        <div className="grid gap-3">
-          {campaignsQuery.data.map((campaign) => {
-            const content = (
-              <div className="relative flex min-h-28 overflow-hidden rounded-xl border bg-card shadow-sm">
-                {campaign.image_url && <img src={campaign.image_url} alt="" className="absolute inset-0 h-full w-full object-cover opacity-20" />}
-                <div className="relative z-[1] flex w-full flex-col justify-center gap-1 bg-gradient-to-l from-background/95 via-background/85 to-background/40 p-4">
-                  <div className="text-base font-bold">{campaign.title}</div>
-                  {campaign.description && <p className="max-w-2xl text-sm text-muted-foreground">{campaign.description}</p>}
-                  {campaign.target_url && <span className="mt-1 text-xs font-semibold text-primary">عرض التفاصيل ←</span>}
-                </div>
+      {activeCampaign && (
+        <section aria-label="الإعلانات والعروض المنشورة" aria-roledescription="عرض شرائح" className="space-y-2">
+          <div className="relative overflow-hidden rounded-2xl border bg-card shadow-sm">
+            {activeCampaign.image_url && <img src={activeCampaign.image_url} alt="" className="absolute inset-0 h-full w-full object-cover opacity-25" />}
+            <div className="relative flex min-h-36 items-center bg-gradient-to-l from-background/95 via-background/85 to-background/45 p-4 sm:min-h-44 sm:p-6">
+              <div className="max-w-3xl space-y-2">
+                <div className="text-xs font-semibold text-primary">إعلان / مساحة ترويجية</div>
+                <h2 className="text-lg font-extrabold sm:text-2xl">{activeCampaign.title}</h2>
+                {activeCampaign.description && <p className="text-sm text-muted-foreground sm:text-base">{activeCampaign.description}</p>}
+                {safeCampaignTarget(activeCampaign.target_url) && <a href={safeCampaignTarget(activeCampaign.target_url)!} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-9 items-center rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90">عرض التفاصيل ←</a>}
               </div>
-            );
-            return campaign.target_url ? <a key={campaign.id} href={campaign.target_url} target="_blank" rel="noopener noreferrer" className="block">{content}</a> : <div key={campaign.id}>{content}</div>;
-          })}
-        </div>
+            </div>
+          </div>
+          {(campaignsQuery.data?.length ?? 0) > 1 && (
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5" aria-label={`الشريحة ${activeCampaignIndex + 1} من ${campaignsQuery.data?.length ?? 0}`}>
+                {campaignsQuery.data?.map((campaign, index) => <button key={campaign.id} type="button" aria-label={`عرض الإعلان ${index + 1}`} aria-current={index === activeCampaignIndex ? "true" : undefined} onClick={() => setActiveCampaignIndex(index)} className={`h-2.5 rounded-full transition-all ${index === activeCampaignIndex ? "w-7 bg-primary" : "w-2.5 bg-muted-foreground/35"}`} />)}
+              </div>
+              <div className="flex items-center gap-1">
+                <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="الإعلان السابق" onClick={() => setActiveCampaignIndex((current) => (current - 1 + (campaignsQuery.data?.length ?? 1)) % (campaignsQuery.data?.length ?? 1))}><ChevronRight className="h-4 w-4" /></Button>
+                <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label={campaignRotationPaused ? "استئناف عرض الإعلانات" : "إيقاف حركة الإعلانات"} onClick={() => setCampaignRotationPaused((paused) => !paused)}>{campaignRotationPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}</Button>
+                <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="الإعلان التالي" onClick={() => setActiveCampaignIndex((current) => (current + 1) % (campaignsQuery.data?.length ?? 1))}><ChevronLeft className="h-4 w-4" /></Button>
+              </div>
+            </div>
+          )}
+        </section>
       )}
 
       {isSuperOwner && superStats.data && (
