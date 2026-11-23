@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   Search, LayoutGrid, Crown, Building, Briefcase, BadgeCheck,
@@ -19,10 +19,27 @@ type NavOverride = { title?: string; hidden?: boolean };
 export function AppLauncher() {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const launcherRef = useRef<HTMLDivElement>(null);
   const [customItems, setCustomItems] = useState<CustomShortcut[]>([]);
   const [navOverrides, setNavOverrides] = useState<Record<string, NavOverride>>({});
   const { tenantId, userId } = useActiveTenant();
   const { isSuperOwner, totalCount } = useSuperOwner();
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && !launcherRef.current?.contains(event.target)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setOpen(false); setSearch(""); }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
 
   useEffect(() => {
     const read = () => {
@@ -108,7 +125,7 @@ export function AppLauncher() {
   }, [isSuperOwner, totalCount, permissions.data, customItems, navOverrides, search]);
 
   return (
-    <div className="relative">
+    <div className="relative" ref={launcherRef}>
       <Button type="button" variant="outline" size="icon" title="التطبيقات" aria-label="فتح التطبيقات" className="h-10 w-10 shrink-0 rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm transition hover:border-[#174b91] hover:bg-blue-50" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
         <LayoutGrid className="h-[18px] w-[18px]" />
       </Button>
@@ -125,7 +142,7 @@ export function AppLauncher() {
                 <h3 className="mb-2 text-xs font-semibold text-muted-foreground">{group.label}</h3>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {group.items.map((item) => (
-                    <Link key={item.url} to={item.url as any} onClick={() => setOpen(false)} className="flex min-h-16 items-center gap-2 rounded-xl border bg-card p-2 text-sm transition hover:border-primary/40 hover:bg-primary/5">
+                    <Link key={item.url} to={item.url as any} onClick={() => { setOpen(false); setSearch(""); }} className="flex min-h-16 items-center gap-2 rounded-xl border bg-card p-2 text-sm transition hover:border-primary/40 hover:bg-primary/5">
                       <item.icon className="h-4 w-4 shrink-0 text-primary" />
                       <span>{item.title}</span>
                     </Link>
