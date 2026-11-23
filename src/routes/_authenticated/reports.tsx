@@ -68,10 +68,14 @@ function ReportsPage() {
     queryKey: ["reports", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner, from, to, branchId],
     queryFn: async () => {
       if (!tenantId) return null;
+      if (!from || !to) throw new Error("حدد تاريخ البداية والنهاية للتقرير.");
       if (from > to) throw new Error("تاريخ البداية يجب أن يسبق تاريخ النهاية أو يساويه.");
       // Interpret date inputs as local calendar days, then convert boundaries for timestamptz queries.
       const localStart = new Date(`${from}T00:00:00`);
       const localEnd = new Date(`${to}T23:59:59.999`);
+      if (Number.isNaN(localStart.getTime()) || Number.isNaN(localEnd.getTime())) {
+        throw new Error("صيغة التاريخ المحدد غير صحيحة.");
+      }
       const fromDate = localStart.toISOString();
       const toDate = localEnd.toISOString();
 
