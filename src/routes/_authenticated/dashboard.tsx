@@ -331,7 +331,18 @@ function Dashboard() {
         color: catMap.get(cid)?.color ?? colors[i % colors.length],
       }));
 
-      const lowStockCount = (lowStock.data ?? []).filter((r) => Number((r as { quantity: number }).quantity) <= 0).length;
+      const inventoryProductIds = [...new Set((lowStock.data ?? []).map((row) => row.product_id))];
+      const lowStockProducts = inventoryProductIds.length
+        ? await supabase.from("products").select("id, min_stock").eq("tenant_id", tenantId).in("id", inventoryProductIds)
+        : { data: [], error: null };
+      if (lowStockProducts.error) throw lowStockProducts.error;
+      const minimumStockByProduct = new Map((lowStockProducts.data ?? []).map((product) => [product.id, Number(product.min_stock)]));
+      if (minimumStockByProduct.size !== inventoryProductIds.length) {
+        throw new Error("تعذر التحقق من حدود إعادة الطلب لجميع منتجات المخزون.");
+      }
+      const lowStockCount = (lowStock.data ?? []).filter((row) =>
+        Number(row.quantity) <= (minimumStockByProduct.get(row.product_id) ?? 0),
+      ).length;
 
       return {
         totalToday, totalMonth, totalExpMonth,
