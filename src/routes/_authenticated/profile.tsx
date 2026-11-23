@@ -169,6 +169,22 @@ function ProfilePage() {
     return () => { cancelled = true; };
   }, [profile]);
 
+  useEffect(() => {
+    if (!profile || isLoading) return;
+    const dirty = form.full_name !== (profile.full_name ?? "") ||
+      form.username !== (profile.username ?? "") ||
+      form.phone !== (profile.phone ?? "") ||
+      form.avatar_url !== (profile.avatar_url ?? "");
+    window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/profile", dirty },
+    }));
+    return () => {
+      window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+        detail: { path: "/profile", dirty: false },
+      }));
+    };
+  }, [form, profile, isLoading]);
+
   const saveMut = useMutation({
     mutationFn: () =>
       updateFn({
