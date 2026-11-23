@@ -114,8 +114,9 @@ export function AppLauncher() {
       items: group.items
         .filter((item) => {
           const basePath = item.url.split("#")[0];
+          const effectiveTitle = navOverrides[basePath]?.title?.trim() || item.title;
           return !navOverrides[basePath]?.hidden && allowed(item) &&
-            (item.title.toLocaleLowerCase("ar").includes(needle) || group.label.toLocaleLowerCase("ar").includes(needle));
+            (effectiveTitle.toLocaleLowerCase("ar").includes(needle) || group.label.toLocaleLowerCase("ar").includes(needle));
         })
         .map((item) => ({
           ...item,
