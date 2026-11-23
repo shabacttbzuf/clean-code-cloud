@@ -188,6 +188,7 @@ export function AdsPage() {
       });
       if (error) throw error;
       setImageUrl(supabase.storage.from("restaurant-assets").getPublicUrl(path).data.publicUrl);
+      setFormTouched(true);
       toast.success("تم رفع صورة الإعلان");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "تعذر رفع الصورة");
