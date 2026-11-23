@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { X, Home, Pin, PinOff } from "lucide-react";
+import {
+  X, Home, Pin, PinOff, ShoppingCart, Receipt, Armchair, ChefHat, Package,
+  ArrowLeftRight, ShoppingBag, Truck, Users, Wallet, BarChart3, Megaphone,
+  Gift, Bell, Settings, UserRound, Building2, ShieldCheck, ClipboardList,
+  BriefcaseBusiness, Tags, FileText, CircleHelp, LayoutGrid,
+} from "lucide-react";
 
 type WorkspaceTab = { path: string; title: string; pinned?: boolean };
 const STORAGE_KEY = "ras-workspace-tabs-v1";
@@ -16,6 +21,34 @@ const ROUTE_TITLES: Array<[string, string]> = [
   ["/users", "المستخدمون"], ["/team-permissions", "الصلاحيات"], ["/notifications", "الإشعارات"],
   ["/settings", "الإعدادات"], ["/profile", "الملف الشخصي"], ["/ads", "الإعلانات"], ["/promotions", "العروض الترويجية"],
 ];
+
+function iconFor(path: string) {
+  if (path === "/dashboard") return Home;
+  if (path.startsWith("/pos")) return ShoppingCart;
+  if (path.startsWith("/sales")) return Receipt;
+  if (path.startsWith("/tables")) return Armchair;
+  if (path.startsWith("/kitchen")) return ChefHat;
+  if (path.startsWith("/inventory/movements")) return ArrowLeftRight;
+  if (path.startsWith("/inventory") || path.startsWith("/products")) return Package;
+  if (path.startsWith("/purchases")) return ShoppingBag;
+  if (path.startsWith("/suppliers")) return Truck;
+  if (path.startsWith("/customers") || path.startsWith("/users")) return Users;
+  if (path.startsWith("/cash-sessions") || path.startsWith("/expenses")) return Wallet;
+  if (path.startsWith("/reports")) return BarChart3;
+  if (path.startsWith("/ads")) return Megaphone;
+  if (path.startsWith("/promotions")) return Gift;
+  if (path.startsWith("/notifications")) return Bell;
+  if (path.startsWith("/settings")) return Settings;
+  if (path.startsWith("/profile")) return UserRound;
+  if (path.startsWith("/branches") || path.startsWith("/companies")) return Building2;
+  if (path.startsWith("/roles") || path.startsWith("/team-permissions")) return ShieldCheck;
+  if (path.startsWith("/audit-logs") || path.startsWith("/login-history")) return ClipboardList;
+  if (path.startsWith("/hr/")) return BriefcaseBusiness;
+  if (path.startsWith("/categories")) return Tags;
+  if (path.startsWith("/support")) return CircleHelp;
+  if (path.startsWith("/departments") || path.startsWith("/job-titles")) return FileText;
+  return LayoutGrid;
+}
 
 function titleFor(path: string) {
   const match = ROUTE_TITLES.find(([route]) => path === route || path.startsWith(route + "/"));
@@ -96,7 +129,7 @@ export function WorkspaceTabs() {
         return (
           <div key={tab.path} className={`group inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-colors ${active ? "border-primary/30 bg-primary text-primary-foreground shadow-sm" : "border-border bg-card text-foreground hover:border-primary/30 hover:bg-primary/5"}`}>
             <button type="button" onClick={() => navigate({ to: tab.path as any })} className="inline-flex items-center gap-2 whitespace-nowrap" aria-current={active ? "page" : undefined}>
-              {tab.path === "/dashboard" ? <Home className="h-4 w-4" /> : null}
+              {(() => { const TabIcon = iconFor(tab.path); return <TabIcon className="h-4 w-4 shrink-0" aria-hidden="true" />; })()}
               <span>{tab.title}</span>
             </button>
             {tab.path !== "/dashboard" && (
