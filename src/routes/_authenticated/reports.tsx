@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
@@ -49,6 +49,12 @@ function ReportsPage() {
       if (error) throw error;
       return data ?? [];
     }, enabled: !!tenantId });
+
+  useEffect(() => {
+    if (branchId !== "all" && branchesQuery.data && !branchesQuery.data.some((branch) => branch.id === branchId)) {
+      setBranchId("all");
+    }
+  }, [branchId, branchesQuery.data]);
 
   const report = useQuery({
     queryKey: ["reports", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner, from, to, branchId],
