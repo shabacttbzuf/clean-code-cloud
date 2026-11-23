@@ -20,7 +20,7 @@ const ROUTE_TITLES: Array<[string, string]> = [
   ["/products", "المنتجات"], ["/categories", "التصنيفات"], ["/customers", "العملاء"],
   ["/cash-sessions", "الورديات"], ["/expenses", "المصروفات"], ["/reports", "التقارير"],
   ["/hr/employees", "الموظفون"], ["/hr/attendance", "الحضور"], ["/hr/leaves", "الإجازات"],
-  ["/hr/payroll", "الرواتب"], ["/branches", "الفروع"], ["/companies", "الشركات"],
+  ["/hr/payroll", "الرواتب"], ["/hr/compensation", "التعويضات"], ["/branches", "الفروع"], ["/companies", "الشركات"],
   ["/users", "المستخدمون"], ["/users-admin", "إدارة المستخدمين"], ["/team-permissions", "صلاحيات الفرق"],
   ["/roles", "الأدوار والصلاحيات"], ["/companies", "الشركات"], ["/departments", "الأقسام الإدارية"],
   ["/job-titles", "المسميات الوظيفية"], ["/employment-types", "أنواع التوظيف"],
@@ -70,8 +70,9 @@ function readTabs(): WorkspaceTab[] {
     const parsed = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(parsed)) return [];
     const valid = parsed.filter((tab): tab is WorkspaceTab =>
-      !!tab && typeof tab.path === "string" && typeof tab.title === "string" &&
-      tab.path.startsWith("/") && !tab.path.startsWith("//") &&
+      !!tab && typeof tab.path === "string" && tab.path.length <= 500 &&
+      typeof tab.title === "string" && tab.title.length <= 100 &&
+      tab.path.startsWith("/") && !tab.path.startsWith("//") && !tab.path.includes("\\") &&
       (tab.pinned === undefined || typeof tab.pinned === "boolean")
     );
     return valid.slice(-MAX_TABS);
@@ -80,7 +81,8 @@ function readTabs(): WorkspaceTab[] {
 
 function limitTabs(tabs: WorkspaceTab[]) {
   const unique = tabs.filter((tab, index, all) => all.findIndex((candidate) => candidate.path === tab.path) === index);
-  const pinned = unique.filter((tab) => tab.pinned);
+  // Keep the dashboard pinned and reserve capacity for the active working tabs.
+  const pinned = unique.filter((tab) => tab.pinned).slice(0, MAX_TABS - 1);
   const unpinned = unique.filter((tab) => !tab.pinned);
   return [...pinned, ...unpinned.slice(-(MAX_TABS - pinned.length))];
 }
@@ -158,16 +160,20 @@ export function WorkspaceTabs() {
   function togglePinned(path: string) {
     const target = tabs.find((tab) => tab.path === path);
     if (!target || path === "/dashboard") return;
+    if (!target.pinned && tabs.filter((tab) => tab.pinned).length >= MAX_TABS - 1) {
+      window.alert("يمكن تثبيت ستة تبويبات كحد أقصى حتى تبقى مساحة كافية لصفحات العمل.");
+      return;
+    }
     persist(tabs.map((tab) => tab.path === path ? { ...tab, pinned: !tab.pinned } : tab));
   }
 
   return (
-    <nav aria-label="تبويبات الصفحات المفتوحة" className="workspace-tabs flex min-h-12 items-center gap-2 overflow-x-auto border-b px-3 py-2">
+    <nav aria-label="تبويبات الصفحات المفتوحة" className="workspace-tabs flex min-h-12 min-w-0 items-center gap-2 overflow-x-auto border-b px-3 py-2" role="tablist">
       {tabs.map((tab) => {
         const active = activePath === tab.path;
         return (
           <div key={tab.path} className={`group inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-colors ${active ? "border-primary/30 bg-primary text-primary-foreground shadow-sm" : "border-border bg-card text-foreground hover:border-primary/30 hover:bg-primary/5"}`}>
-            <button type="button" onClick={() => navigate({ to: tab.path as any })} className="inline-flex items-center gap-2 whitespace-nowrap" aria-current={active ? "page" : undefined}>
+            <button type="button" onClick={() => navigate({ to: tab.path as any })} className="inline-flex min-h-8 items-center gap-2 whitespace-nowrap" role="tab" aria-selected={active} aria-current={active ? "page" : undefined}>
               {(() => { const TabIcon = iconFor(tab.path); return <TabIcon className="h-4 w-4 shrink-0" aria-hidden="true" />; })()}
               <span>{tab.title}</span>
               {dirtyPaths.has(tab.path) && <span className="h-2 w-2 rounded-full bg-amber-400" title="تغييرات غير محفوظة" aria-label="تغييرات غير محفوظة" />}
