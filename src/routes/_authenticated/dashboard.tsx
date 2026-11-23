@@ -319,12 +319,19 @@ function Dashboard() {
 
 
   const latestOrders = useQuery({
-    queryKey: ["dashboard-latest-orders", tenantId, membership?.branch_id],
+    queryKey: ["dashboard-latest-orders", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
       if (!tenantId) return [];
       let query = supabase.from("sales").select("id,invoice_no,total,status,created_at,order_type,customer_id")
         .eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(8);
-      if (membership?.branch_id) query = query.eq("branch_id", membership.branch_id);
+      if (!isSuperOwner && membership?.branch_id) {
+        query = query.eq("branch_id", membership.branch_id);
+      } else if (!isSuperOwner && membership?.company_id) {
+        const { data: branches, error: branchError } = await supabase.from("branches").select("id")
+          .eq("tenant_id", tenantId).eq("company_id", membership.company_id);
+        if (branchError) throw branchError;
+        query = query.in("branch_id", (branches ?? []).map((branch) => branch.id));
+      }
       const { data, error } = await query;
       if (error) throw error;
       return data ?? [];
@@ -334,13 +341,20 @@ function Dashboard() {
     staleTime: 5_000,
   });
   const kitchenOverview = useQuery({
-    queryKey: ["dashboard-kitchen-overview", tenantId, membership?.branch_id],
+    queryKey: ["dashboard-kitchen-overview", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
       if (!tenantId) return [];
       let query = (supabase.from("kitchen_orders" as any) as any).select("id,branch_id,sale_id,status,created_at")
         .eq("tenant_id", tenantId).in("status", ["new", "preparing", "ready"])
         .order("created_at", { ascending: false }).limit(12);
-      if (membership?.branch_id) query = query.eq("branch_id", membership.branch_id);
+      if (!isSuperOwner && membership?.branch_id) {
+        query = query.eq("branch_id", membership.branch_id);
+      } else if (!isSuperOwner && membership?.company_id) {
+        const { data: branches, error: branchError } = await supabase.from("branches").select("id")
+          .eq("tenant_id", tenantId).eq("company_id", membership.company_id);
+        if (branchError) throw branchError;
+        query = query.in("branch_id", (branches ?? []).map((branch) => branch.id));
+      }
       const { data, error } = await query;
       if (error) throw error;
       const orders = data ?? [];
