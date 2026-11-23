@@ -61,8 +61,11 @@ function ReportsPage() {
     queryFn: async () => {
       if (!tenantId) return null;
       if (from > to) throw new Error("تاريخ البداية يجب أن يسبق تاريخ النهاية أو يساويه.");
-      const fromDate = `${from}T00:00:00.000Z`;
-      const toDate = `${to}T23:59:59.999Z`;
+      // Interpret date inputs as local calendar days, then convert boundaries for timestamptz queries.
+      const localStart = new Date(`${from}T00:00:00`);
+      const localEnd = new Date(`${to}T23:59:59.999`);
+      const fromDate = localStart.toISOString();
+      const toDate = localEnd.toISOString();
 
       const [sales, expenses, items, sessions, inventory, refunds] = await Promise.all([
         fetchAllRows((pageFrom, pageTo) => {
@@ -127,11 +130,20 @@ function ReportsPage() {
       );
       const inventoryProducts = productGroups.flat();
 
-      const periodStart = Date.parse(fromDate);
-      const periodEnd = Date.parse(toDate);
+      const periodStart = localStart.getTime();
+      const periodEnd = localEnd.getTime();
       const periodLength = periodEnd - periodStart + 1;
-      const previousFrom = new Date(periodStart - periodLength).toISOString();
-      const previousTo = new Date(periodStart - 1).toISOString();
+      const previousFromDate = new Date(periodStart - periodLength);
+      const previousToDate = new Date(periodStart - 1);
+      const previousFrom = previousFromDate.toISOString();
+      const previousTo = previousToDate.toISOString();
+      const asLocalDate = (date: Date) => [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, "0"),
+        String(date.getDate()).padStart(2, "0"),
+      ].join("-");
+      const previousFromDay = asLocalDate(previousFromDate);
+      const previousToDay = asLocalDate(previousToDate);
       const [previousSales, previousExpenses, previousRefunds] = await Promise.all([
         fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("sales").select("id,total")
@@ -143,7 +155,7 @@ function ReportsPage() {
         fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("expenses").select("amount")
             .eq("tenant_id", tenantId)
-            .gte("paid_at", previousFrom.slice(0, 10)).lte("paid_at", previousTo.slice(0, 10));
+            .gte("paid_at", previousFromDay).lte("paid_at", previousToDay);
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           return query.range(pageFrom, pageTo);
         }),
