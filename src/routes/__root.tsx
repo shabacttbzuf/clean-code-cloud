@@ -130,9 +130,16 @@ function RootComponent() {
   // Global auth listener: refetch on session identity changes
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
-      router.invalidate();
-      if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
+      if (event === "SIGNED_OUT" || event === "SIGNED_IN") {
+        // Never retain one user's cached tenant data for another session.
+        queryClient.clear();
+        router.invalidate();
+        return;
+      }
+      if (event === "USER_UPDATED") {
+        router.invalidate();
+        void queryClient.invalidateQueries();
+      }
     });
     return () => sub.subscription.unsubscribe();
   }, [queryClient, router]);
