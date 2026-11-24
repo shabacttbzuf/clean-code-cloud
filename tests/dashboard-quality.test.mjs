@@ -15,7 +15,7 @@ test("dashboard rejects partial query failures instead of presenting misleading 
 });
 
 test("CI runs on the active feature branch and supports a manual verification run", () => {
-  assert.match(workflow, /branches: \["main", "feature\/\*\*", "feat\/\*\*"\]/);
+  assert.match(workflow, /branches: \["main", "feature\/\*\*", "feat\/\*\*", "work\/\*\*"\]/);
   assert.match(workflow, /workflow_dispatch:/);
 });
 
