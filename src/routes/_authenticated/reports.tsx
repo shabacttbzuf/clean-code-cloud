@@ -83,7 +83,7 @@ function ReportsPage() {
       const fromDate = localStart.toISOString();
       const toDate = localEnd.toISOString();
 
-      const [sales, expenses, items, sessions, inventory, refunds, purchases, employees, campaigns] = await Promise.all([
+      const [sales, expenses, items, sessions, inventory, purchases, employees, campaigns, refunds] = await Promise.all([
         canViewSalesReports ? fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("sales")
             .select("id, created_at, total, subtotal, discount, tax_amount, payment_method, cashier_id, branch_id, status")
@@ -194,15 +194,15 @@ function ReportsPage() {
       const previousFromDay = asLocalDate(previousFromDate);
       const previousToDay = asLocalDate(previousToDate);
       const [previousSales, previousExpenses, previousRefunds] = await Promise.all([
-        fetchAllRows((pageFrom, pageTo) => {
+        canViewSalesReports ? fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("sales").select("id,total")
             .eq("tenant_id", tenantId).neq("status", "void")
             .gte("created_at", previousFrom).lte("created_at", previousTo);
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.range(pageFrom, pageTo);
-        }),
-        canViewFinancialReports ? fetchAllRows((pageFrom, pageTo) => {
+        }) : Promise.resolve([]),
+        canViewExpenses ? fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("expenses").select("amount")
             .eq("tenant_id", tenantId)
             .gte("paid_at", previousFromDay).lte("paid_at", previousToDay);
@@ -210,14 +210,14 @@ function ReportsPage() {
           else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.range(pageFrom, pageTo);
         }) : Promise.resolve([]),
-        fetchAllRows((pageFrom, pageTo) => {
+        canViewSalesReports ? fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("sale_refunds").select("total")
             .eq("tenant_id", tenantId)
             .gte("created_at", previousFrom).lte("created_at", previousTo);
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.range(pageFrom, pageTo);
-        }),
+        }) : Promise.resolve([]),
       ]);
       const previousPeriod = {
         salesTotal: previousSales.reduce((sum, row) => sum + Number(row.total), 0)
