@@ -14835,3 +14835,233 @@ CREATE INDEX IF NOT EXISTS idx_promotional_offers_reward_product_id_fk
 
 COMMIT;
 -- END MIGRATION: 20261122040000_grant_promotions_api_access_and_fk_indexes.sql
+
+-- SOURCE MIGRATION: 20261125010000_notification_realtime_publication.sql
+-- Enable realtime delivery for the existing, RLS-protected notification tables.
+-- Do not recreate the publication or alter any existing publication membership.
+BEGIN;
+DO $migration$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime'
+        AND schemaname = 'public'
+        AND tablename = 'notifications'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications;
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime'
+        AND schemaname = 'public'
+        AND tablename = 'notification_reads'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.notification_reads;
+    END IF;
+  END IF;
+END
+$migration$;
+COMMIT;
+-- END MIGRATION: 20261125010000_notification_realtime_publication.sql
+
+-- SOURCE MIGRATION: 20261125020000_low_stock_event_notifications.sql
+-- Create low-stock alerts from real inventory threshold crossings.
+-- The trigger is transaction-bound to inventory writes and does not mutate stock.
+BEGIN;
+
+CREATE OR REPLACE FUNCTION private.notify_on_low_stock()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $function$
+DECLARE
+  v_product public.products%ROWTYPE;
+  v_company_id uuid;
+  v_crossed_threshold boolean := false;
+BEGIN
+  IF NEW.quantity IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT * INTO v_product
+  FROM public.products
+  WHERE id = NEW.product_id
+    AND tenant_id = NEW.tenant_id;
+
+  IF NOT FOUND OR v_product.min_stock IS NULL OR v_product.min_stock <= 0 THEN
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    v_crossed_threshold := NEW.quantity <= v_product.min_stock;
+  ELSE
+    v_crossed_threshold := NEW.quantity <= v_product.min_stock
+      AND OLD.quantity > v_product.min_stock;
+  END IF;
+
+  IF NOT v_crossed_threshold THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT b.company_id INTO v_company_id
+  FROM public.branches b
+  WHERE b.id = NEW.branch_id
+    AND b.tenant_id = NEW.tenant_id;
+
+  IF NOT FOUND THEN
+    RETURN NEW;
+  END IF;
+
+  INSERT INTO public.notifications (
+    tenant_id, company_id, audience_type, audience_id,
+    kind, urgency, title, body, payload, action_path, action_label, created_by
+  )
+  VALUES (
+    NEW.tenant_id,
+    v_company_id,
+    'branch',
+    NEW.branch_id,
+    'low_stock',
+    CASE WHEN NEW.quantity <= 0 THEN 'critical' ELSE 'urgent' END,
+    'تنبيه انخفاض المخزون',
+    'المنتج ' || v_product.name || ' وصل إلى ' ||
+      trim(to_char(NEW.quantity, 'FM999999999990D999')) ||
+      '، والحد الأدنى المحدد ' ||
+      trim(to_char(v_product.min_stock, 'FM999999999990D999')) || '.',
+    jsonb_build_object(
+      'product_id', NEW.product_id,
+      'branch_id', NEW.branch_id,
+      'quantity', NEW.quantity,
+      'min_stock', v_product.min_stock
+    ),
+    '/inventory',
+    'فتح المخزون',
+    auth.uid()
+  );
+
+  RETURN NEW;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION private.notify_on_low_stock() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS trg_notify_on_low_stock ON public.inventory;
+CREATE TRIGGER trg_notify_on_low_stock
+AFTER INSERT OR UPDATE OF quantity ON public.inventory
+FOR EACH ROW
+EXECUTE FUNCTION private.notify_on_low_stock();
+
+COMMIT;
+-- END MIGRATION: 20261125020000_low_stock_event_notifications.sql
+
+-- SOURCE MIGRATION: 20261125030000_hr_leave_event_notifications.sql
+-- Notify HR recipients from real leave-request creation and decision events.
+-- Notifications are informational only; this trigger never changes the HR record.
+BEGIN;
+
+CREATE OR REPLACE FUNCTION private.notify_leave_request_events()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $function$
+DECLARE
+  v_employee public.employees%ROWTYPE;
+  v_company_id uuid;
+  v_employee_user_id uuid;
+  v_start_date date;
+  v_end_date date;
+  v_status text;
+BEGIN
+  SELECT * INTO v_employee
+  FROM public.employees
+  WHERE id = NEW.employee_id
+    AND tenant_id = NEW.tenant_id;
+
+  IF NOT FOUND THEN
+    RETURN NEW;
+  END IF;
+
+  v_employee_user_id := v_employee.user_id;
+  IF v_employee.branch_id IS NOT NULL THEN
+    SELECT company_id INTO v_company_id
+    FROM public.branches
+    WHERE id = v_employee.branch_id
+      AND tenant_id = NEW.tenant_id;
+  END IF;
+
+  IF TG_OP = 'INSERT' AND NEW.status = 'pending' THEN
+    INSERT INTO public.notifications (
+      tenant_id, company_id, audience_type, kind, urgency,
+      title, body, payload, action_path, action_label
+    )
+    VALUES
+    (
+      NEW.tenant_id, v_company_id, 'owner', 'hr_leave_requested', 'normal',
+      'طلب إجازة جديد',
+      'تم تقديم طلب إجازة جديد يحتاج إلى المراجعة.',
+      jsonb_build_object('leave_request_id', NEW.id, 'employee_id', NEW.employee_id),
+      '/hr/leaves', 'مراجعة الطلب'
+    ),
+    (
+      NEW.tenant_id, v_company_id, 'manager', 'hr_leave_requested', 'normal',
+      'طلب إجازة جديد',
+      'تم تقديم طلب إجازة جديد يحتاج إلى المراجعة.',
+      jsonb_build_object('leave_request_id', NEW.id, 'employee_id', NEW.employee_id),
+      '/hr/leaves', 'مراجعة الطلب'
+    );
+  ELSIF TG_OP = 'UPDATE'
+    AND OLD.status = 'pending'
+    AND NEW.status IN ('approved', 'rejected')
+    AND v_employee_user_id IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM public.user_roles ur
+      WHERE ur.user_id = v_employee_user_id
+        AND ur.tenant_id = NEW.tenant_id
+    )
+  THEN
+    INSERT INTO public.notifications (
+      tenant_id, company_id, audience_type, audience_id, kind, urgency,
+      title, body, payload, action_path, action_label
+    )
+    VALUES (
+      NEW.tenant_id,
+      v_company_id,
+      'user',
+      v_employee_user_id,
+      CASE WHEN NEW.status = 'approved' THEN 'hr_leave_approved' ELSE 'hr_leave_rejected' END,
+      'normal',
+      CASE WHEN NEW.status = 'approved' THEN 'تمت الموافقة على طلب الإجازة' ELSE 'تم رفض طلب الإجازة' END,
+      CASE WHEN NEW.status = 'approved'
+        THEN 'تمت الموافقة على طلب الإجازة المقدم منك.'
+        ELSE 'تم رفض طلب الإجازة المقدم منك. يرجى مراجعة التفاصيل مع الإدارة.'
+      END,
+      jsonb_build_object(
+        'leave_request_id', NEW.id,
+        'status', NEW.status,
+        'start_date', NEW.start_date,
+        'end_date', NEW.end_date
+      ),
+      '/hr/leaves',
+      'عرض طلباتي'
+    );
+  END IF;
+
+  RETURN NEW;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION private.notify_leave_request_events() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS trg_notify_leave_request_events ON public.leave_requests;
+CREATE TRIGGER trg_notify_leave_request_events
+AFTER INSERT OR UPDATE OF status ON public.leave_requests
+FOR EACH ROW
+EXECUTE FUNCTION private.notify_leave_request_events();
+
+COMMIT;
+-- END MIGRATION: 20261125030000_hr_leave_event_notifications.sql
+
