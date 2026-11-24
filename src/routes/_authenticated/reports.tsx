@@ -142,7 +142,7 @@ function ReportsPage() {
             .eq("tenant_id", tenantId);
           if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
           return query.order("created_at", { ascending: false }).range(pageFrom, pageTo);
-        }),
+        }) : Promise.resolve([]),
         canViewSalesReports ? fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("sale_refunds")
             .select("id, sale_id, subtotal, discount, tax_amount, total, refund_method, created_at, branch_id")
@@ -150,7 +150,7 @@ function ReportsPage() {
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.range(pageFrom, pageTo);
-        }),
+        }) : Promise.resolve([]),
       ]);
 
       const validSales = sales.filter((row) => row.status !== "void");
