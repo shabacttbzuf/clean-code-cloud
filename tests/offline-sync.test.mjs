@@ -43,6 +43,12 @@ test("sync preserves dependency order, isolates active tenant/branch/company and
   assert.match(source, /nextRetryAt/);
 });
 
+test("queued operations cannot replay under a different signed-in user", () => {
+  assert.match(handlers, /supabase\.auth\.getUser\(\)/);
+  assert.match(handlers, /authData\.user\.id !== operation\.scope\.userId/);
+  assert.match(handlers, /تغير المستخدم المسجل/);
+});
+
 test("automatic sync listens for restored connectivity and periodically probes reachability", () => {
   assert.match(source, /window\.addEventListener\("online", run\)/);
   assert.match(source, /window\.setInterval\(run, 30_000\)/);
