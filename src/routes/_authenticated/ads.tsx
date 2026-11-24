@@ -188,7 +188,7 @@ export function AdsPage() {
         starts_at: startsAt ? new Date(startsAt).toISOString() : null,
         ends_at: endsAt ? new Date(endsAt).toISOString() : null,
       };
-      let updateQuery = supabase.from("marketing_campaigns").update(payload as any)
+      let updateQuery = supabase.from("marketing_campaigns").update(payload)
         .eq("id", editingId ?? "")
         .eq("tenant_id", tenantId!);
       if (editingId && !isSuperOwner && !isTenantOwner) {
@@ -197,7 +197,7 @@ export function AdsPage() {
       }
       const result = editingId
         ? await updateQuery.select("id").maybeSingle()
-        : await supabase.from("marketing_campaigns").insert({ ...payload, tenant_id: tenantId!, created_by: userId, status: "draft" } as any).select("id").single();
+        : await supabase.from("marketing_campaigns").insert({ ...payload, tenant_id: tenantId!, created_by: userId, status: "draft" }).select("id").single();
       if (result.error) throw result.error;
       if (!result.data?.id) throw new Error("لم يتم العثور على الحملة ضمن نطاق الشركة الحالي؛ لم يُنفّذ الحفظ.");
     },
