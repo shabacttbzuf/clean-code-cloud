@@ -573,6 +573,16 @@ function ReportsPage() {
                 </div>
               </div>
             </div>
+            {isSuperOwner && <div className="space-y-2 sm:w-48">
+              <Label className="text-xs">تصفية حسب الشركة</Label>
+              <Select value={companyId} onValueChange={(value) => { setCompanyId(value); setBranchId("all"); }} disabled={!canFilterReports}>
+                <SelectTrigger><SelectValue placeholder="كل الشركات" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل الشركات</SelectItem>
+                  {(companiesQuery.data ?? []).map((company) => <SelectItem key={company.id} value={company.id}>{company.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>}
             <div className="space-y-2 sm:w-48">
               <Label className="text-xs">تصفية حسب الفرع</Label>
               <Select value={branchId} onValueChange={setBranchId} disabled={!canFilterReports}>
