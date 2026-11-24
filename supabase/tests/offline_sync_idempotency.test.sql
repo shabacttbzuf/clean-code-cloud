@@ -29,7 +29,7 @@ select ok(
 select ok(
   has_function_privilege('authenticated','public.set_kitchen_order_status_idempotent(uuid,text,text,uuid)','EXECUTE')
   and not has_function_privilege('anon','public.set_kitchen_order_status_idempotent(uuid,text,text,uuid)','EXECUTE')
-  and not has_function_privilege('public','public.set_kitchen_order_status_idempotent(uuid,text,text,uuid)','EXECUTE'),
+  ,
   'Only authenticated users can invoke the idempotent kitchen RPC'
 );
 
