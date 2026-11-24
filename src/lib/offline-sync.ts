@@ -254,7 +254,7 @@ export async function syncOfflineOperations(scope: OfflineScope): Promise<void> 
         const operation = await claimOperation(candidate.id);
         if (!operation) continue;
         const handler = handlers.get(operation.type);
-        if (!handler || handler.offlineSafe !== true) {
+        if (!handler || handler.offlineSafe !== true || handler.idempotentServerSide !== true) {
           operation.status = "failed";
           operation.lastError = "لا يوجد معالج آمن ومعتمد لهذا النوع من العمليات.";
           operation.nextRetryAt = null;
