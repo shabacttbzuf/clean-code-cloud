@@ -401,7 +401,7 @@ function TopBar() {
       return permitted && searchQuery.length > 0 && item.title.toLocaleLowerCase("ar").includes(searchQuery);
     }).slice(0, 10);
 
-  const canSelectAllBranches = isSuperOwner || permissions.has("branches.view");
+  const canSelectAllBranches = isSuperOwner || ["owner", "manager", "accountant"].includes(membership?.role ?? "");
   const activeBranchLabel = activeBranchId
     ? branchOptions.find((item) => item.id === activeBranchId)?.name || "الفرع المحدد"
     : canSelectAllBranches ? "جميع الفروع" : branchOptions[0]?.name || (membership?.company_id ? "فروع الشركة" : "جميع الفروع");
@@ -445,8 +445,8 @@ function TopBar() {
         {branchOptions.length > 0 && (branchOptions.length > 1 || canSelectAllBranches) ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button type="button" variant="outline" className="hidden max-w-44 items-center gap-2 rounded-full border-border bg-background px-3 text-xs font-bold lg:inline-flex" aria-label="اختيار الفرع" disabled={branchLoading}>
-                <Building2 className="h-4 w-4 shrink-0" /><span className="truncate">{branchLoading ? "جارٍ تحميل الفروع..." : activeBranchLabel}</span>
+              <Button type="button" variant="outline" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-border bg-background px-0 text-xs font-bold sm:h-10 sm:w-auto sm:max-w-44 sm:gap-2 sm:px-3" aria-label="اختيار الفرع" disabled={branchLoading}>
+                <Building2 className="h-4 w-4 shrink-0" /><span className="hidden truncate sm:inline">{branchLoading ? "جارٍ تحميل الفروع..." : activeBranchLabel}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-60">
