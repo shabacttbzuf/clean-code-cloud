@@ -83,6 +83,9 @@ test("only the non-financial kitchen workflow is registered as offline-safe", ()
   assert.match(handlers, /idempotentServerSide: true/);
   assert.match(source, /handler\.idempotentServerSide !== true/);
   assert.match(handlers, /set_kitchen_order_status_idempotent/);
+  assert.match(handlers, /supabase\.auth\.getUser\(\)/);
+  assert.match(handlers, /authData\.user\.id !== operation\.scope\.userId/);
+  assert.match(handlers, /تغير المستخدم المسجل/);
   assert.match(handlers, /auth\.uid\(\)/);
   assert.match(kitchen, /enqueueOfflineOperation\(/);
   assert.match(kitchen, /navigator\.onLine/);
