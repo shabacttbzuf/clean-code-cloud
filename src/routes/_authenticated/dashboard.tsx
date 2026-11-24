@@ -26,6 +26,14 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
   }),
 });
 
+function localDayKey(date: Date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
 function safeCampaignTarget(value: string | null): string | null {
   if (!value) return null;
   try {
@@ -216,8 +224,8 @@ function Dashboard() {
       const now = new Date();
       const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      const last30 = new Date(now.getTime() - 29 * 86400000);
-      const last30ISO = new Date(last30.getFullYear(), last30.getMonth(), last30.getDate()).toISOString();
+      const last30 = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
+      const last30ISO = last30.toISOString();
 
       // Apply the active branch/company scope to every branch-owned dashboard metric.
       // null means tenant-wide access; an empty list deliberately returns no branch-owned rows.
@@ -304,16 +312,16 @@ function Dashboard() {
       // Trend: group by day
       const dayMap = new Map<string, number>();
       for (let i = 29; i >= 0; i--) {
-        const d = new Date(now.getTime() - i * 86400000);
-        const key = d.toISOString().slice(0, 10);
+        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+        const key = localDayKey(d);
         dayMap.set(key, 0);
       }
       for (const s of salesTrend.data ?? []) {
-        const key = new Date((s as { created_at: string }).created_at).toISOString().slice(0, 10);
+        const key = localDayKey(new Date((s as { created_at: string }).created_at));
         if (dayMap.has(key)) dayMap.set(key, (dayMap.get(key) ?? 0) + Number((s as { total: number }).total));
       }
       for (const refund of refundsTrend.data ?? []) {
-        const key = new Date((refund as { created_at: string }).created_at).toISOString().slice(0, 10);
+        const key = localDayKey(new Date((refund as { created_at: string }).created_at));
         if (dayMap.has(key)) dayMap.set(key, (dayMap.get(key) ?? 0) - Number((refund as { total: number }).total));
       }
       const trend = Array.from(dayMap.entries()).map(([day, total]) => ({ day: day.slice(5), total: +total.toFixed(2) }));
