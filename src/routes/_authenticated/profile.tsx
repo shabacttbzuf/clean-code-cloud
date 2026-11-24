@@ -70,7 +70,7 @@ function ProfilePage() {
       if (!user?.id) throw new Error("لا يوجد مستخدم مسجل الدخول.");
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, full_name, username, phone, email, avatar_url, last_login_at, last_device, last_ip, created_at, tenant_id, branch_id, company_id, department_id, job_title, employee_no, employment_date, status, is_active")
+        .select("id, full_name, username, phone, email, avatar_url, last_login_at, created_at, tenant_id, branch_id, company_id, department_id, job_title, employee_no, employment_date, status, is_active")
         .eq("id", user.id)
         .maybeSingle();
       if (error) throw error;
