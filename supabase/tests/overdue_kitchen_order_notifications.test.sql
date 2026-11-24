@@ -29,15 +29,28 @@ SELECT ok(
   'Delayed alerts use the approved 30-minute window and only unfinished kitchen states'
 );
 
+CREATE FUNCTION pg_temp.has_overdue_kitchen_scheduler()
+RETURNS boolean
+LANGUAGE plpgsql
+AS $
+DECLARE
+  v_exists boolean := false;
+BEGIN
+  IF to_regclass('cron.job') IS NULL THEN
+    RETURN false;
+  END IF;
+  EXECUTE
+    'SELECT EXISTS (SELECT 1 FROM cron.job WHERE jobname=$1 AND schedule=$2 AND command LIKE $3)'
+    INTO v_exists
+    USING 'notify-overdue-kitchen-orders', '* * * * *',
+          '%private.emit_overdue_kitchen_order_notifications%';
+  RETURN v_exists;
+END;
+$;
+
 SELECT ok(
-  to_regclass('cron.job') IS NULL
-  OR EXISTS (
-    SELECT 1 FROM cron.job
-    WHERE jobname='notify-overdue-kitchen-orders'
-      AND schedule='* * * * *'
-      AND command LIKE '%private.emit_overdue_kitchen_order_notifications%'
-  ),
-  'The minute scheduler is registered when pg_cron is available'
+  pg_temp.has_overdue_kitchen_scheduler(),
+  'The minute scheduler is registered and enabled through pg_cron'
 );
 
 SELECT * FROM finish();
