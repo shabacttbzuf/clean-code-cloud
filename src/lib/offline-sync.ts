@@ -179,6 +179,16 @@ async function saveOperation(operation: OfflineOperation) {
   notifyQueueChanged();
 }
 
+export async function retryFailedOfflineOperations(scope: OfflineScope): Promise<void> {
+  const rows = await listOfflineOperations(scope);
+  for (const operation of rows) {
+    if (operation.status !== "failed") continue;
+    operation.status = "pending";
+    operation.nextRetryAt = null;
+    await saveOperation(operation);
+  }
+}
+
 export async function getLastOfflineSyncAt(scope: OfflineScope): Promise<string | null> {
   const key = `lastSuccessfulSyncAt:${scope.userId}:${scope.tenantId}:${scope.branchId ?? "all"}:${scope.companyId ?? "none"}`;
   return (await transaction<string | undefined>([META], "readonly", (tx) =>
