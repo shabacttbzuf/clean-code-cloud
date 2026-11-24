@@ -2,6 +2,7 @@ const DB_NAME = "restaurant-offline-data";
 const DB_VERSION = 1;
 const STORE_NAME = "private-reference-data";
 export const OFFLINE_CACHE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+export const OFFLINE_AUTH_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 type CacheRecord<T> = {
   key: string;
@@ -153,6 +154,7 @@ function isAuthorizationFailure(error: unknown): boolean {
 export async function withOfflineFallback<T>(
   key: string,
   loadFromServer: () => Promise<T>,
+  maxAgeMs = OFFLINE_CACHE_MAX_AGE_MS,
 ): Promise<T> {
   try {
     const fresh = await loadFromServer();
@@ -160,7 +162,7 @@ export async function withOfflineFallback<T>(
     return fresh;
   } catch (error) {
     if (isAuthorizationFailure(error)) throw error;
-    const cached = await readOfflineCache<T>(key);
+    const cached = await readOfflineCache<T>(key, maxAgeMs);
     if (cached) return cached.data;
     throw error;
   }
