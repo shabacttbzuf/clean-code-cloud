@@ -392,6 +392,15 @@ function POSWorkspace() {
     enabled: !!tenantId,
     staleTime: 60_000,
   });
+  useEffect(() => {
+    for (const promo of posPromos.data ?? []) {
+      void (supabase.rpc as any)("record_marketing_campaign_event", {
+        _campaign_id: promo.id,
+        _event_type: "impression",
+      }).catch((error: unknown) => console.warn("POS campaign impression tracking failed", error));
+    }
+  }, [posPromos.data]);
+
 
   const inventory = useQuery({
     queryKey: ["pos-inventory", tenantId, branchId],
@@ -945,7 +954,7 @@ function POSWorkspace() {
                 <div className="relative z-[1] min-w-0"><div className="truncate text-xs font-bold">{promo.title}</div>{promo.description && <div className="truncate text-[10px] text-muted-foreground">{promo.description}</div>}</div>
               </div>
             );
-            return promo.target_url ? <a key={promo.id} href={promo.target_url} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1">{card}</a> : <div key={promo.id} className="min-w-0 flex-1">{card}</div>;
+            return promo.target_url ? <a key={promo.id} href={promo.target_url} target="_blank" rel="noopener noreferrer" onClick={() => void (supabase.rpc as any)("record_marketing_campaign_event", { _campaign_id: promo.id, _event_type: "click" }).catch((error: unknown) => console.warn("POS campaign click tracking failed", error))} className="min-w-0 flex-1">{card}</a> : <div key={promo.id} className="min-w-0 flex-1">{card}</div>;
           })}
         </div>
       )}
