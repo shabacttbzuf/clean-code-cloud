@@ -64,6 +64,18 @@ function Dashboard() {
     enabled: !!user?.id,
     staleTime: 60_000,
   });
+  const branchQuery = useQuery({
+    queryKey: ["dashboard-active-branch-name", tenantId, membership?.branch_id],
+    queryFn: async () => {
+      if (!tenantId || !membership?.branch_id) return null;
+      const { data, error } = await supabase.from("branches").select("name")
+        .eq("tenant_id", tenantId).eq("id", membership.branch_id).maybeSingle();
+      if (error) throw error;
+      return data?.name ?? null;
+    },
+    enabled: !!tenantId && !!membership?.branch_id,
+    staleTime: 60_000,
+  });
   const displayName =
     profileQuery.data?.full_name?.trim() ||
     user?.user_metadata?.full_name?.trim() ||
@@ -480,12 +492,12 @@ function Dashboard() {
   return (
     <div className="space-y-6">
       <section className="relative isolate min-h-[205px] overflow-hidden rounded-2xl border border-[#d7e2f6] bg-[#102f5c] text-white shadow-[0_8px_24px_rgba(16,47,92,.16)] sm:min-h-[220px]" aria-labelledby="dashboard-welcome-title">
-        <img src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1800&q=85" alt="" className="absolute inset-0 h-full w-full object-cover opacity-75" />
+        <img src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=75" alt="" width="1200" height="420" loading="eager" fetchPriority="high" decoding="async" className="absolute inset-0 h-full w-full object-cover opacity-75" />
         <div className="absolute inset-0 bg-gradient-to-l from-[#061c3d]/95 via-[#0c2d59]/80 to-[#102f5c]/5" />
         <div className="absolute inset-x-0 bottom-0 h-2 bg-gradient-to-l from-[#f0b52f] via-[#d9a441] to-transparent" />
         <div className="relative z-[1] flex min-h-[205px] flex-col justify-center px-6 py-7 sm:min-h-[220px] sm:px-10">
           <div className="max-w-2xl">
-            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white/90"><Sparkles className="h-4 w-4 text-[#f4c24f]" /> {tenant?.name ?? "مساحة إدارة المطعم"}</div>
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white/90"><Sparkles className="h-4 w-4 text-[#f4c24f]" /> {tenant?.name ?? "مساحة إدارة المطعم"}{branchQuery.data ? <span className="text-white/70"> · {branchQuery.data}</span> : null}</div>
             <h1 id="dashboard-welcome-title" className="text-2xl font-extrabold tracking-tight sm:text-4xl">أهلاً بك في نظام إدارة <span className="text-[#f5bd36]">المطاعم</span></h1>
             <p className="mt-3 text-base font-medium text-white/90 sm:text-xl">إدارة أسهل.. عمل أكثر كفاءة</p>
             <p className="mt-1 text-xs text-white/70">مرحباً {displayName}</p>
@@ -502,13 +514,13 @@ function Dashboard() {
       {activeCampaign && (
         <section aria-label="الإعلانات والعروض المنشورة" aria-roledescription="عرض شرائح" className="space-y-2">
           <div className="relative overflow-hidden rounded-2xl border bg-card shadow-sm">
-            {activeCampaign.image_url && <img src={activeCampaign.image_url} alt="" className="absolute inset-0 h-full w-full object-cover opacity-25" />}
+            {activeCampaign.image_url && <img src={activeCampaign.image_url} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover opacity-25" />}
             <div className="relative flex min-h-36 items-center bg-gradient-to-l from-background/95 via-background/85 to-background/45 p-4 sm:min-h-44 sm:p-6">
               <div className="max-w-3xl space-y-2">
                 <div className="text-xs font-semibold text-primary">إعلان / مساحة ترويجية</div>
                 <h2 className="text-lg font-extrabold sm:text-2xl">{activeCampaign.title}</h2>
                 {activeCampaign.description && <p className="text-sm text-muted-foreground sm:text-base">{activeCampaign.description}</p>}
-                {safeCampaignTarget(activeCampaign.target_url) && <a href={safeCampaignTarget(activeCampaign.target_url)!} target="_blank" rel="noopener noreferrer" onClick={() => void (supabase.rpc as any)("record_marketing_campaign_event", { _campaign_id: activeCampaign.id, _event_type: "click" }).catch((error: unknown) => console.warn("Campaign click tracking failed", error))} className="inline-flex min-h-9 items-center rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90">عرض التفاصيل ←</a>}
+                {safeCampaignTarget(activeCampaign.target_url) && <a href={safeCampaignTarget(activeCampaign.target_url)!} target="_blank" rel="noopener noreferrer" onClick={() => { void (async () => { try { const { error } = await (supabase.rpc as any)("record_marketing_campaign_event", { _campaign_id: activeCampaign.id, _event_type: "click" }); if (error) console.warn("Campaign click tracking failed", error); } catch (error) { console.warn("Campaign click tracking failed", error); } })(); }} className="inline-flex min-h-9 items-center rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90">عرض التفاصيل ←</a>}
               </div>
             </div>
           </div>
