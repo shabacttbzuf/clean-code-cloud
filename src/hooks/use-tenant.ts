@@ -6,6 +6,8 @@ export type Membership = {
   tenant_id: string;
   role: "owner" | "manager" | "accountant" | "cashier" | "warehouse" | "waiter";
   branch_id: string | null;
+  company_id?: string | null;
+  custom_role_id?: string | null;
 };
 
 export type Tenant = {
@@ -21,7 +23,7 @@ async function fetchMemberships(userId: string): Promise<Membership[]> {
   return withOfflineFallback(`auth-memberships:v1:${userId}`, async () => {
     const { data, error } = await supabase
       .from("user_roles")
-      .select("tenant_id, role, branch_id")
+      .select("tenant_id, role, branch_id, company_id, custom_role_id")
       .eq("user_id", userId);
     if (error) throw error;
     return (data ?? []) as Membership[];
