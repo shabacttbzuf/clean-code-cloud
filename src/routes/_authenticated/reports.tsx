@@ -58,8 +58,25 @@ function ReportsPage() {
   });
   const [to, setTo] = useState(() => localDateKey(new Date()));
   const [groupBy, setGroupBy] = useState<"day" | "month" | "year">("day");
+  const [companyId, setCompanyId] = useState(membership?.company_id ?? "all");
   const [branchId, setBranchId] = useState("all");
-  const branchesQuery = useQuery({ queryKey: ["report-branches", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+  const companiesQuery = useQuery({
+    queryKey: ["report-companies", tenantId, userId, isSuperOwner, membership?.company_id],
+    queryFn: async () => {
+      if (!tenantId) return [];
+      let query = supabase.from("companies").select("id,name").eq("tenant_id", tenantId).order("name");
+      if (!isSuperOwner && membership?.company_id) query = query.eq("id", membership.company_id);
+      else if (!isSuperOwner) return [];
+      const { data, error } = await query;
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!tenantId,
+  });
+  useEffect(() => {
+    if (!isSuperOwner && membership?.company_id && companyId !== membership.company_id) setCompanyId(membership.company_id);
+  }, [isSuperOwner, membership?.company_id, companyId]);
+  const branchesQuery = useQuery({ queryKey: ["report-branches", tenantId, companyId, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
       if (!isSuperOwner && !membership?.branch_id && !membership?.company_id) return [];
       let query = supabase.from("branches").select("id,name").eq("tenant_id", tenantId!).order("name");
