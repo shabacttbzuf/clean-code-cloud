@@ -158,7 +158,7 @@ function saveDrafts(list: Draft[], storageKey: string) {
 }
 
 function POSWorkspace() {
-  const { tenantId, tenant, userId, membership, isAdmin, isSuperOwner } = useActiveTenant();
+  const { tenantId, tenant, userId, membership, role, isAdmin, isSuperOwner } = useActiveTenant();
   const qc = useQueryClient();
   const getPosAccessStatus = useServerFn(getMyPosAccessStatus);
   const verifyPosPasscode = useServerFn(verifyMyPosPasscode);
@@ -377,8 +377,8 @@ function POSWorkspace() {
         .limit(3);
       if (membership?.company_id) {
         query = query.or(`company_id.is.null,company_id.eq.${membership.company_id}`);
-      } else if (!isSuperOwner) {
-        // Do not expose company-specific campaigns to accounts without a company scope.
+      } else if (!isSuperOwner && !(role === "owner" && !membership?.company_id)) {
+        // Do not expose company-specific campaigns to branch-only or regular tenant members.
         query = query.is("company_id", null);
       }
       const { data, error } = await query;
