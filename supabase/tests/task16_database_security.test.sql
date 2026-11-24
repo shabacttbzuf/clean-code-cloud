@@ -77,9 +77,11 @@ SELECT ok(
 SELECT ok(
   EXISTS (SELECT 1 FROM pg_policies
     WHERE schemaname='public' AND tablename='marketing_campaigns'
-      AND permissive='RESTRICTIVE'
-      AND cmd IN ('INSERT','UPDATE','DELETE')),
-  'Marketing campaign writes retain restrictive scope enforcement'
+      AND cmd='SELECT' AND policyname='Tenant members read marketing campaigns')
+  AND EXISTS (SELECT 1 FROM pg_policies
+    WHERE schemaname='public' AND tablename='marketing_campaigns'
+      AND cmd='ALL' AND policyname='Tenant admins manage marketing campaigns'),
+  'Marketing campaigns retain their tenant-member read and tenant-admin management policies'
 );
 
 SELECT * FROM finish();
