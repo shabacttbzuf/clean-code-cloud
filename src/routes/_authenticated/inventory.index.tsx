@@ -54,9 +54,12 @@ function InventoryPage() {
   const [adjustReason, setAdjustReason] = useState("");
 
   const branches = useQuery({
-    queryKey: ["branches-all", tenantId],
+    queryKey: ["branches-all", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
-      const { data, error } = await supabase.from("branches").select("id, name").eq("tenant_id", tenantId!);
+      let query = supabase.from("branches").select("id, name").eq("tenant_id", tenantId!);
+      if (!isSuperOwner && membership?.branch_id) query = query.eq("id", membership.branch_id);
+      else if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
+      const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as Array<{ id: string; name: string }>;
     },
