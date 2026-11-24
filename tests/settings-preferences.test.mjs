@@ -19,7 +19,7 @@ test("branch and user administration remain in their dedicated modules", () => {
 
 test("personal preferences are namespaced per authenticated user and persisted locally", () => {
   assert.match(settings, /ras-settings-preferences-v1:\$\{userId \?\? "guest"\}/);
-  assert.match(settings, /localStorage\.getItem\(preferencesKey\)/);
+  assert.match(settings, /getUserSettingsPreferences\(userId\)/);
   assert.match(settings, /localStorage\.setItem\(preferencesKey, JSON\.stringify\(preferences\)\)/);
   assert.match(settings, /notifyLowStock/);
   assert.match(settings, /notifyDelayedOrders/);
