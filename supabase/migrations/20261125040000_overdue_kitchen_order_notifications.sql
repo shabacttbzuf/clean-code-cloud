@@ -27,9 +27,18 @@ BEGIN
     LEFT JOIN public.sales s
       ON s.id = ko.sale_id
      AND s.tenant_id = ko.tenant_id
-    WHERE ko.status IN ('new', 'preparing')
-      AND ko.created_at <= now() - interval '30 minutes'
+    WHERE ko.created_at <= now() - interval '30 minutes'
       AND b.company_id IS NOT NULL
+      -- Use the event timeline, not only the current status: an order that became
+      -- ready after minute 30 is still delayed and must not lose its alert.
+      -- Cancellation before the deadline ends the preparation SLA without an alert.
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.kitchen_order_events e
+        WHERE e.kitchen_order_id = ko.id
+          AND e.new_status IN ('ready', 'cancelled')
+          AND e.created_at <= ko.created_at + interval '30 minutes'
+      )
       AND NOT EXISTS (
         SELECT 1
         FROM public.notifications n
