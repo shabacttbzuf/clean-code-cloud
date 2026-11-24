@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
@@ -52,7 +52,21 @@ function Page() {
   const [categoryId, setCategoryId] = useState<string>("none");
   const [branchId, setBranchId] = useState<string>("none");
   const [description, setDescription] = useState("");
-  const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10));
+  const defaultPaidAt = new Date().toISOString().slice(0, 10);
+  const [paidAt, setPaidAt] = useState(defaultPaidAt);
+
+  useEffect(() => {
+    const dirty = open && (
+      amount.trim() !== "" || categoryId !== "none" || branchId !== "none" ||
+      description.trim() !== "" || paidAt !== defaultPaidAt
+    );
+    window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/expenses", dirty },
+    }));
+    return () => window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/expenses", dirty: false },
+    }));
+  }, [open, amount, categoryId, branchId, description, paidAt, defaultPaidAt]);
 
   const create = useMutation({
     mutationFn: async () => {
