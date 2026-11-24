@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { useAuthSession } from "@/hooks/use-auth-session";
@@ -111,7 +111,7 @@ export function WorkspaceFormStateKeeper() {
   const { user } = useAuthSession();
   const scope = tenantId && user?.id ? `${STORAGE_PREFIX}:${user.id}:${tenantId}` : null;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!scope || !pathname) return;
     const storageKey = `${scope}:${pathname}`;
     const root = document.querySelector("main") ?? document.body;
