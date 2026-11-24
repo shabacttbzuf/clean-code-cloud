@@ -137,7 +137,7 @@ function ReportsPage() {
             .select("cashier_id, opening_balance, closing_balance, expected_cash, cash_difference, opened_at, closed_at, status, branch_id")
             .eq("tenant_id", tenantId).gte("opened_at", fromDate).lte("opened_at", toDate);
           if (branchId !== "all") query = query.eq("branch_id", branchId);
-          else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
+          else if (!isSuperOwner || companyId !== "all") query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.range(pageFrom, pageTo);
         }) : Promise.resolve([]),
         canViewInventory ? fetchAllRows((pageFrom, pageTo) => {
