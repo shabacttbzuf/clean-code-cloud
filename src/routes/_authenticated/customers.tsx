@@ -218,6 +218,11 @@ function CustomerAccount({ customer, tenantId }: { customer: Customer; tenantId:
   const [cashSessionId, setCashSessionId] = useState("");
   const [paymentKey, setPaymentKey] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  useEffect(() => {
+    const dirty = amount.trim() !== "" || method !== "cash" || !!reference.trim() || !!cashSessionId;
+    window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/customers", dirty } }));
+    return () => window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/customers", dirty: false } }));
+  }, [amount, method, reference, cashSessionId]);
   const selectedSale = invoices.data?.find((sale: any) => sale.id === saleId);
   const sessions = useQuery({
     queryKey: ["customer-open-cash-sessions", tenantId, selectedSale?.branch_id],
