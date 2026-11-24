@@ -196,8 +196,11 @@ function ReportsPage() {
           let query = (supabase as any).from("promotion_redemptions")
             .select("promotion_id, discount_amount, branch_id, created_at, company_id")
             .eq("tenant_id", tenantId).gte("created_at", fromDate).lte("created_at", toDate);
+          if (companyId !== "all") query = query.eq("company_id", companyId);
+          else if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
+          else if (!isSuperOwner) return [];
           if (branchId !== "all") query = query.eq("branch_id", branchId);
-          else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
+          else if (!isSuperOwner || companyId !== "all") query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.range(pageFrom, pageTo);
         }) : Promise.resolve([]),
         canViewSalesReports ? fetchAllRows((pageFrom, pageTo) => {
@@ -272,7 +275,7 @@ function ReportsPage() {
             .eq("tenant_id", tenantId)
             .gte("created_at", previousFrom).lte("created_at", previousTo);
           if (branchId !== "all") query = query.eq("branch_id", branchId);
-          else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
+          else if (!isSuperOwner || companyId !== "all") query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.range(pageFrom, pageTo);
         }) : Promise.resolve([]),
       ]);
@@ -649,7 +652,7 @@ function ReportsPage() {
         {canManagePromotions && <Kpi icon={<FileText className="h-5 w-5" />} label="العروض والاستردادات" value={promotionTotals.offers + " عرض · " + promotionTotals.redemptions + " استخدام" + (canViewFinancialReports ? " · خصومات " + formatMoney(promotionTotals.discount) : "")} tone="primary" />}
       </div>
 
-      <Card>
+      {canViewSalesReports && <Card>
         <CardContent className="p-4">
           <h3 className="mb-3 font-semibold">مقارنة أداء الفروع</h3>
           {branchStats.length ? <div className="overflow-x-auto"><table className="w-full text-sm">
@@ -657,7 +660,7 @@ function ReportsPage() {
             <tbody>{branchStats.map((branch) => <tr key={branch.id} className="border-t"><td className="p-2 font-medium">{branch.name}</td><td className="p-2 num">{branch.invoices}</td><td className="p-2 num font-semibold">{formatMoney(branch.revenue)}</td></tr>)}</tbody>
           </table></div> : <p className="text-sm text-muted-foreground">لا توجد بيانات فروع في الفترة المحددة.</p>}
         </CardContent>
-      </Card>
+      </Card>}
 
       <Tabs defaultValue={canViewSalesReports ? "sales" : canViewEmployees || canViewAttendance ? "staff" : "inventory"}>
         <TabsList className="grid w-full grid-cols-4 sm:w-auto sm:inline-grid">
