@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: ["main", "feature/**", "feat/**"]
+    branches: ["main", "feature/**", "feat/**", "work/uiux-03-tabs"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "work/ui-ux-1.0-complete"]
   workflow_dispatch:
 
 concurrency:
