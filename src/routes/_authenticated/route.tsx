@@ -24,6 +24,7 @@ import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { useSuperOwner } from "@/hooks/use-super-owner";
 import { safeInternalNotificationPath } from "@/lib/notification-links";
 import { resolveAvatarUrl } from "@/lib/storage";
+import { OFFLINE_AUTH_CACHE_MAX_AGE_MS, withOfflineFallback } from "@/lib/offline-reference-cache";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -149,10 +150,17 @@ function PermissionRouteGuard() {
   const permissionsQuery = useQuery({
     queryKey: ["route-effective-permissions", tenantId, userId],
     queryFn: async () => {
-      if (!tenantId) return new Set<string>();
-      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId });
-      if (error) throw error;
-      return new Set<string>((data ?? []) as string[]);
+      if (!tenantId || !userId) return new Set<string>();
+      const permissions = await withOfflineFallback(
+        `auth-route-permissions:v1:${userId}:${tenantId}`,
+        async () => {
+          const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId });
+          if (error) throw error;
+          return (data ?? []) as string[];
+        },
+        OFFLINE_AUTH_CACHE_MAX_AGE_MS,
+      );
+      return new Set<string>(permissions);
     },
     enabled: !!tenantId && !!userId && !isSuperOwner && !!requiredPermission && !ownerOnly,
     staleTime: 15_000,
