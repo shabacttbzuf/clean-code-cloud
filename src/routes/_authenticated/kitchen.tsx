@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, ChefHat, RefreshCw, Clock3, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
+import { enqueueOfflineOperation } from "@/lib/offline-sync";
+import "@/lib/offline-handlers";
 
 export const Route = createFileRoute("/_authenticated/kitchen")({ component: KitchenPage });
 
@@ -34,7 +36,7 @@ const statusLabel: Record<KitchenOrder["status"], string> = {
 };
 
 function KitchenPage() {
-  const { tenantId, membership, hasPermission } = useActiveTenant();
+  const { tenantId, userId, membership, hasPermission } = useActiveTenant();
   const canManage = hasPermission("kitchen.manage");
   const qc = useQueryClient();
   const [branchId, setBranchId] = useState<string>(membership?.branch_id ?? "");
@@ -110,16 +112,35 @@ function KitchenPage() {
 
   const statusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: "preparing" | "ready" | "delivered" }) => {
-      const { error } = await (supabase.rpc as any)("set_kitchen_order_status", {
+      if (!tenantId || !userId || !branchId) throw new Error("تعذر تحديد المستخدم أو المؤسسة أو الفرع.");
+      if (!canManage) throw new Error("لا تملك صلاحية إدارة طلبات المطبخ.");
+      if (!navigator.onLine) {
+        await enqueueOfflineOperation(
+          "kitchen_status",
+          { orderId: id, status, notes: null, tenantId, branchId },
+          {
+            userId,
+            tenantId,
+            branchId,
+            companyId: membership?.company_id ?? null,
+          },
+        );
+        return { queued: true };
+      }
+      const { error } = await (supabase.rpc as any)("set_kitchen_order_status_idempotent", {
         _order_id: id,
         _new_status: status,
         _notes: null,
+        _idempotency_key: crypto.randomUUID(),
       });
       if (error) throw error;
+      return { queued: false };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       void qc.invalidateQueries({ queryKey: ["kitchen-queue", tenantId] });
-      toast.success("تم تحديث حالة الطلب");
+      toast.success(result.queued
+        ? "حُفظ تحديث الطلب محلياً وسيُزامن تلقائياً عند عودة الإنترنت"
+        : "تم تحديث حالة الطلب");
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر تحديث الطلب"),
   });
