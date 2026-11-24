@@ -1051,18 +1051,20 @@ function POSWorkspace() {
               <div className="grid min-h-0 flex-1 content-start grid-cols-2 gap-2 overflow-y-auto p-1 sm:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4">
                 {filteredProducts.map((product) => {
                   const available = stockByProduct.get(product.id);
-                  const stockUnavailable = inventory.isLoading || inventory.isError || available === undefined || available <= 0;
-                  const stockLabel = inventory.isLoading
-                    ? "جاري التحقق"
-                    : inventory.isError
-                      ? "تعذر المخزون"
-                      : available === undefined
-                        ? "غير مسجل"
-                        : available < 0
-                          ? `رصيد سالب: ${available}`
-                          : available === 0
-                            ? "نفد المخزون"
-                            : `متاح: ${available}`;
+                  const stockUnavailable = isOnline && (inventory.isLoading || inventory.isError || available === undefined || available <= 0);
+                  const stockLabel = !isOnline
+                    ? "مسودة محلية — المخزون غير مؤكد"
+                    : inventory.isLoading
+                      ? "جاري التحقق"
+                      : inventory.isError
+                        ? "تعذر المخزون"
+                        : available === undefined
+                          ? "غير مسجل"
+                          : available < 0
+                            ? `رصيد سالب: ${available}`
+                            : available === 0
+                              ? "نفد المخزون"
+                              : `متاح: ${available}`;
                   return (
                     <button key={product.id} type="button" onClick={() => addToCart(product)}
                       disabled={stockUnavailable || checkoutMut.isPending}
@@ -1109,7 +1111,7 @@ function POSWorkspace() {
                       <td className="p-1.5 text-center"><div className="inline-flex items-center gap-0.5">
                         <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => dec(item.product_id)} disabled={checkoutMut.isPending}><Minus className="h-3 w-3" /></Button>
                         <span className="min-w-6 text-center font-semibold num">{item.quantity}</span>
-                        <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => inc(item.product_id)} disabled={checkoutMut.isPending || inventory.isLoading || inventory.isError || (stockByProduct.get(item.product_id) ?? 0) <= item.quantity}><Plus className="h-3 w-3" /></Button>
+                        <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => inc(item.product_id)} disabled={checkoutMut.isPending || (isOnline && (inventory.isLoading || inventory.isError || (stockByProduct.get(item.product_id) ?? 0) <= item.quantity))}><Plus className="h-3 w-3" /></Button>
                       </div></td>
                       <td className="p-1.5 text-center font-bold num">{formatMoney(item.unit_price * item.quantity)}</td>
                       <td className="p-1.5 text-center"><Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" aria-label="حذف الصنف" onClick={() => remove(item.product_id)} disabled={checkoutMut.isPending}><Trash2 className="h-3.5 w-3.5" /></Button></td>
