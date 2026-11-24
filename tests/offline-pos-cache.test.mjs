@@ -54,6 +54,12 @@ test("offline POS is draft-only and blocks all sale submission", () => {
   assert.match(pos, /if \(!openSession\.data && \(isOnline \|\| !unlocked\)\)/);
 });
 
+test("first service worker activation reloads once to cache the app shell", () => {
+  assert.match(root, /restaurant-pwa-first-control-reload-v1/);
+  assert.match(root, /navigator\.serviceWorker\.ready/);
+  assert.match(root, /window\.location\.reload\(\)/);
+});
+
 test("private reference cache is cleared when the user signs out", () => {
   assert.match(root, /if \(event === "SIGNED_OUT"\) void clearOfflineCache\(\)/);
 });
