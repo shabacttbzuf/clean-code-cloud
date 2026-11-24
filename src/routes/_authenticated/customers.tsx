@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
@@ -120,7 +120,7 @@ function CustomersPage() {
         action={isAdmin && (
           <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditing(null); }}>
             <DialogTrigger asChild><Button><Plus className="ml-2 h-4 w-4" />عميل جديد</Button></DialogTrigger>
-            <CustomerDialog initial={editing} tenantId={tenantId!} onSubmit={(v) => upsert.mutate(v)} pending={upsert.isPending} />
+            <CustomerDialog key={`${open}-${editing?.id ?? "new"}`} open={open} initial={editing} tenantId={tenantId!} onSubmit={(v) => upsert.mutate(v)} pending={upsert.isPending} />
           </Dialog>
         )}
       />
@@ -319,8 +319,8 @@ function CustomerAccount({ customer, tenantId }: { customer: Customer; tenantId:
   </div>;
 }
 
-function CustomerDialog({ initial, tenantId, onSubmit, pending }: {
-  initial: Customer | null; tenantId: string;
+function CustomerDialog({ open, initial, tenantId, onSubmit, pending }: {
+  open: boolean; initial: Customer | null; tenantId: string;
   onSubmit: (v: z.infer<typeof schema>) => void; pending: boolean;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
@@ -331,6 +331,17 @@ function CustomerDialog({ initial, tenantId, onSubmit, pending }: {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(initial?.avatar_url ?? null);
   const [active, setActive] = useState(initial?.is_active ?? true);
   const [creditLimit, setCreditLimit] = useState(String(initial?.credit_limit ?? 0));
+
+  useEffect(() => {
+    const dirty = open && (
+      name !== (initial?.name ?? "") || phone !== (initial?.phone ?? "") ||
+      email !== (initial?.email ?? "") || address !== (initial?.address ?? "") ||
+      notes !== (initial?.notes ?? "") || avatarUrl !== (initial?.avatar_url ?? null) ||
+      active !== (initial?.is_active ?? true) || creditLimit !== String(initial?.credit_limit ?? 0)
+    );
+    window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/customers", dirty } }));
+    return () => window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/customers", dirty: false } }));
+  }, [open, initial, name, phone, email, address, notes, avatarUrl, active, creditLimit]);
 
   return (
     <DialogContent className="max-h-[90vh] overflow-y-auto">
