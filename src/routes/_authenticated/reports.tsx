@@ -111,7 +111,7 @@ function ReportsPage() {
       const fromDate = localStart.toISOString();
       const toDate = localEnd.toISOString();
 
-      const [sales, expenses, items, sessions, inventory, purchases, employees, campaigns, campaignEvents, promotions, redemptions, refunds] = await Promise.all([
+      const [sales, expenses, sessions, inventory, purchases, employees, campaigns, campaignEvents, promotions, redemptions, refunds] = await Promise.all([
         canViewSalesReports ? fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("sales")
             .select("id, created_at, total, subtotal, discount, tax_amount, payment_method, cashier_id, branch_id, status")
@@ -129,7 +129,6 @@ function ReportsPage() {
           else if (!isSuperOwner || companyId !== "all") query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.order("paid_at", { ascending: false }).range(pageFrom, pageTo);
         }) : Promise.resolve([]),
-        Promise.resolve([]),
         canViewCash ? fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("cash_sessions")
             .select("cashier_id, opening_balance, closing_balance, expected_cash, cash_difference, opened_at, closed_at, status, branch_id")
