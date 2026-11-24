@@ -38,8 +38,10 @@ function ReportsPage() {
     enabled: !!tenantId && !!userId,
     staleTime: 15_000,
   });
-  const canExportReports = permissionsQuery.data?.has("reports.export") === true;
-  const canFilterReports = permissionsQuery.data?.has("reports.filter") === true;
+  const canViewReports = isSuperOwner || permissionsQuery.data?.has("reports.view") === true;
+  const canViewFinancialReports = isSuperOwner || permissionsQuery.data?.has("reports.financial.view") === true || permissionsQuery.data?.has("finance.reports.view") === true || permissionsQuery.data?.has("reports.profits.view") === true;
+  const canExportReports = isSuperOwner || permissionsQuery.data?.has("reports.export") === true;
+  const canFilterReports = isSuperOwner || permissionsQuery.data?.has("reports.filter") === true;
   const [from, setFrom] = useState(() => {
     const d = new Date();
     d.setMonth(d.getMonth() - 1);
@@ -68,6 +70,7 @@ function ReportsPage() {
     queryKey: ["reports", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner, from, to, branchId],
     queryFn: async () => {
       if (!tenantId) return null;
+      if (!canViewReports) throw new Error("ليس لديك صلاحية عرض التقارير.");
       if (!from || !to) throw new Error("حدد تاريخ البداية والنهاية للتقرير.");
       if (from > to) throw new Error("تاريخ البداية يجب أن يسبق تاريخ النهاية أو يساويه.");
       // Interpret date inputs as local calendar days, then convert boundaries for timestamptz queries.
@@ -198,7 +201,7 @@ function ReportsPage() {
         previousPeriod,
       };
     },
-    enabled: !!tenantId,
+    enabled: !!tenantId && !permissionsQuery.isLoading && canViewReports,
     staleTime: 60_000,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
@@ -354,6 +357,14 @@ function ReportsPage() {
     return Array.from(map.values()).sort((a, b) => b.sales - a.sales);
   }, [safe.sales, safe.refunds]);
 
+  if (permissionsQuery.isLoading || (isSuperOwner === false && !permissionsQuery.data)) {
+    return <div className="space-y-6"><PageHeader title="التقارير" subtitle="جارٍ التحقق من صلاحيات الوصول..." /><div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div></div>;
+  }
+
+  if (!canViewReports) {
+    return <div className="space-y-6"><PageHeader title="التقارير" subtitle="الوصول إلى التقارير محمي بالصلاحيات." /><Card><CardContent className="p-6 text-center text-sm text-muted-foreground" role="alert">ليس لديك صلاحية عرض التقارير. تواصل مع مسؤول الشركة لمنحك الصلاحية المناسبة.</CardContent></Card></div>;
+  }
+
   if (report.isError) {
     return (
       <div className="space-y-6">
@@ -444,9 +455,9 @@ function ReportsPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
         <Kpi icon={<TrendingUp className="h-5 w-5" />} label="المبيعات بعد المرتجعات" value={`${formatMoney(totals.salesTotal)} ${tenant?.currency ?? ""}`} tone="primary" />
         <Kpi icon={<Wallet className="h-5 w-5" />} label="المصروفات" value={`${formatMoney(totals.expensesTotal)} ${tenant?.currency ?? ""}`} tone="destructive" />
-        <Kpi icon={<Package className="h-5 w-5" />} label="تكلفة البضاعة" value={profitMetrics.costOfGoods === null ? "غير مكتملة" : `${formatMoney(profitMetrics.costOfGoods)} ${tenant?.currency ?? ""}`} tone="primary" />
-        <Kpi icon={<FileText className="h-5 w-5" />} label="مجمل الربح" value={profitMetrics.grossProfit === null ? "غير متاح" : `${formatMoney(profitMetrics.grossProfit)} ${tenant?.currency ?? ""}`} tone={profitMetrics.grossProfit !== null && profitMetrics.grossProfit >= 0 ? "success" : "destructive"} />
-        <Kpi icon={<Wallet className="h-5 w-5" />} label="صافي الربح التشغيلي" value={profitMetrics.netProfit === null ? "غير متاح" : `${formatMoney(profitMetrics.netProfit)} ${tenant?.currency ?? ""}`} tone={profitMetrics.netProfit !== null && profitMetrics.netProfit >= 0 ? "success" : "destructive"} />
+        {canViewFinancialReports && <Kpi icon={<Package className="h-5 w-5" />} label="تكلفة البضاعة" value={profitMetrics.costOfGoods === null ? "غير مكتملة" : `${formatMoney(profitMetrics.costOfGoods)} ${tenant?.currency ?? ""}`} tone="primary" />}
+        {canViewFinancialReports && <Kpi icon={<FileText className="h-5 w-5" />} label="مجمل الربح" value={profitMetrics.grossProfit === null ? "غير متاح" : `${formatMoney(profitMetrics.grossProfit)} ${tenant?.currency ?? ""}`} tone={profitMetrics.grossProfit !== null && profitMetrics.grossProfit >= 0 ? "success" : "destructive"} />}
+        {canViewFinancialReports && <Kpi icon={<Wallet className="h-5 w-5" />} label="صافي الربح التشغيلي" value={profitMetrics.netProfit === null ? "غير متاح" : `${formatMoney(profitMetrics.netProfit)} ${tenant?.currency ?? ""}`} tone={profitMetrics.netProfit !== null && profitMetrics.netProfit >= 0 ? "success" : "destructive"} />}
         <Kpi icon={<Users className="h-5 w-5" />} label="عدد الفواتير" value={String(safe.sales.length)} tone="primary" />
       </div>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border bg-card px-4 py-3 text-xs">
@@ -463,7 +474,7 @@ function ReportsPage() {
           </span>
         ))}
       </div>
-      {profitMetrics.unknownCostItems > 0 && (
+      {canViewFinancialReports && profitMetrics.unknownCostItems > 0 && (
         <div role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-800 dark:text-amber-300">
           لا يمكن اعتماد الربحية بدقة: توجد {profitMetrics.unknownCostItems} بنود بيع أو مرتجعات مستردة بلا تكلفة محفوظة وقت البيع. لم يتم تقديرها من سعر المنتج الحالي.
         </div>
