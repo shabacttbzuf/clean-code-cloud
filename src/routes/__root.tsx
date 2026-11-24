@@ -14,6 +14,7 @@ import "../lib/fonts";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ThemeProvider } from "@/lib/theme";
 import { Toaster } from "@/components/ui/sonner";
+import { OfflineIndicator } from "@/components/offline-indicator";
 import { supabase } from "@/integrations/supabase/client";
 
 function NotFoundComponent() {
@@ -109,6 +110,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { name: "theme-color", content: "#102b4e" },
     ],
   }),
   shellComponent: RootShell,
@@ -135,6 +138,14 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
 
+  // Register same-origin offline support. Personalized HTML and backend data are never cached.
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    void navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch((error) => {
+      console.warn("Offline support could not be initialized:", error);
+    });
+  }, []);
+
   // Global auth listener: refetch on session identity changes
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
@@ -155,6 +166,7 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
+        <OfflineIndicator />
         <Outlet />
         <Toaster position="top-center" richColors />
       </ThemeProvider>
