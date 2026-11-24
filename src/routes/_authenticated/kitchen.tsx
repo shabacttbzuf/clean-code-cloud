@@ -34,16 +34,17 @@ const statusLabel: Record<KitchenOrder["status"], string> = {
 };
 
 function KitchenPage() {
-  const { tenantId, membership, hasPermission } = useActiveTenant();
+  const { tenantId, membership, isSuperOwner, hasPermission } = useActiveTenant();
   const canManage = hasPermission("kitchen.manage");
   const qc = useQueryClient();
   const [branchId, setBranchId] = useState<string>(membership?.branch_id ?? "");
 
   const branches = useQuery({
-    queryKey: ["kitchen-branches", tenantId, membership?.branch_id],
+    queryKey: ["kitchen-branches", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
       let query = supabase.from("branches").select("id,name").eq("tenant_id", tenantId!).eq("is_active", true).order("name");
-      if (membership?.branch_id) query = query.eq("id", membership.branch_id);
+      if (!isSuperOwner && membership?.branch_id) query = query.eq("id", membership.branch_id);
+      else if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
       const { data, error } = await query;
       if (error) throw error;
       return data ?? [];
@@ -52,6 +53,10 @@ function KitchenPage() {
   });
 
   useEffect(() => {
+    if (branchId && branches.data && !branches.data.some((branch) => branch.id === branchId)) {
+      setBranchId(branches.data[0]?.id ?? "");
+      return;
+    }
     if (!branchId && branches.data?.length) setBranchId(branches.data[0].id);
   }, [branchId, branches.data]);
 
