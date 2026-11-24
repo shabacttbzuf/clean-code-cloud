@@ -38,7 +38,7 @@ test("sync preserves dependency order, isolates active tenant/branch/company and
   assert.match(source, /row\.scope\.tenantId === scope\.tenantId/);
   assert.match(source, /row\.scope\.branchId === scope\.branchId/);
   assert.match(source, /row\.scope\.companyId === scope\.companyId/);
-  assert.match(source, /operation\.status = "conflict"/);
+  assert.match(source, /operation\.status = \/conflict\|version\|stale\|تعارض\/i\.test\(message\)/);
   assert.match(source, /operation\.status = "failed"/);
   assert.match(source, /nextRetryAt/);
 });
