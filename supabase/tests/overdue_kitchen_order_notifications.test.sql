@@ -32,7 +32,7 @@ SELECT ok(
 CREATE FUNCTION pg_temp.has_overdue_kitchen_scheduler()
 RETURNS boolean
 LANGUAGE plpgsql
-AS $
+AS $function$
 DECLARE
   v_exists boolean := false;
 BEGIN
@@ -46,7 +46,7 @@ BEGIN
           '%private.emit_overdue_kitchen_order_notifications%';
   RETURN v_exists;
 END;
-$;
+$function$;
 
 SELECT ok(
   pg_temp.has_overdue_kitchen_scheduler(),
