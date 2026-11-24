@@ -92,10 +92,10 @@ function Dashboard() {
       }
       const { data, error } = await query;
       if (error) throw error;
-      const now = Date.now();
+      const nowMs = Date.now();
       return (data ?? []).filter((campaign) =>
-        (!campaign.starts_at || new Date(campaign.starts_at).getTime() <= now) &&
-        (!campaign.ends_at || new Date(campaign.ends_at).getTime() > now)
+        (!campaign.starts_at || new Date(campaign.starts_at).getTime() <= nowMs) &&
+        (!campaign.ends_at || new Date(campaign.ends_at).getTime() > nowMs)
       );
     },
     enabled: !!tenantId,
