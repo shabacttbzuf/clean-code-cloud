@@ -171,6 +171,7 @@ function POSWorkspace() {
         void qc.invalidateQueries({ queryKey: ["categories-min", tenantId] });
         void qc.invalidateQueries({ queryKey: ["branches-active", tenantId] });
         void qc.invalidateQueries({ queryKey: ["pos-inventory", tenantId] });
+        void qc.invalidateQueries({ queryKey: ["open-session"] });
       }
     };
     updateConnection();
@@ -907,7 +908,7 @@ function POSWorkspace() {
     );
   }
 
-  if (!openSession.data) {
+  if (!openSession.data && (isOnline || !unlocked)) {
     return (
       <div className="space-y-4">
         <PageHeader title="نقطة البيع" subtitle="افتح وردية للبدء بالبيع" />
