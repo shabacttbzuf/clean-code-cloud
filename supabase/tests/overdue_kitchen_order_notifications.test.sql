@@ -23,9 +23,11 @@ SELECT ok(
   pg_get_functiondef('private.emit_overdue_kitchen_order_notifications()'::regprocedure)
     LIKE '%30 minutes%'
   AND pg_get_functiondef('private.emit_overdue_kitchen_order_notifications()'::regprocedure)
-    LIKE '%new%'
+    LIKE '%kitchen_order_events%'
   AND pg_get_functiondef('private.emit_overdue_kitchen_order_notifications()'::regprocedure)
-    LIKE '%preparing%',
+    LIKE '%ready%'
+  AND pg_get_functiondef('private.emit_overdue_kitchen_order_notifications()'::regprocedure)
+    LIKE '%cancelled%',
   'Delayed alerts use the approved 30-minute window and only unfinished kitchen states'
 );
 
