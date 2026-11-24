@@ -146,6 +146,7 @@ export function WorkspaceFormStateKeeper() {
     };
     const markDirty = () => {
       if (restoring || !restored) return;
+      discardCurrent = false;
       save();
       window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: pathname, dirty: true } }));
     };
@@ -160,6 +161,7 @@ export function WorkspaceFormStateKeeper() {
       const detail = (event as CustomEvent<{ path?: string }>).detail;
       if (detail?.path !== pathname) return;
       try { sessionStorage.removeItem(storageKey); } catch { /* optional */ }
+      discardCurrent = true;
       window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: pathname, dirty: false } }));
     };
 
