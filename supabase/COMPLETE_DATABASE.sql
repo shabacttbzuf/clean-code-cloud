@@ -14941,8 +14941,11 @@ BEGIN
   IF v_subtotal<=0 OR v_eligible_subtotal<=0 THEN
     RAISE EXCEPTION 'Promotion does not apply to the current cart' USING ERRCODE='22023';
   END IF;
-  IF v_eligible_subtotal < v_offer.minimum_subtotal THEN
-    RAISE EXCEPTION 'Eligible items do not meet the promotion minimum subtotal' USING ERRCODE='22023';
+  IF v_subtotal < v_offer.minimum_subtotal THEN
+    RAISE EXCEPTION 'Cart does not meet the promotion minimum subtotal' USING ERRCODE='22023';
+  END IF;
+  IF coalesce(_discount,0)<0 OR coalesce(_discount,0)>v_subtotal THEN
+    RAISE EXCEPTION 'Manual discount is outside the cart subtotal' USING ERRCODE='22023';
   END IF;
 
   IF v_offer.offer_type='percentage' THEN
@@ -14974,6 +14977,8 @@ BEGIN
   IF v_offer.max_discount IS NOT NULL THEN
     v_promo_discount := least(v_promo_discount, v_offer.max_discount);
   END IF;
+  -- Manual and promotional discounts are separate; cap the promotion to the remaining balance.
+  v_promo_discount := least(v_promo_discount, greatest(0, v_subtotal - coalesce(_discount,0)));
   v_total_discount := coalesce(_discount,0) + v_promo_discount;
   IF v_promo_discount<=0 OR v_total_discount>v_subtotal THEN
     RAISE EXCEPTION 'Promotion discount is invalid for this cart' USING ERRCODE='22023';
