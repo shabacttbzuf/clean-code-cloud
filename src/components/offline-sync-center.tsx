@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Cloud, CloudOff, RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
+import "@/lib/offline-handlers";
 import {
   getLastOfflineSyncAt,
   listOfflineOperations,
