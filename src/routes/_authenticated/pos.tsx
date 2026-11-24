@@ -31,7 +31,7 @@ import { formatMoney } from "@/lib/format";
 import { printInvoiceHTML, type InvoiceData } from "@/lib/invoice-pdf";
 import { PageHeader } from "@/components/page-header";
 import { getMyPosAccessStatus, verifyMyPosPasscode } from "@/lib/pos-access.functions";
-import { offlineCacheKey, withOfflineFallback } from "@/lib/offline-reference-cache";
+import { offlineCacheKey, withOfflineFallback, OFFLINE_INVENTORY_CACHE_MAX_AGE_MS } from "@/lib/offline-reference-cache";
 
 export const Route = createFileRoute("/_authenticated/pos")({
   component: POSPage,
@@ -442,16 +442,20 @@ function POSWorkspace() {
 
 
   const inventory = useQuery({
-    queryKey: ["pos-inventory", tenantId, branchId],
-    queryFn: async () => {
-      return fetchAllRows<{ product_id: string; quantity: number }>(
-        supabase.from("inventory")
-          .select("product_id, quantity")
-          .eq("tenant_id", tenantId!)
-          .eq("branch_id", branchId!)
-          .order("product_id"),
-      );
-    },
+    queryKey: ["pos-inventory", tenantId, userId, membership?.company_id, branchId],
+    queryFn: async () =>
+      withOfflineFallback(
+        offlineCacheKey({ ...offlineScope, branchId }, "pos-inventory"),
+        () =>
+          fetchAllRows<{ product_id: string; quantity: number }>(
+            supabase.from("inventory")
+              .select("product_id, quantity")
+              .eq("tenant_id", tenantId!)
+              .eq("branch_id", branchId!)
+              .order("product_id"),
+          ),
+        OFFLINE_INVENTORY_CACHE_MAX_AGE_MS,
+      ),
     enabled: !!tenantId && !!branchId,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
