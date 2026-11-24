@@ -336,6 +336,21 @@ function ReportsPage() {
     total: safe.campaigns.length,
     active: safe.campaigns.filter((row: any) => row.status === "active").length,
   }), [safe.campaigns]);
+  const branchStats = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; invoices: number; revenue: number }>();
+    const names = new Map((branchesQuery.data ?? []).map((branch) => [branch.id, branch.name]));
+    for (const sale of safe.sales) {
+      const row = map.get(sale.branch_id) ?? { id: sale.branch_id, name: names.get(sale.branch_id) ?? "فرع غير محدد", invoices: 0, revenue: 0 };
+      row.invoices += 1;
+      row.revenue += Number(sale.total ?? 0);
+      map.set(sale.branch_id, row);
+    }
+    for (const refund of safe.refunds) {
+      const row = map.get(refund.branch_id);
+      if (row) row.revenue -= Number(refund.total ?? 0);
+    }
+    return [...map.values()].sort((a, b) => b.revenue - a.revenue);
+  }, [safe.sales, safe.refunds, branchesQuery.data]);
 
   const comparison = {
     sales: calculatePercentChange(totals.salesTotal, data?.previousPeriod.salesTotal ?? 0),
@@ -549,6 +564,16 @@ function ReportsPage() {
         <Kpi icon={<FileText className="h-5 w-5" />} label="الحملات الإعلانية" value={campaignTotals.active + " نشطة من " + campaignTotals.total} tone="primary" />
       </div>
 
+      <Card>
+        <CardContent className="p-4">
+          <h3 className="mb-3 font-semibold">مقارنة أداء الفروع</h3>
+          {branchStats.length ? <div className="overflow-x-auto"><table className="w-full text-sm">
+            <thead className="bg-muted/50 text-right"><tr><th className="p-2">الفرع</th><th className="p-2">الفواتير</th><th className="p-2">المبيعات بعد المرتجعات</th></tr></thead>
+            <tbody>{branchStats.map((branch) => <tr key={branch.id} className="border-t"><td className="p-2 font-medium">{branch.name}</td><td className="p-2 num">{branch.invoices}</td><td className="p-2 num font-semibold">{formatMoney(branch.revenue)}</td></tr>)}</tbody>
+          </table></div> : <p className="text-sm text-muted-foreground">لا توجد بيانات فروع في الفترة المحددة.</p>}
+        </CardContent>
+      </Card>
+
       <Tabs defaultValue="sales">
         <TabsList className="grid w-full grid-cols-4 sm:w-auto sm:inline-grid">
           <TabsTrigger value="sales">المبيعات</TabsTrigger>
@@ -642,7 +667,7 @@ function ReportsPage() {
                       <th className="p-3 font-medium">#</th>
                       <th className="p-3 font-medium">المنتج</th>
                       <th className="p-3 font-medium">الكمية المباعة</th>
-                      <th className="p-3 font-medium">الإيراد</th>
+                      {canViewFinancialReports && <th className="p-3 font-medium">الإيراد</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -651,7 +676,7 @@ function ReportsPage() {
                         <td className="p-3 num text-muted-foreground">{i + 1}</td>
                         <td className="p-3 font-medium">{p.name}</td>
                         <td className="p-3 num">{formatMoney(p.qty, 3)}</td>
-                        <td className="p-3 num font-bold text-primary">{formatMoney(p.revenue)}</td>
+                        {canViewFinancialReports && <td className="p-3 num font-bold text-primary">{formatMoney(p.revenue)}</td>}
                       </tr>
                     ))}
                     {topProducts.length === 0 && (
@@ -674,9 +699,8 @@ function ReportsPage() {
                 exportCsv(
                   cashierStats.map((c) => ({
                     "معرف الكاشير": c.id,
-                    المبيعات: c.sales,
+                    ...(canViewFinancialReports ? { المبيعات: c.sales, النقدي: c.cash } : {}),
                     "عدد الفواتير": c.count,
-                    النقدي: c.cash,
                   })),
                   `cashier-report-${from}-${to}.csv`,
                 )
@@ -692,8 +716,8 @@ function ReportsPage() {
                   <thead className="bg-muted/50 text-right">
                     <tr>
                       <th className="p-3 font-medium">الكاشير</th>
-                      <th className="p-3 font-medium">المبيعات</th>
-                      <th className="p-3 font-medium">النقدي</th>
+                      {canViewFinancialReports && <th className="p-3 font-medium">المبيعات</th>}
+                      {canViewFinancialReports && <th className="p-3 font-medium">النقدي</th>}
                       <th className="p-3 font-medium">عدد الفواتير</th>
                     </tr>
                   </thead>
@@ -704,13 +728,13 @@ function ReportsPage() {
                           <Users className="h-3 w-3 text-muted-foreground" />
                           <span dir="ltr" className="font-mono text-xs">{c.id.slice(0, 8)}</span>
                         </td>
-                        <td className="p-3 num font-bold text-primary">{formatMoney(c.sales)}</td>
-                        <td className="p-3 num">{formatMoney(c.cash)}</td>
+                        {canViewFinancialReports && <td className="p-3 num font-bold text-primary">{formatMoney(c.sales)}</td>}
+                        {canViewFinancialReports && <td className="p-3 num">{formatMoney(c.cash)}</td>}
                         <td className="p-3 num">{c.count}</td>
                       </tr>
                     ))}
                     {cashierStats.length === 0 && (
-                      <tr><td colSpan={4} className="p-8 text-center text-muted-foreground">لا يوجد كاشيرون في الفترة المحددة</td></tr>
+                      <tr><td colSpan={canViewFinancialReports ? 4 : 2} className="p-8 text-center text-muted-foreground">لا يوجد كاشيرون في الفترة المحددة</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -733,7 +757,7 @@ function ReportsPage() {
               inventoryRows.map((row: any) => ({
                 المنتج: row.productName, الرمز: row.sku ?? "", الفرع: row.branchName,
                 الكمية: row.quantity, "حد إعادة الطلب": row.minimum,
-                "تكلفة الوحدة الحالية": row.costPrice, "القيمة التقديرية": row.estimatedValue,
+                ...(canViewFinancialReports ? { "تكلفة الوحدة الحالية": row.costPrice, "القيمة التقديرية": row.estimatedValue } : {}),
               })),
               `inventory-report-${from}-${to}.csv`,
             )}><Download className="ml-2 h-4 w-4" />تصدير CSV</Button>}
