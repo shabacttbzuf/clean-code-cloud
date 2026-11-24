@@ -127,14 +127,33 @@ function KitchenPage() {
         );
         return { queued: true };
       }
-      const { error } = await (supabase.rpc as any)("set_kitchen_order_status_idempotent", {
-        _order_id: id,
-        _new_status: status,
-        _notes: null,
-        _idempotency_key: crypto.randomUUID(),
-      });
-      if (error) throw error;
-      return { queued: false };
+      const idempotencyKey = crypto.randomUUID();
+      try {
+        const { error } = await (supabase.rpc as any)("set_kitchen_order_status_idempotent", {
+          _order_id: id,
+          _new_status: status,
+          _notes: null,
+          _idempotency_key: idempotencyKey,
+        });
+        if (error) throw error;
+        return { queued: false };
+      } catch (error) {
+        const networkFailure = error instanceof TypeError ||
+          /failed to fetch|network|connection|offline|fetcherror/i.test(
+            error instanceof Error ? error.message : String(error),
+          );
+        if (!navigator.onLine || networkFailure) {
+          await enqueueOfflineOperation(
+            "kitchen_status",
+            { orderId: id, status, notes: null, tenantId, branchId },
+            { userId, tenantId, branchId, companyId: membership?.company_id ?? null },
+            [],
+            idempotencyKey,
+          );
+          return { queued: true };
+        }
+        throw error;
+      }
     },
     onSuccess: (result) => {
       void qc.invalidateQueries({ queryKey: ["kitchen-queue", tenantId] });
