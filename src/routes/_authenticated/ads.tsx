@@ -26,6 +26,15 @@ type Campaign = {
   starts_at: string | null;
   ends_at: string | null;
   sort_order: number;
+  target_branch_ids: string[];
+};
+
+type AdPlacement = { id: string; placement_key: string; name_ar: string; description: string; is_enabled: boolean; sort_order: number };
+
+const PLACEMENT_LABELS: Record<string, string> = {
+  welcome: "مساحة الترحيب", main: "المساحة الرئيسية", sidebar: "المساحة الجانبية",
+  offers: "مساحة إعلانات العروض", in_page: "المساحات داخل الصفحات",
+  dashboard_banner: "شريط لوحة التحكم", dashboard_card: "بطاقات لوحة التحكم", pos_promo: "مساحة نقطة البيع",
 };
 
 export function AdsPage() {
@@ -39,6 +48,7 @@ export function AdsPage() {
   const [imageUrl, setImageUrl] = useState("");
   const [targetUrl, setTargetUrl] = useState("");
   const [placement, setPlacement] = useState("dashboard_banner");
+  const [targetBranchIds, setTargetBranchIds] = useState<string[]>([]);
   const [sortOrder, setSortOrder] = useState("0");
   const [showPreview, setShowPreview] = useState(false);
   const [startsAt, setStartsAt] = useState("");
@@ -71,11 +81,55 @@ export function AdsPage() {
     ((role === "owner" || role === "manager") && !!membership?.company_id &&
       permissions.data?.includes("ads.manage") === true);
 
+  const branches = useQuery({
+    queryKey: ["ads-target-branches", tenantId, membership?.company_id, membership?.branch_id],
+    queryFn: async () => {
+      let query = supabase.from("branches").select("id,name,company_id").eq("tenant_id", tenantId!);
+      if (!isSuperOwner && !isTenantOwner) {
+        if (!membership?.company_id) return [] as Array<{ id: string; name: string; company_id: string | null }>;
+        query = query.eq("company_id", membership.company_id);
+        if (membership.branch_id) query = query.eq("id", membership.branch_id);
+      }
+      const { data, error } = await query.order("name");
+      if (error) throw error;
+      return (data ?? []) as Array<{ id: string; name: string; company_id: string | null }>;
+    },
+    enabled: !!tenantId && canManage,
+  });
+
+  const placements = useQuery({
+    queryKey: ["marketing-ad-placements", tenantId, membership?.company_id ?? "tenant"],
+    queryFn: async (): Promise<AdPlacement[]> => {
+      let query = (supabase.from("marketing_ad_placements" as any) as any)
+        .select("id,placement_key,name_ar,description,is_enabled,sort_order")
+        .eq("tenant_id", tenantId!).order("sort_order");
+      if (!isSuperOwner && !isTenantOwner) {
+        if (!membership?.company_id) return [];
+        query = query.eq("company_id", membership.company_id);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []) as AdPlacement[];
+    },
+    enabled: !!tenantId && canManage,
+  });
+
+  const updatePlacement = useMutation({
+    mutationFn: async ({ id, is_enabled }: { id: string; is_enabled: boolean }) => {
+      const { data, error } = await (supabase.from("marketing_ad_placements" as any) as any)
+        .update({ is_enabled }).eq("id", id).eq("tenant_id", tenantId!).select("id").maybeSingle();
+      if (error) throw error;
+      if (!data?.id) throw new Error("تعذر تحديث المساحة ضمن نطاق الصلاحيات الحالي.");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["marketing-ad-placements", tenantId] }),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر تحديث المساحة الإعلانية"),
+  });
+
   const campaigns = useQuery({
     queryKey: ["marketing-campaigns", tenantId, membership?.company_id ?? "tenant"],
     queryFn: async (): Promise<Campaign[]> => {
       let query = supabase.from("marketing_campaigns")
-        .select("id,company_id,title,description,image_url,target_url,placement,status,starts_at,ends_at,sort_order")
+        .select("id,company_id,title,description,image_url,target_url,placement,status,starts_at,ends_at,sort_order,target_branch_ids")
         .eq("tenant_id", tenantId!)
         .order("sort_order")
         .order("created_at", { ascending: false });
@@ -129,11 +183,12 @@ export function AdsPage() {
         image_url: imageUrl || null,
         target_url: targetUrl.trim() || null,
         placement,
+        target_branch_ids: targetBranchIds,
         sort_order: normalizedSortOrder,
         starts_at: startsAt ? new Date(startsAt).toISOString() : null,
         ends_at: endsAt ? new Date(endsAt).toISOString() : null,
       };
-      let updateQuery = supabase.from("marketing_campaigns").update(payload)
+      let updateQuery = supabase.from("marketing_campaigns").update(payload as any)
         .eq("id", editingId ?? "")
         .eq("tenant_id", tenantId!);
       if (editingId && !isSuperOwner && !isTenantOwner) {
@@ -142,7 +197,7 @@ export function AdsPage() {
       }
       const result = editingId
         ? await updateQuery.select("id").maybeSingle()
-        : await supabase.from("marketing_campaigns").insert({ ...payload, tenant_id: tenantId!, created_by: userId, status: "draft" }).select("id").single();
+        : await supabase.from("marketing_campaigns").insert({ ...payload, tenant_id: tenantId!, created_by: userId, status: "draft" } as any).select("id").single();
       if (result.error) throw result.error;
       if (!result.data?.id) throw new Error("لم يتم العثور على الحملة ضمن نطاق الشركة الحالي؛ لم يُنفّذ الحفظ.");
     },
@@ -206,6 +261,7 @@ export function AdsPage() {
     setImageUrl("");
     setTargetUrl("");
     setPlacement("dashboard_banner");
+    setTargetBranchIds([]);
     setSortOrder("0");
     setShowPreview(false);
     setStartsAt("");
@@ -248,6 +304,7 @@ export function AdsPage() {
     setImageUrl(campaign.image_url ?? "");
     setTargetUrl(campaign.target_url ?? "");
     setPlacement(campaign.placement);
+    setTargetBranchIds(campaign.target_branch_ids ?? []);
     setSortOrder(String(campaign.sort_order ?? 0));
     setShowPreview(false);
     const toLocalInput = (value: string | null) => {
@@ -265,7 +322,18 @@ export function AdsPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="الإعلانات والمساحات الإعلانية" subtitle="إدارة الحملات الإعلانية وصورها وروابطها ومواقع ظهورها وجدولتها بصورة مستقلة عن إعدادات النظام والعروض الترويجية." />
+      <PageHeader title="الإعلانات والمساحات الإعلانية" subtitle="إدارة مستقلة للحملات والمساحات والمواد الإعلانية والاستهداف حسب الفروع، دون ربطها بإعدادات النظام أو سجلات العروض." />
+      <Card>
+        <CardHeader><CardTitle>إدارة المساحات الإعلانية</CardTitle><CardDescription>فعّل أو أوقف كل موضع إعلاني بصورة مستقلة. لا يؤدي إيقاف المساحة إلى حذف الحملات أو تغيير العروض الترويجية.</CardDescription></CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {placements.isLoading ? <div className="text-sm text-muted-foreground">جارٍ تحميل المساحات...</div> : placements.isError ? <div className="text-sm text-destructive">تعذر تحميل المساحات الإعلانية.</div> : placements.data?.map((slot) => (
+            <div key={slot.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+              <div className="min-w-0"><div className="font-medium">{slot.name_ar}</div><p className="text-xs text-muted-foreground">{slot.description}</p><p className="mt-1 text-xs">{slot.is_enabled ? "مفعّلة" : "متوقفة"}</p></div>
+              <Button type="button" size="sm" variant={slot.is_enabled ? "outline" : "default"} disabled={updatePlacement.isPending} onClick={() => updatePlacement.mutate({ id: slot.id, is_enabled: !slot.is_enabled })}>{slot.is_enabled ? "إيقاف" : "تفعيل"}</Button>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Megaphone className="h-5 w-5 text-primary" /> {editingId ? "تعديل حملة إعلانية" : "إنشاء حملة إعلانية"}</CardTitle>
@@ -276,13 +344,12 @@ export function AdsPage() {
             <div className="space-y-2"><Label>عنوان الإعلان</Label><Input value={title} onChange={(event) => { setTitle(event.target.value); setFormTouched(true); }} maxLength={120} placeholder="مثال: عروض نهاية الأسبوع" /></div>
             <div className="space-y-2"><Label>المساحة الإعلانية</Label>
               <select value={placement} onChange={(event) => { setPlacement(event.target.value); setFormTouched(true); }} className="h-10 w-full rounded-md border bg-background px-3 text-sm">
-                <option value="dashboard_banner">الشريط الرئيسي في لوحة التحكم</option>
-                <option value="dashboard_card">بطاقة إعلانية في لوحة التحكم</option>
-                <option value="pos_promo">المساحة الترويجية في نقطة البيع</option>
+                {(placements.data ?? []).filter((slot) => slot.is_enabled).map((slot) => <option key={slot.placement_key} value={slot.placement_key}>{slot.name_ar}</option>)}
               </select>
             </div>
             <div className="space-y-2"><Label>ترتيب الظهور (الأقل أولاً)</Label><Input type="number" min="0" max="10000" step="1" value={sortOrder} onChange={(event) => { setSortOrder(event.target.value); setFormTouched(true); }} /></div>
             <div className="space-y-2 md:col-span-2"><Label>وصف الإعلان</Label><Input value={description} onChange={(event) => { setDescription(event.target.value); setFormTouched(true); }} maxLength={500} placeholder="اكتب تفاصيل الإعلان" /></div>
+            <div className="space-y-2 md:col-span-2"><Label>الفروع المستهدفة</Label><p className="text-xs text-muted-foreground">اترك الاختيار فارغاً لعرض الإعلان في جميع الفروع المسموح بها. يمكنك تحديد فرع أو أكثر.</p><div className="grid max-h-36 gap-2 overflow-y-auto rounded-md border p-3 sm:grid-cols-2">{branches.data?.map((branch) => <label key={branch.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={targetBranchIds.includes(branch.id)} onChange={(event) => { setTargetBranchIds((current) => event.target.checked ? [...current, branch.id] : current.filter((id) => id !== branch.id)); setFormTouched(true); }} />{branch.name}</label>)}{!branches.data?.length && <span className="text-xs text-muted-foreground">لا توجد فروع متاحة ضمن نطاق صلاحياتك.</span>}</div></div>
             <div className="space-y-2"><Label>رابط الوجهة (اختياري)</Label><Input dir="ltr" value={targetUrl} onChange={(event) => { setTargetUrl(event.target.value); setFormTouched(true); }} placeholder="https://example.com" /></div>
             <div className="space-y-2"><Label>صورة الإعلان</Label><div className="flex items-center gap-3">
               <div className="grid h-14 w-20 shrink-0 place-items-center overflow-hidden rounded-md border bg-muted">{imageUrl ? <img src={imageUrl} alt="معاينة الإعلان" className="h-full w-full object-cover" /> : <Image className="h-5 w-5 text-muted-foreground" />}</div>
@@ -318,7 +385,7 @@ export function AdsPage() {
               const canEdit = isSuperOwner || isTenantOwner || (!!membership?.company_id && campaign.company_id === membership.company_id && canManage);
               return <div key={campaign.id} className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
                 {campaign.image_url && <img src={campaign.image_url} alt="" className="h-14 w-20 rounded object-cover" />}
-                <div className="min-w-0 flex-1"><div className="font-medium">{campaign.title}</div><div className="text-xs text-muted-foreground">{campaign.placement === "dashboard_banner" ? "الشريط الرئيسي" : campaign.placement === "dashboard_card" ? "بطاقة لوحة التحكم" : "نقطة البيع"} · {campaign.status === "active" ? "نشط" : campaign.status === "paused" ? "متوقف" : campaign.status === "archived" ? "مؤرشف" : "مسودة"}{campaign.starts_at ? ` · يبدأ ${new Date(campaign.starts_at).toLocaleString("ar")}` : ""}{campaign.ends_at ? ` · ينتهي ${new Date(campaign.ends_at).toLocaleString("ar")}` : ""}</div>
+                <div className="min-w-0 flex-1"><div className="font-medium">{campaign.title}</div><div className="text-xs text-muted-foreground">{PLACEMENT_LABELS[campaign.placement] ?? campaign.placement} · {campaign.status === "active" ? "نشط" : campaign.status === "paused" ? "متوقف" : campaign.status === "archived" ? "مؤرشف" : "مسودة"}{campaign.starts_at ? ` · يبدأ ${new Date(campaign.starts_at).toLocaleString("ar")}` : ""}{campaign.ends_at ? ` · ينتهي ${new Date(campaign.ends_at).toLocaleString("ar")}` : ""}</div>
                   <div className="mt-1 text-xs text-muted-foreground" aria-label="إحصاءات الحملة">
                     {analytics.isLoading ? "جارٍ تحميل الإحصاءات..." : analytics.isError ? "تعذر تحميل الإحصاءات" : (() => {
                       const stats = analyticsByCampaign.get(campaign.id);
