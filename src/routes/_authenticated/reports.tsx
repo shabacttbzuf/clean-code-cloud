@@ -158,6 +158,7 @@ function ReportsPage() {
             .select("campaign_id, event_type, event_day, company_id")
             .eq("tenant_id", tenantId).gte("event_day", from).lte("event_day", to);
           if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
+          else if (!isSuperOwner) return [];
           return query.range(pageFrom, pageTo);
         }) : Promise.resolve([]),
         canManagePromotions ? fetchAllRows((pageFrom, pageTo) => {
@@ -621,15 +622,15 @@ function ReportsPage() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="sales">
+      <Tabs defaultValue={canViewSalesReports ? "sales" : canViewEmployees || canViewAttendance ? "staff" : "inventory"}>
         <TabsList className="grid w-full grid-cols-4 sm:w-auto sm:inline-grid">
-          <TabsTrigger value="sales">المبيعات</TabsTrigger>
-          <TabsTrigger value="products">المنتجات</TabsTrigger>
-          <TabsTrigger value="staff">الموظفون</TabsTrigger>
-          <TabsTrigger value="inventory">المخزون</TabsTrigger>
+          {canViewSalesReports && <TabsTrigger value="sales">المبيعات</TabsTrigger>}
+          {canViewSalesReports && <TabsTrigger value="products">المنتجات</TabsTrigger>}
+          {(canViewSalesReports || canViewEmployees || canViewAttendance) && <TabsTrigger value="staff">الموظفون</TabsTrigger>}
+          {canViewInventory && <TabsTrigger value="inventory">المخزون</TabsTrigger>}
         </TabsList>
 
-        <TabsContent value="sales" className="space-y-4 pt-2">
+        {canViewSalesReports && <TabsContent value="sales" className="space-y-4 pt-2">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold">ملخص المبيعات والمصروفات</h3>
             {canExportReports && <Button
@@ -682,9 +683,9 @@ function ReportsPage() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent>}
 
-        <TabsContent value="products" className="space-y-4 pt-2">
+        {canViewSalesReports && <TabsContent value="products" className="space-y-4 pt-2">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold">أكثر 10 منتجات مبيعاً</h3>
             {canExportReports && <Button
@@ -734,9 +735,9 @@ function ReportsPage() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent>}
 
-        <TabsContent value="staff" className="space-y-4 pt-2">
+        {(canViewSalesReports || canViewEmployees || canViewAttendance) && <TabsContent value="staff" className="space-y-4 pt-2">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold">أداء الكاشيرين</h3>
             {canExportReports && <Button
@@ -788,9 +789,9 @@ function ReportsPage() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent>}
 
-        <TabsContent value="inventory" className="space-y-4 pt-2">
+        {canViewInventory && <TabsContent value="inventory" className="space-y-4 pt-2">
           <div className="grid gap-4 sm:grid-cols-2">
             {canViewFinancialReports && <Kpi icon={<Package className="h-5 w-5" />} label="قيمة المخزون الحالية بالتكلفة" value={`${formatMoney(inventoryValue)} ${tenant?.currency ?? ""}`} tone="primary" />}
             <Kpi icon={<Package className="h-5 w-5" />} label="أصناف عند حد إعادة الطلب أو أقل" value={String(lowStockRows.length)} tone={lowStockRows.length ? "destructive" : "success"} />
@@ -843,7 +844,7 @@ function ReportsPage() {
               {inventoryRows.length > 100 && <p className="border-t p-3 text-center text-xs text-muted-foreground">يتم عرض أول 100 صنف حسب أولوية النقص؛ التصدير يتضمن جميع الأصناف.</p>}
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent>}
       </Tabs>
     </div>
   );
