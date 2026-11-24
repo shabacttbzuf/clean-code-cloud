@@ -67,7 +67,7 @@ function ReportsPage() {
   }, [branchId, branchesQuery.data]);
 
   const report = useQuery({
-    queryKey: ["reports", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner, from, to, branchId],
+    queryKey: ["reports", tenantId, userId, membership?.company_id, membership?.branch_id, isSuperOwner, canViewFinancialReports, from, to, branchId],
     queryFn: async () => {
       if (!tenantId) return null;
       if (!canViewReports) throw new Error("ليس لديك صلاحية عرض التقارير.");
@@ -173,14 +173,14 @@ function ReportsPage() {
           else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.range(pageFrom, pageTo);
         }),
-        fetchAllRows((pageFrom, pageTo) => {
+        canViewFinancialReports ? fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("expenses").select("amount")
             .eq("tenant_id", tenantId)
             .gte("paid_at", previousFromDay).lte("paid_at", previousToDay);
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.range(pageFrom, pageTo);
-        }),
+        }) : Promise.resolve([]),
         fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("sale_refunds").select("total")
             .eq("tenant_id", tenantId)
@@ -209,7 +209,7 @@ function ReportsPage() {
         previousPeriod,
       };
     },
-    enabled: !!tenantId && !permissionsQuery.isLoading && canViewReports,
+    enabled: !!tenantId && !permissionsQuery.isLoading && canViewReports && !branchesQuery.isLoading,
     staleTime: 60_000,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
