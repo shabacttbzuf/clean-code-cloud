@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthSession } from "./use-auth-session";
+import { OFFLINE_AUTH_CACHE_MAX_AGE_MS, withOfflineFallback } from "@/lib/offline-reference-cache";
 
 const ACTIVE_TENANT_KEY = "ras-active-tenant";
 
@@ -33,12 +34,18 @@ export function useActiveTenant() {
   const memQuery = useQuery({
     queryKey: ["memberships", user?.id],
     queryFn: async (): Promise<Membership[]> => {
-      const { data, error } = await supabase
-        .from("user_roles")
-        .select("tenant_id, role, branch_id, company_id, custom_role_id")
-        .eq("user_id", user!.id);
-      if (error) throw error;
-      return (data ?? []) as Membership[];
+      return withOfflineFallback(
+        `auth-memberships:v1:${user!.id}`,
+        async () => {
+          const { data, error } = await supabase
+            .from("user_roles")
+            .select("tenant_id, role, branch_id, company_id, custom_role_id")
+            .eq("user_id", user!.id);
+          if (error) throw error;
+          return (data ?? []) as Membership[];
+        },
+        OFFLINE_AUTH_CACHE_MAX_AGE_MS,
+      );
     },
     enabled: !!user?.id,
   });
@@ -46,11 +53,17 @@ export function useActiveTenant() {
   const superOwnerQuery = useQuery({
     queryKey: ["is-super-owner", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("is_super_owner", {
-        _user_id: user!.id,
-      });
-      if (error) throw error;
-      return data === true;
+      return withOfflineFallback(
+        `auth-super-owner:v1:${user!.id}`,
+        async () => {
+          const { data, error } = await supabase.rpc("is_super_owner", {
+            _user_id: user!.id,
+          });
+          if (error) throw error;
+          return data === true;
+        },
+        OFFLINE_AUTH_CACHE_MAX_AGE_MS,
+      );
     },
     enabled: !!user?.id,
     staleTime: 60_000,
@@ -76,9 +89,15 @@ export function useActiveTenant() {
   const tenantQuery = useQuery({
     queryKey: ["tenant", activeId],
     queryFn: async (): Promise<Tenant | null> => {
-      const { data, error } = await supabase.from("tenants").select("*").eq("id", activeId!).maybeSingle();
-      if (error) throw error;
-      return data as Tenant | null;
+      return withOfflineFallback(
+        `auth-tenant:v1:${user?.id ?? "unknown"}:${activeId!}`,
+        async () => {
+          const { data, error } = await supabase.from("tenants").select("*").eq("id", activeId!).maybeSingle();
+          if (error) throw error;
+          return data as Tenant | null;
+        },
+        OFFLINE_AUTH_CACHE_MAX_AGE_MS,
+      );
     },
     enabled: !!activeId,
   });
@@ -95,9 +114,15 @@ export function useActiveTenant() {
   const permissionsQuery = useQuery({
     queryKey: ["effective-permissions", user?.id, activeId],
     queryFn: async (): Promise<string[]> => {
-      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: activeId! });
-      if (error) throw error;
-      return data ?? [];
+      return withOfflineFallback(
+        `auth-permissions:v1:${user!.id}:${activeId!}`,
+        async () => {
+          const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: activeId! });
+          if (error) throw error;
+          return data ?? [];
+        },
+        OFFLINE_AUTH_CACHE_MAX_AGE_MS,
+      );
     },
     enabled: !!user?.id && !!activeId,
     staleTime: 15_000,
