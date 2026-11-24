@@ -202,9 +202,9 @@ function PurchaseReturnDialog({
     window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
       detail: { path: "/purchases", dirty },
     }));
-    return () => window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+    return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
       detail: { path: "/purchases", dirty: false },
-    }));
+    }));; };
   }, [open, reason, quantities]);
 
   const purchaseLines = useQuery({
@@ -337,9 +337,9 @@ function NewPurchaseDialog({
     window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
       detail: { path: "/purchases", dirty },
     }));
-    return () => window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+    return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
       detail: { path: "/purchases", dirty: false },
-    }));
+    }));; };
   }, [open, defaultBranchId, branches.data, branchId, supplierId, reference, notes, lines, addProdId]);
 
   // Auto-pick first branch when none preselected
