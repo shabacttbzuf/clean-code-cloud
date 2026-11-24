@@ -82,7 +82,7 @@ function ReportsPage() {
       const fromDate = localStart.toISOString();
       const toDate = localEnd.toISOString();
 
-      const [sales, expenses, items, sessions, inventory, refunds] = await Promise.all([
+      const [sales, expenses, items, sessions, inventory, refunds, purchases, employees, campaigns] = await Promise.all([
         fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("sales")
             .select("id, created_at, total, subtotal, discount, tax_amount, payment_method, cashier_id, branch_id, status")
@@ -120,6 +120,29 @@ function ReportsPage() {
           return query.range(pageFrom, pageTo);
         }),
         fetchAllRows((pageFrom, pageTo) => {
+          let query = supabase.from("purchases")
+            .select("id, branch_id, received_at, total, status, supplier_id")
+            .eq("tenant_id", tenantId).gte("received_at", fromDate).lte("received_at", toDate);
+          if (branchId !== "all") query = query.eq("branch_id", branchId);
+          else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
+          return query.order("received_at", { ascending: false }).range(pageFrom, pageTo);
+        }),
+        fetchAllRows((pageFrom, pageTo) => {
+          let query = supabase.from("employees")
+            .select("id, full_name, branch_id, status")
+            .eq("tenant_id", tenantId);
+          if (branchId !== "all") query = query.eq("branch_id", branchId);
+          else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
+          return query.order("full_name").range(pageFrom, pageTo);
+        }),
+        fetchAllRows((pageFrom, pageTo) => {
+          let query = supabase.from("marketing_campaigns")
+            .select("id, title, status, company_id, starts_at, ends_at")
+            .eq("tenant_id", tenantId);
+          if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
+          return query.order("created_at", { ascending: false }).range(pageFrom, pageTo);
+        }),
+        fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("sale_refunds")
             .select("id, sale_id, subtotal, discount, tax_amount, total, refund_method, created_at, branch_id")
             .eq("tenant_id", tenantId).gte("created_at", fromDate).lte("created_at", toDate);
@@ -130,6 +153,11 @@ function ReportsPage() {
       ]);
 
       const validSales = sales.filter((row) => row.status !== "void");
+      const employeeIds = new Set(employees.map((employee) => employee.id));
+      const attendance = employeeIds.size ? await fetchAllRows((pageFrom, pageTo) => supabase.from("attendance")
+        .select("employee_id, date, status, hours_worked, is_late, late_minutes")
+        .eq("tenant_id", tenantId).gte("date", from).lte("date", to)
+        .in("employee_id", [...employeeIds]).range(pageFrom, pageTo)) : [];
       const saleIds = new Set(validSales.map((sale) => sale.id));
       const validItems = items.filter((item) => saleIds.has(item.sale_id));
       const refundIds = refunds.map((refund) => refund.id);
@@ -204,6 +232,10 @@ function ReportsPage() {
         sessions,
         inventory,
         inventoryProducts,
+        purchases,
+        employees,
+        attendance,
+        campaigns,
         refunds,
         refundItems,
         previousPeriod,
@@ -217,7 +249,7 @@ function ReportsPage() {
 
   const data = report.data;
   const safe = useMemo(() => {
-    const raw = data ?? { sales: [] as any[], expenses: [] as any[], items: [] as any[], sessions: [] as any[], inventory: [] as any[], inventoryProducts: [] as any[], refunds: [] as any[], refundItems: [] as any[] };
+    const raw = data ?? { sales: [] as any[], expenses: [] as any[], items: [] as any[], sessions: [] as any[], inventory: [] as any[], inventoryProducts: [] as any[], purchases: [] as any[], employees: [] as any[], attendance: [] as any[], campaigns: [] as any[], refunds: [] as any[], refundItems: [] as any[] };
     if (branchId === "all") return raw;
     const sales = raw.sales.filter((row: any) => row.branch_id === branchId);
     const refunds = raw.refunds.filter((row: any) => row.branch_id === branchId);
@@ -229,9 +261,13 @@ function ReportsPage() {
       refunds,
       expenses: raw.expenses.filter((row: any) => row.branch_id === branchId),
       sessions: raw.sessions.filter((row: any) => row.branch_id === branchId),
+      purchases: raw.purchases.filter((row: any) => row.branch_id === branchId),
+      employees: raw.employees.filter((row: any) => row.branch_id === branchId),
+      attendance: raw.attendance.filter((row: any) => raw.employees.some((employee: any) => employee.id === row.employee_id && employee.branch_id === branchId)),
       inventory: raw.inventory.filter((row: any) => row.branch_id === branchId),
       items: raw.items.filter((row: any) => saleIds.has(row.sale_id)),
       refundItems: raw.refundItems.filter((row: any) => refundIds.has(row.refund_id)),
+      campaigns: raw.campaigns,
     };
   }, [data, branchId]);
 
@@ -284,6 +320,21 @@ function ReportsPage() {
     const net = salesTotal - expensesTotal;
     return { salesTotal, grossSalesTotal, refundsTotal, expensesTotal, discountTotal, taxTotal, net };
   }, [safe]);
+
+  const purchaseTotals = useMemo(() => ({
+    count: safe.purchases.length,
+    total: safe.purchases.filter((row: any) => row.status !== "cancelled" && row.status !== "void").reduce((sum: number, row: any) => sum + Number(row.total ?? 0), 0),
+  }), [safe.purchases]);
+  const staffTotals = useMemo(() => ({
+    employees: safe.employees.length,
+    attendance: safe.attendance.length,
+    late: safe.attendance.filter((row: any) => row.is_late).length,
+    hours: safe.attendance.reduce((sum: number, row: any) => sum + Number(row.hours_worked ?? 0), 0),
+  }), [safe.employees, safe.attendance]);
+  const campaignTotals = useMemo(() => ({
+    total: safe.campaigns.length,
+    active: safe.campaigns.filter((row: any) => row.status === "active").length,
+  }), [safe.campaigns]);
 
   const comparison = {
     sales: calculatePercentChange(totals.salesTotal, data?.previousPeriod.salesTotal ?? 0),
