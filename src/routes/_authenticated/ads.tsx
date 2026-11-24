@@ -138,7 +138,12 @@ export function AdsPage() {
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { data, error } = await supabase.from("marketing_campaigns").update({ status }).eq("id", id).eq("tenant_id", tenantId!).select("id").maybeSingle();
+      let query = supabase.from("marketing_campaigns").update({ status }).eq("id", id).eq("tenant_id", tenantId!);
+      if (!isSuperOwner && !isTenantOwner) {
+        if (!membership?.company_id) throw new Error("لا يوجد نطاق شركة مصرح به لإدارة هذه الحملة.");
+        query = query.eq("company_id", membership.company_id);
+      }
+      const { data, error } = await query.select("id").maybeSingle();
       if (error) throw error;
       if (!data?.id) throw new Error("لم يتم العثور على الحملة ضمن نطاق الشركة المصرح به.");
     },
@@ -148,7 +153,12 @@ export function AdsPage() {
 
   const deleteCampaign = useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await supabase.from("marketing_campaigns").delete().eq("id", id).eq("tenant_id", tenantId!).select("id").maybeSingle();
+      let query = supabase.from("marketing_campaigns").delete().eq("id", id).eq("tenant_id", tenantId!);
+      if (!isSuperOwner && !isTenantOwner) {
+        if (!membership?.company_id) throw new Error("لا يوجد نطاق شركة مصرح به لإدارة هذه الحملة.");
+        query = query.eq("company_id", membership.company_id);
+      }
+      const { data, error } = await query.select("id").maybeSingle();
       if (error) throw error;
       if (!data?.id) throw new Error("لم يتم العثور على الحملة أو لا تملك صلاحية حذفها.");
     },
