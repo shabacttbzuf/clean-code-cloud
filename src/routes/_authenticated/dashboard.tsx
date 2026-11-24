@@ -44,13 +44,14 @@ function safeCampaignTarget(value: string | null): string | null {
   }
 }
 
+const DEFAULT_DASHBOARD_HERO_IMAGE_URL = "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=75";
+
 function Dashboard() {
   const [activeCampaignIndex, setActiveCampaignIndex] = useState(0);
   const [campaignRotationPaused, setCampaignRotationPaused] = useState(false);
-  const defaultHeroImageUrl = "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=75";
-  const [heroImageUrl, setHeroImageUrl] = useState(defaultHeroImageUrl);
+  const [heroImageUrl, setHeroImageUrl] = useState(DEFAULT_DASHBOARD_HERO_IMAGE_URL);
   const [heroBackgroundColor, setHeroBackgroundColor] = useState("#102f5c");
-  const [heroImageDraft, setHeroImageDraft] = useState(defaultHeroImageUrl);
+  const [heroImageDraft, setHeroImageDraft] = useState(DEFAULT_DASHBOARD_HERO_IMAGE_URL);
   const [heroBackgroundDraft, setHeroBackgroundDraft] = useState("#102f5c");
   const [heroSettingsOpen, setHeroSettingsOpen] = useState(false);
   const { tenantId, tenant, user, membership, role, hasPermission } = useActiveTenant();
@@ -60,8 +61,8 @@ function Dashboard() {
     try {
       const saved = window.localStorage.getItem(heroCustomizationKey);
       if (!saved) {
-        setHeroImageUrl(defaultHeroImageUrl);
-        setHeroImageDraft(defaultHeroImageUrl);
+        setHeroImageUrl(DEFAULT_DASHBOARD_HERO_IMAGE_URL);
+        setHeroImageDraft(DEFAULT_DASHBOARD_HERO_IMAGE_URL);
         setHeroBackgroundColor("#102f5c");
         setHeroBackgroundDraft("#102f5c");
         return;
@@ -575,7 +576,7 @@ function Dashboard() {
               }
             }}>حفظ التخصيص</Button>
             <Button type="button" variant="outline" onClick={() => {
-              setHeroImageDraft(defaultHeroImageUrl);
+              setHeroImageDraft(DEFAULT_DASHBOARD_HERO_IMAGE_URL);
               setHeroBackgroundDraft("#102f5c");
             }}>استعادة الافتراضي</Button>
             <Button type="button" variant="ghost" onClick={() => setHeroSettingsOpen(false)}>إغلاق</Button>
