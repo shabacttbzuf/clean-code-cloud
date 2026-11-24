@@ -1,0 +1,1 @@
+Temporary CI-only marker. The actual implementation is maintained in work/uiux-18-offline-sync; do not merge this validation branch.
