@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS private.kitchen_order_sync_requests (
     PRIMARY KEY (tenant_id, actor_id, idempotency_key)
 );
 
+ALTER TABLE private.kitchen_order_sync_requests ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE private.kitchen_order_sync_requests FROM PUBLIC, anon, authenticated;
 
 CREATE OR REPLACE FUNCTION private.set_kitchen_order_status_idempotent(
