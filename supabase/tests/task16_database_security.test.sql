@@ -1,6 +1,6 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(8);
+SELECT plan(10);
 
 SELECT is(
   (SELECT count(*)::int
@@ -85,6 +85,29 @@ SELECT is(
      ) AND permissive='RESTRICTIVE'),
   3,
   'Marketing campaign writes retain restrictive company-scope policies'
+);
+
+
+SELECT is(
+  (SELECT count(*)::int
+   FROM pg_policies
+   WHERE schemaname='public'
+     AND tablename IN ('payroll_runs','payroll_items')
+     AND cmd IN ('SELECT','INSERT','UPDATE','DELETE')
+     AND permissive='RESTRICTIVE'),
+  16,
+  'Payroll runs and items retain restrictive scope and permission gates for all CRUD operations'
+);
+
+SELECT is(
+  (SELECT count(*)::int
+   FROM pg_policies
+   WHERE schemaname='public'
+     AND tablename='profiles'
+     AND cmd='UPDATE'
+     AND permissive='RESTRICTIVE'),
+  3,
+  'Profile updates retain company, permission, and Super Owner protection gates'
 );
 
 SELECT * FROM finish();
