@@ -230,39 +230,46 @@ export async function syncOfflineOperations(scope: OfflineScope): Promise<void> 
   const task = (async () => {
     const rows = await listOfflineOperations(scope);
     const syncedIds = new Set(rows.filter((row) => row.status === "synced").map((row) => row.id));
-    for (const candidate of rows) {
-      if (candidate.status === "synced" || candidate.status === "conflict") continue;
-      if (!candidate.dependencies.every((id) => syncedIds.has(id))) continue;
-      const operation = await claimOperation(candidate.id);
-      if (!operation) continue;
-      const handler = handlers.get(operation.type);
-      if (!handler || handler.offlineSafe !== true) {
-        operation.status = "failed";
-        operation.lastError = "لا يوجد معالج آمن ومعتمد لهذا النوع من العمليات.";
-        operation.nextRetryAt = null;
-        releaseLease(operation);
-        await saveOperation(operation);
-        continue;
-      }
-      try {
-        await handler.send(operation);
-        operation.status = "synced";
-        operation.syncedAt = new Date().toISOString();
-        operation.lastError = null;
-        operation.nextRetryAt = null;
-        releaseLease(operation);
-        syncedIds.add(operation.id);
-        await saveOperation(operation);
-        const metaKey = "lastSuccessfulSyncAt:" + scope.userId + ":" + scope.tenantId + ":" + (scope.branchId ?? "all") + ":" + (scope.companyId ?? "none");
-        await transaction([META], "readwrite", (tx) => tx.objectStore(META).put(operation.syncedAt, metaKey));
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "فشل غير معروف أثناء المزامنة.";
-        operation.status = /conflict|version|stale|تعارض/i.test(message) ? "conflict" : "failed";
-        operation.lastError = message.slice(0, 1000);
-        const retryDelay = Math.min(30 * 60_000, 5_000 * 2 ** Math.min(operation.attempts - 1, 8));
-        operation.nextRetryAt = operation.status === "conflict" ? null : new Date(Date.now() + retryDelay).toISOString();
-        releaseLease(operation);
-        await saveOperation(operation);
+    const attemptedIds = new Set<string>();
+    let madeProgress = true;
+    while (madeProgress) {
+      madeProgress = false;
+      for (const candidate of rows) {
+        if (attemptedIds.has(candidate.id) || candidate.status === "synced" || candidate.status === "conflict") continue;
+        if (!candidate.dependencies.every((id) => syncedIds.has(id))) continue;
+        attemptedIds.add(candidate.id);
+        const operation = await claimOperation(candidate.id);
+        if (!operation) continue;
+        const handler = handlers.get(operation.type);
+        if (!handler || handler.offlineSafe !== true) {
+          operation.status = "failed";
+          operation.lastError = "لا يوجد معالج آمن ومعتمد لهذا النوع من العمليات.";
+          operation.nextRetryAt = null;
+          releaseLease(operation);
+          await saveOperation(operation);
+          continue;
+        }
+        try {
+          await handler.send(operation);
+          operation.status = "synced";
+          operation.syncedAt = new Date().toISOString();
+          operation.lastError = null;
+          operation.nextRetryAt = null;
+          releaseLease(operation);
+          syncedIds.add(operation.id);
+          madeProgress = true;
+          await saveOperation(operation);
+          const metaKey = "lastSuccessfulSyncAt:" + scope.userId + ":" + scope.tenantId + ":" + (scope.branchId ?? "all") + ":" + (scope.companyId ?? "none");
+          await transaction([META], "readwrite", (tx) => tx.objectStore(META).put(operation.syncedAt, metaKey));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "فشل غير معروف أثناء المزامنة.";
+          operation.status = /conflict|version|stale|تعارض/i.test(message) ? "conflict" : "failed";
+          operation.lastError = message.slice(0, 1000);
+          const retryDelay = Math.min(30 * 60_000, 5_000 * 2 ** Math.min(operation.attempts - 1, 8));
+          operation.nextRetryAt = operation.status === "conflict" ? null : new Date(Date.now() + retryDelay).toISOString();
+          releaseLease(operation);
+          await saveOperation(operation);
+        }
       }
     }
   })().finally(() => { syncPromises.delete(lockKey); });
