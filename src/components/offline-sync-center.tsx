@@ -35,7 +35,7 @@ export function OfflineSyncCenter() {
     try {
       const [rows, syncedAt] = await Promise.all([
         listOfflineOperations(scope),
-        getLastOfflineSyncAt(),
+        getLastOfflineSyncAt(scope),
       ]);
       setOperations(rows);
       setLastSync(syncedAt);
