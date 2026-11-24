@@ -29,6 +29,14 @@ registerOfflineHandler("kitchen_status", {
   offlineSafe: true,
   idempotentServerSide: true,
   send: async (operation) => {
+    // A queued operation must never be replayed under a different signed-in account.
+    // The server still performs its own permission and branch checks in the RPC.
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError) throw authError;
+    if (!authData.user || authData.user.id !== operation.scope.userId) {
+      throw new Error("تغير المستخدم المسجل؛ أوقفنا مزامنة العملية حتى يعود صاحبها.");
+    }
+
     const payload = parseKitchenPayload(operation);
     // The RPC derives the actor from auth.uid(), checks current kitchen.manage
     // permission and branch membership, and stores the idempotency result atomically.
