@@ -52,6 +52,7 @@ function ReportsPage() {
   const [branchId, setBranchId] = useState("all");
   const branchesQuery = useQuery({ queryKey: ["report-branches", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
+      if (!isSuperOwner && !membership?.branch_id && !membership?.company_id) return [];
       let query = supabase.from("branches").select("id,name").eq("tenant_id", tenantId!).order("name");
       if (!isSuperOwner && membership?.branch_id) query = query.eq("id", membership.branch_id);
       else if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
@@ -121,7 +122,7 @@ function ReportsPage() {
         }),
         fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("purchases")
-            .select("id, branch_id, received_at, total, status, supplier_id")
+            .select(canViewFinancialReports ? "id, branch_id, received_at, total, status, supplier_id" : "id, branch_id, received_at, status, supplier_id")
             .eq("tenant_id", tenantId).gte("received_at", fromDate).lte("received_at", toDate);
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
@@ -720,7 +721,7 @@ function ReportsPage() {
 
         <TabsContent value="inventory" className="space-y-4 pt-2">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Kpi icon={<Package className="h-5 w-5" />} label="قيمة المخزون الحالية بالتكلفة" value={`${formatMoney(inventoryValue)} ${tenant?.currency ?? ""}`} tone="primary" />
+            {canViewFinancialReports && <Kpi icon={<Package className="h-5 w-5" />} label="قيمة المخزون الحالية بالتكلفة" value={`${formatMoney(inventoryValue)} ${tenant?.currency ?? ""}`} tone="primary" />}
             <Kpi icon={<Package className="h-5 w-5" />} label="أصناف عند حد إعادة الطلب أو أقل" value={String(lowStockRows.length)} tone={lowStockRows.length ? "destructive" : "success"} />
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -747,7 +748,7 @@ function ReportsPage() {
                       <th className="p-3 font-medium">الفرع</th>
                       <th className="p-3 font-medium">الرصيد</th>
                       <th className="p-3 font-medium">حد إعادة الطلب</th>
-                      <th className="p-3 font-medium">قيمة المخزون</th>
+                      {canViewFinancialReports && <th className="p-3 font-medium">قيمة المخزون</th>}
                       <th className="p-3 font-medium">الحالة</th>
                     </tr>
                   </thead>
