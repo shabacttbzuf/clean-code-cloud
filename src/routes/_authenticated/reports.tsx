@@ -489,6 +489,8 @@ function ReportsPage() {
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [safe, groupBy]);
 
+  const chartMax = Math.max(1, ...groupedSales.map(([, row]) => Math.max(row.sales, row.expenses)));
+
   const topProducts = useMemo(() => {
     const map = new Map<string, { name: string; qty: number; revenue: number }>();
     for (const i of safe.items) {
@@ -727,6 +729,23 @@ function ReportsPage() {
               <Download className="ml-2 h-4 w-4" />تصدير CSV
             </Button>}
           </div>
+          <Card><CardContent className="p-4">
+            <div className="mb-3 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+              <span className="font-semibold text-foreground">اتجاه المبيعات حسب الفترة</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-primary" />المبيعات بعد المرتجعات</span>
+              {canViewFinancialReports && <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-destructive" />المصروفات</span>}
+            </div>
+            <div className="flex min-h-40 items-end gap-2 overflow-x-auto pb-2" role="img" aria-label="رسم بياني يقارن المبيعات والمصروفات حسب الفترة">
+              {groupedSales.map(([key, row]) => <div key={key} className="flex min-w-10 flex-1 flex-col items-center gap-1">
+                <div className="flex h-32 w-full items-end justify-center gap-1">
+                  <div className="w-3 rounded-t bg-primary" title={"المبيعات: " + formatMoney(row.sales)} style={{ height: Math.max(2, Math.max(0, row.sales) / chartMax * 100) + "%" }} />
+                  {canViewFinancialReports && <div className="w-3 rounded-t bg-destructive" title={"المصروفات: " + formatMoney(row.expenses)} style={{ height: Math.max(2, row.expenses / chartMax * 100) + "%" }} />}
+                </div>
+                <span className="max-w-16 truncate text-[10px] text-muted-foreground">{row.label}</span>
+              </div>)}
+              {groupedSales.length === 0 && <p className="m-auto text-sm text-muted-foreground">لا توجد بيانات للرسم البياني.</p>}
+            </div>
+          </CardContent></Card>
           <Card>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
