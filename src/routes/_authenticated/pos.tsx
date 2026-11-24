@@ -469,7 +469,7 @@ function POSWorkspace() {
   const manualDiscount = Math.max(0, Number(discount) || 0);
   const promotionDiscount = useMemo(() => {
     const offer = selectedPromotion;
-    if (!offer || subtotal < Number(offer.minimum_subtotal)) return 0;
+    if (!offer) return 0;
     const eligible = cart.filter((item) => !offer.product_id || item.product_id === offer.product_id);
     const eligibleSubtotal = eligible.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
     if (eligibleSubtotal <= 0) return 0;
@@ -481,7 +481,8 @@ function POSWorkspace() {
       const buyQty = cart.filter((item) => item.product_id === offer.product_id).reduce((sum, item) => sum + item.quantity, 0);
       const reward = cart.find((item) => item.product_id === rewardId);
       const rewardQty = cart.filter((item) => item.product_id === rewardId).reduce((sum, item) => sum + item.quantity, 0);
-      const freeQty = Math.min(rewardQty, Math.floor(buyQty / Math.max(1, Number(offer.buy_quantity))) * Number(offer.get_quantity));
+      const availableRewardQty = rewardId === offer.product_id ? Math.max(0, rewardQty - buyQty) : rewardQty;
+      const freeQty = Math.min(availableRewardQty, Math.floor(buyQty / Math.max(1, Number(offer.buy_quantity))) * Number(offer.get_quantity));
       amount = freeQty * (reward?.unit_price ?? 0);
     }
     if (offer.max_discount !== null) amount = Math.min(amount, Number(offer.max_discount));
