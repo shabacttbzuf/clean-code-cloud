@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { useAuthSession } from "@/hooks/use-auth-session";
-import { useNotificationSync } from "@/hooks/use-notification-sync";
 import { safeInternalNotificationPath, notificationPathPermission } from "@/lib/notification-links";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,7 +17,6 @@ function NotificationsPage() {
   const { tenantId, loading, hasPermission, isSuperOwner } = useActiveTenant();
   const navigate = useNavigate();
   const { user } = useAuthSession();
-  useNotificationSync(tenantId, user?.id);
   const qc = useQueryClient();
   const q = useQuery({
     queryKey: ["notifications-list", tenantId, user?.id],
