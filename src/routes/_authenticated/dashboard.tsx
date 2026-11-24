@@ -321,23 +321,25 @@ function Dashboard() {
           fetchAllRows((from, to) => refundsYesterdayQ.order("created_at").order("id").range(from, to)),
           fetchAllRows((from, to) => refundsMonthQ.order("created_at").order("id").range(from, to)),
           fetchAllRows((from, to) => refundsTrendQ.order("created_at").order("id").range(from, to)),
-          fetchAllRows((from, to) => expensesQ.order("paid_at").order("id").range(from, to)),
-          fetchAllRows((from, to) => expensesByCategoryQ.order("paid_at").order("id").range(from, to)),
-          fetchAllRows((from, to) => inventoryQ.order("product_id").order("id").range(from, to)),
-          fetchAllRows((from, to) => sessionsQ.order("id").range(from, to)),
+          hasPermission("expenses.view") || hasPermission("reports.view") ? fetchAllRows((from, to) => expensesQ.order("paid_at").order("id").range(from, to)) : Promise.resolve([]),
+          hasPermission("expenses.view") || hasPermission("reports.view") ? fetchAllRows((from, to) => expensesByCategoryQ.order("paid_at").order("id").range(from, to)) : Promise.resolve([]),
+          hasPermission("inventory.view") ? fetchAllRows((from, to) => inventoryQ.order("product_id").order("id").range(from, to)) : Promise.resolve([]),
+          hasPermission("cash.view") ? fetchAllRows((from, to) => sessionsQ.order("id").range(from, to)) : Promise.resolve([]),
           scope(supabase.from("sales").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).neq("status", "void").gte("created_at", dayStart).lt("created_at", tomorrow)),
         ]);
         if (salesCount.error) throw salesCount.error;
 
         const saleIds = salesMonth.map((row) => row.id);
         const refundIds = refundsMonth.map((row) => row.id);
-        const saleCostGroups = await Promise.all(Array.from({ length: Math.ceil(saleIds.length / 100) }, (_, i) => saleIds.slice(i * 100, (i + 1) * 100))
-          .map((ids) => ids.length ? fetchAllRows((from, to) => supabase.from("sale_items").select("quantity,cost_price_snapshot").eq("tenant_id", tenantId).in("sale_id", ids).range(from, to)) : Promise.resolve([])));
-        const refundCostGroups = await Promise.all(Array.from({ length: Math.ceil(refundIds.length / 100) }, (_, i) => refundIds.slice(i * 100, (i + 1) * 100))
-          .map((ids) => ids.length ? fetchAllRows((from, to) => supabase.from("sale_refund_items").select("quantity,cost_price_snapshot,restocked").eq("tenant_id", tenantId).in("refund_id", ids).range(from, to)) : Promise.resolve([])));
+        const saleCostGroups = hasPermission("reports.view") ? await Promise.all(Array.from({ length: Math.ceil(saleIds.length / 100) }, (_, i) => saleIds.slice(i * 100, (i + 1) * 100))
+          .map((ids) => ids.length ? fetchAllRows((from, to) => supabase.from("sale_items").select("quantity,cost_price_snapshot").eq("tenant_id", tenantId).in("sale_id", ids).range(from, to)) : Promise.resolve([]))) : [];
+        const refundCostGroups = hasPermission("reports.view") ? await Promise.all(Array.from({ length: Math.ceil(refundIds.length / 100) }, (_, i) => refundIds.slice(i * 100, (i + 1) * 100))
+          .map((ids) => ids.length ? fetchAllRows((from, to) => supabase.from("sale_refund_items").select("quantity,cost_price_snapshot,restocked").eq("tenant_id", tenantId).in("refund_id", ids).range(from, to)) : Promise.resolve([]))) : [];
         const saleCosts = saleCostGroups.flat();
         const refundCosts = refundCostGroups.flat();
-        const categories = await supabase.from("expense_categories").select("id,name,color").eq("tenant_id", tenantId);
+        const categories = hasPermission("expenses.view") || hasPermission("reports.view")
+          ? await supabase.from("expense_categories").select("id,name,color").eq("tenant_id", tenantId)
+          : { data: [], error: null };
         if (categories.error) throw categories.error;
         const categoryMap = new Map((categories.data ?? []).map((row) => [row.id, row]));
 
@@ -364,11 +366,11 @@ function Dashboard() {
         const byCat = Array.from(catTotals.entries()).map(([id, value], i) => ({ name: id === "other" ? "أخرى" : (categoryMap.get(id)?.name ?? "—"), value: +value.toFixed(2), color: categoryMap.get(id)?.color ?? palette[i % palette.length] }));
 
         const productIds = [...new Set(inventory.map((row) => row.product_id))];
-        const productGroups = await Promise.all(Array.from({ length: Math.ceil(productIds.length / 100) }, (_, i) => productIds.slice(i * 100, (i + 1) * 100))
-          .map((ids) => ids.length ? fetchAllRows((from, to) => supabase.from("products").select("id,min_stock").eq("tenant_id", tenantId).in("id", ids).range(from, to)) : Promise.resolve([])));
+        const productGroups = hasPermission("inventory.view") ? await Promise.all(Array.from({ length: Math.ceil(productIds.length / 100) }, (_, i) => productIds.slice(i * 100, (i + 1) * 100))
+          .map((ids) => ids.length ? fetchAllRows((from, to) => supabase.from("products").select("id,min_stock").eq("tenant_id", tenantId).in("id", ids).range(from, to)) : Promise.resolve([]))) : [];
         const products = productGroups.flat();
         const minStock = new Map(products.map((row) => [row.id, Number(row.min_stock)]));
-        if (minStock.size !== productIds.length) throw new Error("تعذر التحقق من حدود إعادة الطلب لجميع منتجات المخزون.");
+        if (hasPermission("inventory.view") && minStock.size !== productIds.length) throw new Error("تعذر التحقق من حدود إعادة الطلب لجميع منتجات المخزون.");
         const lowStockCount = inventory.filter((row) => Number(row.quantity) <= (minStock.get(row.product_id) ?? 0)).length;
 
         return {
