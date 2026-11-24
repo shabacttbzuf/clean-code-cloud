@@ -40,6 +40,8 @@ export type OfflineOperation = {
 export type OfflineHandler = {
   /** Must be true only for a locally safe, non-ledger operation. */
   offlineSafe: true;
+  /** Explicit assertion that the server atomically persists and replays this key. */
+  idempotentServerSide: true;
   /** Server call must persist idempotencyKey atomically with its mutation. */
   send: (operation: OfflineOperation) => Promise<void>;
 };
@@ -110,7 +112,7 @@ export function registerOfflineHandler(type: string, handler: OfflineHandler) {
   if (!type.trim() || FINANCIAL_TYPES.has(type)) {
     throw new Error("هذا النوع من العمليات لا يسمح بتسجيله للمزامنة دون اتصال.");
   }
-  if (handler.offlineSafe !== true) throw new Error("يجب تأكيد أن العملية آمنة للعمل دون اتصال.");
+  if (handler.offlineSafe !== true || handler.idempotentServerSide !== true) throw new Error("يجب تأكيد أمان العملية ودعم الخادم لمفتاح منع التكرار.");
   handlers.set(type, handler);
   return () => handlers.delete(type);
 }
