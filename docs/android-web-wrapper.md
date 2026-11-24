@@ -18,7 +18,7 @@
 
 ## بناء APK
 
-سير العمل `.github/workflows/android-wrapper.yml` يثبت أدوات Capacitor بإصدار ثابت، يفحص TypeScript، يبني الويب، ينشئ مشروع Android مؤقتاً، ثم ينفذ `assembleDebug` ويرفع APK كأثر GitHub Actions لمدة 14 يوماً. لا يضيف ملفات Android مولدة ضخمة أو يغير جداول قاعدة البيانات.
+وظيفة `Build installable Android APK` ضمن `.github/workflows/ci.yml` تثبت Java 21 وAndroid SDK API 36 وCapacitor 8.6.2، ثم تنشئ مشروع Android مؤقتاً وتنَفذ `assembleDebug` وترفع APK كأثر GitHub Actions لمدة 14 يوماً. لا تضيف ملفات Android مولدة ضخمة أو تغير جداول قاعدة البيانات.
 
 ## حدود الأمان
 
