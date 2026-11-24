@@ -303,8 +303,8 @@ function Dashboard() {
         const refundsYesterdayQ = scope(supabase.from("sale_refunds").select("total").eq("tenant_id", tenantId).gte("created_at", yesterday).lt("created_at", dayStart));
         const refundsMonthQ = scope(supabase.from("sale_refunds").select("id,total,subtotal,discount").eq("tenant_id", tenantId).gte("created_at", monthStart));
         const refundsTrendQ = scope(supabase.from("sale_refunds").select("total,created_at").eq("tenant_id", tenantId).gte("created_at", last30));
-        const expensesQ = scope(supabase.from("expenses").select("amount,paid_at").eq("tenant_id", tenantId).gte("paid_at", monthStart.slice(0, 10)));
-        const expensesByCategoryQ = scope(supabase.from("expenses").select("amount,category_id,paid_at").eq("tenant_id", tenantId).gte("paid_at", monthStart.slice(0, 10)));
+        const expensesQ = scope(supabase.from("expenses").select("amount,paid_at").eq("tenant_id", tenantId).gte("paid_at", localDayKey(monthStartDate)));
+        const expensesByCategoryQ = scope(supabase.from("expenses").select("amount,category_id,paid_at").eq("tenant_id", tenantId).gte("paid_at", localDayKey(monthStartDate)));
         const inventoryQ = scope(supabase.from("inventory").select("quantity,product_id").eq("tenant_id", tenantId));
         const sessionsQ = scope(supabase.from("cash_sessions").select("id").eq("tenant_id", tenantId).eq("status", "open"));
 
@@ -313,17 +313,17 @@ function Dashboard() {
           refundsMonth, refundsTrend, expenses, expensesByCategory, inventory, sessions,
           salesCount,
         ] = await Promise.all([
-          fetchAllRows((from, to) => salesTodayQ.order("created_at").range(from, to)),
-          fetchAllRows((from, to) => salesYesterdayQ.order("created_at").range(from, to)),
-          fetchAllRows((from, to) => salesMonthQ.order("created_at").range(from, to)),
-          fetchAllRows((from, to) => salesTrendQ.order("created_at").range(from, to)),
-          fetchAllRows((from, to) => refundsTodayQ.order("created_at").range(from, to)),
-          fetchAllRows((from, to) => refundsYesterdayQ.order("created_at").range(from, to)),
-          fetchAllRows((from, to) => refundsMonthQ.order("created_at").range(from, to)),
-          fetchAllRows((from, to) => refundsTrendQ.order("created_at").range(from, to)),
-          fetchAllRows((from, to) => expensesQ.order("paid_at").range(from, to)),
-          fetchAllRows((from, to) => expensesByCategoryQ.order("paid_at").range(from, to)),
-          fetchAllRows((from, to) => inventoryQ.order("product_id").range(from, to)),
+          fetchAllRows((from, to) => salesTodayQ.order("created_at").order("id").range(from, to)),
+          fetchAllRows((from, to) => salesYesterdayQ.order("created_at").order("id").range(from, to)),
+          fetchAllRows((from, to) => salesMonthQ.order("created_at").order("id").range(from, to)),
+          fetchAllRows((from, to) => salesTrendQ.order("created_at").order("id").range(from, to)),
+          fetchAllRows((from, to) => refundsTodayQ.order("created_at").order("id").range(from, to)),
+          fetchAllRows((from, to) => refundsYesterdayQ.order("created_at").order("id").range(from, to)),
+          fetchAllRows((from, to) => refundsMonthQ.order("created_at").order("id").range(from, to)),
+          fetchAllRows((from, to) => refundsTrendQ.order("created_at").order("id").range(from, to)),
+          fetchAllRows((from, to) => expensesQ.order("paid_at").order("id").range(from, to)),
+          fetchAllRows((from, to) => expensesByCategoryQ.order("paid_at").order("id").range(from, to)),
+          fetchAllRows((from, to) => inventoryQ.order("product_id").order("id").range(from, to)),
           fetchAllRows((from, to) => sessionsQ.order("id").range(from, to)),
           scope(supabase.from("sales").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).neq("status", "void").gte("created_at", dayStart).lt("created_at", tomorrow)),
         ]);
@@ -562,7 +562,7 @@ function Dashboard() {
         </div>
       )}
 
-      {stats.isLoading ? (
+      {(hasPermission("sales.view") || hasPermission("reports.view")) && (stats.isLoading ? (
         <div className="flex justify-center py-12" role="status" aria-live="polite"><Loader2 className="h-6 w-6 animate-spin text-primary" /><span className="sr-only">جارٍ تحميل مؤشرات لوحة التحكم</span></div>
       ) : stats.error ? (
         <Card role="alert" className="border-destructive/40">
@@ -596,7 +596,7 @@ function Dashboard() {
           </div>
 
           <div className="grid gap-4 lg:grid-cols-3">
-            <Card className="lg:col-span-2">
+            {(hasPermission("sales.view") || hasPermission("reports.view")) && <Card className="lg:col-span-2">
               <CardContent className="p-4">
                 <div className="mb-3 text-sm font-semibold">مبيعات آخر 30 يوم</div>
                 <div className="h-64">
@@ -612,7 +612,7 @@ function Dashboard() {
                 </div>
               </CardContent>
             </Card>
-            <Card>
+            {hasPermission("expenses.view") && <Card>
               <CardContent className="p-4">
                 <div className="mb-3 text-sm font-semibold">توزيع المصروفات</div>
                 {stats.data.byCat.length === 0 ? (
@@ -631,17 +631,17 @@ function Dashboard() {
                   </div>
                 )}
               </CardContent>
-            </Card>
+            </Card>}
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <MiniStat label="ورديات مفتوحة" value={stats.data.openSessions} icon={<Wallet className="h-4 w-4" />} />
-            <MiniStat label="نفاد مخزون" value={stats.data.lowStockCount} icon={<Package className="h-4 w-4" />} />
+            {hasPermission("cash.view") && <MiniStat label="ورديات مفتوحة" value={stats.data.openSessions} icon={<Wallet className="h-4 w-4" />} />}
+            {hasPermission("inventory.view") && <MiniStat label="نفاد مخزون" value={stats.data.lowStockCount} icon={<Package className="h-4 w-4" />} />
             {hasPermission("sales.view") && <MiniStat label="طلبات اليوم" value={stats.data.salesTodayCount} icon={<Receipt className="h-4 w-4" />} />}
 
           </div>
         </>
-      )}
+      ))}
       {(hasPermission("sales.view") || hasPermission("kitchen.view")) && (
         <section className="grid gap-4 xl:grid-cols-2" aria-label="متابعة الطلبات والتشغيل">
           {hasPermission("sales.view") && <Card className="overflow-hidden border-[#dce5f3] shadow-sm"><CardContent className="p-0">
