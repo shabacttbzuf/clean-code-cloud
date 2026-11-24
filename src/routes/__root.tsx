@@ -52,6 +52,14 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
           حدث خطأ غير متوقع
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">حاول تحديث الصفحة أو العودة للرئيسية.</p>
+        {import.meta.env.DEV ? (
+          <details open className="mt-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-start" dir="ltr">
+            <summary className="cursor-pointer text-xs font-semibold">Development error details</summary>
+            <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words text-xs text-destructive">
+              {error instanceof Error ? `${error.name}: ${error.message}\n\n${error.stack ?? ""}` : String(error)}
+            </pre>
+          </details>
+        ) : null}
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
