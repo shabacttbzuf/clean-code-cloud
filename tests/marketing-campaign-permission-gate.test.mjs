@@ -16,7 +16,15 @@ test("company-scoped marketing controls require the dedicated ads.manage permiss
 test("tenant-wide and Super Owner management remain explicit while campaign actions stay company-scoped", () => {
   assert.match(source, /const isTenantOwner = role === "owner" && !membership\?\.company_id/);
   assert.match(source, /if \(!isSuperOwner && !isTenantOwner\)[\s\S]*query = query\.eq\("company_id", membership\.company_id\)/);
-  assert.match(source, /\.update\(payload\)\.eq\("id", editingId\)\.eq\("tenant_id", tenantId!\)/);
+  assert.match(source, /\.update\(payload\)\s*\.eq\("id", editingId \?\? ""\)\s*\.eq\("tenant_id", tenantId!\)/);
+});
+
+test("campaign ordering and draft preview are available without bypassing the save flow", () => {
+  assert.match(source, /sort_order: normalizedSortOrder/);
+  assert.match(source, /Number\\.isInteger\\(normalizedSortOrder\\)/);
+  assert.match(source, /setSortOrder\\(String\\(campaign\\.sort_order \\?\\? 0\\)\\)/);
+  assert.match(source, /معاينة الإعلان/);
+  assert.match(source, /aria-label="معاينة الإعلان"/);
 });
 
 test("database grants dedicated ads permission without changing company-scope boundaries", () => {
