@@ -52,7 +52,7 @@ export function AdsPage() {
     }));
     return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
       detail: { path: "/ads", dirty: false },
-    }));; };
+    })); };
   }, [formTouched]);
 
   const isTenantOwner = role === "owner" && !membership?.company_id;
