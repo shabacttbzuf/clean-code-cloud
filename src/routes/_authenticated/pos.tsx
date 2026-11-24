@@ -865,13 +865,7 @@ function POSWorkspace() {
 
   if (branches.isLoading || openSession.isLoading) {
     return (
-    <div className="space-y-4">
-      {!isOnline ? (
-        <div role="status" aria-live="polite" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950" dir="rtl">
-          وضع عدم الاتصال: يعرض النظام بيانات الأصناف والتصنيفات المحفوظة سابقاً، ويمكن إعداد مسودات محلية فقط. المخزون والأسعار والعروض غير مؤكدة، وإتمام البيع والمحاسبة متوقف حتى عودة الاتصال.
-        </div>
-      ) : null}
-fy-center py-12">
+      <div className="flex justify-center py-12">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
     );
@@ -974,6 +968,11 @@ fy-center py-12">
 
   return (
     <div className="flex h-[calc(100dvh-7rem)] min-h-[420px] flex-col gap-2 overflow-hidden p-1">
+      {!isOnline ? (
+        <div role="status" aria-live="polite" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950" dir="rtl">
+          وضع عدم الاتصال: يعرض النظام بيانات الأصناف والتصنيفات المحفوظة سابقاً، ويمكن إعداد مسودات محلية فقط. المخزون والأسعار والعروض غير مؤكدة، وإتمام البيع والمحاسبة متوقف حتى عودة الاتصال.
+        </div>
+      ) : null}
       <PageHeader
         title="نقطة البيع"
         subtitle={currentBranch?.name}
