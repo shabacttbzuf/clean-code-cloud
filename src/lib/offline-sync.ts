@@ -32,6 +32,7 @@ export type OfflineOperation = {
   dependencies: string[];
   lastError: string | null;
   syncedAt: string | null;
+  nextRetryAt: string | null;
 };
 
 export type OfflineHandler = {
@@ -135,6 +136,7 @@ export async function enqueueOfflineOperation(
     dependencies: [...new Set(dependencies)],
     lastError: null,
     syncedAt: null,
+    nextRetryAt: null,
   };
   await transaction([STORE], "readwrite", (tx) => tx.objectStore(STORE).add(operation));
   notifyQueueChanged();
@@ -149,7 +151,8 @@ export async function listOfflineOperations(scope?: OfflineScope): Promise<Offli
     .filter((row) => !scope || (
       row.scope.userId === scope.userId &&
       row.scope.tenantId === scope.tenantId &&
-      row.scope.branchId === scope.branchId
+      row.scope.branchId === scope.branchId &&
+      row.scope.companyId === scope.companyId
     ))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
@@ -160,9 +163,10 @@ async function saveOperation(operation: OfflineOperation) {
   notifyQueueChanged();
 }
 
-export async function getLastOfflineSyncAt(): Promise<string | null> {
+export async function getLastOfflineSyncAt(scope: OfflineScope): Promise<string | null> {
+  const key = `lastSuccessfulSyncAt:${scope.userId}:${scope.tenantId}:${scope.branchId ?? "all"}:${scope.companyId ?? "none"}`;
   return (await transaction<string | undefined>([META], "readonly", (tx) =>
-    tx.objectStore(META).get("lastSuccessfulSyncAt"),
+    tx.objectStore(META).get(key),
   )) ?? null;
 }
 
@@ -174,6 +178,7 @@ export async function syncOfflineOperations(scope: OfflineScope): Promise<void> 
     const syncedIds = new Set(rows.filter((row) => row.status === "synced").map((row) => row.id));
     for (const operation of rows) {
       if (operation.status === "synced" || operation.status === "conflict") continue;
+      if (operation.nextRetryAt && new Date(operation.nextRetryAt).getTime() > Date.now()) continue;
       if (!operation.dependencies.every((id) => syncedIds.has(id))) continue;
       const handler = handlers.get(operation.type);
       if (!handler || handler.offlineSafe !== true) {
@@ -192,15 +197,19 @@ export async function syncOfflineOperations(scope: OfflineScope): Promise<void> 
         operation.status = "synced";
         operation.syncedAt = new Date().toISOString();
         operation.lastError = null;
+        operation.nextRetryAt = null;
         syncedIds.add(operation.id);
         await saveOperation(operation);
+        const metaKey = `lastSuccessfulSyncAt:${scope.userId}:${scope.tenantId}:${scope.branchId ?? "all"}:${scope.companyId ?? "none"}`;
         await transaction([META], "readwrite", (tx) =>
-          tx.objectStore(META).put(operation.syncedAt, "lastSuccessfulSyncAt"),
+          tx.objectStore(META).put(operation.syncedAt, metaKey),
         );
       } catch (error) {
         const message = error instanceof Error ? error.message : "فشل غير معروف أثناء المزامنة.";
         operation.status = /conflict|version|stale|تعارض/i.test(message) ? "conflict" : "failed";
         operation.lastError = message.slice(0, 1000);
+        const retryDelay = Math.min(30 * 60_000, 5_000 * 2 ** Math.min(operation.attempts - 1, 8));
+        operation.nextRetryAt = new Date(Date.now() + retryDelay).toISOString();
         await saveOperation(operation);
         // Keep later dependent operations queued; independent operations may proceed.
       }
