@@ -122,9 +122,6 @@ export function WorkspaceTabs() {
   function persist(nextTabs: WorkspaceTab[]) {
     const limited = limitTabs(nextTabs);
     setTabs(limited);
-    if (storageKey) {
-      try { localStorage.setItem(storageKey, JSON.stringify(limited)); } catch { /* storage is optional */ }
-    }
   }
 
   useEffect(() => {
@@ -148,12 +145,14 @@ export function WorkspaceTabs() {
         ? current.map((tab) => tab.path === pathname ? { ...tab, title: titleFor(pathname) } : tab)
         : [...current, { path: pathname, title: titleFor(pathname) }];
       const limited = limitTabs(next);
-      if (storageKey) {
-        try { localStorage.setItem(storageKey, JSON.stringify(limited)); } catch { /* storage is optional */ }
-      }
       return limited;
     });
   }, [pathname, storageKey]);
+
+  useEffect(() => {
+    if (!storageKey || (!isSuperOwner && permissionQuery.isLoading)) return;
+    try { localStorage.setItem(storageKey, JSON.stringify(tabs)); } catch { /* storage is optional */ }
+  }, [tabs, storageKey, isSuperOwner, permissionQuery.isLoading]);
 
   const activePath = useMemo(() => pathname, [pathname]);
 
