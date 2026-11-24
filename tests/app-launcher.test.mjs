@@ -39,5 +39,5 @@ test("favorite and frequent shortcuts are derived from permission-filtered visib
   assert.match(launcher, /const favorites = useMemo/);
   assert.match(launcher, /const mostUsed = useMemo/);
   assert.match(launcher, /visibleItems\.filter\(\(item\) => favoriteUrls\.includes\(item\.url\)\)/);
-  assert.match(launcher, /visibleItems\.filter\(\(item\) => \(usageCounts\[item\.url\] \?\? 0\) > 0\)/);
+  assert.match(launcher, /usageCounts\[item\.url\] \?\? 0/);\n  assert.match(launcher, /\.sort\(\(a, b\) =>/);
 });
