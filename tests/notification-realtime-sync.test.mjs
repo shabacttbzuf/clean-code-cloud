@@ -7,6 +7,7 @@ const migration = readFileSync(new URL("../supabase/migrations/20261125010000_no
 const topbar = readFileSync(new URL("../src/routes/_authenticated/route.tsx", import.meta.url), "utf8");
 const page = readFileSync(new URL("../src/routes/_authenticated/notifications.tsx", import.meta.url), "utf8");
 const lowStockMigration = readFileSync(new URL("../supabase/migrations/20261125020000_low_stock_event_notifications.sql", import.meta.url), "utf8");
+const hrMigration = readFileSync(new URL("../supabase/migrations/20261125030000_hr_leave_event_notifications.sql", import.meta.url), "utf8");
 
 test("notification realtime refreshes existing RLS-backed queries and never renders event payloads", () => {
   assert.match(hook, /postgres_changes/);
@@ -39,4 +40,17 @@ test("low-stock alerts are emitted only when real inventory crosses its configur
   assert.match(lowStockMigration, /'urgent'/);
   assert.match(lowStockMigration, /'/);
   assert.doesNotMatch(lowStockMigration, /UPDATE public\.(sales|payments|cash_sessions)|DELETE FROM public\.(sales|payments|cash_sessions)/i);
+});
+
+test("HR notifications follow actual leave-request creation and decision transitions", () => {
+  assert.match(hrMigration, /AFTER INSERT OR UPDATE OF status ON public\.leave_requests/);
+  assert.match(hrMigration, /NEW\.status = 'pending'/);
+  assert.match(hrMigration, /OLD\.status = 'pending'/);
+  assert.match(hrMigration, /NEW\.status IN \('approved', 'rejected'\)/);
+  assert.match(hrMigration, /v_employee_user_id/);
+  assert.match(hrMigration, /'hr_leave_requested'/);
+  assert.match(hrMigration, /'hr_leave_approved'/);
+  assert.match(hrMigration, /'hr_leave_rejected'/);
+  assert.match(hrMigration, /ur\.user_id = v_employee_user_id/);
+  assert.doesNotMatch(hrMigration, /UPDATE public\.leave_requests|DELETE FROM public\.leave_requests/i);
 });
