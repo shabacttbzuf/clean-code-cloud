@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
 import { Loader2, TrendingUp, TrendingDown, Receipt, Wallet, Package, Crown, Building2, Users as UsersIcon, Bell, Wifi, WifiOff, CircleHelp, ClipboardList, ChefHat } from "lucide-react";
 import { formatMoney } from "@/lib/format";
+import { offlineCacheKey, readOfflineCache, writeOfflineCache } from "@/lib/offline-reference-cache";
 import { Link } from "@tanstack/react-router";
 import { Sparkles, ShoppingBag, ArrowLeft, ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 
@@ -393,7 +394,14 @@ function Dashboard() {
   const latestOrders = useQuery({
     queryKey: ["dashboard-latest-orders", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
+      const cacheKey = offlineCacheKey({
+        tenantId: tenantId ?? "no-tenant",
+        userId: user?.id ?? "no-user",
+        companyId: membership?.company_id,
+        branchId: membership?.branch_id,
+      }, "dashboard-latest-orders");
       if (!tenantId) return [];
+      try {
       let query = supabase.from("sales").select("id,invoice_no,total,status,created_at,order_type,customer_id,notes")
         .eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(8);
       if (!isSuperOwner && membership?.branch_id) {
@@ -417,10 +425,24 @@ function Dashboard() {
       const kitchenStatusBySale = new Map<string, string>(
         (kitchenRows ?? []).map((row: { sale_id: string; status: string }) => [row.sale_id, row.status]),
       );
-      return salesRows.map((sale) => ({
+      const result = salesRows.map((sale) => ({
         ...sale,
         kitchen_status: kitchenStatusBySale.get(sale.id) ?? null,
       }));
+      await writeOfflineCache(cacheKey, result);
+      return result;
+      } catch (error) {
+        const failure = error as { status?: number; code?: string };
+        if (failure?.status === 401 || failure?.status === 403 ||
+            failure?.code === "42501" || failure?.code === "PGRST301") throw error;
+        const cached = await readOfflineCache<Array<{
+          id: string; invoice_no: number | null; total: number; status: string; created_at: string;
+          order_type: "dine_in" | "takeaway" | "delivery"; customer_id: string | null;
+          notes: string | null; kitchen_status: string | null;
+        }>>(cacheKey);
+        if (cached) return cached.data;
+        throw error;
+      }
     },
     enabled: !!tenantId && hasPermission("sales.view"),
     refetchInterval: 15_000,
@@ -499,6 +521,7 @@ function Dashboard() {
         void queryClient.invalidateQueries({ queryKey: ["dashboard-stats", tenantId] });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "kitchen_orders", filter: `tenant_id=eq.${tenantId}` }, () => {
+        void queryClient.invalidateQueries({ queryKey: ["dashboard-latest-orders", tenantId] });
         void queryClient.invalidateQueries({ queryKey: ["dashboard-kitchen-overview", tenantId] });
         void queryClient.invalidateQueries({ queryKey: ["dashboard-kitchen-counts", tenantId] });
       })
@@ -656,7 +679,7 @@ function Dashboard() {
               : latestOrders.isLoading ? <div className="py-6 text-center text-sm text-muted-foreground">جارٍ تحميل الطلبات...</div>
               : (latestOrders.data ?? []).length === 0 ? <div className="py-6 text-center text-sm text-muted-foreground">لا توجد طلبات مسجلة بعد.</div>
               : <div className="divide-y divide-[#edf1f7] px-4">{(latestOrders.data ?? []).map((order) => <div key={order.id} className="flex items-center justify-between gap-3 py-3">
-                <div className="flex min-w-0 items-center gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#edf3fc] text-[#174b91]"><Receipt className="h-5 w-5" /></div><div className="min-w-0"><Link to="/sales/$id" params={{ id: order.id }} className="truncate text-sm font-extrabold text-[#18375f] hover:text-primary">طلب #${order.invoice_no ?? "—"} · التفاصيل</Link><div className="mt-1 text-[11px] text-slate-500">{new Intl.DateTimeFormat("ar-YE", { dateStyle: "short", timeStyle: "short" }).format(new Date(order.created_at))} · {order.order_type === "dine_in" ? "داخل المطعم" : order.order_type === "delivery" ? "توصيل" : "سفري"}</div>{order.notes && <div className="mt-1 max-w-[240px] truncate text-[11px] text-slate-500">ملاحظات الطلب: {order.notes}</div>}</div></div>
+                <div className="flex min-w-0 items-center gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#edf3fc] text-[#174b91]"><Receipt className="h-5 w-5" /></div><div className="min-w-0"><Link to="/sales/$id" params={{ id: order.id }} className="truncate text-sm font-extrabold text-[#18375f] hover:text-primary">طلب #{order.invoice_no ?? "—"} · التفاصيل</Link><div className="mt-1 text-[11px] text-slate-500">{new Intl.DateTimeFormat("ar-YE", { dateStyle: "short", timeStyle: "short" }).format(new Date(order.created_at))} · {order.order_type === "dine_in" ? "داخل المطعم" : order.order_type === "delivery" ? "توصيل" : "سفري"}</div>{order.notes && <div className="mt-1 max-w-[240px] truncate text-[11px] text-slate-500">ملاحظات الطلب: {order.notes}</div>}</div></div>
                 <div className="shrink-0 text-left"><div className="text-sm font-extrabold text-[#102f5c] num">{formatMoney(Number(order.total))} {currency}</div><span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${order.status === "completed" ? "bg-emerald-50 text-emerald-700" : order.status === "void" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700"}`}>الفاتورة: {order.status === "completed" ? "مكتملة" : order.status === "void" ? "ملغاة" : "قيد المعالجة"}</span>{order.kitchen_status && <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${order.kitchen_status === "ready" || order.kitchen_status === "delivered" ? "bg-emerald-50 text-emerald-700" : order.kitchen_status === "preparing" ? "bg-amber-50 text-amber-700" : "bg-sky-50 text-sky-700"}`}>المطبخ: {order.kitchen_status === "new" ? "جديد" : order.kitchen_status === "preparing" ? "قيد التحضير" : order.kitchen_status === "ready" ? "جاهز" : order.kitchen_status === "delivered" ? "تم التسليم" : "ملغي"}</span>}</div>
               </div>)}</div>}
           </CardContent></Card>}
