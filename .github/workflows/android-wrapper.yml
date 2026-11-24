@@ -1,0 +1,77 @@
+name: Android Wrapper APK
+
+on:
+  push:
+    branches: ["work/uiux-17-offline-foundation"]
+    paths:
+      - "capacitor.config.ts"
+      - "android-web/**"
+      - "public/**"
+      - "src/**"
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/android-wrapper.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-wrapper-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-debug-apk:
+    name: Build Android debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install project dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install pinned Capacitor toolchain without changing project manifests
+        run: bun add --no-save @capacitor/core@8.6.2 @capacitor/android@8.6.2 @capacitor/cli@8.6.2
+
+      - name: Build and typecheck web application
+        run: |
+          bun run typecheck
+          bun run build
+
+      - name: Generate Android wrapper
+        run: |
+          bunx cap add android
+          bunx cap sync android
+
+      - name: Assemble installable debug APK
+        working-directory: android
+        run: ./gradlew --no-daemon --stacktrace assembleDebug
+
+      - name: Verify APK artifact
+        run: |
+          test -s android/app/build/outputs/apk/debug/app-debug.apk
+          file android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: restaurant-management-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
