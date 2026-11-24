@@ -21,8 +21,8 @@ test("tenant-wide and Super Owner management remain explicit while campaign acti
 
 test("campaign ordering and draft preview are available without bypassing the save flow", () => {
   assert.match(source, /sort_order: normalizedSortOrder/);
-  assert.match(source, /Number\\.isInteger\\(normalizedSortOrder\\)/);
-  assert.match(source, /setSortOrder\\(String\\(campaign\\.sort_order \\?\\? 0\\)\\)/);
+  assert.ok(source.includes("Number.isInteger(normalizedSortOrder)"));
+  assert.ok(source.includes("setSortOrder(String(campaign.sort_order ?? 0))"));
   assert.match(source, /معاينة الإعلان/);
   assert.match(source, /aria-label="معاينة الإعلان"/);
 });
