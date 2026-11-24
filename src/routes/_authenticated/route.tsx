@@ -67,12 +67,16 @@ function AuthLayout() {
 }
 
 function AuthShell() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+
   return (
     <div className="workspace-surface flex min-h-screen w-full flex-col">
       <TopBar />
       <WorkspaceTabs />
       <main className="min-w-0 flex-1 p-3 sm:p-4 md:p-6">
-        <PermissionRouteGuard />
+        <div key={pathname} className="workspace-page-transition">
+          <PermissionRouteGuard />
+        </div>
       </main>
     </div>
   );
