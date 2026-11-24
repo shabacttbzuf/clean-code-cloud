@@ -118,6 +118,14 @@ function Dashboard() {
 
   const activeCampaign = campaignsQuery.data?.[activeCampaignIndex] ?? campaignsQuery.data?.[0] ?? null;
 
+  useEffect(() => {
+    if (!activeCampaign?.id) return;
+    void (supabase.rpc as any)("record_marketing_campaign_event", {
+      _campaign_id: activeCampaign.id,
+      _event_type: "impression",
+    }).catch((error: unknown) => console.warn("Campaign impression tracking failed", error));
+  }, [activeCampaign?.id]);
+
   const systemStatusQuery = useQuery({
     queryKey: ["dashboard-system-status", tenantId, user?.id],
     queryFn: async () => {
@@ -491,7 +499,7 @@ function Dashboard() {
                 <div className="text-xs font-semibold text-primary">إعلان / مساحة ترويجية</div>
                 <h2 className="text-lg font-extrabold sm:text-2xl">{activeCampaign.title}</h2>
                 {activeCampaign.description && <p className="text-sm text-muted-foreground sm:text-base">{activeCampaign.description}</p>}
-                {safeCampaignTarget(activeCampaign.target_url) && <a href={safeCampaignTarget(activeCampaign.target_url)!} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-9 items-center rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90">عرض التفاصيل ←</a>}
+                {safeCampaignTarget(activeCampaign.target_url) && <a href={safeCampaignTarget(activeCampaign.target_url)!} target="_blank" rel="noopener noreferrer" onClick={() => void (supabase.rpc as any)("record_marketing_campaign_event", { _campaign_id: activeCampaign.id, _event_type: "click" }).catch((error: unknown) => console.warn("Campaign click tracking failed", error))} className="inline-flex min-h-9 items-center rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90">عرض التفاصيل ←</a>}
               </div>
             </div>
           </div>
