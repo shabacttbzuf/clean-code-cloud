@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, ChefHat, RefreshCw, Clock3, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
+import { offlineCacheKey, readOfflineCache, writeOfflineCache } from "@/lib/offline-reference-cache";
 
 export const Route = createFileRoute("/_authenticated/kitchen")({ component: KitchenPage });
 
@@ -34,7 +35,7 @@ const statusLabel: Record<KitchenOrder["status"], string> = {
 };
 
 function KitchenPage() {
-  const { tenantId, membership, isSuperOwner, hasPermission } = useActiveTenant();
+  const { tenantId, userId, membership, isSuperOwner, hasPermission } = useActiveTenant();
   const canManage = hasPermission("kitchen.manage");
   const qc = useQueryClient();
   const [branchId, setBranchId] = useState<string>(membership?.branch_id ?? "");
@@ -63,7 +64,14 @@ function KitchenPage() {
   const queue = useQuery({
     queryKey: ["kitchen-queue", tenantId, branchId],
     queryFn: async () => {
+      const cacheKey = offlineCacheKey({
+        tenantId: tenantId ?? "no-tenant",
+        userId: userId ?? "no-user",
+        companyId: membership?.company_id,
+        branchId: branchId || membership?.branch_id,
+      }, "kitchen-queue");
       if (!tenantId || !branchId) return [] as Array<KitchenOrder & { sale: Sale | null; items: SaleItem[] }>;
+      try {
       const { data: orderRows, error } = await (supabase.from("kitchen_orders" as any) as any)
         .select("id,tenant_id,branch_id,sale_id,status,notes,created_at")
         .eq("tenant_id", tenantId).eq("branch_id", branchId)
@@ -93,11 +101,19 @@ function KitchenPage() {
       for (const item of (itemsResult.data ?? []) as SaleItem[]) {
         itemsMap.set(item.sale_id, [...(itemsMap.get(item.sale_id) ?? []), item]);
       }
-      return orders.map((order) => ({
+      const result = orders.map((order) => ({
         ...order,
         sale: salesMap.get(order.sale_id) ?? null,
         items: itemsMap.get(order.sale_id) ?? [],
       }));
+      await writeOfflineCache(cacheKey, result);
+      return result;
+    } catch (error) {
+      // Offline mode is read-only: cached kitchen tickets can be viewed, never advanced.
+      const cached = await readOfflineCache<Array<KitchenOrder & { sale: Sale | null; items: SaleItem[] }>>(cacheKey);
+      if (cached) return cached.data;
+      throw error;
+    }
     },
     enabled: !!tenantId && !!branchId,
     refetchInterval: 30_000,
@@ -129,6 +145,21 @@ function KitchenPage() {
     onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر تحديث الطلب"),
   });
 
+  const kitchenMetrics = useMemo(() => {
+    const orders = queue.data ?? [];
+    const newCount = orders.filter((order) => order.status === "new").length;
+    const preparingCount = orders.filter((order) => order.status === "preparing").length;
+    const readyCount = orders.filter((order) => order.status === "ready").length;
+    const activeCount = newCount + preparingCount + readyCount;
+    const completedCount = readyCount;
+    const completionRate = activeCount ? Math.round((completedCount / activeCount) * 100) : 0;
+    const lateOrders = orders.filter((order) =>
+      (order.status === "new" || order.status === "preparing") &&
+      Date.now() - new Date(order.created_at).getTime() >= 20 * 60 * 1000
+    );
+    return { newCount, preparingCount, readyCount, activeCount, completionRate, lateOrders };
+  }, [queue.data]);
+
   const columns = useMemo(() => ([
     { status: "new" as const, title: "طلبات جديدة", next: "preparing" as const, action: "بدء التحضير" },
     { status: "preparing" as const, title: "قيد التحضير", next: "ready" as const, action: "تحديد كجاهز" },
@@ -148,6 +179,20 @@ function KitchenPage() {
           <Button type="button" size="icon" variant="outline" aria-label="تحديث الطلبات" onClick={() => queue.refetch()}><RefreshCw className="h-4 w-4" /></Button>
         </div>
       } />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          { label: "طلبات جديدة", value: kitchenMetrics.newCount, tone: "border-sky-200 bg-sky-50 text-sky-800" },
+          { label: "قيد التحضير", value: kitchenMetrics.preparingCount, tone: "border-amber-200 bg-amber-50 text-amber-800" },
+          { label: "جاهزة", value: kitchenMetrics.readyCount, tone: "border-emerald-200 bg-emerald-50 text-emerald-800" },
+          { label: "نسبة الإنجاز", value: `${kitchenMetrics.completionRate}%`, tone: "border-primary/20 bg-primary/5 text-primary" },
+        ].map((metric) => <Card key={metric.label} className={metric.tone}><CardContent className="p-4"><div className="text-xs font-semibold">{metric.label}</div><div className="mt-1 text-2xl font-extrabold num">{metric.value}</div></CardContent></Card>)}
+      </div>
+      {kitchenMetrics.lateOrders.length > 0 && (
+        <div role="status" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+          <strong>تنبيه تأخير:</strong> يوجد {kitchenMetrics.lateOrders.length} طلباً تجاوز 20 دقيقة دون الجاهزية.
+        </div>
+      )}
+      {!navigator.onLine && <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">أنت تعمل دون اتصال. تُعرض آخر بيانات محفوظة، وتحديث الحالات متوقف حتى عودة الإنترنت.</div>}
       {branches.isError && <div role="alert" className="rounded-lg border border-destructive/30 p-3 text-sm text-destructive">تعذر تحميل الفروع. أعد تحميل الصفحة أو تحقق من صلاحياتك.</div>}
       {queue.isError && <div role="alert" className="rounded-lg border border-destructive/30 p-3 text-sm text-destructive">تعذر تحميل طلبات المطبخ. <Button variant="link" onClick={() => queue.refetch()}>إعادة المحاولة</Button></div>}
       {queue.isLoading ? <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" /></div> : (
@@ -177,7 +222,7 @@ function KitchenPage() {
                       </div>
                       {order.sale?.order_type === "delivery" && <div className="rounded-md bg-muted p-2 text-xs"><strong>التوصيل:</strong> {order.sale.delivery_customer_name} · {order.sale.delivery_customer_phone}<br />{order.sale.delivery_address}</div>}
                       {(order.notes || order.sale?.notes) && <div className="rounded-md bg-amber-500/10 p-2 text-xs"><strong>ملاحظات:</strong> {order.notes || order.sale?.notes}</div>}
-                      {canManage && <Button className="w-full" size="sm" disabled={statusMutation.isPending} onClick={() => statusMutation.mutate({ id: order.id, status: column.next })}><CheckCircle2 className="ml-2 h-4 w-4" />{column.action}</Button>}
+                      {canManage && <Button className="w-full" size="sm" disabled={statusMutation.isPending || !navigator.onLine} onClick={() => statusMutation.mutate({ id: order.id, status: column.next })}><CheckCircle2 className="ml-2 h-4 w-4" />{column.action}</Button>}
                     </CardContent>
                   </Card>
                 ))}
