@@ -16,7 +16,7 @@ test("offline queue is durable and commits IndexedDB transactions before reporti
 
 test("every queued operation receives a UUID idempotency key and immutable creation metadata", () => {
   assert.match(source, /const id = crypto\.randomUUID\(\)/);
-  assert.match(source, /idempotencyKey: id/);
+  assert.match(source, /idempotencyKey: idempotencyKey \?\? id/);
   assert.match(source, /createdAt: now/);
   assert.match(source, /userId: string/);
   assert.match(source, /tenantId: string/);
