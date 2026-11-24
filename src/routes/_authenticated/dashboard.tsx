@@ -54,6 +54,7 @@ function Dashboard() {
   const [heroImageDraft, setHeroImageDraft] = useState(DEFAULT_DASHBOARD_HERO_IMAGE_URL);
   const [heroBackgroundDraft, setHeroBackgroundDraft] = useState("#102f5c");
   const [heroSettingsOpen, setHeroSettingsOpen] = useState(false);
+  const [heroImageUploading, setHeroImageUploading] = useState(false);
   const { tenantId, tenant, user, membership, role, hasPermission } = useActiveTenant();
   const heroCustomizationKey = `restaurant-dashboard-hero:${tenantId ?? "global"}:${user?.id ?? "anonymous"}`;
 
@@ -522,6 +523,43 @@ function Dashboard() {
 
   const currency = tenant?.currency ?? "";
 
+  async function uploadHeroImage(file?: File) {
+    if (!file || !tenantId || !user?.id) return;
+    const extensions: Record<string, string> = {
+      "image/jpeg": "jpg",
+      "image/png": "png",
+      "image/webp": "webp",
+      "image/avif": "avif",
+    };
+    const extension = extensions[file.type];
+    if (!extension) {
+      window.alert("صيغة الصورة غير مدعومة. استخدم JPG أو PNG أو WebP أو AVIF.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      window.alert("حجم الصورة يتجاوز الحد المسموح (5MB).");
+      return;
+    }
+    setHeroImageUploading(true);
+    try {
+      const path = membership?.company_id
+        ? `${tenantId}/companies/${membership.company_id}/dashboard/${user.id}/${crypto.randomUUID()}.${extension}`
+        : `${tenantId}/dashboard/${user.id}/${crypto.randomUUID()}.${extension}`;
+      const { error } = await supabase.storage.from("restaurant-assets").upload(path, file, {
+        upsert: false,
+        contentType: file.type,
+        cacheControl: "31536000",
+      });
+      if (error) throw error;
+      setHeroImageDraft(supabase.storage.from("restaurant-assets").getPublicUrl(path).data.publicUrl);
+    } catch (error) {
+      console.error("Dashboard hero image upload failed", error);
+      window.alert("تعذر رفع الصورة. تحقق من صلاحيات التخزين ثم حاول مجدداً.");
+    } finally {
+      setHeroImageUploading(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <section className="relative isolate min-h-[205px] overflow-hidden rounded-2xl border border-[#d7e2f6] text-white shadow-[0_8px_24px_rgba(16,47,92,.16)] sm:min-h-[220px]" style={{ backgroundColor: heroBackgroundColor }} aria-labelledby="dashboard-welcome-title">
@@ -551,6 +589,13 @@ function Dashboard() {
               رابط صورة الخلفية
               <input type="url" dir="ltr" value={heroImageDraft} onChange={(event) => setHeroImageDraft(event.target.value)} placeholder="https://example.com/restaurant.webp" className="h-10 w-full rounded-md border bg-background px-3 text-left text-sm font-normal" />
               <span className="block text-xs font-normal text-muted-foreground">استخدم رابط صورة مباشر بصيغة HTTPS أو HTTP، أو اتركه فارغاً لإظهار لون الخلفية فقط.</span>
+              <span className="flex flex-wrap items-center gap-2 pt-1">
+                <label className="inline-flex cursor-pointer items-center rounded-md border px-3 py-2 text-xs hover:bg-muted">
+                  {heroImageUploading ? "جارٍ رفع الصورة..." : "رفع صورة من الجهاز"}
+                  <input type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={heroImageUploading} className="sr-only" onChange={(event) => { void uploadHeroImage(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+                </label>
+                {heroImageDraft && <button type="button" className="text-xs text-destructive underline" onClick={() => setHeroImageDraft("")}>إزالة الصورة</button>}
+              </span>
             </label>
             <label className="flex items-center gap-3 text-sm font-medium">
               لون الخلفية
