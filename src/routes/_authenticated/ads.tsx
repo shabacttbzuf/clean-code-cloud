@@ -88,6 +88,20 @@ export function AdsPage() {
     enabled: !!tenantId && canManage,
   });
 
+  const analytics = useQuery({
+    queryKey: ["marketing-campaign-analytics", tenantId, membership?.company_id ?? "tenant"],
+    queryFn: async (): Promise<Array<{ campaign_id: string; impressions: number; clicks: number }>> => {
+      const { data, error } = await (supabase.rpc as any)("get_marketing_campaign_analytics", { _tenant_id: tenantId! });
+      if (error) throw error;
+      return (data ?? []) as Array<{ campaign_id: string; impressions: number; clicks: number }>;
+    },
+    enabled: !!tenantId && canManage,
+    staleTime: 30_000,
+  });
+  const analyticsByCampaign = new Map(
+    (analytics.data ?? []).map((row) => [row.campaign_id, row]),
+  );
+
   const saveCampaign = useMutation({
     mutationFn: async () => {
       const cleanTitle = title.trim();
@@ -280,7 +294,13 @@ export function AdsPage() {
               const canEdit = isSuperOwner || isTenantOwner || (!!membership?.company_id && campaign.company_id === membership.company_id && canManage);
               return <div key={campaign.id} className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
                 {campaign.image_url && <img src={campaign.image_url} alt="" className="h-14 w-20 rounded object-cover" />}
-                <div className="min-w-0 flex-1"><div className="font-medium">{campaign.title}</div><div className="text-xs text-muted-foreground">{campaign.placement === "dashboard_banner" ? "الشريط الرئيسي" : campaign.placement === "dashboard_card" ? "بطاقة لوحة التحكم" : "نقطة البيع"} · {campaign.status === "active" ? "نشط" : campaign.status === "paused" ? "متوقف" : campaign.status === "archived" ? "مؤرشف" : "مسودة"}{campaign.starts_at ? ` · يبدأ ${new Date(campaign.starts_at).toLocaleString("ar")}` : ""}{campaign.ends_at ? ` · ينتهي ${new Date(campaign.ends_at).toLocaleString("ar")}` : ""}</div></div>
+                <div className="min-w-0 flex-1"><div className="font-medium">{campaign.title}</div><div className="text-xs text-muted-foreground">{campaign.placement === "dashboard_banner" ? "الشريط الرئيسي" : campaign.placement === "dashboard_card" ? "بطاقة لوحة التحكم" : "نقطة البيع"} · {campaign.status === "active" ? "نشط" : campaign.status === "paused" ? "متوقف" : campaign.status === "archived" ? "مؤرشف" : "مسودة"}{campaign.starts_at ? ` · يبدأ ${new Date(campaign.starts_at).toLocaleString("ar")}` : ""}{campaign.ends_at ? ` · ينتهي ${new Date(campaign.ends_at).toLocaleString("ar")}` : ""}</div>
+                  <div className="mt-1 text-xs text-muted-foreground" aria-label="إحصاءات الحملة">
+                    {analytics.isLoading ? "جارٍ تحميل الإحصاءات..." : analytics.isError ? "تعذر تحميل الإحصاءات" : (() => {
+                      const stats = analyticsByCampaign.get(campaign.id);
+                      return `المشاهدات الفريدة يومياً: ${stats?.impressions ?? 0} · النقرات الفريدة يومياً: ${stats?.clicks ?? 0}`;
+                    })()}
+                  </div></div>
                 <Button type="button" size="sm" variant="ghost" disabled={!canEdit} onClick={() => editCampaign(campaign)}>تعديل</Button>
                 <Button type="button" size="sm" variant="outline" disabled={!canEdit || updateStatus.isPending} onClick={() => updateStatus.mutate({
                   id: campaign.id,
