@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -27,6 +27,7 @@ function localDateKey(date: Date) {
 }
 
 function ReportsPage() {
+  const navigate = useNavigate();
   const { tenantId, tenant, userId, membership, isSuperOwner } = useActiveTenant();
   const permissionsQuery = useQuery({
     queryKey: ["reports-permissions", tenantId, userId],
@@ -677,7 +678,7 @@ function ReportsPage() {
       </div>
 
       {canViewPurchases && <Card><CardContent className="p-4">
-        <h3 className="mb-3 font-semibold">تفاصيل المشتريات</h3>
+        <div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">تفاصيل المشتريات</h3><Button size="sm" variant="outline" onClick={() => navigate({ to: "/purchases" })}>فتح المشتريات</Button></div>
         <div className="overflow-x-auto"><table className="w-full text-sm">
           <thead className="bg-muted/50 text-right"><tr><th className="p-2">التاريخ</th><th className="p-2">المرجع</th><th className="p-2">الفرع</th><th className="p-2">الحالة</th>{canViewFinancialReports && <th className="p-2">الإجمالي</th>}</tr></thead>
           <tbody>{safe.purchases.slice(0, 100).map((purchase: any) => <tr key={purchase.id} className="border-t">
@@ -691,7 +692,7 @@ function ReportsPage() {
 
       {canViewSalesReports && <Card>
         <CardContent className="p-4">
-          <h3 className="mb-3 font-semibold">مقارنة أداء الفروع</h3>
+          <div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">مقارنة أداء الفروع</h3><Button size="sm" variant="outline" onClick={() => navigate({ to: "/branches" })}>إدارة الفروع</Button></div>
           {branchStats.length ? <div className="overflow-x-auto"><table className="w-full text-sm">
             <thead className="bg-muted/50 text-right"><tr><th className="p-2">الفرع</th><th className="p-2">الفواتير</th><th className="p-2">المبيعات بعد المرتجعات</th></tr></thead>
             <tbody>{branchStats.map((branch) => <tr key={branch.id} className="border-t"><td className="p-2 font-medium">{branch.name}</td><td className="p-2 num">{branch.invoices}</td><td className="p-2 num font-semibold">{formatMoney(branch.revenue)}</td></tr>)}</tbody>
@@ -709,7 +710,7 @@ function ReportsPage() {
 
         {canViewSalesReports && <TabsContent value="sales" className="space-y-4 pt-2">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold">ملخص المبيعات والمصروفات</h3>
+            <div className="flex items-center gap-2"><h3 className="font-semibold">ملخص المبيعات والمصروفات</h3><Button size="sm" variant="ghost" onClick={() => navigate({ to: "/sales" })}>تفاصيل المبيعات</Button></div>
             {canExportReports && <Button
               variant="outline"
               size="sm"
@@ -833,7 +834,7 @@ function ReportsPage() {
 
         {(canViewSalesReports || canViewEmployees || canViewAttendance) && <TabsContent value="staff" className="space-y-4 pt-2">
           {canViewEmployees && <Card><CardContent className="p-4">
-            <h3 className="mb-3 font-semibold">ملخص الموظفين</h3>
+            <div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">ملخص الموظفين</h3><Button size="sm" variant="outline" onClick={() => navigate({ to: "/hr/employees" })}>ملف الموظفين</Button></div>
             <div className="overflow-x-auto"><table className="w-full text-sm">
               <thead className="bg-muted/50 text-right"><tr><th className="p-2">الموظف</th><th className="p-2">الحالة</th>{canViewAttendance && <><th className="p-2">أيام الحضور</th><th className="p-2">ساعات العمل</th><th className="p-2">مرات التأخر</th></>}</tr></thead>
               <tbody>{employeeAttendanceStats.map((employee) => <tr key={employee.id} className="border-t">
@@ -903,7 +904,7 @@ function ReportsPage() {
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h3 className="font-semibold">تفاصيل أرصدة المخزون</h3>
+              <div className="flex items-center gap-2"><h3 className="font-semibold">تفاصيل أرصدة المخزون</h3><Button size="sm" variant="ghost" onClick={() => navigate({ to: "/inventory" })}>فتح المخزون</Button></div>
               <p className="text-xs text-muted-foreground">القيمة تقديرية وفق تكلفة المنتج الحالية، وليست تكلفة تاريخية للمبيعات.</p>
             </div>
             {canExportReports && <Button variant="outline" size="sm" onClick={() => exportCsv(
