@@ -1,0 +1,21 @@
+{
+  "id": "/",
+  "name": "نظام إدارة المطاعم",
+  "short_name": "إدارة المطاعم",
+  "description": "نظام متكامل لإدارة المطاعم والفروع والمبيعات والمخزون والتقارير.",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f7fb",
+  "theme_color": "#102b4e",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
