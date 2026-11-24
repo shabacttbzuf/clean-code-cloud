@@ -800,6 +800,17 @@ function ReportsPage() {
         </TabsContent>}
 
         {(canViewSalesReports || canViewEmployees || canViewAttendance) && <TabsContent value="staff" className="space-y-4 pt-2">
+          {canViewEmployees && <Card><CardContent className="p-4">
+            <h3 className="mb-3 font-semibold">ملخص الموظفين</h3>
+            <div className="overflow-x-auto"><table className="w-full text-sm">
+              <thead className="bg-muted/50 text-right"><tr><th className="p-2">الموظف</th><th className="p-2">الحالة</th>{canViewAttendance && <><th className="p-2">أيام الحضور</th><th className="p-2">ساعات العمل</th><th className="p-2">مرات التأخر</th></>}</tr></thead>
+              <tbody>{employeeAttendanceStats.map((employee) => <tr key={employee.id} className="border-t">
+                <td className="p-2 font-medium">{employee.name}</td><td className="p-2">{employee.status}</td>
+                {canViewAttendance && <><td className="p-2 num">{employee.days}</td><td className="p-2 num">{formatMoney(employee.hours, 2)}</td><td className="p-2 num">{employee.late}</td></>}
+              </tr>)}
+              {employeeAttendanceStats.length === 0 && <tr><td colSpan={canViewAttendance ? 5 : 2} className="p-6 text-center text-muted-foreground">لا توجد بيانات موظفين ضمن النطاق المحدد.</td></tr>}</tbody>
+            </table></div>
+          </CardContent></Card>}
           <div className="flex items-center justify-between">
             <h3 className="font-semibold">أداء الكاشيرين</h3>
             {canExportReports && <Button
