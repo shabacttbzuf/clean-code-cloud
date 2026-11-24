@@ -33,6 +33,8 @@ export type OfflineOperation = {
   lastError: string | null;
   syncedAt: string | null;
   nextRetryAt: string | null;
+  leaseOwner: string | null;
+  leaseExpiresAt: string | null;
 };
 
 export type OfflineHandler = {
@@ -51,7 +53,9 @@ const FINANCIAL_TYPES = new Set([
   "stock_adjustment", "purchase_receipt", "cash_movement", "payroll",
 ]);
 const handlers = new Map<string, OfflineHandler>();
-let syncPromise: Promise<void> | null = null;
+const syncPromises = new Map<string, Promise<void>>();
+const workerId = typeof crypto !== "undefined" ? crypto.randomUUID() : "server-render";
+const LEASE_MS = 120_000;
 
 function openDb(): Promise<IDBDatabase> {
   if (typeof indexedDB === "undefined") {
@@ -137,6 +141,8 @@ export async function enqueueOfflineOperation(
     lastError: null,
     syncedAt: null,
     nextRetryAt: null,
+    leaseOwner: null,
+    leaseExpiresAt: null,
   };
   await transaction([STORE], "readwrite", (tx) => tx.objectStore(STORE).add(operation));
   notifyQueueChanged();
@@ -151,8 +157,8 @@ export async function listOfflineOperations(scope?: OfflineScope): Promise<Offli
     .filter((row) => !scope || (
       row.scope.userId === scope.userId &&
       row.scope.tenantId === scope.tenantId &&
-      row.scope.branchId === scope.branchId &&
-      row.scope.companyId === scope.companyId
+      (scope.branchId === null || row.scope.branchId === scope.branchId) &&
+      (scope.companyId === null || row.scope.companyId === scope.companyId)
     ))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
@@ -170,52 +176,89 @@ export async function getLastOfflineSyncAt(scope: OfflineScope): Promise<string 
   )) ?? null;
 }
 
+async function claimOperation(id: string): Promise<OfflineOperation | null> {
+  const db = await openDb();
+  try {
+    return await new Promise<OfflineOperation | null>((resolve, reject) => {
+      const tx = db.transaction([STORE], "readwrite");
+      const store = tx.objectStore(STORE);
+      const request = store.get(id);
+      let claimed: OfflineOperation | null = null;
+      request.onsuccess = () => {
+        const current = request.result as OfflineOperation | undefined;
+        if (!current || current.status === "synced" || current.status === "conflict") return;
+        const now = Date.now();
+        if (current.leaseExpiresAt && new Date(current.leaseExpiresAt).getTime() > now && current.leaseOwner !== workerId) return;
+        if (current.nextRetryAt && new Date(current.nextRetryAt).getTime() > now) return;
+        current.status = "processing";
+        current.attempts += 1;
+        current.leaseOwner = workerId;
+        current.leaseExpiresAt = new Date(now + LEASE_MS).toISOString();
+        current.updatedAt = new Date(now).toISOString();
+        store.put(current);
+        claimed = current;
+      };
+      request.onerror = () => reject(request.error);
+      tx.oncomplete = () => resolve(claimed);
+      tx.onerror = () => reject(tx.error ?? new Error("تعذر حجز العملية للمزامنة."));
+      tx.onabort = () => reject(tx.error ?? new Error("تم إلغاء حجز العملية."));
+    });
+  } finally {
+    db.close();
+  }
+}
+
+function releaseLease(operation: OfflineOperation) {
+  operation.leaseOwner = null;
+  operation.leaseExpiresAt = null;
+}
+
 export async function syncOfflineOperations(scope: OfflineScope): Promise<void> {
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
-  if (syncPromise) return syncPromise;
-  syncPromise = (async () => {
+  const lockKey = [scope.userId, scope.tenantId, scope.branchId ?? "*", scope.companyId ?? "*"].join(":");
+  const existing = syncPromises.get(lockKey);
+  if (existing) return existing;
+  const task = (async () => {
     const rows = await listOfflineOperations(scope);
     const syncedIds = new Set(rows.filter((row) => row.status === "synced").map((row) => row.id));
-    for (const operation of rows) {
-      if (operation.status === "synced" || operation.status === "conflict") continue;
-      if (operation.nextRetryAt && new Date(operation.nextRetryAt).getTime() > Date.now()) continue;
-      if (!operation.dependencies.every((id) => syncedIds.has(id))) continue;
+    for (const candidate of rows) {
+      if (candidate.status === "synced" || candidate.status === "conflict") continue;
+      if (!candidate.dependencies.every((id) => syncedIds.has(id))) continue;
+      const operation = await claimOperation(candidate.id);
+      if (!operation) continue;
       const handler = handlers.get(operation.type);
       if (!handler || handler.offlineSafe !== true) {
         operation.status = "failed";
         operation.lastError = "لا يوجد معالج آمن ومعتمد لهذا النوع من العمليات.";
+        operation.nextRetryAt = null;
+        releaseLease(operation);
         await saveOperation(operation);
         continue;
       }
-      operation.status = "processing";
-      operation.attempts += 1;
-      await saveOperation(operation);
       try {
-        // The handler must re-check the current session, permissions, tenant and branch
-        // on the server. Never trust the scope captured in the browser as authorization.
         await handler.send(operation);
         operation.status = "synced";
         operation.syncedAt = new Date().toISOString();
         operation.lastError = null;
         operation.nextRetryAt = null;
+        releaseLease(operation);
         syncedIds.add(operation.id);
         await saveOperation(operation);
-        const metaKey = `lastSuccessfulSyncAt:${scope.userId}:${scope.tenantId}:${scope.branchId ?? "all"}:${scope.companyId ?? "none"}`;
-        await transaction([META], "readwrite", (tx) =>
-          tx.objectStore(META).put(operation.syncedAt, metaKey),
-        );
+        const metaKey = "lastSuccessfulSyncAt:" + scope.userId + ":" + scope.tenantId + ":" + (scope.branchId ?? "all") + ":" + (scope.companyId ?? "none");
+        await transaction([META], "readwrite", (tx) => tx.objectStore(META).put(operation.syncedAt, metaKey));
       } catch (error) {
         const message = error instanceof Error ? error.message : "فشل غير معروف أثناء المزامنة.";
         operation.status = /conflict|version|stale|تعارض/i.test(message) ? "conflict" : "failed";
         operation.lastError = message.slice(0, 1000);
         const retryDelay = Math.min(30 * 60_000, 5_000 * 2 ** Math.min(operation.attempts - 1, 8));
-        operation.nextRetryAt = new Date(Date.now() + retryDelay).toISOString();
+        operation.nextRetryAt = operation.status === "conflict" ? null : new Date(Date.now() + retryDelay).toISOString();
+        releaseLease(operation);
         await saveOperation(operation);
-        // Keep later dependent operations queued; independent operations may proceed.
       }
     }
-  })().finally(() => { syncPromise = null; });
-  return syncPromise;
+  })().finally(() => { syncPromises.delete(lockKey); });
+  syncPromises.set(lockKey, task);
+  return task;
 }
 
 export function startOfflineSync(scope: OfflineScope) {
