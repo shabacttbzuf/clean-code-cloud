@@ -66,7 +66,8 @@ function applyFields(root: ParentNode, fields: SavedField[]) {
     used.add(element);
     if (element instanceof HTMLInputElement) {
       if (saved.checked !== undefined) {
-        element.checked = saved.checked;
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "checked")?.set;
+        setter?.call(element, saved.checked);
         element.dispatchEvent(new Event("change", { bubbles: true }));
       } else {
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
