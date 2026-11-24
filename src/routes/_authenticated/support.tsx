@@ -102,10 +102,20 @@ function SupportPage() {
       } else {
         const headers = { apikey: supabaseKey, Accept: "application/json" };
         try {
-          const { error } = await supabase.from("tenants").select("id", { head: true, count: "exact" }).limit(1);
-          const status = (error as (typeof error & { status?: number }) | null)?.status;
-          const dbState: HealthState = !error ? "healthy" : status && status >= 500 ? "down" : "degraded";
-          results.set("database", { id: "database", label: "قاعدة بيانات Supabase", state: dbState, detail: !error ? "نجح استعلام قراءة فعلي على جدول المؤسسات مع احترام صلاحيات الحساب." : status && status >= 500 ? `فشل اتصال قاعدة البيانات أو خدمتها (HTTP ${status}).` : "وصل الطلب إلى الخدمة لكن تعذر إتمام استعلام القراءة؛ تحقق من الصلاحيات والإعدادات.", checkedAt: now() });
+          const dbController = new AbortController();
+          const dbTimer = window.setTimeout(() => dbController.abort(), 8000);
+          let error: { message?: string } | null = null;
+          let dbHttpStatus = 0;
+          try {
+            const response = await supabase.from("tenants").select("id", { head: true, count: "exact" }).limit(1).abortSignal(dbController.signal);
+            error = response.error;
+            dbHttpStatus = response.status;
+          } finally {
+            window.clearTimeout(dbTimer);
+          }
+          const timedOut = dbController.signal.aborted;
+          const dbState: HealthState = !error ? "healthy" : timedOut ? "degraded" : dbHttpStatus >= 500 ? "down" : "degraded";
+          results.set("database", { id: "database", label: "قاعدة بيانات Supabase", state: dbState, detail: !error ? "نجح استعلام قراءة فعلي على جدول المؤسسات مع احترام صلاحيات الحساب." : timedOut ? "انتهت مهلة استعلام قاعدة البيانات؛ تعذر الجزم هل السبب بطء الشبكة أم الخدمة." : dbHttpStatus >= 500 ? `فشل اتصال قاعدة البيانات أو خدمتها (HTTP ${dbHttpStatus}).` : "وصل الطلب إلى الخدمة لكن تعذر إتمام استعلام القراءة؛ تحقق من الصلاحيات والإعدادات.", checkedAt: now() });
         } catch {
           results.set("database", { id: "database", label: "قاعدة بيانات Supabase", state: "down", detail: "تعذر تنفيذ استعلام قاعدة البيانات؛ تحقق من الشبكة وخدمة Supabase.", checkedAt: now() });
         }
