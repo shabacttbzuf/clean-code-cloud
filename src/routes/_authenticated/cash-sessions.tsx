@@ -33,20 +33,26 @@ type ProfileMap = Record<string, string>;
 type BranchMap = Record<string, string>;
 
 function CashSessionsPage() {
-  const { tenantId, userId, isAdmin } = useActiveTenant();
+  const { tenantId, userId, isAdmin, membership, isSuperOwner } = useActiveTenant();
   const qc = useQueryClient();
   const [closingId, setClosingId] = useState<Session | null>(null);
   const [closingCash, setClosingCash] = useState("0");
 
   const sessions = useQuery({
-    queryKey: ["cash-sessions", tenantId],
+    queryKey: ["cash-sessions", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("cash_sessions")
+      let query = supabase.from("cash_sessions")
         .select("*")
-        .eq("tenant_id", tenantId!)
-        .order("opened_at", { ascending: false })
-        .limit(100);
+        .eq("tenant_id", tenantId!);
+      if (!isSuperOwner && membership?.branch_id) {
+        query = query.eq("branch_id", membership.branch_id);
+      } else if (!isSuperOwner && membership?.company_id) {
+        const { data: branches, error: branchError } = await supabase.from("branches").select("id")
+          .eq("tenant_id", tenantId!).eq("company_id", membership.company_id);
+        if (branchError) throw branchError;
+        query = query.in("branch_id", (branches ?? []).map((branch) => branch.id));
+      }
+      const { data, error } = await query.order("opened_at", { ascending: false }).limit(100);
       if (error) throw error;
       const list = (data ?? []) as Session[];
 
