@@ -277,7 +277,7 @@ function POSWorkspace() {
   };
 
   const branches = useQuery({
-    queryKey: ["branches-active", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryKey: ["branches-active", tenantId, userId, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async (): Promise<Branch[]> =>
       withOfflineFallback(offlineCacheKey(offlineScope, "pos-branches"), async () => {
         let query = supabase
@@ -374,7 +374,7 @@ function POSWorkspace() {
   });
 
   const categories = useQuery({
-    queryKey: ["categories-min", tenantId],
+    queryKey: ["categories-min", tenantId, userId, membership?.company_id, membership?.branch_id],
     queryFn: async (): Promise<Category[]> =>
       withOfflineFallback(offlineCacheKey(offlineScope, "pos-categories"), async () => {
         const { data, error } = await supabase.from("categories").select("id, name").eq("tenant_id", tenantId!).order("sort_order");
@@ -385,7 +385,7 @@ function POSWorkspace() {
   });
 
   const products = useQuery({
-    queryKey: ["products-pos", tenantId],
+    queryKey: ["products-pos", tenantId, userId, membership?.company_id, membership?.branch_id],
     queryFn: async (): Promise<Product[]> =>
       withOfflineFallback(offlineCacheKey(offlineScope, "pos-products"), () =>
         fetchAllRows<Product>(
