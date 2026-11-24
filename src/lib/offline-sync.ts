@@ -120,6 +120,7 @@ export async function enqueueOfflineOperation(
   payload: Record<string, unknown>,
   scope: OfflineScope,
   dependencies: string[] = [],
+  idempotencyKey?: string,
 ): Promise<OfflineOperation> {
   if (FINANCIAL_TYPES.has(type) || !handlers.has(type)) {
     throw new Error("هذه العملية تتطلب اتصالاً بالخادم ولا يمكن حفظها كعملية قابلة للإرسال.");
@@ -138,7 +139,7 @@ export async function enqueueOfflineOperation(
   const now = new Date().toISOString();
   const operation: OfflineOperation = {
     id,
-    idempotencyKey: id,
+    idempotencyKey: idempotencyKey ?? id,
     type,
     payload: structuredClone(payload),
     scope: { ...scope },
