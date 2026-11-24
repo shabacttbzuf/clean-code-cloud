@@ -84,7 +84,7 @@ function ReportsPage() {
       const toDate = localEnd.toISOString();
 
       const [sales, expenses, items, sessions, inventory, refunds, purchases, employees, campaigns] = await Promise.all([
-        fetchAllRows((pageFrom, pageTo) => {
+        canViewSalesReports ? fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("sales")
             .select("id, created_at, total, subtotal, discount, tax_amount, payment_method, cashier_id, branch_id, status")
             .eq("tenant_id", tenantId).neq("status", "void")
@@ -92,8 +92,8 @@ function ReportsPage() {
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.order("created_at", { ascending: false }).range(pageFrom, pageTo);
-        }),
-        canViewFinancialReports ? fetchAllRows((pageFrom, pageTo) => {
+        }) : Promise.resolve([]),
+        canViewExpenses ? fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("expenses")
             .select("id, paid_at, amount, category_id, description, branch_id")
             .eq("tenant_id", tenantId).gte("paid_at", from).lte("paid_at", to);
@@ -101,11 +101,11 @@ function ReportsPage() {
           else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.order("paid_at", { ascending: false }).range(pageFrom, pageTo);
         }) : Promise.resolve([]),
-        fetchAllRows((pageFrom, pageTo) => supabase.from("sale_items")
+        canViewSalesReports ? fetchAllRows((pageFrom, pageTo) => supabase.from("sale_items")
           .select(canViewFinancialReports ? "product_name, quantity, line_total, sale_id, created_at, cost_price_snapshot" : "product_name, quantity, line_total, sale_id, created_at")
           .eq("tenant_id", tenantId).gte("created_at", fromDate).lte("created_at", toDate)
-          .range(pageFrom, pageTo)),
-        canViewFinancialReports ? fetchAllRows((pageFrom, pageTo) => {
+          .range(pageFrom, pageTo)) : Promise.resolve([]),
+        canViewCash ? fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("cash_sessions")
             .select("cashier_id, opening_balance, closing_balance, expected_cash, cash_difference, opened_at, closed_at, status, branch_id")
             .eq("tenant_id", tenantId).gte("opened_at", fromDate).lte("opened_at", toDate);
@@ -113,37 +113,37 @@ function ReportsPage() {
           else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.range(pageFrom, pageTo);
         }) : Promise.resolve([]),
-        fetchAllRows((pageFrom, pageTo) => {
+        canViewInventory ? fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("inventory")
             .select("quantity, product_id, branch_id").eq("tenant_id", tenantId);
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.range(pageFrom, pageTo);
-        }),
-        fetchAllRows((pageFrom, pageTo) => {
+        }) : Promise.resolve([]),
+        canViewPurchases ? fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("purchases")
             .select(canViewFinancialReports ? "id, branch_id, received_at, total, status, supplier_id" : "id, branch_id, received_at, status, supplier_id")
             .eq("tenant_id", tenantId).gte("received_at", fromDate).lte("received_at", toDate);
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.order("received_at", { ascending: false }).range(pageFrom, pageTo);
-        }),
-        fetchAllRows((pageFrom, pageTo) => {
+        }) : Promise.resolve([]),
+        canViewEmployees ? fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("employees")
             .select("id, full_name, branch_id, status")
             .eq("tenant_id", tenantId);
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.order("full_name").range(pageFrom, pageTo);
-        }),
-        fetchAllRows((pageFrom, pageTo) => {
+        }) : Promise.resolve([]),
+        canManageAds ? fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("marketing_campaigns")
             .select("id, title, status, company_id, starts_at, ends_at")
             .eq("tenant_id", tenantId);
           if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
           return query.order("created_at", { ascending: false }).range(pageFrom, pageTo);
         }),
-        fetchAllRows((pageFrom, pageTo) => {
+        canViewSalesReports ? fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("sale_refunds")
             .select("id, sale_id, subtotal, discount, tax_amount, total, refund_method, created_at, branch_id")
             .eq("tenant_id", tenantId).gte("created_at", fromDate).lte("created_at", toDate);
@@ -155,7 +155,7 @@ function ReportsPage() {
 
       const validSales = sales.filter((row) => row.status !== "void");
       const employeeIds = new Set(employees.map((employee) => employee.id));
-      const attendance = employeeIds.size ? await fetchAllRows((pageFrom, pageTo) => supabase.from("attendance")
+      const attendance = canViewAttendance && employeeIds.size ? await fetchAllRows((pageFrom, pageTo) => supabase.from("attendance")
         .select("employee_id, date, status, hours_worked, is_late, late_minutes")
         .eq("tenant_id", tenantId).gte("date", from).lte("date", to)
         .in("employee_id", [...employeeIds]).range(pageFrom, pageTo)) : [];
