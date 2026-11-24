@@ -242,16 +242,18 @@ function POSWorkspace() {
   };
 
   const branches = useQuery({
-    queryKey: ["branches-active", tenantId],
+    queryKey: ["branches-active", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async (): Promise<Branch[]> => {
       let query = supabase
         .from("branches")
         .select("id, name, tax_number, address, phone")
         .eq("tenant_id", tenantId!)
         .eq("is_active", true);
-      // Branch-scoped staff must never see or select another branch in POS.
-      if (membership?.branch_id && !isAdmin && !isSuperOwner) {
+      // Every non-platform account is limited to its assigned branch or company.
+      if (!isSuperOwner && membership?.branch_id) {
         query = query.eq("id", membership.branch_id);
+      } else if (!isSuperOwner && membership?.company_id) {
+        query = query.eq("company_id", membership.company_id);
       }
       const { data, error } = await query;
       if (error) throw error;
@@ -261,7 +263,7 @@ function POSWorkspace() {
   });
 
   useEffect(() => {
-    if (membership?.branch_id && !isAdmin && !isSuperOwner && branchId !== membership.branch_id) {
+    if (membership?.branch_id && !isSuperOwner && branchId !== membership.branch_id) {
       setBranchId(membership.branch_id);
     }
   }, [membership?.branch_id, isAdmin, isSuperOwner, branchId]);
