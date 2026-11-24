@@ -175,7 +175,7 @@ export function AppLauncher() {
         <LayoutGrid className="h-[18px] w-[18px]" />
       </Button>
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 max-h-[min(82vh,720px)] w-[min(94vw,520px)] overflow-y-auto rounded-2xl border border-slate-200 bg-popover p-3 text-popover-foreground shadow-2xl ring-1 ring-black/5 sm:p-4" dir="rtl">
+        <div className="absolute right-0 top-full z-50 mt-2 max-h-[min(78vh,680px)] w-[min(94vw,520px)] overflow-y-auto rounded-2xl border border-slate-200 bg-popover p-3 text-popover-foreground shadow-2xl ring-1 ring-black/5 sm:p-4" dir="rtl">
           <div className="mb-3 flex items-center justify-between">
             <div>
               <h2 className="text-base font-bold text-[#173b67]">التطبيقات والأقسام</h2>
