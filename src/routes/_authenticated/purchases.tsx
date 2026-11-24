@@ -159,6 +159,7 @@ function PurchasesPage() {
 
       <Dialog open={creating} onOpenChange={setCreating}>
         <NewPurchaseDialog
+          open={creating}
           onDone={() => {
             setCreating(false);
             qc.invalidateQueries({ queryKey: ["purchases"] });
@@ -172,6 +173,7 @@ function PurchasesPage() {
       <Dialog open={!!returningPurchaseId} onOpenChange={(open) => { if (!open) setReturningPurchaseId(null); }}>
         {returningPurchaseId && (
           <PurchaseReturnDialog
+            open={!!returningPurchaseId}
             purchaseId={returningPurchaseId}
             tenantId={tenantId!}
             onDone={() => {
@@ -189,10 +191,20 @@ function PurchasesPage() {
 }
 
 function PurchaseReturnDialog({
-  purchaseId, tenantId, onDone, onCancel,
-}: { purchaseId: string; tenantId: string; onDone: () => void; onCancel: () => void }) {
+  open, purchaseId, tenantId, onDone, onCancel,
+}: { open: boolean; purchaseId: string; tenantId: string; onDone: () => void; onCancel: () => void }) {
   const [reason, setReason] = useState("");
   const [quantities, setQuantities] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const dirty = open && (reason.trim().length > 0 || Object.values(quantities).some((value) => Number(value) > 0));
+    window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/purchases", dirty },
+    }));
+    return () => window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/purchases", dirty: false },
+    }));
+  }, [open, reason, quantities]);
 
   const purchaseLines = useQuery({
     queryKey: ["purchase-return-lines", purchaseId],
@@ -280,8 +292,8 @@ function PurchaseReturnDialog({
 }
 
 function NewPurchaseDialog({
-  onDone, tenantId, userId, defaultBranchId,
-}: { onDone: () => void; tenantId: string; userId: string; defaultBranchId: string | null }) {
+  open, onDone, tenantId, userId, defaultBranchId,
+}: { open: boolean; onDone: () => void; tenantId: string; userId: string; defaultBranchId: string | null }) {
   const [branchId, setBranchId] = useState<string>(defaultBranchId ?? "");
   const [supplierId, setSupplierId] = useState<string>("none");
   const [reference, setReference] = useState("");
@@ -310,6 +322,20 @@ function NewPurchaseDialog({
       return (data ?? []).map((p) => ({ ...(p as { id: string; name: string; unit: string; cost_price: number }) }));
     },
   });
+
+  useEffect(() => {
+    const expectedBranch = defaultBranchId ?? branches.data?.[0]?.id ?? "";
+    const dirty = open && (
+      branchId !== expectedBranch || supplierId !== "none" || !!reference.trim() ||
+      !!notes.trim() || lines.length > 0 || !!addProdId
+    );
+    window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/purchases", dirty },
+    }));
+    return () => window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/purchases", dirty: false },
+    }));
+  }, [open, defaultBranchId, branches.data, branchId, supplierId, reference, notes, lines, addProdId]);
 
   // Auto-pick first branch when none preselected
   useEffect(() => {
