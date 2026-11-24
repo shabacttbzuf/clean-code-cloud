@@ -52,7 +52,8 @@ function Page() {
   const [categoryId, setCategoryId] = useState<string>("none");
   const [branchId, setBranchId] = useState<string>("none");
   const [description, setDescription] = useState("");
-  const defaultPaidAt = new Date().toISOString().slice(0, 10);
+  const today = new Date();
+  const defaultPaidAt = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, "0"), String(today.getDate()).padStart(2, "0")].join("-");
   const [paidAt, setPaidAt] = useState(defaultPaidAt);
 
   useEffect(() => {
