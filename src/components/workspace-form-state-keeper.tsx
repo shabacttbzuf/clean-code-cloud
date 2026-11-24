@@ -118,6 +118,7 @@ export function WorkspaceFormStateKeeper() {
     const root = document.querySelector("main") ?? document.body;
     let restored = false;
     let restoring = false;
+    let discardCurrent = false;
     const restore = () => {
       if (restored || root.querySelectorAll(FIELD_SELECTOR).length === 0) return;
       let fields: SavedField[] = [];
@@ -148,6 +149,13 @@ export function WorkspaceFormStateKeeper() {
       save();
       window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: pathname, dirty: true } }));
     };
+    const onDiscard = (event: Event) => {
+      const detail = (event as CustomEvent<{ path?: string }>).detail;
+      if (!detail?.path) return;
+      try { sessionStorage.removeItem(`${scope}:${detail.path}`); } catch { /* optional */ }
+      if (detail.path === pathname) discardCurrent = true;
+      window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: detail.path, dirty: false } }));
+    };
     const onSaved = (event: Event) => {
       const detail = (event as CustomEvent<{ path?: string }>).detail;
       if (detail?.path !== pathname) return;
@@ -162,14 +170,16 @@ export function WorkspaceFormStateKeeper() {
     root.addEventListener("input", markDirty, true);
     root.addEventListener("change", markDirty, true);
     window.addEventListener("ras-workspace-form-saved", onSaved);
+    window.addEventListener("ras-workspace-form-discard", onDiscard);
     return () => {
       window.clearTimeout(timer);
       window.clearTimeout(maxWait);
       observer.disconnect();
-      save();
+      if (!discardCurrent) save();
       root.removeEventListener("input", markDirty, true);
       root.removeEventListener("change", markDirty, true);
       window.removeEventListener("ras-workspace-form-saved", onSaved);
+      window.removeEventListener("ras-workspace-form-discard", onDiscard);
     };
   }, [pathname, scope]);
 
