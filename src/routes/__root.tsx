@@ -142,9 +142,38 @@ function RootComponent() {
   // Register same-origin offline support. Personalized HTML and backend data are never cached.
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
-    void navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch((error) => {
-      console.warn("Offline support could not be initialized:", error);
-    });
+    let cancelled = false;
+    const initializeOfflineSupport = async () => {
+      try {
+        await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+        await navigator.serviceWorker.ready;
+        if (cancelled || navigator.serviceWorker.controller) return;
+
+        // The first document was loaded before the worker controlled this tab.
+        // Wait for clients.claim(), then reload once so the app shell and its
+        // initial assets are fetched through the active worker and cached.
+        await new Promise<void>((resolve) => {
+          const timeout = window.setTimeout(resolve, 2500);
+          navigator.serviceWorker.addEventListener("controllerchange", () => {
+            window.clearTimeout(timeout);
+            resolve();
+          }, { once: true });
+        });
+        const reloadKey = "restaurant-pwa-first-control-reload-v1";
+        if (
+          !cancelled &&
+          navigator.serviceWorker.controller &&
+          sessionStorage.getItem(reloadKey) !== "1"
+        ) {
+          sessionStorage.setItem(reloadKey, "1");
+          window.location.reload();
+        }
+      } catch (error) {
+        console.warn("Offline support could not be initialized:", error);
+      }
+    };
+    void initializeOfflineSupport();
+    return () => { cancelled = true; };
   }, []);
 
   // Global auth listener: refetch on session identity changes
