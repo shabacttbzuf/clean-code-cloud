@@ -235,3 +235,37 @@ test("dashboard provides permission-scoped operations, notifications, and a trut
   assert.match(dashboard, /hasPermission\("kitchen.view"\)/);
   assert.match(dashboard, /hasPermission\("reports.view"\)/);
 });
+
+
+test("statistics use exact order counts, full pagination, and compare against the previous local day", () => {
+  assert.match(dashboard, /select\("id", \{ count: "exact", head: true \}\)/);
+  assert.match(dashboard, /fetchAllRows\(\(from, to\) => salesTodayQ/);
+  assert.match(dashboard, /fetchAllRows\(\(from, to\) => salesYesterdayQ/);
+  assert.match(dashboard, /calculatePercentChange\(todayTotal, yesterdayTotal\)/);
+  assert.match(dashboard, /calculatePercentChange\(salesCount\.count \?\? 0, salesYesterday\.length\)/);
+  assert.match(dashboard, /lt\("created_at", tomorrow\)/);
+});
+
+test("dashboard statistics cache is isolated by tenant, user, company, and branch and does not mask authorization failures", () => {
+  assert.match(dashboard, /offlineCacheKey\(\{ tenantId, userId: user\.id, companyId: membership\?\.company_id, branchId: membership\?\.branch_id \}/);
+  assert.match(dashboard, /writeOfflineCache\(cacheKey, fresh\)/);
+  assert.match(dashboard, /readOfflineCache<.*>\(cacheKey, 12 \* 60 \* 60 \* 1000\)/);
+  assert.match(dashboard, /value\?\.status === 401 \|\| value\?\.status === 403/);
+  assert.match(dashboard, /source: "offline"/);
+  assert.match(dashboard, /آخر تحديث/);
+});
+
+test("statistics cards link to their relevant screens and obey metric permissions", () => {
+  assert.match(dashboard, /hasPermission\("sales\.view"\).*إجمالي مبيعات اليوم/s);
+  assert.match(dashboard, /to="\/reports"/);
+  assert.match(dashboard, /to="\/sales"/);
+  assert.match(dashboard, /hasPermission\("customers\.view"\)/);
+  assert.match(dashboard, /hasPermission\("kitchen\.view"\).*الطلبات قيد التحضير/s);
+  assert.match(dashboard, /hasPermission\("expenses\.view"\).*توزيع المصروفات/s);
+  assert.match(dashboard, /sparkline=\{stats\.data\.trend\.slice\(-7\)\}/);
+});
+
+test("customer KPI is not misrepresented as branch/company scoped when the schema only supports tenant-wide customers", () => {
+  assert.match(dashboard, /!membership\?\.branch_id && !membership\?\.company_id/);
+  assert.match(dashboard, /إجمالي عملاء المؤسسة/);
+});
