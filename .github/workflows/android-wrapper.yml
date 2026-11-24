@@ -8,6 +8,7 @@ on:
       - "android-web/**"
       - "public/**"
       - "src/**"
+      - "tests/**"
       - "package.json"
       - "bun.lock"
       - ".github/workflows/android-wrapper.yml"
@@ -52,6 +53,7 @@ jobs:
       - name: Build and typecheck web application
         run: |
           bun run typecheck
+          bun run test
           bun run build
 
       - name: Generate Android wrapper
