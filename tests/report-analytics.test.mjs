@@ -68,3 +68,16 @@ test("fetchAllRows propagates database errors and validates page size", async ()
   })), /permission denied/);
   await assert.rejects(() => fetchAllRows(async () => ({ data: [], error: null }), 0), /pageSize/);
 });
+
+test("buildCsv escapes cells and neutralizes formula-like untrusted text", async () => {
+  const { buildCsv } = await import("../src/lib/report-analytics.ts");
+  const csv = buildCsv([
+    { المنتج: '=HYPERLINK("https://example.invalid","افتح")', الكمية: 2, ملاحظة: '  @SUM(1,2)' },
+    { المنتج: 'عصير "طازج"', الكمية: -1, ملاحظة: null },
+  ]);
+  assert.equal(
+    csv,
+    '"المنتج","الكمية","ملاحظة"\r\n"\'=HYPERLINK(""https://example.invalid"",""افتح"")","2","'  @SUM(1,2)"\r\n"عصير ""طازج""","-1",""',
+  );
+  assert.equal(buildCsv([]), "");
+});
