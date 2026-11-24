@@ -404,7 +404,7 @@ function TopBar() {
   const canSelectAllBranches = isSuperOwner || ["owner", "manager", "accountant"].includes(membership?.role ?? "");
   const activeBranchLabel = activeBranchId
     ? branchOptions.find((item) => item.id === activeBranchId)?.name || "الفرع المحدد"
-    : canSelectAllBranches ? "جميع الفروع" : branchOptions[0]?.name || (membership?.company_id ? "فروع الشركة" : "جميع الفروع");
+    : canSelectAllBranches ? "جميع الفروع" : branchOptions[0]?.name || "لم يحدد فرع";
 
   const initial = displayName.charAt(0) || "?";
 
