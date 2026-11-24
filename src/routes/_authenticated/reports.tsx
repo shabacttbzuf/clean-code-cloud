@@ -92,7 +92,7 @@ function ReportsPage() {
       const fromDate = localStart.toISOString();
       const toDate = localEnd.toISOString();
 
-      const [sales, expenses, items, sessions, inventory, purchases, employees, campaigns, refunds, campaignEvents, promotions, redemptions] = await Promise.all([
+      const [sales, expenses, items, sessions, inventory, purchases, employees, campaigns, campaignEvents, promotions, redemptions, refunds] = await Promise.all([
         canViewSalesReports ? fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("sales")
             .select("id, created_at, total, subtotal, discount, tax_amount, payment_method, cashier_id, branch_id, status")
@@ -150,6 +150,7 @@ function ReportsPage() {
             .select("id, title, status, company_id, starts_at, ends_at")
             .eq("tenant_id", tenantId);
           if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
+          else if (!isSuperOwner) return [];
           return query.order("created_at", { ascending: false }).range(pageFrom, pageTo);
         }) : Promise.resolve([]),
         canManageAds ? fetchAllRows((pageFrom, pageTo) => {
@@ -163,8 +164,9 @@ function ReportsPage() {
           let query = (supabase as any).from("promotional_offers")
             .select("id, name, status, company_id, branch_id")
             .eq("tenant_id", tenantId);
+          if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
+          else if (!isSuperOwner) return [];
           if (branchId !== "all") query = query.or("branch_id.is.null,branch_id.eq." + branchId);
-          else if (!isSuperOwner && membership?.company_id) query = query.or("company_id.is.null,company_id.eq." + membership.company_id);
           return query.range(pageFrom, pageTo);
         }) : Promise.resolve([]),
         canManagePromotions ? fetchAllRows((pageFrom, pageTo) => {
@@ -601,12 +603,12 @@ function ReportsPage() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Kpi icon={<Package className="h-5 w-5" />} label="المشتريات خلال الفترة" value={String(purchaseTotals.count)} tone="primary" />
+        {canViewPurchases && <Kpi icon={<Package className="h-5 w-5" />} label="المشتريات خلال الفترة" value={String(purchaseTotals.count)} tone="primary" />}
         {canViewFinancialReports && <Kpi icon={<Wallet className="h-5 w-5" />} label="إجمالي قيمة المشتريات" value={formatMoney(purchaseTotals.total)} tone="primary" />}
-        <Kpi icon={<Users className="h-5 w-5" />} label="الموظفون ضمن النطاق" value={String(staffTotals.employees)} tone="primary" />
-        <Kpi icon={<Users className="h-5 w-5" />} label="سجلات الحضور" value={String(staffTotals.attendance)} tone="primary" />
-        <Kpi icon={<Users className="h-5 w-5" />} label="حالات التأخر المسجلة" value={String(staffTotals.late)} tone={staffTotals.late ? "destructive" : "success"} />
-        <Kpi icon={<FileText className="h-5 w-5" />} label="الحملات الإعلانية" value={campaignTotals.active + " نشطة من " + campaignTotals.total} tone="primary" />
+        {canViewEmployees && <Kpi icon={<Users className="h-5 w-5" />} label="الموظفون ضمن النطاق" value={String(staffTotals.employees)} tone="primary" />}
+        {canViewAttendance && <Kpi icon={<Users className="h-5 w-5" />} label="سجلات الحضور" value={String(staffTotals.attendance)} tone="primary" />}
+        {canViewAttendance && <Kpi icon={<Users className="h-5 w-5" />} label="حالات التأخر المسجلة" value={String(staffTotals.late)} tone={staffTotals.late ? "destructive" : "success"} />}
+        {canManageAds && <Kpi icon={<FileText className="h-5 w-5" />} label="الحملات والإعلانات" value={campaignTotals.active + " نشطة · " + campaignTotals.impressions + " ظهور · " + campaignTotals.clicks + " نقرة"} tone="primary" />}
       </div>
 
       <Card>
