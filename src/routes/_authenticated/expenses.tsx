@@ -71,9 +71,9 @@ function Page() {
     window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
       detail: { path: "/expenses", dirty },
     }));
-    return () => window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+    return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
       detail: { path: "/expenses", dirty: false },
-    }));
+    }));; };
   }, [open, amount, categoryId, branchId, description, paidAt, defaultPaidAt]);
 
   const create = useMutation({
