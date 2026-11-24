@@ -406,7 +406,21 @@ function Dashboard() {
       }
       const { data, error } = await query;
       if (error) throw error;
-      return data ?? [];
+      const salesRows = data ?? [];
+      const saleIds = salesRows.map((sale) => sale.id);
+      if (!saleIds.length) return [];
+      // Kitchen status is fetched from its own operational ledger. It is never
+      // inferred from or written back to the financial invoice status.
+      const { data: kitchenRows, error: kitchenError } = await (supabase.from("kitchen_orders" as any) as any)
+        .select("sale_id,status").eq("tenant_id", tenantId).in("sale_id", saleIds);
+      if (kitchenError && kitchenError.code !== "42501") throw kitchenError;
+      const kitchenStatusBySale = new Map<string, string>(
+        (kitchenRows ?? []).map((row: { sale_id: string; status: string }) => [row.sale_id, row.status]),
+      );
+      return salesRows.map((sale) => ({
+        ...sale,
+        kitchen_status: kitchenStatusBySale.get(sale.id) ?? null,
+      }));
     },
     enabled: !!tenantId && hasPermission("sales.view"),
     refetchInterval: 15_000,
@@ -642,8 +656,8 @@ function Dashboard() {
               : latestOrders.isLoading ? <div className="py-6 text-center text-sm text-muted-foreground">جارٍ تحميل الطلبات...</div>
               : (latestOrders.data ?? []).length === 0 ? <div className="py-6 text-center text-sm text-muted-foreground">لا توجد طلبات مسجلة بعد.</div>
               : <div className="divide-y divide-[#edf1f7] px-4">{(latestOrders.data ?? []).map((order) => <div key={order.id} className="flex items-center justify-between gap-3 py-3">
-                <div className="flex min-w-0 items-center gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#edf3fc] text-[#174b91]"><Receipt className="h-5 w-5" /></div><div className="min-w-0"><div className="truncate text-sm font-extrabold text-[#18375f]">فاتورة #{order.invoice_no ?? "—"}</div><div className="mt-1 text-[11px] text-slate-500">{new Intl.DateTimeFormat("ar-YE", { dateStyle: "short", timeStyle: "short" }).format(new Date(order.created_at))} · {order.order_type === "dine_in" ? "داخل المطعم" : order.order_type === "delivery" ? "توصيل" : "سفري"}</div></div></div>
-                <div className="shrink-0 text-left"><div className="text-sm font-extrabold text-[#102f5c] num">{formatMoney(Number(order.total))} {currency}</div><span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${order.status === "completed" ? "bg-emerald-50 text-emerald-700" : order.status === "void" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700"}`}>{order.status === "completed" ? "مكتملة" : order.status === "void" ? "ملغاة" : "قيد المعالجة"}</span></div>
+                <div className="flex min-w-0 items-center gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#edf3fc] text-[#174b91]"><Receipt className="h-5 w-5" /></div><div className="min-w-0"><Link to="/sales/$id" params={{ id: order.id }} className="truncate text-sm font-extrabold text-[#18375f] hover:text-primary">طلب #${order.invoice_no ?? "—"} · التفاصيل</Link><div className="mt-1 text-[11px] text-slate-500">{new Intl.DateTimeFormat("ar-YE", { dateStyle: "short", timeStyle: "short" }).format(new Date(order.created_at))} · {order.order_type === "dine_in" ? "داخل المطعم" : order.order_type === "delivery" ? "توصيل" : "سفري"}</div>{order.notes && <div className="mt-1 max-w-[240px] truncate text-[11px] text-slate-500">ملاحظات الطلب: {order.notes}</div>}</div></div>
+                <div className="shrink-0 text-left"><div className="text-sm font-extrabold text-[#102f5c] num">{formatMoney(Number(order.total))} {currency}</div><span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${order.status === "completed" ? "bg-emerald-50 text-emerald-700" : order.status === "void" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700"}`}>الفاتورة: {order.status === "completed" ? "مكتملة" : order.status === "void" ? "ملغاة" : "قيد المعالجة"}</span>{order.kitchen_status && <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${order.kitchen_status === "ready" || order.kitchen_status === "delivered" ? "bg-emerald-50 text-emerald-700" : order.kitchen_status === "preparing" ? "bg-amber-50 text-amber-700" : "bg-sky-50 text-sky-700"}`}>المطبخ: {order.kitchen_status === "new" ? "جديد" : order.kitchen_status === "preparing" ? "قيد التحضير" : order.kitchen_status === "ready" ? "جاهز" : order.kitchen_status === "delivered" ? "تم التسليم" : "ملغي"}</span>}</div>
               </div>)}</div>}
           </CardContent></Card>}
           {hasPermission("kitchen.view") && <Card className="overflow-hidden border-[#dce5f3] shadow-sm"><CardContent className="p-0">
