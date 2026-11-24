@@ -39,6 +39,8 @@ export function AdsPage() {
   const [imageUrl, setImageUrl] = useState("");
   const [targetUrl, setTargetUrl] = useState("");
   const [placement, setPlacement] = useState("dashboard_banner");
+  const [sortOrder, setSortOrder] = useState("0");
+  const [showPreview, setShowPreview] = useState(false);
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -115,7 +117,11 @@ export function AdsPage() {
           throw new Error("رابط الوجهة يجب أن يكون صالحاً ويبدأ بـ https:// أو http://");
         }
       }
+      if (startsAt && Number.isNaN(new Date(startsAt).getTime())) throw new Error("تاريخ بداية الإعلان غير صالح");
+      if (endsAt && Number.isNaN(new Date(endsAt).getTime())) throw new Error("تاريخ نهاية الإعلان غير صالح");
       if (startsAt && endsAt && new Date(endsAt) <= new Date(startsAt)) throw new Error("تاريخ النهاية يجب أن يكون بعد البداية");
+      const normalizedSortOrder = Number(sortOrder);
+      if (!Number.isInteger(normalizedSortOrder) || normalizedSortOrder < 0 || normalizedSortOrder > 10000) throw new Error("ترتيب الإعلان يجب أن يكون رقماً صحيحاً بين 0 و10000");
       const payload = {
         company_id: editingId ? editingCompanyId : (membership?.company_id ?? null),
         title: cleanTitle,
@@ -123,6 +129,7 @@ export function AdsPage() {
         image_url: imageUrl || null,
         target_url: targetUrl.trim() || null,
         placement,
+        sort_order: normalizedSortOrder,
         starts_at: startsAt ? new Date(startsAt).toISOString() : null,
         ends_at: endsAt ? new Date(endsAt).toISOString() : null,
       };
@@ -199,6 +206,8 @@ export function AdsPage() {
     setImageUrl("");
     setTargetUrl("");
     setPlacement("dashboard_banner");
+    setSortOrder("0");
+    setShowPreview(false);
     setStartsAt("");
     setEndsAt("");
   }
@@ -239,6 +248,8 @@ export function AdsPage() {
     setImageUrl(campaign.image_url ?? "");
     setTargetUrl(campaign.target_url ?? "");
     setPlacement(campaign.placement);
+    setSortOrder(String(campaign.sort_order ?? 0));
+    setShowPreview(false);
     const toLocalInput = (value: string | null) => {
       if (!value) return "";
       const date = new Date(value);
@@ -270,6 +281,7 @@ export function AdsPage() {
                 <option value="pos_promo">المساحة الترويجية في نقطة البيع</option>
               </select>
             </div>
+            <div className="space-y-2"><Label>ترتيب الظهور (الأقل أولاً)</Label><Input type="number" min="0" max="10000" step="1" value={sortOrder} onChange={(event) => { setSortOrder(event.target.value); setFormTouched(true); }} /></div>
             <div className="space-y-2 md:col-span-2"><Label>وصف الإعلان</Label><Input value={description} onChange={(event) => { setDescription(event.target.value); setFormTouched(true); }} maxLength={500} placeholder="اكتب تفاصيل الإعلان" /></div>
             <div className="space-y-2"><Label>رابط الوجهة (اختياري)</Label><Input dir="ltr" value={targetUrl} onChange={(event) => { setTargetUrl(event.target.value); setFormTouched(true); }} placeholder="https://example.com" /></div>
             <div className="space-y-2"><Label>صورة الإعلان</Label><div className="flex items-center gap-3">
@@ -280,9 +292,21 @@ export function AdsPage() {
             <div className="space-y-2"><Label>تاريخ ووقت النهاية</Label><Input type="datetime-local" value={endsAt} onChange={(event) => { setEndsAt(event.target.value); setFormTouched(true); }} /></div>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={() => setShowPreview((current) => !current)}>{showPreview ? "إخفاء المعاينة" : "معاينة الإعلان"}</Button>
             <Button type="button" onClick={() => saveCampaign.mutate()} disabled={saveCampaign.isPending || !title.trim()}>{saveCampaign.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}<Plus className="ml-1 h-4 w-4" />{editingId ? "حفظ التعديلات" : "حفظ كمسودة"}</Button>
             {editingId && <Button type="button" variant="outline" onClick={resetForm}>إلغاء التعديل</Button>}
           </div>
+          {showPreview && (
+            <div className="overflow-hidden rounded-xl border bg-card" aria-label="معاينة الإعلان">
+              {imageUrl ? <img src={imageUrl} alt="صورة معاينة الإعلان" className="h-44 w-full object-cover" /> : <div className="grid h-32 place-items-center bg-muted text-sm text-muted-foreground">لا توجد صورة مرفقة</div>}
+              <div className="space-y-2 p-4">
+                <div className="text-xs font-medium text-primary">{placement === "dashboard_banner" ? "معاينة الشريط الرئيسي" : placement === "dashboard_card" ? "معاينة بطاقة لوحة التحكم" : "معاينة مساحة نقطة البيع"}</div>
+                <h3 className="text-lg font-bold">{title.trim() || "عنوان الإعلان"}</h3>
+                <p className="text-sm text-muted-foreground">{description.trim() || "سيظهر وصف الإعلان هنا."}</p>
+                {targetUrl.trim() && <div dir="ltr" className="truncate text-xs text-muted-foreground">{targetUrl.trim()}</div>}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
       <Card>
