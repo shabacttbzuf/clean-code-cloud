@@ -2,7 +2,7 @@
 
 ## Current implementation boundary
 
-The browser queue in `src/lib/offline-sync.ts` is a durable IndexedDB transport foundation. It deliberately has **no business-operation handlers registered by default**. Therefore no business write is silently queued or replayed before its authorization and idempotency contract has been implemented.
+The browser queue in `src/lib/offline-sync.ts` is a durable IndexedDB transport. The only enabled business handler in this change is `kitchen_status`, backed by a transactional idempotency RPC. No financial or inventory-ledger operation is registered.
 
 IndexedDB is device-local persistence, not encryption. Do not enqueue passwords, access tokens, payment credentials, full card data, or unnecessary personal data. The server remains the source of truth.
 
@@ -31,18 +31,19 @@ Every handler must:
 7. Validate dependencies and process them in dependency order.
 8. Return success only after the server confirms the committed transaction.
 
-Only explicitly approved, non-financial operations may be registered with `registerOfflineHandler(type, { offlineSafe: true, send })`. The function rejects the known financial and stock-ledger operation types.
+Only explicitly approved, non-financial operations may be registered with `registerOfflineHandler(type, { offlineSafe: true, idempotentServerSide: true, send })`. Registration and replay both reject handlers without the server-idempotency assertion. The function rejects the known financial and stock-ledger operation types. The kitchen status handler sends the same operation UUID on every retry to `set_kitchen_order_status_idempotent`; the migration stores the result in a private RLS-enabled ledger and rechecks the authenticated actor, current `kitchen.manage` permission, and branch access.
 
 ## Current UI and behavior
 
 - The authenticated workspace displays network state, queued / failed / conflict / synced counts and the last successful sync timestamp for the active user and workspace scope.
 - The queue stores UUID, idempotency key, payload, creation/update times, user/tenant/company/branch scope, dependencies, attempt count, status, retry time, error and successful sync time.
 - Automatic replay starts on browser `online` events and a periodic online check. Failed operations use bounded exponential backoff. Independent operations may continue after another operation fails.
-- Conflicts remain visible and are not overwritten automatically.
+- Conflicts remain visible with their error details and are not overwritten or retried automatically. Failed operations can be explicitly retried. Identical pending payloads are deduplicated locally. IndexedDB leases reduce duplicate sends across tabs; the server idempotency ledger remains the final duplicate-delivery guarantee.
+- Successful kitchen replays update the local operation state and invalidate the kitchen queue query.
 - No hosted Supabase migration or production database write is part of this change.
 
 ## Required acceptance tests before production
 
-Add browser + local Supabase integration tests for: repeated offline/online transitions; browser reload with pending operations; duplicate delivery of one idempotency key; server commit followed by lost client response; stale-version conflict; expired session / revoked permission; user switching; tenant/company/branch switching; dependency failure; partial batch success; IndexedDB transaction abort; and offline storage quota failure.
+The migration adds pgTAP checks for the private ledger, grants, fixed privileged boundary, replay authorization, and atomic result persistence. Browser + local Supabase end-to-end testing is still required for repeated offline/online transitions, reload with pending work, duplicate delivery, server commit followed by lost response, stale-version conflict, expired session / revoked permission, user switching, tenant/company/branch switching, dependency failure, partial batch success, IndexedDB transaction abort, and storage quota failure.
 
 Do not merge or enable business handlers until the tests above and the CI typecheck, unit tests, production build, and clean Supabase migration reset pass.
