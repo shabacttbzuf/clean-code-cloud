@@ -15,7 +15,7 @@ test("dashboard rejects partial query failures instead of presenting misleading 
 });
 
 test("CI runs on the active feature branch and supports a manual verification run", () => {
-  assert.match(workflow, /branches: \["main", "feature\/\*\*", "feat\/\*\*"\]/);
+  assert.match(workflow, /branches: \["main", "feature\/\*\*", "feat\/\*\*", "work\/\*\*"\]/);
   assert.match(workflow, /workflow_dispatch:/);
 });
 
@@ -234,4 +234,22 @@ test("dashboard provides permission-scoped operations, notifications, and a trut
   assert.match(dashboard, /hasPermission\("sales.create"\)/);
   assert.match(dashboard, /hasPermission\("kitchen.view"\)/);
   assert.match(dashboard, /hasPermission\("reports.view"\)/);
+});
+
+const kitchen = readFileSync(new URL("../src/routes/_authenticated/kitchen.tsx", import.meta.url), "utf8");
+
+test("dashboard keeps financial invoice status separate from kitchen progress and refreshes both live", () => {
+  assert.match(dashboard, /الفاتورة:/);
+  assert.match(dashboard, /المطبخ:/);
+  assert.match(dashboard, /table: "kitchen_orders"/);
+  assert.match(dashboard, /dashboard-latest-orders/);
+});
+
+test("kitchen offline mode is read-only and uses branch-scoped cached queue data", () => {
+  assert.match(kitchen, /offlineCacheKey/);
+  assert.match(kitchen, /readOfflineCache/);
+  assert.match(kitchen, /writeOfflineCache/);
+  assert.match(kitchen, /!isOnline/);
+  assert.match(kitchen, /statusMutation\.isPending \|\| !isOnline/);
+  assert.match(kitchen, /set_kitchen_order_status/);
 });
