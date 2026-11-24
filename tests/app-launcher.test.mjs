@@ -33,3 +33,11 @@ test("launcher supports keyboard and outside-click dismissal", () => {
   assert.match(launcher, /event\.key === "Escape"/);
   assert.match(launcher, /pointerdown/);
 });
+
+test("favorite and frequent shortcuts are derived from permission-filtered visible items", () => {
+  assert.match(launcher, /const visibleItems = useMemo\(\(\) => groups\.flatMap/);
+  assert.match(launcher, /const favorites = useMemo/);
+  assert.match(launcher, /const mostUsed = useMemo/);
+  assert.match(launcher, /visibleItems\.filter\(\(item\) => favoriteUrls\.includes\(item\.url\)\)/);
+  assert.match(launcher, /visibleItems\.filter\(\(item\) => \(usageCounts\[item\.url\] \?\? 0\) > 0\)/);
+});
