@@ -49,6 +49,15 @@ function SuppliersPage() {
   const [paymentReference, setPaymentReference] = useState("");
   const [paymentNotes, setPaymentNotes] = useState("");
 
+  useEffect(() => {
+    const dirty = !!paymentSupplier && (
+      paymentAmount.trim() !== "" || paymentMethod !== "cash" || !!cashSessionId ||
+      paymentBranchId !== (membership?.branch_id ?? "") || !!paymentReference.trim() || !!paymentNotes.trim()
+    );
+    window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/suppliers", dirty } }));
+    return () => window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/suppliers", dirty: false } }));
+  }, [paymentSupplier, paymentAmount, paymentMethod, cashSessionId, paymentBranchId, paymentReference, paymentNotes, membership?.branch_id]);
+
   const q = useQuery({
     queryKey: ["suppliers", tenantId],
     queryFn: async (): Promise<Supplier[]> => {
