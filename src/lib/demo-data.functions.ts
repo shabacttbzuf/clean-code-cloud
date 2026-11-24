@@ -157,6 +157,70 @@ export const setUserPermission = createServerFn({ method: "POST" })
     }).parse(data),
   )
   .handler(async ({ data, context }) => {
+    if (data.user_id === context.userId) {
+      throw new Error("لا يمكنك تغيير صلاحيات حسابك بنفسك.");
+    }
+
+    const { data: isSuperOwner, error: superOwnerError } = await context.supabase
+      .rpc("is_super_owner", { _user_id: context.userId });
+    if (superOwnerError) throw new Error(superOwnerError.message);
+
+    const { data: targetIsSuperOwner, error: targetSuperOwnerError } = await context.supabase
+      .rpc("is_super_owner", { _user_id: data.user_id });
+    if (targetSuperOwnerError) throw new Error(targetSuperOwnerError.message);
+    if (targetIsSuperOwner) {
+      throw new Error("لا يمكن تعديل صلاحيات حساب المالك الرئيسي من إدارة مستخدمي المؤسسة.");
+    }
+
+    const { data: actorRoles, error: actorRolesError } = await context.supabase
+      .from("user_roles")
+      .select("role, branch_id")
+      .eq("tenant_id", data.tenant_id)
+      .eq("user_id", context.userId);
+    if (actorRolesError) throw new Error(actorRolesError.message);
+
+    const { data: targetRoles, error: targetRolesError } = await context.supabase
+      .from("user_roles")
+      .select("role, branch_id, hired_by")
+      .eq("tenant_id", data.tenant_id)
+      .eq("user_id", data.user_id);
+    if (targetRolesError) throw new Error(targetRolesError.message);
+    if (!targetRoles?.length) throw new Error("المستخدم المستهدف لا ينتمي إلى المؤسسة المحددة.");
+
+    if (!isSuperOwner) {
+      const actorIsOwner = (actorRoles ?? []).some((row) => row.role === "owner");
+      const actorManager = (actorRoles ?? []).find((row) => row.role === "manager");
+      if (!actorIsOwner && !actorManager) {
+        throw new Error("غير مصرح: إدارة صلاحيات الفريق للمالك أو المدير المخول فقط.");
+      }
+
+      if (actorManager && !actorIsOwner) {
+        if (targetRoles.some((row) => row.role === "owner" || row.role === "manager")) {
+          throw new Error("لا يحق لمدير الفرع تعديل صلاحيات المالك أو مدير آخر.");
+        }
+        if (targetRoles.some((row) => row.hired_by !== context.userId)) {
+          throw new Error("يمكن لمدير الفرع إدارة الموظفين الذين قام بتعيينهم فقط.");
+        }
+        if (actorManager.branch_id && targetRoles.some((row) => row.branch_id !== actorManager.branch_id)) {
+          throw new Error("لا يمكن إدارة صلاحيات مستخدم من فرع آخر.");
+        }
+        const { data: effectivePermissions, error: effectivePermissionsError } = await context.supabase
+          .rpc("get_my_permissions", { _tenant_id: data.tenant_id });
+        if (effectivePermissionsError) throw new Error(effectivePermissionsError.message);
+        if (!(effectivePermissions ?? []).includes(data.permission_key)) {
+          throw new Error("لا يمكنك منح صلاحية لا تملكها بنفسك.");
+        }
+      }
+    }
+
+    const { data: permission, error: permissionError } = await context.supabase
+      .from("permissions")
+      .select("key")
+      .eq("key", data.permission_key)
+      .maybeSingle();
+    if (permissionError) throw new Error(permissionError.message);
+    if (!permission) throw new Error("الصلاحية المطلوبة غير موجودة.");
+
     if (data.granted === null) {
       const { error } = await context.supabase
         .from("user_permission_overrides").delete()
@@ -166,6 +230,7 @@ export const setUserPermission = createServerFn({ method: "POST" })
       if (error) throw new Error(error.message);
       return { ok: true };
     }
+
     const { error } = await context.supabase
       .from("user_permission_overrides")
       .upsert(
