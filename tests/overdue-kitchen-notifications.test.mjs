@@ -7,7 +7,9 @@ const snapshot = readFileSync(new URL("../supabase/COMPLETE_DATABASE.sql", impor
 
 test("delayed kitchen alerts use the approved 30-minute SLA and actual kitchen workflow states", () => {
   assert.match(migration, /ko\.created_at <= now\(\) - interval '30 minutes'/);
-  assert.match(migration, /ko\.status IN \('new', 'preparing'\)/);
+  assert.match(migration, /kitchen_order_events e/);
+  assert.match(migration, /e\.new_status IN \('ready', 'cancelled'\)/);
+  assert.match(migration, /e\.created_at <= ko\.created_at \+ interval '30 minutes'/);
   assert.match(migration, /'kitchen_order_delayed'/);
   assert.match(migration, /'delay_minutes', 30/);
   assert.match(migration, /'\/kitchen'/);
