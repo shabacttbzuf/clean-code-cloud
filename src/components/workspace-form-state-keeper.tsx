@@ -29,7 +29,7 @@ function fieldKey(element: HTMLElement, index: number): string {
 }
 
 function collectFields(root: ParentNode): SavedField[] {
-  return Array.from(root.querySelectorAll<HTMLElement>(FIELD_SELECTOR)).flatMap((element, index) => {
+  return Array.from(root.querySelectorAll<HTMLElement>(FIELD_SELECTOR)).flatMap<SavedField>((element, index): SavedField[] => {
     if (element.closest("[data-workspace-restore='off']") || isSensitiveField(element)) return [];
     if (element instanceof HTMLInputElement) {
       const type = element.type.toLowerCase();
