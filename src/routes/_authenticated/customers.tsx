@@ -221,7 +221,7 @@ function CustomerAccount({ customer, tenantId }: { customer: Customer; tenantId:
   useEffect(() => {
     const dirty = amount.trim() !== "" || method !== "cash" || !!reference.trim() || !!cashSessionId;
     window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/customers", dirty } }));
-    return () => window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/customers", dirty: false } }));
+    return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/customers", dirty: false } }));; };
   }, [amount, method, reference, cashSessionId]);
   const selectedSale = invoices.data?.find((sale: any) => sale.id === saleId);
   const sessions = useQuery({
@@ -345,7 +345,7 @@ function CustomerDialog({ open, initial, tenantId, onSubmit, pending }: {
       active !== (initial?.is_active ?? true) || creditLimit !== String(initial?.credit_limit ?? 0)
     );
     window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/customers", dirty } }));
-    return () => window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/customers", dirty: false } }));
+    return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/customers", dirty: false } }));; };
   }, [open, initial, name, phone, email, address, notes, avatarUrl, active, creditLimit]);
 
   return (
