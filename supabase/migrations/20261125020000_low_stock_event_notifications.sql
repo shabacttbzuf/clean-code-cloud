@@ -26,11 +26,12 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  v_crossed_threshold := NEW.quantity <= v_product.min_stock
-    AND (
-      TG_OP = 'INSERT'
-      OR OLD.quantity > v_product.min_stock
-    );
+  IF TG_OP = 'INSERT' THEN
+    v_crossed_threshold := NEW.quantity <= v_product.min_stock;
+  ELSE
+    v_crossed_threshold := NEW.quantity <= v_product.min_stock
+      AND OLD.quantity > v_product.min_stock;
+  END IF;
 
   IF NOT v_crossed_threshold THEN
     RETURN NEW;
