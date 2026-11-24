@@ -55,7 +55,7 @@ BEGIN
     'branch',
     NEW.branch_id,
     'low_stock',
-    CASE WHEN NEW.quantity <= 0 THEN 'critical' ELSE 'high' END,
+    CASE WHEN NEW.quantity <= 0 THEN 'critical' ELSE 'urgent' END,
     'تنبيه انخفاض المخزون',
     'المنتج ' || v_product.name || ' وصل إلى ' ||
       trim(to_char(NEW.quantity, 'FM999999999990D999')) ||
