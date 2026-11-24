@@ -88,6 +88,12 @@ function SupportPage() {
         finally { window.clearTimeout(timer); }
       };
       try {
+        const internetResponse = await timeoutFetch("https://www.cloudflare.com/cdn-cgi/trace", { method: "GET", mode: "no-cors" });
+        results.set("internet", { id: "internet", label: "اتصال الإنترنت", state: internetResponse.type === "opaque" || internetResponse.ok ? "healthy" : "degraded", detail: "نجح الوصول إلى نقطة اختبار مستقلة خارج خادم التطبيق وقاعدة البيانات.", checkedAt: now() });
+      } catch {
+        results.set("internet", { id: "internet", label: "اتصال الإنترنت", state: "degraded", detail: "تعذر الوصول إلى نقطة الاختبار الخارجية؛ قد يكون الاتصال محدوداً أو أن نقطة الاختبار محجوبة، ولا يثبت ذلك تعطل قاعدة البيانات.", checkedAt: now() });
+      }
+      try {
         const response = await timeoutFetch(window.location.origin, { method: "HEAD" });
         results.set("host", { id: "host", label: "خادم/مضيف التطبيق", state: response.ok ? "healthy" : response.status >= 500 ? "down" : "degraded", detail: response.ok ? "استجاب مضيف التطبيق لطلب الفحص." : `استجاب المضيف برمز HTTP ${response.status}.`, checkedAt: now() });
       } catch {
