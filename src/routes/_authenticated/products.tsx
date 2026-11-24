@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
@@ -130,6 +130,8 @@ function ProductsPage() {
                 <Button><Plus className="ml-2 h-4 w-4" />منتج جديد</Button>
               </DialogTrigger>
               <ProductDialog
+                key={`${open}-${editing?.id ?? "new"}`}
+                open={open}
                 initial={editing}
                 categories={cats.data ?? []}
                 tenantId={tenantId!}
@@ -214,6 +216,7 @@ function ProductsPage() {
 }
 
 function ProductDialog({
+  open,
   initial,
   categories,
   tenantId,
@@ -221,6 +224,7 @@ function ProductDialog({
   onSubmit,
   pending,
 }: {
+  open: boolean;
   initial: Product | null;
   categories: Category[];
   tenantId: string;
@@ -238,6 +242,22 @@ function ProductDialog({
   const [active, setActive] = useState(initial?.is_active ?? true);
   const [imageUrl, setImageUrl] = useState<string | null>(initial?.image_url ?? null);
   const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    const dirty = open && (
+      name !== (initial?.name ?? "") || sku !== (initial?.sku ?? "") ||
+      categoryId !== (initial?.category_id ?? "none") ||
+      cost !== String(initial?.cost_price ?? 0) || sale !== String(initial?.sale_price ?? 0) ||
+      unit !== (initial?.unit ?? "piece") || minStock !== String(initial?.min_stock ?? 0) ||
+      active !== (initial?.is_active ?? true) || imageUrl !== (initial?.image_url ?? null) || uploading
+    );
+    window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/products", dirty },
+    }));
+    return () => window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/products", dirty: false },
+    }));
+  }, [open, initial, name, sku, categoryId, cost, sale, unit, minStock, active, imageUrl, uploading]);
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
