@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthSession } from "./use-auth-session";
 import { OFFLINE_AUTH_CACHE_MAX_AGE_MS, withOfflineFallback } from "@/lib/offline-reference-cache";
@@ -129,6 +129,77 @@ export function useActiveTenant() {
   });
   const permissions = useMemo(() => new Set(permissionsQuery.data ?? []), [permissionsQuery.data]);
   const hasPermission = (permission: string) => isSuperOwner || permissions.has(permission);
+  const queryClient = useQueryClient();
+
+  // The branch list is always obtained through the user's authenticated RLS context.
+  // Users without branches.view can only receive branches explicitly assigned to them.
+  const branchOptionsQuery = useQuery({
+    queryKey: ["authorized-branches", user?.id, activeId],
+    queryFn: async () => {
+      if (!activeId) return [];
+      const { data, error } = await supabase
+        .from("branches")
+        .select("id,name,company_id")
+        .eq("tenant_id", activeId)
+        .eq("is_active", true)
+        .order("name");
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!user?.id && !!activeId && !!membership &&
+      (!!membership.branch_id || hasPermission("branches.view") || isSuperOwner),
+    staleTime: 30_000,
+  });
+  const branchOptions = branchOptionsQuery.data ?? [];
+  const branchScopeKey = user?.id && activeId ? `${user.id}:${activeId}` : null;
+  const [branchSelection, setBranchSelection] = useState<{
+    scope: string | null;
+    branchId: string | null;
+    ready: boolean;
+  }>({ scope: null, branchId: null, ready: false });
+
+  useEffect(() => {
+    if (!branchScopeKey || !membership || branchOptionsQuery.isLoading || branchOptionsQuery.isError) return;
+    const canSelectAll = isSuperOwner || permissions.has("branches.view");
+    const storageKey = `ras-active-branch:${branchScopeKey}`;
+    const stored = typeof window !== "undefined" ? window.localStorage.getItem(storageKey) : null;
+    const allowedIds = new Set(branchOptions.map((item) => item.id));
+    const nextBranchId =
+      stored === "__all__" && canSelectAll ? null :
+      stored && allowedIds.has(stored) ? stored :
+      membership.branch_id && allowedIds.has(membership.branch_id) ? membership.branch_id :
+      canSelectAll ? null :
+      branchOptions[0]?.id ?? membership.branch_id ?? null;
+    setBranchSelection({ scope: branchScopeKey, branchId: nextBranchId, ready: true });
+    if (typeof window !== "undefined") {
+      if (nextBranchId) window.localStorage.setItem(storageKey, nextBranchId);
+      else if (canSelectAll) window.localStorage.setItem(storageKey, "__all__");
+      else window.localStorage.removeItem(storageKey);
+    }
+  }, [branchScopeKey, membership?.branch_id, branchOptionsQuery.data, branchOptionsQuery.isLoading, branchOptionsQuery.isError, isSuperOwner, permissions]);
+
+  const activeBranchId = branchSelection.scope === branchScopeKey && branchSelection.ready
+    ? branchSelection.branchId
+    : membership?.branch_id ?? null;
+  const effectiveMembership = useMemo(
+    () => membership ? { ...membership, branch_id: activeBranchId } : null,
+    [membership, activeBranchId],
+  );
+
+  function switchBranch(id: string | null) {
+    const canSelectAll = isSuperOwner || permissions.has("branches.view");
+    if (id === null && !canSelectAll) return;
+    if (id !== null && !branchOptions.some((item) => item.id === id)) return;
+    if (!branchScopeKey) return;
+    const storageKey = `ras-active-branch:${branchScopeKey}`;
+    setBranchSelection({ scope: branchScopeKey, branchId: id, ready: true });
+    if (typeof window !== "undefined") {
+      if (id) window.localStorage.setItem(storageKey, id);
+      else window.localStorage.setItem(storageKey, "__all__");
+    }
+    // Invalidate all tenant-scoped data so screens refetch under the new branch.
+    void queryClient.invalidateQueries();
+  }
 
   return {
     user,
@@ -137,7 +208,12 @@ export function useActiveTenant() {
     tenantId: activeId,
     tenant: tenantQuery.data ?? null,
     memberships: memQuery.data ?? [],
-    membership,
+    membership: effectiveMembership,
+    branchOptions,
+    activeBranchId,
+    branchLoading: branchOptionsQuery.isLoading,
+    branchError: branchOptionsQuery.error,
+    switchBranch,
     role,
     isAdmin,
     isSuperOwner,
