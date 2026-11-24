@@ -15,7 +15,10 @@ self.addEventListener("activate", (event) => {
     caches.keys().then((keys) =>
       Promise.all(
         keys
-          .filter((key) => key.startsWith("restaurant-app-shell-") && key !== CACHE_NAME)
+          .filter((key) =>
+            (key.startsWith("restaurant-app-shell-") && key !== CACHE_NAME) ||
+            (key.startsWith("restaurant-app-documents-") && key !== "restaurant-app-documents-v1"),
+          )
           .map((key) => caches.delete(key)),
       ),
     ),
@@ -45,16 +48,41 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(async () => {
-        const offlinePage = await caches.match(OFFLINE_URL);
-        return (
-          offlinePage ||
-          new Response("أنت غير متصل بالإنترنت. أعد الاتصال ثم حاول مجدداً.", {
-            status: 503,
-            headers: { "Content-Type": "text/plain; charset=utf-8" },
-          })
-        );
-      }),
+      (async () => {
+        const documents = await caches.open("restaurant-app-documents-v1");
+        try {
+          const response = await fetch(request);
+          const contentType = response.headers.get("content-type") || "";
+          const cacheControl = response.headers.get("cache-control") || "";
+          // Authenticated TanStack routes use ssr:false: this is the generic app
+          // document shell, not rendered tenant or user data. Never cache URLs
+          // carrying query parameters (OAuth codes/tokens) or no-store responses.
+          if (
+            response.ok &&
+            contentType.includes("text/html") &&
+            !url.search &&
+            !cacheControl.toLowerCase().includes("no-store") &&
+            !request.headers.has("authorization") &&
+            url.pathname !== "/auth"
+          ) {
+            await documents.put(request, response.clone());
+          }
+          return response;
+        } catch {
+          const cachedDocument = !url.search ? await documents.match(request) : undefined;
+          if (cachedDocument) return cachedDocument;
+          const appShell = await documents.match(new URL("/", self.location.origin).toString());
+          if (appShell) return appShell;
+          const offlinePage = await caches.match(OFFLINE_URL);
+          return (
+            offlinePage ||
+            new Response("أنت غير متصل بالإنترنت. أعد الاتصال ثم حاول مجدداً.", {
+              status: 503,
+              headers: { "Content-Type": "text/plain; charset=utf-8" },
+            })
+          );
+        }
+      })(),
     );
     return;
   }
