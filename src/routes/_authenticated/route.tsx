@@ -186,23 +186,12 @@ function PermissionRouteGuard() {
 
 function TopBar() {
   const { theme, toggle } = useTheme();
-  const { tenantId, tenant, membership, memberships, switchTenant } = useActiveTenant();
+  const { tenantId, tenant, membership, memberships, switchTenant, permissions, permissionsLoading, permissionsError } = useActiveTenant();
   const { user } = useAuthSession();
   const { isSuperOwner } = useSuperOwner();
   const [globalSearch, setGlobalSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
-  const searchPermissions = useQuery({
-    queryKey: ["topbar-search-permissions", tenantId, user?.id],
-    queryFn: async () => {
-      if (!tenantId) return new Set<string>();
-      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId });
-      if (error) throw error;
-      return new Set<string>((data ?? []) as string[]);
-    },
-    enabled: !!tenantId && !!user?.id && !isSuperOwner,
-    staleTime: 30_000,
-  });
   const branchQuery = useQuery({
     queryKey: ["topbar-active-branch", tenantId, membership?.branch_id],
     queryFn: async () => {
@@ -358,7 +347,7 @@ function TopBar() {
     const targetPath = target.split(/[?#]/, 1)[0];
     const requiredPermission = permissionForPath(targetPath);
     const allowed = isSuperOwner || (requiredPermission
-      ? searchPermissions.data?.has(requiredPermission) === true
+      ? permissions.has(requiredPermission) === true
       : targetPath === "/profile" || targetPath === "/notifications");
     if (!allowed) {
       toast.error("لا تملك صلاحية فتح وجهة هذا الإشعار.");
@@ -418,7 +407,7 @@ function TopBar() {
     .filter((item, index, all) => all.findIndex((candidate) => candidate.url === item.url) === index)
     .filter((item) => {
       const permitted = isSuperOwner || (item.permission
-        ? !!searchPermissions.data?.has(item.permission)
+        ? !!permissions.has(item.permission)
         : item.url === "/profile" || item.url === "/support");
       return permitted && searchQuery.length > 0 && item.title.toLocaleLowerCase("ar").includes(searchQuery);
     }).slice(0, 10);
@@ -428,7 +417,7 @@ function TopBar() {
   const initial = displayName.charAt(0) || "?";
 
   return (
-    <header className="sticky top-0 z-30 flex min-h-[68px] items-center justify-between gap-3 border-b border-[#dbe5f4] bg-[rgba(248,250,255,.96)] px-3 py-2 shadow-[0_3px_14px_rgba(16,47,92,.06)] backdrop-blur-xl sm:px-5" dir="rtl">
+    <header className="sticky top-0 z-40 flex min-h-[64px] w-full items-center justify-between gap-2 border-b border-border bg-background/95 px-2 py-2 shadow-sm backdrop-blur-xl sm:min-h-[68px] sm:gap-3 sm:px-4 lg:px-5" dir="rtl">
       <div className="flex min-w-0 items-center gap-2 sm:gap-3">
         <Link to="/support" aria-label="مركز المساعدة والدعم" title="مركز المساعدة والدعم">
           <Button variant="outline" size="icon" className="rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm">
@@ -436,7 +425,7 @@ function TopBar() {
           </Button>
         </Link>
         <AppLauncher />
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#174b91] to-[#102f5c] text-[#f5c65b] shadow-sm"><Building2 className="h-5 w-5" /></div>
+        <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br from-[#174b91] to-[#102f5c] text-[#f5c65b] shadow-sm" aria-label="شعار النظام">{tenant?.logo_url ? <img src={tenant.logo_url} alt={`شعار ${tenant.name || "الشركة"}`} className="h-full w-full object-contain" loading="lazy" /> : <Building2 className="h-5 w-5" />}</div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button type="button" className="min-w-0 rounded-lg px-1 text-right outline-none transition hover:bg-blue-50 focus-visible:ring-2 focus-visible:ring-[#174b91]" aria-label="اختيار الشركة">
@@ -468,7 +457,7 @@ function TopBar() {
         <Button type="button" variant="outline" size="icon" className="rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm lg:hidden" aria-label="فتح البحث الشامل" aria-expanded={mobileSearchOpen} onClick={() => setMobileSearchOpen((value) => !value)}><Search className="h-4 w-4" /></Button>
         {mobileSearchOpen && <div className="absolute right-2 left-2 top-full z-50 mt-2 rounded-2xl border bg-white p-3 text-slate-800 shadow-xl lg:hidden" dir="rtl">
           <div className="flex items-center gap-2 rounded-xl border px-3 py-2"><Search className="h-4 w-4 shrink-0 text-primary" /><input autoFocus value={globalSearch} onChange={(event) => setGlobalSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { setMobileSearchOpen(false); setGlobalSearch(""); } if (event.key === "Enter" && searchItems[0]) { navigate({ to: searchItems[0].url as any }); setGlobalSearch(""); setMobileSearchOpen(false); } }} placeholder="ابحث عن صفحة أو قسم..." aria-label="البحث الشامل داخل النظام" className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></div>
-          {globalSearch.trim() && <div className="mt-2 max-h-60 overflow-y-auto">{searchPermissions.isError ? <p role="alert" className="p-3 text-xs text-destructive">تعذر التحقق من صلاحيات البحث.</p> : searchPermissions.isLoading && !isSuperOwner ? <p className="p-3 text-xs text-muted-foreground">جارٍ التحقق من الصلاحيات...</p> : searchItems.length ? searchItems.map((item) => <button key={item.url} type="button" onClick={() => { navigate({ to: item.url as any }); setGlobalSearch(""); setMobileSearchOpen(false); }} className="flex w-full items-center rounded-lg px-3 py-3 text-right text-sm hover:bg-blue-50">{item.title}</button>) : <p className="p-3 text-xs text-muted-foreground">لا توجد نتائج متاحة.</p>}</div>}
+          {globalSearch.trim() && <div className="mt-2 max-h-60 overflow-y-auto">{!!permissionsError ? <p role="alert" className="p-3 text-xs text-destructive">تعذر التحقق من صلاحيات البحث.</p> : permissionsLoading && !isSuperOwner ? <p className="p-3 text-xs text-muted-foreground">جارٍ التحقق من الصلاحيات...</p> : searchItems.length ? searchItems.map((item) => <button key={item.url} type="button" onClick={() => { navigate({ to: item.url as any }); setGlobalSearch(""); setMobileSearchOpen(false); }} className="flex w-full items-center rounded-lg px-3 py-3 text-right text-sm hover:bg-blue-50">{item.title}</button>) : <p className="p-3 text-xs text-muted-foreground">لا توجد نتائج متاحة.</p>}</div>}
         </div>}
         <div className="relative hidden w-[min(28vw,300px)] lg:block">
           <div className="flex items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 shadow-sm focus-within:border-primary/50">
@@ -476,7 +465,7 @@ function TopBar() {
             <input value={globalSearch} onChange={(event) => setGlobalSearch(event.target.value)} onFocus={() => setSearchOpen(true)} onBlur={() => window.setTimeout(() => setSearchOpen(false), 150)} onKeyDown={(event) => { if (event.key === "Escape") { setGlobalSearch(""); setSearchOpen(false); } if (event.key === "Enter" && searchItems[0]) { navigate({ to: searchItems[0].url as any }); setGlobalSearch(""); setSearchOpen(false); } }} placeholder="البحث في النظام..." aria-label="البحث الشامل داخل النظام" className="min-w-0 flex-1 bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400" />
           </div>
           {searchOpen && globalSearch.trim() && <div className="absolute right-0 top-full z-50 mt-2 max-h-80 w-full overflow-y-auto rounded-xl border bg-white p-2 text-slate-800 shadow-xl" dir="rtl">
-            {searchPermissions.isError ? <p role="alert" className="p-3 text-xs text-destructive">تعذر التحقق من صلاحيات البحث.</p> : searchPermissions.isLoading && !isSuperOwner ? <p className="p-3 text-xs text-slate-500">جارٍ التحقق من الصلاحيات...</p> : searchItems.length ? searchItems.map((item) => <button key={item.url} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { navigate({ to: item.url as any }); setGlobalSearch(""); setSearchOpen(false); }} className="flex w-full items-center rounded-lg px-3 py-2 text-right text-sm hover:bg-blue-50">{item.title}</button>) : <p className="p-3 text-xs text-slate-500">لا توجد نتائج متاحة.</p>}
+            {!!permissionsError ? <p role="alert" className="p-3 text-xs text-destructive">تعذر التحقق من صلاحيات البحث.</p> : permissionsLoading && !isSuperOwner ? <p className="p-3 text-xs text-slate-500">جارٍ التحقق من الصلاحيات...</p> : searchItems.length ? searchItems.map((item) => <button key={item.url} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { navigate({ to: item.url as any }); setGlobalSearch(""); setSearchOpen(false); }} className="flex w-full items-center rounded-lg px-3 py-2 text-right text-sm hover:bg-blue-50">{item.title}</button>) : <p className="p-3 text-xs text-slate-500">لا توجد نتائج متاحة.</p>}
           </div>}
         </div>
         <Button type="button" variant="outline" size="icon" onClick={toggleFullscreen} aria-label={fullscreen ? "الخروج من ملء الشاشة" : "ملء الشاشة"} className="hidden rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm sm:inline-flex">{fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</Button>
@@ -489,7 +478,7 @@ function TopBar() {
             <DropdownMenuSeparator /><DropdownMenuItem onSelect={() => navigate({ to: "/notifications" })} className="justify-center text-primary">عرض كل الإشعارات</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" className="h-11 gap-2 rounded-full px-1.5 sm:px-2"><Avatar className="h-9 w-9 border-2 border-[#dce5f3]"><AvatarImage src={avatarUrl ?? undefined} alt="" /><AvatarFallback className="bg-[#e8effb] font-bold text-[#174b91]">{initial}</AvatarFallback></Avatar><span className="hidden min-w-0 text-right sm:block"><span className="block max-w-28 truncate text-xs font-extrabold text-[#102f5c]">{displayName}</span><span className="block max-w-28 truncate text-[10px] text-slate-500">{currentProfile?.job_title?.trim() || "حساب المستخدم"}</span></span></Button></DropdownMenuTrigger>
+        <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" className="h-10 max-w-[44px] gap-2 rounded-full px-1.5 sm:h-11 sm:max-w-none sm:px-2" aria-label={`الملف الشخصي: ${displayName}`}><Avatar className="h-9 w-9 border-2 border-[#dce5f3]"><AvatarImage src={avatarUrl ?? undefined} alt="" /><AvatarFallback className="bg-[#e8effb] font-bold text-[#174b91]">{initial}</AvatarFallback></Avatar><span className="hidden min-w-0 text-right sm:block"><span className="block max-w-28 truncate text-xs font-extrabold text-[#102f5c]">{displayName}</span><span className="block max-w-28 truncate text-[10px] text-slate-500">{currentProfile?.job_title?.trim() || "حساب المستخدم"}</span></span></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end"><DropdownMenuLabel className="text-sm font-semibold">{displayName}</DropdownMenuLabel><DropdownMenuSeparator /><DropdownMenuItem onClick={() => navigate({ to: "/profile" })}><UserIcon className="ml-2 h-4 w-4" />ملفي الشخصي</DropdownMenuItem><DropdownMenuItem onClick={() => navigate({ to: "/settings" })}><UserIcon className="ml-2 h-4 w-4" />الإعدادات</DropdownMenuItem><DropdownMenuItem onClick={handleSignOut} disabled={signingOut}><LogOut className="ml-2 h-4 w-4" />تسجيل الخروج</DropdownMenuItem></DropdownMenuContent>
         </DropdownMenu>
       </div>
