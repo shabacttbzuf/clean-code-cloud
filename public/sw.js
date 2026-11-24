@@ -35,7 +35,9 @@ self.addEventListener("fetch", (event) => {
     event.respondWith((async () => {
       try {
         const response = await fetch(request);
-        if (response.ok && url.pathname === "/") {
+        // The "/" route is explicitly ssr:false in this app, so its HTML is a
+        // public application shell rather than user- or tenant-specific markup.
+        if (response.ok && url.pathname === "/" && response.headers.get("content-type")?.includes("text/html")) {
           const cache = await caches.open(SHELL_CACHE);
           await cache.put("/", response.clone());
         }
