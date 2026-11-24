@@ -79,6 +79,6 @@ test("buildCsv escapes cells and neutralizes formula-like untrusted text", async
     `"المنتج","الكمية","ملاحظة"`,
     `"'=HYPERLINK(""https://example.invalid"",""افتح"")","2","'  @SUM(1,2)"`,
     `"عصير ""طازج""","-1",""`,
-  ].join("\\r\\n"));
+  ].join("\r\n"));
   assert.equal(buildCsv([]), "");
 });
