@@ -709,7 +709,7 @@ function POSWorkspace() {
       const inv = buildInvoice(sale, items, method, sale.payment_method);
       try {
         if (userSettings.autoPrint) {
-          const printed = printInvoiceHTML(inv, paperSize, printWindowRef.current);
+          const printed = printInvoiceHTML(inv, paperSize, printWindowRef.current, Number(userSettings.copies));
           if (!printed) toast.warning("تم إصدار الفاتورة، لكن نافذة الطباعة لم تفتح. استخدم زر معاينة الفاتورة.");
         } else {
           printWindowRef.current?.close();
