@@ -481,8 +481,9 @@ function POSWorkspace() {
       const buyQty = cart.filter((item) => item.product_id === offer.product_id).reduce((sum, item) => sum + item.quantity, 0);
       const reward = cart.find((item) => item.product_id === rewardId);
       const rewardQty = cart.filter((item) => item.product_id === rewardId).reduce((sum, item) => sum + item.quantity, 0);
-      const availableRewardQty = rewardId === offer.product_id ? Math.max(0, rewardQty - buyQty) : rewardQty;
-      const freeQty = Math.min(availableRewardQty, Math.floor(buyQty / Math.max(1, Number(offer.buy_quantity))) * Number(offer.get_quantity));
+      const freeQty = rewardId === offer.product_id
+        ? Math.floor(rewardQty / (Math.max(1, Number(offer.buy_quantity)) + Math.max(1, Number(offer.get_quantity)))) * Number(offer.get_quantity)
+        : Math.min(rewardQty, Math.floor(buyQty / Math.max(1, Number(offer.buy_quantity))) * Number(offer.get_quantity));
       amount = freeQty * (reward?.unit_price ?? 0);
     }
     if (offer.max_discount !== null) amount = Math.min(amount, Number(offer.max_discount));
