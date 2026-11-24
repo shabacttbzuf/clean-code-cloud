@@ -92,7 +92,7 @@ function ReportsPage() {
       const fromDate = localStart.toISOString();
       const toDate = localEnd.toISOString();
 
-      const [sales, expenses, items, sessions, inventory, purchases, employees, campaigns, refunds] = await Promise.all([
+      const [sales, expenses, items, sessions, inventory, purchases, employees, campaigns, refunds, campaignEvents, promotions, redemptions] = await Promise.all([
         canViewSalesReports ? fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("sales")
             .select("id, created_at, total, subtotal, discount, tax_amount, payment_method, cashier_id, branch_id, status")
@@ -151,6 +151,29 @@ function ReportsPage() {
             .eq("tenant_id", tenantId);
           if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
           return query.order("created_at", { ascending: false }).range(pageFrom, pageTo);
+        }) : Promise.resolve([]),
+        canManageAds ? fetchAllRows((pageFrom, pageTo) => {
+          let query = (supabase as any).from("marketing_campaign_events")
+            .select("campaign_id, event_type, event_day, company_id")
+            .eq("tenant_id", tenantId).gte("event_day", from).lte("event_day", to);
+          if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
+          return query.range(pageFrom, pageTo);
+        }) : Promise.resolve([]),
+        canManagePromotions ? fetchAllRows((pageFrom, pageTo) => {
+          let query = (supabase as any).from("promotional_offers")
+            .select("id, name, status, company_id, branch_id")
+            .eq("tenant_id", tenantId);
+          if (branchId !== "all") query = query.or("branch_id.is.null,branch_id.eq." + branchId);
+          else if (!isSuperOwner && membership?.company_id) query = query.or("company_id.is.null,company_id.eq." + membership.company_id);
+          return query.range(pageFrom, pageTo);
+        }) : Promise.resolve([]),
+        canManagePromotions ? fetchAllRows((pageFrom, pageTo) => {
+          let query = (supabase as any).from("promotion_redemptions")
+            .select("promotion_id, discount_amount, branch_id, created_at, company_id")
+            .eq("tenant_id", tenantId).gte("created_at", fromDate).lte("created_at", toDate);
+          if (branchId !== "all") query = query.eq("branch_id", branchId);
+          else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
+          return query.range(pageFrom, pageTo);
         }) : Promise.resolve([]),
         canViewSalesReports ? fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("sale_refunds")
@@ -246,6 +269,9 @@ function ReportsPage() {
         employees,
         attendance,
         campaigns,
+        campaignEvents,
+        promotions,
+        redemptions,
         refunds,
         refundItems,
         previousPeriod,
@@ -259,7 +285,7 @@ function ReportsPage() {
 
   const data = report.data;
   const safe = useMemo(() => {
-    const raw = data ?? { sales: [] as any[], expenses: [] as any[], items: [] as any[], sessions: [] as any[], inventory: [] as any[], inventoryProducts: [] as any[], purchases: [] as any[], employees: [] as any[], attendance: [] as any[], campaigns: [] as any[], refunds: [] as any[], refundItems: [] as any[] };
+    const raw = data ?? { sales: [] as any[], expenses: [] as any[], items: [] as any[], sessions: [] as any[], inventory: [] as any[], inventoryProducts: [] as any[], purchases: [] as any[], employees: [] as any[], attendance: [] as any[], campaigns: [] as any[], campaignEvents: [] as any[], promotions: [] as any[], redemptions: [] as any[], refunds: [] as any[], refundItems: [] as any[] };
     if (branchId === "all") return raw;
     const sales = raw.sales.filter((row: any) => row.branch_id === branchId);
     const refunds = raw.refunds.filter((row: any) => row.branch_id === branchId);
@@ -278,6 +304,9 @@ function ReportsPage() {
       items: raw.items.filter((row: any) => saleIds.has(row.sale_id)),
       refundItems: raw.refundItems.filter((row: any) => refundIds.has(row.refund_id)),
       campaigns: raw.campaigns,
+      campaignEvents: raw.campaignEvents,
+      promotions: raw.promotions.filter((row: any) => row.branch_id == null || row.branch_id === branchId),
+      redemptions: raw.redemptions.filter((row: any) => row.branch_id === branchId),
     };
   }, [data, branchId]);
 
@@ -344,7 +373,14 @@ function ReportsPage() {
   const campaignTotals = useMemo(() => ({
     total: safe.campaigns.length,
     active: safe.campaigns.filter((row: any) => row.status === "active").length,
-  }), [safe.campaigns]);
+    impressions: safe.campaignEvents.filter((row: any) => row.event_type === "impression").length,
+    clicks: safe.campaignEvents.filter((row: any) => row.event_type === "click").length,
+  }), [safe.campaigns, safe.campaignEvents]);
+  const promotionTotals = useMemo(() => ({
+    offers: safe.promotions.length,
+    redemptions: safe.redemptions.length,
+    discount: safe.redemptions.reduce((sum: number, row: any) => sum + Number(row.discount_amount ?? 0), 0),
+  }), [safe.promotions, safe.redemptions]);
   const branchStats = useMemo(() => {
     const map = new Map<string, { id: string; name: string; invoices: number; revenue: number }>();
     const names = new Map((branchesQuery.data ?? []).map((branch) => [branch.id, branch.name]));
