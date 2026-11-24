@@ -6,10 +6,14 @@ export const getRouter = () => {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 30_000,
-        gcTime: 5 * 60_000,
+        // Reuse cached page data during in-app navigation instead of showing
+        // a loading state and issuing the same request on every visit.
+        staleTime: 60_000,
+        gcTime: 15 * 60_000,
         retry: 1,
-        refetchOnWindowFocus: true,
+        refetchOnMount: false,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: true,
       },
       mutations: {
         retry: 0,
@@ -21,7 +25,10 @@ export const getRouter = () => {
     routeTree,
     context: { queryClient },
     scrollRestoration: true,
-    defaultPreloadStaleTime: 30_000,
+    // Load route code/data when a user intends to open a link, not after
+    // the current page has already been left.
+    defaultPreload: "intent",
+    defaultPreloadStaleTime: 60_000,
   });
 
   return router;
