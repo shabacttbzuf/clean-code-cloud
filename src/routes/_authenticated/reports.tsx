@@ -81,6 +81,7 @@ function ReportsPage() {
       if (!isSuperOwner && !membership?.branch_id && !membership?.company_id) return [];
       let query = supabase.from("branches").select("id,name").eq("tenant_id", tenantId!).order("name");
       if (!isSuperOwner && membership?.branch_id) query = query.eq("id", membership.branch_id);
+      else if (companyId !== "all") query = query.eq("company_id", companyId);
       else if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
       const { data, error } = await query;
       if (error) throw error;
@@ -94,7 +95,7 @@ function ReportsPage() {
   }, [branchId, branchesQuery.data]);
 
   const report = useQuery({
-    queryKey: ["reports", tenantId, userId, membership?.company_id, membership?.branch_id, isSuperOwner, canViewFinancialReports, from, to, branchId],
+    queryKey: ["reports", tenantId, userId, membership?.company_id, membership?.branch_id, companyId, isSuperOwner, canViewFinancialReports, from, to, branchId],
     queryFn: async () => {
       if (!tenantId) return null;
       if (!canViewReports) throw new Error("ليس لديك صلاحية عرض التقارير.");
@@ -116,7 +117,7 @@ function ReportsPage() {
             .eq("tenant_id", tenantId).neq("status", "void")
             .gte("created_at", fromDate).lte("created_at", toDate);
           if (branchId !== "all") query = query.eq("branch_id", branchId);
-          else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
+          else if (!isSuperOwner || companyId !== "all") query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.order("created_at", { ascending: false }).range(pageFrom, pageTo);
         }) : Promise.resolve([]),
         canViewExpenses ? fetchAllRows((pageFrom, pageTo) => {
@@ -166,7 +167,8 @@ function ReportsPage() {
           let query = supabase.from("marketing_campaigns")
             .select("id, title, status, company_id, starts_at, ends_at")
             .eq("tenant_id", tenantId);
-          if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
+          if (companyId !== "all") query = query.eq("company_id", companyId);
+          else if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
           else if (!isSuperOwner) return [];
           return query.order("created_at", { ascending: false }).range(pageFrom, pageTo);
         }) : Promise.resolve([]),
