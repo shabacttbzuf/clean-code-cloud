@@ -174,14 +174,14 @@ export const setUserPermission = createServerFn({ method: "POST" })
 
     const { data: actorRoles, error: actorRolesError } = await context.supabase
       .from("user_roles")
-      .select("role, branch_id")
+      .select("role, branch_id, company_id")
       .eq("tenant_id", data.tenant_id)
       .eq("user_id", context.userId);
     if (actorRolesError) throw new Error(actorRolesError.message);
 
     const { data: targetRoles, error: targetRolesError } = await context.supabase
       .from("user_roles")
-      .select("role, branch_id, hired_by")
+      .select("role, branch_id, company_id, hired_by")
       .eq("tenant_id", data.tenant_id)
       .eq("user_id", data.user_id);
     if (targetRolesError) throw new Error(targetRolesError.message);
@@ -203,6 +203,9 @@ export const setUserPermission = createServerFn({ method: "POST" })
         }
         if (actorManager.branch_id && targetRoles.some((row) => row.branch_id !== actorManager.branch_id)) {
           throw new Error("لا يمكن إدارة صلاحيات مستخدم من فرع آخر.");
+        }
+        if (actorManager.company_id && targetRoles.some((row) => row.company_id !== actorManager.company_id)) {
+          throw new Error("لا يمكن إدارة صلاحيات مستخدم من شركة أخرى.");
         }
         const { data: effectivePermissions, error: effectivePermissionsError } = await context.supabase
           .rpc("get_my_permissions", { _tenant_id: data.tenant_id });
