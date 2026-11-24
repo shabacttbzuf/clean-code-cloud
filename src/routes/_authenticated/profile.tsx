@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Save, KeyRound, Upload, Eye, EyeOff, ShieldCheck, Briefcase, Building2, CalendarDays, Monitor, MapPin } from "lucide-react";
+import { Loader2, Save, KeyRound, Upload, ShieldCheck, Briefcase } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { updateMyProfile, updateUserPassword } from "@/lib/users.functions";
@@ -70,7 +70,7 @@ function ProfilePage() {
       if (!user?.id) throw new Error("لا يوجد مستخدم مسجل الدخول.");
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, full_name, username, phone, email, avatar_url, last_login_at, last_device, last_ip, created_at, tenant_id, branch_id, company_id, department_id, job_title, employee_no, national_id, employment_date, status, is_active, must_change_password, approved_at, password_changed_at")
+        .select("id, full_name, username, phone, email, avatar_url, last_login_at, last_device, last_ip, created_at, tenant_id, branch_id, company_id, department_id, job_title, employee_no, employment_date, status, is_active")
         .eq("id", user.id)
         .maybeSingle();
       if (error) throw error;
@@ -105,7 +105,6 @@ function ProfilePage() {
   const [pwd, setPwd] = useState({ next: "", confirm: "" });
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [showNationalId, setShowNationalId] = useState(false);
   const [posPasscode, setPosPasscode] = useState("");
   const [posPasscodeConfirm, setPosPasscodeConfirm] = useState("");
   const posPasscodeMut = useMutation({
@@ -239,7 +238,6 @@ function ProfilePage() {
                 {uploadingAvatar ? "جارٍ رفع الصورة..." : "رفع صورة من الجهاز"}
                 <input className="hidden" type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={uploadingAvatar || !tenantId} onChange={(e) => { void uploadAvatar(e.target.files?.[0]); e.currentTarget.value = ""; }} />
               </label>
-              <Input dir="ltr" placeholder="أو الصق رابط الصورة https://..." value={form.avatar_url} onChange={(e) => setForm({ ...form, avatar_url: e.target.value })} />
               <p className="text-xs text-muted-foreground">JPG أو PNG أو WEBP أو AVIF — بحد أقصى 5MB.</p>
             </div>
           </div>
@@ -303,13 +301,6 @@ function ProfilePage() {
           <ProfileInfo label="الشركة" value={profile.company_name ?? (profile.company_id ? "غير متاح ضمن الصلاحيات" : "نطاق الشركة العام")} />
           <ProfileInfo label="الفرع" value={profile.branch_name ?? (profile.branch_id ? "غير متاح ضمن الصلاحيات" : "حسب نطاق الصلاحيات")} />
           <ProfileInfo label="تاريخ التوظيف" value={formatProfileDate(profile.employment_date, true)} />
-          <div className="rounded-lg border p-3">
-            <div className="mb-1 text-xs text-muted-foreground">رقم الهوية الوطنية</div>
-            <div className="flex items-center justify-between gap-2">
-              <span dir="ltr" className="font-medium">{profile.national_id ? (showNationalId ? profile.national_id : `••••••${profile.national_id.slice(-4)}`) : "غير مسجل"}</span>
-              {profile.national_id && <Button type="button" variant="ghost" size="icon" className="h-7 w-7" aria-label={showNationalId ? "إخفاء رقم الهوية" : "إظهار رقم الهوية"} onClick={() => setShowNationalId((value) => !value)}>{showNationalId ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</Button>}
-            </div>
-          </div>
           <ProfileInfo label="حالة الحساب" value={accountStatusLabel(profile.status)} />
           <ProfileInfo label="حالة التفعيل" value={profile.is_active ? "مفعّل" : "غير مفعّل"} />
         </CardContent>
@@ -324,11 +315,6 @@ function ProfilePage() {
           <ProfileInfo label="البريد الإلكتروني" value={user?.email ?? profile.email} direction="ltr" />
           <ProfileInfo label="تاريخ إنشاء الحساب" value={formatProfileDate(profile.created_at)} />
           <ProfileInfo label="آخر تسجيل دخول" value={formatProfileDate(profile.last_login_at)} />
-          <ProfileInfo label="آخر جهاز مسجل" value={profile.last_device} />
-          <ProfileInfo label="آخر عنوان IP" value={profile.last_ip} direction="ltr" />
-          <ProfileInfo label="آخر تغيير لكلمة المرور" value={formatProfileDate(profile.password_changed_at)} />
-          <ProfileInfo label="اعتماد الحساب" value={formatProfileDate(profile.approved_at)} />
-          <ProfileInfo label="تغيير كلمة المرور مطلوب" value={profile.must_change_password ? "نعم — يلزم التغيير" : "لا"} />
         </CardContent>
       </Card>
 
