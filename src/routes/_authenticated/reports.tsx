@@ -141,7 +141,7 @@ function ReportsPage() {
           let query = supabase.from("inventory")
             .select("quantity, product_id, branch_id").eq("tenant_id", tenantId);
           if (branchId !== "all") query = query.eq("branch_id", branchId);
-          else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
+          else if (!isSuperOwner || companyId !== "all") query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.range(pageFrom, pageTo);
         }) : Promise.resolve([]),
         canViewPurchases ? fetchAllRows((pageFrom, pageTo) => {
@@ -149,7 +149,7 @@ function ReportsPage() {
             .select(canViewFinancialReports ? "id, branch_id, received_at, total, status, supplier_id, reference" : "id, branch_id, received_at, status, supplier_id, reference")
             .eq("tenant_id", tenantId).gte("received_at", fromDate).lte("received_at", toDate);
           if (branchId !== "all") query = query.eq("branch_id", branchId);
-          else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
+          else if (!isSuperOwner || companyId !== "all") query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.order("received_at", { ascending: false }).range(pageFrom, pageTo);
         }) : Promise.resolve([]),
         canViewEmployees ? fetchAllRows((pageFrom, pageTo) => {
@@ -157,7 +157,7 @@ function ReportsPage() {
             .select("id, full_name, branch_id, status")
             .eq("tenant_id", tenantId);
           if (branchId !== "all") query = query.eq("branch_id", branchId);
-          else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
+          else if (!isSuperOwner || companyId !== "all") query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.order("full_name").range(pageFrom, pageTo);
         }) : Promise.resolve([]),
         canManageAds ? fetchAllRows((pageFrom, pageTo) => {
@@ -205,7 +205,7 @@ function ReportsPage() {
             .select("id, sale_id, subtotal, discount, tax_amount, total, refund_method, created_at, branch_id")
             .eq("tenant_id", tenantId).gte("created_at", fromDate).lte("created_at", toDate);
           if (branchId !== "all") query = query.eq("branch_id", branchId);
-          else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
+          else if (!isSuperOwner || companyId !== "all") query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.range(pageFrom, pageTo);
         }) : Promise.resolve([]),
       ]);
