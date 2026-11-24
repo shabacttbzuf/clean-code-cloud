@@ -31,7 +31,7 @@ import { formatMoney } from "@/lib/format";
 import { printInvoiceHTML, type InvoiceData } from "@/lib/invoice-pdf";
 import { PageHeader } from "@/components/page-header";
 import { getMyPosAccessStatus, verifyMyPosPasscode } from "@/lib/pos-access.functions";
-import { getUserSettingsPreferences } from "@/lib/settings-preferences";
+import { getUserSettingsPreferences, formatUserDateTime } from "@/lib/settings-preferences";
 
 export const Route = createFileRoute("/_authenticated/pos")({
   component: POSPage,
@@ -709,7 +709,7 @@ function POSWorkspace() {
       const inv = buildInvoice(sale, items, method, sale.payment_method);
       try {
         if (userSettings.autoPrint) {
-          const printed = printInvoiceHTML(inv, paperSize, printWindowRef.current, Number(userSettings.copies));
+          const printed = printInvoiceHTML({ ...inv, formatted_created_at: formatUserDateTime(inv.created_at, userSettings) }, paperSize, printWindowRef.current, Number(userSettings.copies));
           if (!printed) toast.warning("تم إصدار الفاتورة، لكن نافذة الطباعة لم تفتح. استخدم زر معاينة الفاتورة.");
         } else {
           printWindowRef.current?.close();
@@ -803,7 +803,7 @@ function POSWorkspace() {
       cart,
       "cash",
     );
-    printInvoiceHTML(inv, paperSize);
+    printInvoiceHTML({ ...inv, formatted_created_at: formatUserDateTime(inv.created_at, userSettings) }, paperSize, null, Number(userSettings.copies));
   };
 
   if (branches.isLoading || openSession.isLoading) {
