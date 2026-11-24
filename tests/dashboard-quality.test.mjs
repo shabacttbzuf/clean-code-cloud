@@ -78,14 +78,19 @@ const authLayout = readFileSync(new URL("../src/routes/_authenticated/route.tsx"
 const sonner = readFileSync(new URL("../src/components/ui/sonner.tsx", import.meta.url), "utf8");
 const userAdmin = readFileSync(new URL("../src/routes/_authenticated/users-admin.tsx", import.meta.url), "utf8");
 
-test("dashboard and account menu show profile names, including the platform owner's requested name", () => {
+test("dashboard and account menu use dynamic profile names without hardcoded account identities", () => {
   assert.match(dashboard, /أهلاً بك في نظام إدارة/);
   assert.match(dashboard, /إدارة أسهل/);
-  assert.match(dashboard, /shafiqalwatiry@gmail\.com/);
+  assert.match(dashboard, /profileQuery\\.data\\?\\.full_name/);
+  assert.match(dashboard, /profileQuery\\.data\\?\\.username/);
+  assert.match(dashboard, /مرحباً \\{displayName\\}/);
+  assert.doesNotMatch(dashboard, /shafiqalwatiry@gmail\\.com/);
   assert.match(authLayout, /topbar-profile-name/);
-  assert.match(authLayout, /شفيق الوتيري/);
-  assert.doesNotMatch(userAdmin, /u\.email \?\? u\.username/);
-});
+  assert.match(authLayout, /currentProfile\\?\\.full_name/);
+  assert.match(authLayout, /currentProfile\\?\\.username/);
+  assert.doesNotMatch(authLayout, /شفيق الوتيري/);
+  assert.doesNotMatch(userAdmin, /u\\.email \\?\\? u\\.username/);
+});;
 
 test("authenticated workspace removes the side drawer and keeps applications navigation in the top bar", () => {
   assert.doesNotMatch(authLayout, /SidebarProvider|SidebarTrigger|SidebarInset|AppSidebar|SidebarRouteSync/);
