@@ -129,10 +129,7 @@ function ReportsPage() {
           else if (!isSuperOwner || companyId !== "all") query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.order("paid_at", { ascending: false }).range(pageFrom, pageTo);
         }) : Promise.resolve([]),
-        canViewSalesReports ? fetchAllRows((pageFrom, pageTo) => supabase.from("sale_items")
-          .select(canViewFinancialReports ? "product_name, quantity, line_total, sale_id, created_at, cost_price_snapshot" : "product_name, quantity, line_total, sale_id, created_at")
-          .eq("tenant_id", tenantId).gte("created_at", fromDate).lte("created_at", toDate)
-          .range(pageFrom, pageTo)) : Promise.resolve([]),
+        Promise.resolve([]),
         canViewCash ? fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("cash_sessions")
             .select("cashier_id, opening_balance, closing_balance, expected_cash, cash_difference, opened_at, closed_at, status, branch_id")
@@ -221,7 +218,12 @@ function ReportsPage() {
         .eq("tenant_id", tenantId).gte("date", from).lte("date", to)
         .in("employee_id", [...employeeIds]).range(pageFrom, pageTo)) : [];
       const saleIds = new Set(validSales.map((sale) => sale.id));
-      const validItems = items.filter((item) => saleIds.has(item.sale_id));
+      const saleIdGroups = Array.from({ length: Math.ceil(saleIds.size / 100) }, (_, index) => [...saleIds].slice(index * 100, (index + 1) * 100));
+      const itemGroups = await Promise.all(saleIdGroups.map((ids) => fetchAllRows((pageFrom, pageTo) =>
+        supabase.from("sale_items")
+          .select(canViewFinancialReports ? "product_name, quantity, line_total, sale_id, cost_price_snapshot" : "product_name, quantity, line_total, sale_id")
+          .eq("tenant_id", tenantId).in("sale_id", ids).range(pageFrom, pageTo))));
+      const validItems = itemGroups.flat();
       const refundIds = refunds.map((refund) => refund.id);
       const refundItemGroups = await Promise.all(
         Array.from({ length: Math.ceil(refundIds.length / 100) }, (_, index) => refundIds.slice(index * 100, (index + 1) * 100))
