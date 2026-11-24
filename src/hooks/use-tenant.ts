@@ -18,7 +18,7 @@ export type Tenant = {
 };
 
 async function fetchMemberships(userId: string): Promise<Membership[]> {
-  return withOfflineFallback(`auth-shell-memberships:v1:${userId}`, async () => {
+  return withOfflineFallback(`auth-memberships:v1:${userId}`, async () => {
     const { data, error } = await supabase
       .from("user_roles")
       .select("tenant_id, role, branch_id")
