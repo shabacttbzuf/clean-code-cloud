@@ -1,0 +1,1 @@
+Temporary validation branch mirroring work/uiux-18-offline-sync. This file exists only to trigger the repository CI workflow on a pull-request-opened event. Do not merge this validation-only pull request.
