@@ -256,7 +256,7 @@ function ProductDialog({
     }));
     return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
       detail: { path: "/products", dirty: false },
-    }));; };
+    })); };
   }, [open, initial, name, sku, categoryId, cost, sale, unit, minStock, active, imageUrl, uploading]);
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
