@@ -14,10 +14,10 @@ async function precacheShellAssets() {
   const html = await shellResponse.text();
   const assetPaths = [...html.matchAll(/(?:src|href)=["']([^"']+)["']/g)]
     .map((match) => match[1])
-    .filter((path) => /\\.(?:js|mjs|css|woff2?|ttf|otf|eot)$/i.test(new URL(path, self.location.origin).pathname));
+    .filter((path) => /\.(?:js|mjs|css|woff2?|ttf|otf|eot)$/i.test(new URL(path, self.location.origin).pathname));
 
   const staticCache = await caches.open(STATIC_CACHE);
-  const cssPaths = assetPaths.filter((path) => /\\.css(?:$|\\?)/i.test(path));
+  const cssPaths = assetPaths.filter((path) => /\.css(?:$|\?)/i.test(path));
   await Promise.all(assetPaths.map(async (path) => {
     const url = new URL(path, self.location.origin);
     if (url.origin !== self.location.origin) return;
@@ -26,10 +26,10 @@ async function precacheShellAssets() {
       if (response.ok && response.type === "basic") await staticCache.put(url.href, response.clone());
       if (response.ok && cssPaths.includes(path)) {
         const css = await response.clone().text();
-        const fonts = [...css.matchAll(/url\\(["']?([^"')]+)["']?\\)/g)].map((match) => match[1]);
+        const fonts = [...css.matchAll(/url\(["']?([^"')]+)["']?\)/g)].map((match) => match[1]);
         await Promise.all(fonts.map(async (font) => {
           const fontUrl = new URL(font, url);
-          if (fontUrl.origin !== self.location.origin || !/\\.(?:woff2?|ttf|otf|eot)$/i.test(fontUrl.pathname)) return;
+          if (fontUrl.origin !== self.location.origin || !/\.(?:woff2?|ttf|otf|eot)$/i.test(fontUrl.pathname)) return;
           try {
             const fontResponse = await fetch(fontUrl.href);
             if (fontResponse.ok && fontResponse.type === "basic") await staticCache.put(fontUrl.href, fontResponse);
