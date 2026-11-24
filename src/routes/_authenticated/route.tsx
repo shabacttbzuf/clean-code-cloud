@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { useSuperOwner } from "@/hooks/use-super-owner";
 import { safeInternalNotificationPath } from "@/lib/notification-links";
+import { useNotificationSync } from "@/hooks/use-notification-sync";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -168,6 +169,7 @@ function TopBar() {
   const { theme, toggle } = useTheme();
   const { tenantId, tenant, membership, memberships, switchTenant } = useActiveTenant();
   const { user } = useAuthSession();
+  useNotificationSync(tenantId, user?.id);
   const { isSuperOwner } = useSuperOwner();
   const [globalSearch, setGlobalSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
