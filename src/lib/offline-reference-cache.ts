@@ -16,7 +16,7 @@ function openDatabase(): Promise<IDBDatabase | null> {
   if (typeof indexedDB === "undefined") return Promise.resolve(null);
   if (databasePromise) return databasePromise;
 
-  databasePromise = new Promise((resolve) => {
+  const pending: Promise<IDBDatabase | null> = new Promise<IDBDatabase | null>((resolve) => {
     try {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
       request.onupgradeneeded = () => {
@@ -35,12 +35,12 @@ function openDatabase(): Promise<IDBDatabase | null> {
     } catch {
       resolve(null);
     }
-  }).then((database) => {
+  }).then((database): IDBDatabase | null => {
     if (!database) databasePromise = null;
     return database;
   });
-
-  return databasePromise;
+  databasePromise = pending;
+  return pending;
 }
 
 export function offlineCacheKey(
