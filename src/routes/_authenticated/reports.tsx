@@ -649,7 +649,7 @@ function ReportsPage() {
                     الترتيب: i + 1,
                     المنتج: p.name,
                     الكمية: p.qty,
-                    الإيراد: p.revenue,
+                    ...(canViewFinancialReports ? { الإيراد: p.revenue } : {}),
                   })),
                   `top-products-${from}-${to}.csv`,
                 )
