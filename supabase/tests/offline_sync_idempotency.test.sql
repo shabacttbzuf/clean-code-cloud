@@ -35,8 +35,8 @@ select ok(
 
 select ok(
   (select prosecdef from pg_proc where oid='private.set_kitchen_order_status_idempotent(uuid,text,text,uuid)'::regprocedure)
-  and (select prosecdef from pg_proc where oid='public.set_kitchen_order_status_idempotent(uuid,text,text,uuid)'::regprocedure),
-  'The wrapper and private implementation use a fixed-search-path privileged boundary'
+  and not (select prosecdef from pg_proc where oid='public.set_kitchen_order_status_idempotent(uuid,text,text,uuid)'::regprocedure),
+  'A SECURITY INVOKER public wrapper delegates to a private SECURITY DEFINER implementation'
 );
 
 select ok(
