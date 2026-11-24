@@ -3,6 +3,8 @@ const DB_VERSION = 1;
 const STORE_NAME = "private-reference-data";
 export const OFFLINE_CACHE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 export const OFFLINE_AUTH_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+// Inventory snapshots are operational hints only; POS checkout always requires a live server check.
+export const OFFLINE_INVENTORY_CACHE_MAX_AGE_MS = 60 * 60 * 1000;
 
 type CacheRecord<T> = {
   key: string;
