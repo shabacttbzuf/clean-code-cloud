@@ -74,7 +74,7 @@ function SupportPage() {
     const now = () => new Date().toISOString();
     const results = new Map<string, ServiceCheck>();
     const online = typeof navigator === "undefined" ? false : navigator.onLine;
-    results.set("internet", { id: "internet", label: "اتصال الإنترنت", state: online ? "healthy" : "down", detail: online ? "المتصفح يعلن أن الاتصال متاح؛ هذا لا يضمن الوصول لكل خدمة." : "المتصفح يعلن عدم وجود اتصال بالشبكة.", checkedAt: now() });
+    results.set("internet", { id: "internet", label: "اتصال الإنترنت", state: online ? "checking" : "down", detail: online ? "يجري اختبار الوصول إلى نقطة مستقلة على الإنترنت." : "المتصفح يعلن عدم وجود اتصال بالشبكة.", checkedAt: now() });
 
     if (!online) {
       results.set("host", { id: "host", label: "خادم/مضيف التطبيق", state: "unknown", detail: "لم يُفحص بسبب انقطاع الاتصال.", checkedAt: now() });
