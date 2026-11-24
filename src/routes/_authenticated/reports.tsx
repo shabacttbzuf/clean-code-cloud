@@ -259,7 +259,7 @@ function ReportsPage() {
             .eq("tenant_id", tenantId).neq("status", "void")
             .gte("created_at", previousFrom).lte("created_at", previousTo);
           if (branchId !== "all") query = query.eq("branch_id", branchId);
-          else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
+          else if (!isSuperOwner || companyId !== "all") query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.range(pageFrom, pageTo);
         }) : Promise.resolve([]),
         canViewExpenses ? fetchAllRows((pageFrom, pageTo) => {
@@ -267,7 +267,7 @@ function ReportsPage() {
             .eq("tenant_id", tenantId)
             .gte("paid_at", previousFromDay).lte("paid_at", previousToDay);
           if (branchId !== "all") query = query.eq("branch_id", branchId);
-          else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
+          else if (!isSuperOwner || companyId !== "all") query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.range(pageFrom, pageTo);
         }) : Promise.resolve([]),
         canViewSalesReports ? fetchAllRows((pageFrom, pageTo) => {
