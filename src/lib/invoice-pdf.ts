@@ -184,6 +184,7 @@ export function printInvoiceHTML(
   targetWindow?: Window | null,
   copies = 1,
 ): boolean {
+  const safeCopies = Math.max(1, Math.min(3, Math.floor(Number(copies) || 1)));
   const pageCss =
     paper === "A4"
       ? "@page { size: A4; margin: 12mm; }"
@@ -294,7 +295,7 @@ export function printInvoiceHTML(
   <div class="center thanks">شكراً لزيارتكم — نتشرف بخدمتكم مجدداً</div>
   ${platformFooter}
 </div>
-<script>window.onload = function(){ var receipt=document.querySelector(".receipt"); var count=Math.max(1,Math.min(3,Number(${copies})||1)); for(var i=1;i<count;i++){ var clone=receipt.cloneNode(true); clone.style.pageBreakBefore="always"; document.body.appendChild(clone); } setTimeout(function(){ window.print(); }, 150); };</script>
+<script>window.onload = function(){ var receipt=document.querySelector(".receipt"); var count=${safeCopies}; for(var i=1;i<count;i++){ var clone=receipt.cloneNode(true); clone.style.pageBreakBefore="always"; document.body.appendChild(clone); } setTimeout(function(){ window.print(); }, 150); };</script>
 </body>
 </html>`;
   const w = targetWindow === undefined
