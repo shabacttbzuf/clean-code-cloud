@@ -480,6 +480,10 @@ function ReportsPage() {
     return Array.from(map.values()).sort((a, b) => b.sales - a.sales);
   }, [safe.sales, safe.refunds]);
 
+  if (permissionsQuery.isError) {
+    return <div className="space-y-6"><PageHeader title="التقارير" subtitle="تعذر التحقق من صلاحيات الوصول." /><Card><CardContent className="p-6 text-center text-sm text-destructive" role="alert">تعذر التحقق من صلاحياتك. أعد المحاولة قبل عرض أي بيانات.</CardContent></Card><Button variant="outline" onClick={() => void permissionsQuery.refetch()}>إعادة المحاولة</Button></div>;
+  }
+
   if (permissionsQuery.isLoading || (isSuperOwner === false && !permissionsQuery.data)) {
     return <div className="space-y-6"><PageHeader title="التقارير" subtitle="جارٍ التحقق من صلاحيات الوصول..." /><div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div></div>;
   }
@@ -609,7 +613,8 @@ function ReportsPage() {
         {canViewEmployees && <Kpi icon={<Users className="h-5 w-5" />} label="الموظفون ضمن النطاق" value={String(staffTotals.employees)} tone="primary" />}
         {canViewAttendance && <Kpi icon={<Users className="h-5 w-5" />} label="سجلات الحضور" value={String(staffTotals.attendance)} tone="primary" />}
         {canViewAttendance && <Kpi icon={<Users className="h-5 w-5" />} label="حالات التأخر المسجلة" value={String(staffTotals.late)} tone={staffTotals.late ? "destructive" : "success"} />}
-        {canManageAds && <Kpi icon={<FileText className="h-5 w-5" />} label="الحملات والإعلانات" value={campaignTotals.active + " نشطة · " + campaignTotals.impressions + " ظهور · " + campaignTotals.clicks + " نقرة"} tone="primary" />}
+        {canManageAds && <Kpi icon={<FileText className="h-5 w-5" />} label="الحملات والإعلانات" value={branchId === "all" ? campaignTotals.active + " نشطة · " + campaignTotals.impressions + " ظهور · " + campaignTotals.clicks + " نقرة" : campaignTotals.total + " حملة على مستوى الشركة"} tone="primary" />}
+        {canManagePromotions && <Kpi icon={<FileText className="h-5 w-5" />} label="العروض والاستردادات" value={promotionTotals.offers + " عرض · " + promotionTotals.redemptions + " استخدام" + (canViewFinancialReports ? " · خصومات " + formatMoney(promotionTotals.discount) : "")} tone="primary" />}
       </div>
 
       <Card>
