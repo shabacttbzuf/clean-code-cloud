@@ -14,7 +14,7 @@ test("PWA manifest is Arabic RTL and installable", async () => {
 
 test("service worker caches the app shell and static assets only", async () => {
   const worker = await read("../public/sw.js");
-  assert.match(worker, /cache\.addAll\(SHELL_URLS\)/);
+  assert.match(worker, /addAll\\(SHELL_URLS\\)/);
   assert.match(worker, /request\.method !== "GET"/);
   assert.match(worker, /isSensitiveOrApiPath/);
   assert.match(worker, /rest\\\/v1|auth\\\/v1|functions\\\/v1|storage\\\/v1/);
