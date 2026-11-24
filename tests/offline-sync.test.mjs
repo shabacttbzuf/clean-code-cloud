@@ -32,7 +32,7 @@ test("financial and stock-ledger mutations are explicitly blocked from generic o
 });
 
 test("sync preserves dependency order, isolates active tenant/branch/company and records partial failures", () => {
-  assert.match(source, /operation\.dependencies\.every\(\(id\) => syncedIds\.has\(id\)\)/);
+  assert.match(source, /candidate\.dependencies\.every\(\(id\) => syncedIds\.has\(id\)\)/);
   assert.match(source, /row\.scope\.tenantId === scope\.tenantId/);
   assert.match(source, /row\.scope\.branchId === scope\.branchId/);
   assert.match(source, /row\.scope\.companyId === scope\.companyId/);
@@ -78,7 +78,7 @@ test("only the non-financial kitchen workflow is registered as offline-safe", ()
   assert.match(handlers, /auth\.uid\(\)/);
   assert.match(kitchen, /enqueueOfflineOperation\(/);
   assert.match(kitchen, /navigator\.onLine/);
-  assert.match(kitchen, /_idempotency_key: crypto\.randomUUID\(\)/);
+  assert.match(kitchen, /const idempotencyKey = crypto\.randomUUID\(\)/);\n  assert.match(kitchen, /_idempotency_key: idempotencyKey/);
 });
 
 test("kitchen replay RPC persists idempotency and rechecks permission and branch access", () => {
