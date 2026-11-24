@@ -49,7 +49,7 @@ function ReportsPage() {
   const canViewAttendance = isSuperOwner || permissionsQuery.data?.has("hr.attendance.view") === true;
   const canManagePromotions = isSuperOwner || permissionsQuery.data?.has("promotions.manage") === true;
   const canManageAds = isSuperOwner || permissionsQuery.data?.has("ads.manage") === true;
-  const canViewFinancialReports = canViewExpenses;
+  const canViewFinancialReports = canViewExpenses && canViewSalesReports;
   const canExportReports = isSuperOwner || permissionsQuery.data?.has("reports.export") === true;
   const canFilterReports = isSuperOwner || permissionsQuery.data?.has("reports.filter") === true;
   const [from, setFrom] = useState(() => {
