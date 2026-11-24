@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, ChefHat, RefreshCw, Clock3, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
-import { offlineCacheKey, readOfflineCache, writeOfflineCache } from "@/lib/offline-reference-cache";
+import { offlineCacheKey, readOfflineCache, writeOfflineCache, withOfflineFallback } from "@/lib/offline-reference-cache";
 
 export const Route = createFileRoute("/_authenticated/kitchen")({ component: KitchenPage });
 
@@ -54,12 +54,20 @@ function KitchenPage() {
   const branches = useQuery({
     queryKey: ["kitchen-branches", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
-      let query = supabase.from("branches").select("id,name").eq("tenant_id", tenantId!).eq("is_active", true).order("name");
-      if (!isSuperOwner && membership?.branch_id) query = query.eq("id", membership.branch_id);
-      else if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
-      const { data, error } = await query;
-      if (error) throw error;
-      return data ?? [];
+      const cacheKey = offlineCacheKey({
+        tenantId: tenantId ?? "no-tenant",
+        userId: userId ?? "no-user",
+        companyId: membership?.company_id,
+        branchId: membership?.branch_id,
+      }, "kitchen-branches");
+      return withOfflineFallback(cacheKey, async () => {
+        let query = supabase.from("branches").select("id,name").eq("tenant_id", tenantId!).eq("is_active", true).order("name");
+        if (!isSuperOwner && membership?.branch_id) query = query.eq("id", membership.branch_id);
+        else if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
+        const { data, error } = await query;
+        if (error) throw error;
+        return data ?? [];
+      });
     },
     enabled: !!tenantId,
   });
