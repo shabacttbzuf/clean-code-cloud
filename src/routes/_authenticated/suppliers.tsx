@@ -79,10 +79,13 @@ function SuppliersPage() {
   });
 
   const branches = useQuery({
-    queryKey: ["supplier-payment-branches", tenantId],
+    queryKey: ["supplier-payment-branches", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
-      const { data, error } = await supabase.from("branches").select("id, name, is_active")
-        .eq("tenant_id", tenantId!).eq("is_active", true).order("name");
+      let query = supabase.from("branches").select("id, name, is_active")
+        .eq("tenant_id", tenantId!).eq("is_active", true);
+      if (!isSuperOwner && membership?.branch_id) query = query.eq("id", membership.branch_id);
+      else if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
+      const { data, error } = await query.order("name");
       if (error) throw error;
       return data ?? [];
     },
@@ -90,12 +93,18 @@ function SuppliersPage() {
   });
 
   const cashSessions = useQuery({
-    queryKey: ["supplier-payment-open-cash-sessions", tenantId, userId],
+    queryKey: ["supplier-payment-open-cash-sessions", tenantId, userId, membership?.company_id, membership?.branch_id, paymentBranchId, isSuperOwner],
     queryFn: async () => {
-      const { data, error } = await supabase.from("cash_sessions")
+      let query = supabase.from("cash_sessions")
         .select("id, branch_id, opened_at, cashier_id")
-        .eq("tenant_id", tenantId!).eq("status", "open")
-        .order("opened_at", { ascending: false });
+        .eq("tenant_id", tenantId!).eq("status", "open");
+      if (!isSuperOwner && membership?.branch_id) query = query.eq("branch_id", membership.branch_id);
+      else if (!isSuperOwner && membership?.company_id) {
+        const allowedBranchIds = (branches.data ?? []).map((branch) => branch.id);
+        query = query.in("branch_id", allowedBranchIds);
+      }
+      if (paymentBranchId) query = query.eq("branch_id", paymentBranchId);
+      const { data, error } = await query.order("opened_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
