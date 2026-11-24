@@ -39,6 +39,17 @@ function KitchenPage() {
   const canManage = hasPermission("kitchen.manage");
   const qc = useQueryClient();
   const [branchId, setBranchId] = useState<string>(membership?.branch_id ?? "");
+  const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" ? true : navigator.onLine);
+
+  useEffect(() => {
+    const updateOnline = () => setIsOnline(navigator.onLine);
+    window.addEventListener("online", updateOnline);
+    window.addEventListener("offline", updateOnline);
+    return () => {
+      window.removeEventListener("online", updateOnline);
+      window.removeEventListener("offline", updateOnline);
+    };
+  }, []);
 
   const branches = useQuery({
     queryKey: ["kitchen-branches", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
@@ -192,7 +203,7 @@ function KitchenPage() {
           <strong>تنبيه تأخير:</strong> يوجد {kitchenMetrics.lateOrders.length} طلباً تجاوز 20 دقيقة دون الجاهزية.
         </div>
       )}
-      {!navigator.onLine && <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">أنت تعمل دون اتصال. تُعرض آخر بيانات محفوظة، وتحديث الحالات متوقف حتى عودة الإنترنت.</div>}
+      {!isOnline && <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">أنت تعمل دون اتصال. تُعرض آخر بيانات محفوظة، وتحديث الحالات متوقف حتى عودة الإنترنت.</div>}
       {branches.isError && <div role="alert" className="rounded-lg border border-destructive/30 p-3 text-sm text-destructive">تعذر تحميل الفروع. أعد تحميل الصفحة أو تحقق من صلاحياتك.</div>}
       {queue.isError && <div role="alert" className="rounded-lg border border-destructive/30 p-3 text-sm text-destructive">تعذر تحميل طلبات المطبخ. <Button variant="link" onClick={() => queue.refetch()}>إعادة المحاولة</Button></div>}
       {queue.isLoading ? <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" /></div> : (
@@ -222,7 +233,7 @@ function KitchenPage() {
                       </div>
                       {order.sale?.order_type === "delivery" && <div className="rounded-md bg-muted p-2 text-xs"><strong>التوصيل:</strong> {order.sale.delivery_customer_name} · {order.sale.delivery_customer_phone}<br />{order.sale.delivery_address}</div>}
                       {(order.notes || order.sale?.notes) && <div className="rounded-md bg-amber-500/10 p-2 text-xs"><strong>ملاحظات:</strong> {order.notes || order.sale?.notes}</div>}
-                      {canManage && <Button className="w-full" size="sm" disabled={statusMutation.isPending || !navigator.onLine} onClick={() => statusMutation.mutate({ id: order.id, status: column.next })}><CheckCircle2 className="ml-2 h-4 w-4" />{column.action}</Button>}
+                      {canManage && <Button className="w-full" size="sm" disabled={statusMutation.isPending || !isOnline} onClick={() => statusMutation.mutate({ id: order.id, status: column.next })}><CheckCircle2 className="ml-2 h-4 w-4" />{column.action}</Button>}
                     </CardContent>
                   </Card>
                 ))}
