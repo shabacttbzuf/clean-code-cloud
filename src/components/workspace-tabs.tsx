@@ -229,6 +229,7 @@ export function WorkspaceTabs() {
     const target = tabs.find((tab) => tab.path === path);
     if (!target || target.pinned) return;
     if (dirtyPaths.has(path) && !window.confirm("توجد تغييرات غير محفوظة في هذه الصفحة. هل تريد إغلاق التبويب رغم ذلك؟")) return;
+    window.dispatchEvent(new CustomEvent("ras-workspace-form-discard", { detail: { path } }));
     const next = tabs.filter((tab) => tab.path !== path);
     setDirtyPaths((current) => {
       const updated = new Set(current);
