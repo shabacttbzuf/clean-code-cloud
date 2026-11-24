@@ -178,6 +178,7 @@ export function printInvoiceHTML(
     platform_website_url?: string | null;
     platform_brand_placement?: "header" | "footer" | "both" | null;
     platform_brand_enabled?: boolean;
+    formatted_created_at?: string;
   },
   paper: "58mm" | "80mm" | "A4" = "80mm",
   targetWindow?: Window | null,
@@ -256,7 +257,7 @@ export function printInvoiceHTML(
   <div class="divider"></div>
   <div class="meta">
     <div>فاتورة #<b>${data.invoice_no}</b></div>
-    <div>${formatDateTime(data.created_at)}</div>
+    <div>${escapeHtml(data.formatted_created_at || formatDateTime(data.created_at))}</div>
   </div>
   <div class="meta">
     <div>الكاشير: ${escapeHtml(data.cashier_name || "-")}</div>
