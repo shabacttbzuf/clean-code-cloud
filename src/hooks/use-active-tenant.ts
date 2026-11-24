@@ -134,7 +134,7 @@ export function useActiveTenant() {
   // The branch list is always obtained through the user's authenticated RLS context.
   // Users without branches.view can only receive branches explicitly assigned to them.
   const branchOptionsQuery = useQuery({
-    queryKey: ["authorized-branches", user?.id, activeId],
+    queryKey: ["authorized-branches", user?.id, activeId, membership?.company_id, membership?.branch_id],
     queryFn: async () => {
       if (!activeId) return [];
       const { data, error } = await supabase
@@ -147,11 +147,11 @@ export function useActiveTenant() {
       return data ?? [];
     },
     enabled: !!user?.id && !!activeId && !!membership &&
-      (!!membership.branch_id || hasPermission("branches.view") || isSuperOwner),
+      (!!membership.branch_id || ["owner", "manager", "accountant"].includes(membership.role) || hasPermission("branches.view") || isSuperOwner),
     staleTime: 30_000,
   });
   const branchOptions = branchOptionsQuery.data ?? [];
-  const branchScopeKey = user?.id && activeId ? `${user.id}:${activeId}` : null;
+  const branchScopeKey = user?.id && activeId ? `${user.id}:${activeId}:${membership?.company_id ?? "tenant"}` : null;
   const [branchSelection, setBranchSelection] = useState<{
     scope: string | null;
     branchId: string | null;
@@ -160,7 +160,7 @@ export function useActiveTenant() {
 
   useEffect(() => {
     if (!branchScopeKey || !membership || branchOptionsQuery.isLoading || branchOptionsQuery.isError) return;
-    const canSelectAll = isSuperOwner || permissions.has("branches.view");
+    const canSelectAll = isSuperOwner || ["owner", "manager", "accountant"].includes(membership?.role ?? "");
     const storageKey = `ras-active-branch:${branchScopeKey}`;
     const stored = typeof window !== "undefined" ? window.localStorage.getItem(storageKey) : null;
     const allowedIds = new Set(branchOptions.map((item) => item.id));
@@ -176,7 +176,7 @@ export function useActiveTenant() {
       else if (canSelectAll) window.localStorage.setItem(storageKey, "__all__");
       else window.localStorage.removeItem(storageKey);
     }
-  }, [branchScopeKey, membership?.branch_id, branchOptionsQuery.data, branchOptionsQuery.isLoading, branchOptionsQuery.isError, isSuperOwner, permissions]);
+  }, [branchScopeKey, membership?.branch_id, membership?.role, branchOptionsQuery.data, branchOptionsQuery.isLoading, branchOptionsQuery.isError, isSuperOwner, permissions]);
 
   const activeBranchId = branchSelection.scope === branchScopeKey && branchSelection.ready
     ? branchSelection.branchId
@@ -187,7 +187,7 @@ export function useActiveTenant() {
   );
 
   function switchBranch(id: string | null) {
-    const canSelectAll = isSuperOwner || permissions.has("branches.view");
+    const canSelectAll = isSuperOwner || ["owner", "manager", "accountant"].includes(membership?.role ?? "");
     if (id === null && !canSelectAll) return;
     if (id !== null && !branchOptions.some((item) => item.id === id)) return;
     if (!branchScopeKey) return;
