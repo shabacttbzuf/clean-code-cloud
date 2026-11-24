@@ -9,7 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { normalizeCustomShortcuts } from "@/lib/navigation-shortcuts";
 import { useSuperOwner } from "@/hooks/use-super-owner";
-import { appNavigationGroups, type AppNavigationGroup } from "@/components/app-sidebar";
+import { appNavigationGroups, navigationIconTone, type AppNavigationGroup } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -143,8 +143,8 @@ export function AppLauncher() {
                 <h3 className="mb-2 text-xs font-semibold text-muted-foreground">{group.label}</h3>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {group.items.map((item) => (
-                    <Link key={item.url} to={item.url as any} onClick={() => { setOpen(false); setSearch(""); }} className="flex min-h-16 items-center gap-2 rounded-xl border bg-card p-2 text-sm transition hover:border-primary/40 hover:bg-primary/5">
-                      <item.icon className="h-4 w-4 shrink-0 text-primary" />
+                    <Link key={item.url} to={item.url as any} onClick={() => { setOpen(false); setSearch(""); }} className="flex min-h-[76px] items-center gap-3 rounded-2xl border border-slate-200/80 bg-white p-3 text-sm font-semibold shadow-sm transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md">
+                      <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ring-1 ${navigationIconTone(item.url)}`}><item.icon className="h-5 w-5" /></span>
                       <span>{item.title}</span>
                     </Link>
                   ))}
