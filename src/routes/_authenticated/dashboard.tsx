@@ -242,6 +242,30 @@ function Dashboard() {
     enabled: isSuperOwner,
   });
 
+  const customerStats = useQuery({
+    queryKey: ["dashboard-customer-count", tenantId, user?.id],
+    queryFn: async () => {
+      if (!tenantId || !user?.id) return null;
+      const key = offlineCacheKey({ tenantId, userId: user.id }, "dashboard-customer-count-v1");
+      try {
+        const { count, error } = await supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId);
+        if (error) throw error;
+        const value = { count: count ?? 0, updatedAt: new Date().toISOString(), source: "live" as const };
+        await writeOfflineCache(key, value);
+        return value;
+      } catch (error) {
+        const value = error as { status?: number; code?: string };
+        if (value?.status === 401 || value?.status === 403 || ["42501", "PGRST301"].includes(value?.code ?? "")) throw error;
+        const cached = await readOfflineCache<{ count: number; updatedAt: string }>(key, 12 * 60 * 60 * 1000);
+        if (!cached) throw error;
+        return { ...cached.data, source: "offline" as const, cachedAt: new Date(cached.savedAt).toISOString() };
+      }
+    },
+    enabled: !!tenantId && !!user?.id && hasPermission("customers.view") && !membership?.branch_id && !membership?.company_id,
+    staleTime: 30_000,
+    retry: 1,
+  });
+
   const stats = useQuery({
     queryKey: ["dashboard-stats", tenantId, user?.id, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
@@ -287,7 +311,7 @@ function Dashboard() {
         const [
           salesToday, salesYesterday, salesMonth, salesTrend, refundsToday, refundsYesterday,
           refundsMonth, refundsTrend, expenses, expensesByCategory, inventory, sessions,
-          salesCount, customersCount,
+          salesCount,
         ] = await Promise.all([
           fetchAllRows((from, to) => salesTodayQ.order("created_at").range(from, to)),
           fetchAllRows((from, to) => salesYesterdayQ.order("created_at").range(from, to)),
@@ -302,10 +326,8 @@ function Dashboard() {
           fetchAllRows((from, to) => inventoryQ.order("product_id").range(from, to)),
           fetchAllRows((from, to) => sessionsQ.order("id").range(from, to)),
           scope(supabase.from("sales").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).neq("status", "void").gte("created_at", dayStart).lt("created_at", tomorrow)),
-          supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
         ]);
         if (salesCount.error) throw salesCount.error;
-        if (customersCount.error) throw customersCount.error;
 
         const saleIds = salesMonth.map((row) => row.id);
         const refundIds = refundsMonth.map((row) => row.id);
@@ -351,7 +373,7 @@ function Dashboard() {
 
         return {
           totalToday: todayTotal, totalYesterday: yesterdayTotal, totalMonth: monthTotal, totalExpMonth: expenseTotal,
-          profit, unknownCostItems: unknownCosts, salesTodayCount: salesCount.count ?? 0, customersCount: customersCount.count ?? 0,
+          profit, unknownCostItems: unknownCosts, salesTodayCount: salesCount.count ?? 0,
           openSessions: sessions.length, lowStockCount, trend, byCat,
           salesChange: calculatePercentChange(todayTotal, yesterdayTotal),
           ordersChange: calculatePercentChange(salesCount.count ?? 0, salesYesterday.length),
@@ -371,7 +393,7 @@ function Dashboard() {
         return { ...cached.data, source: "offline" as const, cachedAt: new Date(cached.savedAt).toISOString() };
       }
     },
-    enabled: !!tenantId && !!user?.id && (hasPermission("sales.view") || hasPermission("reports.view") || hasPermission("customers.view") || hasPermission("kitchen.view")),
+    enabled: !!tenantId && !!user?.id && (hasPermission("sales.view") || hasPermission("reports.view")),
     refetchInterval: 60_000,
     staleTime: 30_000,
     retry: 1,
@@ -533,6 +555,13 @@ function Dashboard() {
         </Card>
       )}
 
+      {(customerStats.data || (hasPermission("kitchen.view") && kitchenStatusCounts.data)) && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {hasPermission("customers.view") && customerStats.data && <Kpi label="عدد العملاء" value={String(customerStats.data.count)} sub={customerStats.data.source === "offline" ? "بيانات مخزنة محلياً" : "إجمالي عملاء المؤسسة"} icon={<UsersIcon className="h-5 w-5" />} tone="primary" to="/customers" />}
+          {hasPermission("kitchen.view") && kitchenStatusCounts.data && <Kpi label="الطلبات قيد التحضير" value={String(kitchenStatusCounts.data.preparing)} sub="حالة المطبخ الحالية" icon={<ChefHat className="h-5 w-5" />} tone="destructive" to="/kitchen" />}
+        </div>
+      )}
+
       {stats.isLoading ? (
         <div className="flex justify-center py-12" role="status" aria-live="polite"><Loader2 className="h-6 w-6 animate-spin text-primary" /><span className="sr-only">جارٍ تحميل مؤشرات لوحة التحكم</span></div>
       ) : stats.error ? (
@@ -562,8 +591,7 @@ function Dashboard() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {hasPermission("sales.view") && <Kpi label="إجمالي مبيعات اليوم" value={`${formatMoney(stats.data.totalToday)} ${currency}`} sub={`${stats.data.salesTodayCount} طلباً`} change={stats.data.salesChange} sparkline={stats.data.trend.slice(-7)} icon={<Receipt className="h-5 w-5" />} tone="primary" to="/reports" />}
             {hasPermission("sales.view") && <Kpi label="عدد الطلبات" value={String(stats.data.salesTodayCount)} sub="طلبات اليوم غير الملغاة" change={stats.data.ordersChange} sparkline={stats.data.trend.slice(-7)} icon={<ClipboardList className="h-5 w-5" />} tone="success" to="/sales" />}
-            {hasPermission("customers.view") && !membership?.branch_id && !membership?.company_id && <Kpi label="عدد العملاء" value={String(stats.data.customersCount)} sub="إجمالي عملاء المؤسسة" icon={<UsersIcon className="h-5 w-5" />} tone="primary" to="/customers" />}
-            {hasPermission("kitchen.view") && <Kpi label="قيد التحضير" value={String(kitchenStatusCounts.data?.preparing ?? "—")} sub="طلبات المطبخ الحالية" icon={<ChefHat className="h-5 w-5" />} tone="destructive" to="/kitchen" />}
+
             {hasPermission("reports.view") && <Kpi label="صافي مبيعات الشهر" value={`${formatMoney(stats.data.totalMonth)} ${currency}`} sub="بعد خصم المرتجعات المسجلة" icon={<TrendingUp className="h-5 w-5" />} tone="success" to="/reports" />}
           </div>
 
@@ -610,7 +638,7 @@ function Dashboard() {
             <MiniStat label="ورديات مفتوحة" value={stats.data.openSessions} icon={<Wallet className="h-4 w-4" />} />
             <MiniStat label="نفاد مخزون" value={stats.data.lowStockCount} icon={<Package className="h-4 w-4" />} />
             {hasPermission("sales.view") && <MiniStat label="طلبات اليوم" value={stats.data.salesTodayCount} icon={<Receipt className="h-4 w-4" />} />}
-            {hasPermission("customers.view") && !membership?.branch_id && !membership?.company_id && <MiniStat label="إجمالي العملاء" value={stats.data.customersCount} icon={<UsersIcon className="h-4 w-4" />} />}
+
           </div>
         </>
       )}
