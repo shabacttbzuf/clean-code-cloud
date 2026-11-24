@@ -129,9 +129,10 @@ function RootShell({ children }: { children: ReactNode }) {
 }
 
 function OfflineStatus() {
-  const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
+  const [online, setOnline] = useState(true);
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
+    update();
     window.addEventListener("online", update);
     window.addEventListener("offline", update);
     if ("serviceWorker" in navigator && window.isSecureContext) {
