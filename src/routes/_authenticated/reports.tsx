@@ -192,7 +192,7 @@ function ReportsPage() {
         }) : Promise.resolve([]),
         canManagePromotions ? fetchAllRows((pageFrom, pageTo) => {
           let query = (supabase as any).from("promotion_redemptions")
-            .select("promotion_id, discount_amount, branch_id, created_at, company_id")
+            .select(canViewFinancialReports ? "promotion_id, discount_amount, branch_id, created_at, company_id" : "promotion_id, branch_id, created_at, company_id")
             .eq("tenant_id", tenantId).gte("created_at", fromDate).lte("created_at", toDate);
           if (companyId !== "all") query = query.eq("company_id", companyId);
           else if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
