@@ -470,6 +470,7 @@ function POSWorkspace() {
   const promotionDiscount = useMemo(() => {
     const offer = selectedPromotion;
     if (!offer) return 0;
+    if (subtotal < Number(offer.minimum_subtotal)) return 0;
     const eligible = cart.filter((item) => !offer.product_id || item.product_id === offer.product_id);
     const eligibleSubtotal = eligible.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
     if (eligibleSubtotal <= 0) return 0;
