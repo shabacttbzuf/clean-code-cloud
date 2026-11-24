@@ -31,7 +31,7 @@ DECLARE
   v_order public.kitchen_orders%ROWTYPE;
   v_updated public.kitchen_orders%ROWTYPE;
   v_existing private.kitchen_order_sync_requests%ROWTYPE;
-  v_inserted boolean := false;
+  v_inserted integer := 0;
   v_valid_transition boolean := false;
 BEGIN
   IF v_actor IS NULL THEN
@@ -65,7 +65,7 @@ BEGIN
 
   GET DIAGNOSTICS v_inserted = ROW_COUNT;
 
-  IF NOT v_inserted THEN
+  IF v_inserted = 0 THEN
     SELECT * INTO v_existing
     FROM private.kitchen_order_sync_requests
     WHERE tenant_id=v_order.tenant_id
