@@ -39,7 +39,16 @@ function ReportsPage() {
     staleTime: 15_000,
   });
   const canViewReports = isSuperOwner || permissionsQuery.data?.has("reports.view") === true;
-  const canViewFinancialReports = isSuperOwner || permissionsQuery.data?.has("reports.financial.view") === true || permissionsQuery.data?.has("finance.reports.view") === true || permissionsQuery.data?.has("reports.profits.view") === true;
+  const canViewSalesReports = isSuperOwner || permissionsQuery.data?.has("sales.view") === true;
+  const canViewExpenses = isSuperOwner || permissionsQuery.data?.has("expenses.view") === true;
+  const canViewCash = isSuperOwner || permissionsQuery.data?.has("cash.view") === true;
+  const canViewPurchases = isSuperOwner || permissionsQuery.data?.has("purchases.view") === true;
+  const canViewInventory = isSuperOwner || permissionsQuery.data?.has("inventory.view") === true;
+  const canViewEmployees = isSuperOwner || permissionsQuery.data?.has("hr.employees.view") === true;
+  const canViewAttendance = isSuperOwner || permissionsQuery.data?.has("hr.attendance.view") === true;
+  const canManagePromotions = isSuperOwner || permissionsQuery.data?.has("promotions.manage") === true;
+  const canManageAds = isSuperOwner || permissionsQuery.data?.has("ads.manage") === true;
+  const canViewFinancialReports = canViewExpenses;
   const canExportReports = isSuperOwner || permissionsQuery.data?.has("reports.export") === true;
   const canFilterReports = isSuperOwner || permissionsQuery.data?.has("reports.filter") === true;
   const [from, setFrom] = useState(() => {
