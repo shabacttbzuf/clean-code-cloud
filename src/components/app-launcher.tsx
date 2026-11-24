@@ -154,6 +154,21 @@ export function AppLauncher() {
     })).filter((group) => group.items.length);
   }, [isSuperOwner, totalCount, permissions.data, customItems, navOverrides, search]);
 
+  // Build shortcuts only from the currently visible, permission-filtered navigation.
+  // This prevents stale local favorites/usage entries from exposing inaccessible routes.
+  const visibleItems = useMemo(() => groups.flatMap((group) => group.items), [groups]);
+  const favorites = useMemo(
+    () => visibleItems.filter((item) => favoriteUrls.includes(item.url)),
+    [visibleItems, favoriteUrls],
+  );
+  const mostUsed = useMemo(
+    () => visibleItems
+      .filter((item) => (usageCounts[item.url] ?? 0) > 0)
+      .sort((a, b) => (usageCounts[b.url] ?? 0) - (usageCounts[a.url] ?? 0))
+      .slice(0, 6),
+    [visibleItems, usageCounts],
+  );
+
   return (
     <div className="relative" ref={launcherRef}>
       <Button type="button" variant="outline" size="icon" title="التطبيقات" aria-label="فتح التطبيقات" className="h-10 w-10 shrink-0 rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm transition hover:border-[#174b91] hover:bg-blue-50" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
