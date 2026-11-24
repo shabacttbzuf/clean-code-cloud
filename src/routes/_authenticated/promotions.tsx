@@ -44,9 +44,9 @@ function PromotionsPage() {
     window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
       detail: { path: "/promotions", dirty: formTouched },
     }));
-    return () => window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+    return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
       detail: { path: "/promotions", dirty: false },
-    }));
+    }));; };
   }, [formTouched]);
   useEffect(() => {
     if (membership?.branch_id && !membership.company_id && !editing) {
