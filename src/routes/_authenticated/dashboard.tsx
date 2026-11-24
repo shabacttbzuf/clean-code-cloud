@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
 import { Loader2, TrendingUp, TrendingDown, Receipt, Wallet, Package, Crown, Building2, Users as UsersIcon, Bell, Wifi, WifiOff, CircleHelp, ClipboardList, ChefHat } from "lucide-react";
 import { formatMoney } from "@/lib/format";
+import { calculatePercentChange, fetchAllRows } from "@/lib/report-analytics";
+import { offlineCacheKey, readOfflineCache, writeOfflineCache } from "@/lib/offline-reference-cache";
 import { Link } from "@tanstack/react-router";
 import { Sparkles, ShoppingBag, ArrowLeft, ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 
@@ -241,151 +243,138 @@ function Dashboard() {
   });
 
   const stats = useQuery({
-    queryKey: ["dashboard-stats", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryKey: ["dashboard-stats", tenantId, user?.id, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
-      if (!tenantId) return null;
+      if (!tenantId || !user?.id) return null;
       const now = new Date();
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      const last30 = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
-      const last30ISO = last30.toISOString();
+      const dayStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const tomorrowDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      const yesterdayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      const monthStartDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      const last30Date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
+      const dayStart = dayStartDate.toISOString();
+      const tomorrow = tomorrowDate.toISOString();
+      const yesterday = yesterdayDate.toISOString();
+      const monthStart = monthStartDate.toISOString();
+      const last30 = last30Date.toISOString();
+      const cacheKey = offlineCacheKey({ tenantId, userId: user.id, companyId: membership?.company_id, branchId: membership?.branch_id }, "dashboard-statistics-v2");
 
-      // Apply the active branch/company scope to every branch-owned dashboard metric.
-      // null means tenant-wide access; an empty list deliberately returns no branch-owned rows.
-      let scopedBranchIds: string[] | null = null;
-      if (!isSuperOwner && membership?.branch_id) {
-        scopedBranchIds = [membership.branch_id];
-      } else if (!isSuperOwner && membership?.company_id) {
-        const { data: companyBranches, error: branchScopeError } = await supabase.from("branches")
-          .select("id").eq("tenant_id", tenantId).eq("company_id", membership.company_id);
-        if (branchScopeError) throw branchScopeError;
-        scopedBranchIds = (companyBranches ?? []).map((row) => row.id);
-      }
+      const loadLiveStats = async () => {
+        let scopedBranchIds: string[] | null = null;
+        if (!isSuperOwner && membership?.branch_id) scopedBranchIds = [membership.branch_id];
+        else if (!isSuperOwner && membership?.company_id) {
+          const { data, error } = await supabase.from("branches").select("id")
+            .eq("tenant_id", tenantId).eq("company_id", membership.company_id);
+          if (error) throw error;
+          scopedBranchIds = (data ?? []).map((row) => row.id);
+        }
+        const scope = <T extends { in: (column: string, values: string[]) => T }>(query: T): T =>
+          scopedBranchIds === null ? query : query.in("branch_id", scopedBranchIds);
 
-      let salesTodayQuery = supabase.from("sales").select("total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfDay);
-      let salesMonthQuery = supabase.from("sales").select("id, total, subtotal, discount").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfMonth);
-      let salesTrendQuery = supabase.from("sales").select("total, created_at").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", last30ISO);
-      let refundsTodayQuery = supabase.from("sale_refunds").select("total").eq("tenant_id", tenantId).gte("created_at", startOfDay);
-      let refundsMonthQuery = supabase.from("sale_refunds").select("id, total, subtotal, discount").eq("tenant_id", tenantId).gte("created_at", startOfMonth);
-      let refundsTrendQuery = supabase.from("sale_refunds").select("total, created_at").eq("tenant_id", tenantId).gte("created_at", last30ISO);
-      let expensesMonthQuery = supabase.from("expenses").select("amount").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10));
-      let expensesByCategoryQuery = supabase.from("expenses").select("amount, category_id").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10));
-      let lowStockQuery = supabase.from("inventory").select("quantity, product_id").eq("tenant_id", tenantId);
-      let sessionsQuery = supabase.from("cash_sessions").select("id").eq("tenant_id", tenantId).eq("status", "open");
-      if (scopedBranchIds !== null) {
-        salesTodayQuery = salesTodayQuery.in("branch_id", scopedBranchIds);
-        salesMonthQuery = salesMonthQuery.in("branch_id", scopedBranchIds);
-        salesTrendQuery = salesTrendQuery.in("branch_id", scopedBranchIds);
-        refundsTodayQuery = refundsTodayQuery.in("branch_id", scopedBranchIds);
-        refundsMonthQuery = refundsMonthQuery.in("branch_id", scopedBranchIds);
-        refundsTrendQuery = refundsTrendQuery.in("branch_id", scopedBranchIds);
-        expensesMonthQuery = expensesMonthQuery.in("branch_id", scopedBranchIds);
-        expensesByCategoryQuery = expensesByCategoryQuery.in("branch_id", scopedBranchIds);
-        lowStockQuery = lowStockQuery.in("branch_id", scopedBranchIds);
-        sessionsQuery = sessionsQuery.in("branch_id", scopedBranchIds);
-      }
+        const salesTodayQ = scope(supabase.from("sales").select("id,total,created_at").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", dayStart).lt("created_at", tomorrow));
+        const salesYesterdayQ = scope(supabase.from("sales").select("id,total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", yesterday).lt("created_at", dayStart));
+        const salesMonthQ = scope(supabase.from("sales").select("id,total,subtotal,discount").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", monthStart));
+        const salesTrendQ = scope(supabase.from("sales").select("total,created_at").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", last30));
+        const refundsTodayQ = scope(supabase.from("sale_refunds").select("total").eq("tenant_id", tenantId).gte("created_at", dayStart).lt("created_at", tomorrow));
+        const refundsYesterdayQ = scope(supabase.from("sale_refunds").select("total").eq("tenant_id", tenantId).gte("created_at", yesterday).lt("created_at", dayStart));
+        const refundsMonthQ = scope(supabase.from("sale_refunds").select("id,total,subtotal,discount").eq("tenant_id", tenantId).gte("created_at", monthStart));
+        const refundsTrendQ = scope(supabase.from("sale_refunds").select("total,created_at").eq("tenant_id", tenantId).gte("created_at", last30));
+        const expensesQ = scope(supabase.from("expenses").select("amount,paid_at").eq("tenant_id", tenantId).gte("paid_at", monthStart.slice(0, 10)));
+        const expensesByCategoryQ = scope(supabase.from("expenses").select("amount,category_id,paid_at").eq("tenant_id", tenantId).gte("paid_at", monthStart.slice(0, 10)));
+        const inventoryQ = scope(supabase.from("inventory").select("quantity,product_id").eq("tenant_id", tenantId));
+        const sessionsQ = scope(supabase.from("cash_sessions").select("id").eq("tenant_id", tenantId).eq("status", "open"));
 
-      const [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount] = await Promise.all([
-        salesTodayQuery, salesMonthQuery, salesTrendQuery, refundsTodayQuery, refundsMonthQuery,
-        refundsTrendQuery, expensesMonthQuery, expensesByCategoryQuery, lowStockQuery, sessionsQuery,
-        supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
-      ]);
-      for (const result of [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount]) {
-        if (result.error) throw result.error;
-      }
+        const [
+          salesToday, salesYesterday, salesMonth, salesTrend, refundsToday, refundsYesterday,
+          refundsMonth, refundsTrend, expenses, expensesByCategory, inventory, sessions,
+          salesCount, customersCount,
+        ] = await Promise.all([
+          fetchAllRows((from, to) => salesTodayQ.order("created_at").range(from, to)),
+          fetchAllRows((from, to) => salesYesterdayQ.order("created_at").range(from, to)),
+          fetchAllRows((from, to) => salesMonthQ.order("created_at").range(from, to)),
+          fetchAllRows((from, to) => salesTrendQ.order("created_at").range(from, to)),
+          fetchAllRows((from, to) => refundsTodayQ.order("created_at").range(from, to)),
+          fetchAllRows((from, to) => refundsYesterdayQ.order("created_at").range(from, to)),
+          fetchAllRows((from, to) => refundsMonthQ.order("created_at").range(from, to)),
+          fetchAllRows((from, to) => refundsTrendQ.order("created_at").range(from, to)),
+          fetchAllRows((from, to) => expensesQ.order("paid_at").range(from, to)),
+          fetchAllRows((from, to) => expensesByCategoryQ.order("paid_at").range(from, to)),
+          fetchAllRows((from, to) => inventoryQ.order("product_id").range(from, to)),
+          fetchAllRows((from, to) => sessionsQ.order("id").range(from, to)),
+          scope(supabase.from("sales").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).neq("status", "void").gte("created_at", dayStart).lt("created_at", tomorrow)),
+          supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
+        ]);
+        if (salesCount.error) throw salesCount.error;
+        if (customersCount.error) throw customersCount.error;
 
-      const saleIdsMonth = (salesMonth.data ?? []).map((sale) => sale.id);
-      const refundIdsMonth = (refundsMonth.data ?? []).map((refund) => refund.id);
-      const [saleCostRows, refundCostRows] = await Promise.all([
-        saleIdsMonth.length
-          ? supabase.from("sale_items").select("quantity, cost_price_snapshot").in("sale_id", saleIdsMonth)
-          : Promise.resolve({ data: [], error: null }),
-        refundIdsMonth.length
-          ? supabase.from("sale_refund_items").select("quantity, cost_price_snapshot, restocked").in("refund_id", refundIdsMonth)
-          : Promise.resolve({ data: [], error: null }),
-      ]);
-      if (saleCostRows.error) throw saleCostRows.error;
-      if (refundCostRows.error) throw refundCostRows.error;
-      const catsRes = await supabase.from("expense_categories").select("id, name, color").eq("tenant_id", tenantId);
-      if (catsRes.error) throw catsRes.error;
-      const catMap = new Map((catsRes.data ?? []).map((c) => [(c as { id: string }).id, c as { name: string; color: string | null }]));
+        const saleIds = salesMonth.map((row) => row.id);
+        const refundIds = refundsMonth.map((row) => row.id);
+        const saleCostGroups = await Promise.all(Array.from({ length: Math.ceil(saleIds.length / 100) }, (_, i) => saleIds.slice(i * 100, (i + 1) * 100))
+          .map((ids) => ids.length ? fetchAllRows((from, to) => supabase.from("sale_items").select("quantity,cost_price_snapshot").eq("tenant_id", tenantId).in("sale_id", ids).range(from, to)) : Promise.resolve([])));
+        const refundCostGroups = await Promise.all(Array.from({ length: Math.ceil(refundIds.length / 100) }, (_, i) => refundIds.slice(i * 100, (i + 1) * 100))
+          .map((ids) => ids.length ? fetchAllRows((from, to) => supabase.from("sale_refund_items").select("quantity,cost_price_snapshot,restocked").eq("tenant_id", tenantId).in("refund_id", ids).range(from, to)) : Promise.resolve([])));
+        const saleCosts = saleCostGroups.flat();
+        const refundCosts = refundCostGroups.flat();
+        const categories = await supabase.from("expense_categories").select("id,name,color").eq("tenant_id", tenantId);
+        if (categories.error) throw categories.error;
+        const categoryMap = new Map((categories.data ?? []).map((row) => [row.id, row]));
 
-      const totalToday = (salesToday.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0)
-        - (refundsToday.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
-      const totalMonth = (salesMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0)
-        - (refundsMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
-      const totalExpMonth = (expensesMonth.data ?? []).reduce((s, r) => s + Number((r as { amount: number }).amount), 0);
-      const unknownSaleCosts = (saleCostRows.data ?? []).filter((row) => row.cost_price_snapshot == null).length;
-      const unknownReturnedCosts = (refundCostRows.data ?? []).filter((row) => row.restocked && row.cost_price_snapshot == null).length;
-      const unknownCostItems = unknownSaleCosts + unknownReturnedCosts;
-      const cogsSales = (saleCostRows.data ?? []).reduce(
-        (sum, row) => sum + Number(row.cost_price_snapshot ?? 0) * Number(row.quantity), 0,
-      );
-      const cogsRestockedReturns = (refundCostRows.data ?? []).reduce(
-        (sum, row) => sum + (row.restocked ? Number(row.cost_price_snapshot ?? 0) * Number(row.quantity) : 0), 0,
-      );
-      const revenueBeforeTax = (salesMonth.data ?? []).reduce(
-        (sum, row) => sum + Number(row.subtotal) - Number(row.discount), 0,
-      ) - (refundsMonth.data ?? []).reduce(
-        (sum, row) => sum + Number(row.subtotal) - Number(row.discount), 0,
-      );
-      const grossProfit = unknownCostItems > 0 ? null : revenueBeforeTax - cogsSales + cogsRestockedReturns;
-      const profit = grossProfit === null ? null : grossProfit - totalExpMonth;
+        const todayTotal = salesToday.reduce((sum, row) => sum + Number(row.total), 0) - refundsToday.reduce((sum, row) => sum + Number(row.total), 0);
+        const yesterdayTotal = salesYesterday.reduce((sum, row) => sum + Number(row.total), 0) - refundsYesterday.reduce((sum, row) => sum + Number(row.total), 0);
+        const monthTotal = salesMonth.reduce((sum, row) => sum + Number(row.total), 0) - refundsMonth.reduce((sum, row) => sum + Number(row.total), 0);
+        const expenseTotal = expenses.reduce((sum, row) => sum + Number(row.amount), 0);
+        const unknownCosts = saleCosts.filter((row) => row.cost_price_snapshot == null).length + refundCosts.filter((row) => row.restocked && row.cost_price_snapshot == null).length;
+        const soldCost = saleCosts.reduce((sum, row) => sum + Number(row.cost_price_snapshot ?? 0) * Number(row.quantity), 0);
+        const returnedCost = refundCosts.reduce((sum, row) => sum + (row.restocked ? Number(row.cost_price_snapshot ?? 0) * Number(row.quantity) : 0), 0);
+        const revenueBeforeTax = salesMonth.reduce((sum, row) => sum + Number(row.subtotal) - Number(row.discount), 0) - refundsMonth.reduce((sum, row) => sum + Number(row.subtotal) - Number(row.discount), 0);
+        const grossProfit = unknownCosts ? null : revenueBeforeTax - soldCost + returnedCost;
+        const profit = grossProfit === null ? null : grossProfit - expenseTotal;
 
-      // Trend: group by day
-      const dayMap = new Map<string, number>();
-      for (let i = 29; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-        const key = localDayKey(d);
-        dayMap.set(key, 0);
-      }
-      for (const s of salesTrend.data ?? []) {
-        const key = localDayKey(new Date((s as { created_at: string }).created_at));
-        if (dayMap.has(key)) dayMap.set(key, (dayMap.get(key) ?? 0) + Number((s as { total: number }).total));
-      }
-      for (const refund of refundsTrend.data ?? []) {
-        const key = localDayKey(new Date((refund as { created_at: string }).created_at));
-        if (dayMap.has(key)) dayMap.set(key, (dayMap.get(key) ?? 0) - Number((refund as { total: number }).total));
-      }
-      const trend = Array.from(dayMap.entries()).map(([day, total]) => ({ day: day.slice(5), total: +total.toFixed(2) }));
+        const dayMap = new Map<string, number>();
+        for (let i = 29; i >= 0; i--) dayMap.set(localDayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)), 0);
+        for (const row of salesTrend) { const key = localDayKey(new Date(row.created_at)); if (dayMap.has(key)) dayMap.set(key, (dayMap.get(key) ?? 0) + Number(row.total)); }
+        for (const row of refundsTrend) { const key = localDayKey(new Date(row.created_at)); if (dayMap.has(key)) dayMap.set(key, (dayMap.get(key) ?? 0) - Number(row.total)); }
+        const trend = Array.from(dayMap.entries()).map(([day, total]) => ({ day: day.slice(5), total: +total.toFixed(2) }));
 
-      // Expenses by category
-      const byCatMap = new Map<string, number>();
-      for (const e of expByCat.data ?? []) {
-        const cid = (e as { category_id: string | null }).category_id ?? "other";
-        byCatMap.set(cid, (byCatMap.get(cid) ?? 0) + Number((e as { amount: number }).amount));
-      }
-      const colors = ["hsl(var(--primary))", "hsl(var(--accent))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
-      const byCat = Array.from(byCatMap.entries()).map(([cid, value], i) => ({
-        name: cid === "other" ? "أخرى" : (catMap.get(cid)?.name ?? "—"),
-        value: +value.toFixed(2),
-        color: catMap.get(cid)?.color ?? colors[i % colors.length],
-      }));
+        const catTotals = new Map<string, number>();
+        for (const row of expensesByCategory) { const id = row.category_id ?? "other"; catTotals.set(id, (catTotals.get(id) ?? 0) + Number(row.amount)); }
+        const palette = ["hsl(var(--primary))", "hsl(var(--accent))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
+        const byCat = Array.from(catTotals.entries()).map(([id, value], i) => ({ name: id === "other" ? "أخرى" : (categoryMap.get(id)?.name ?? "—"), value: +value.toFixed(2), color: categoryMap.get(id)?.color ?? palette[i % palette.length] }));
 
-      const inventoryProductIds = [...new Set((lowStock.data ?? []).map((row) => row.product_id))];
-      const lowStockProducts = inventoryProductIds.length
-        ? await supabase.from("products").select("id, min_stock").eq("tenant_id", tenantId).in("id", inventoryProductIds)
-        : { data: [], error: null };
-      if (lowStockProducts.error) throw lowStockProducts.error;
-      const minimumStockByProduct = new Map((lowStockProducts.data ?? []).map((product) => [product.id, Number(product.min_stock)]));
-      if (minimumStockByProduct.size !== inventoryProductIds.length) {
-        throw new Error("تعذر التحقق من حدود إعادة الطلب لجميع منتجات المخزون.");
-      }
-      const lowStockCount = (lowStock.data ?? []).filter((row) =>
-        Number(row.quantity) <= (minimumStockByProduct.get(row.product_id) ?? 0),
-      ).length;
+        const productIds = [...new Set(inventory.map((row) => row.product_id))];
+        const productGroups = await Promise.all(Array.from({ length: Math.ceil(productIds.length / 100) }, (_, i) => productIds.slice(i * 100, (i + 1) * 100))
+          .map((ids) => ids.length ? fetchAllRows((from, to) => supabase.from("products").select("id,min_stock").eq("tenant_id", tenantId).in("id", ids).range(from, to)) : Promise.resolve([])));
+        const products = productGroups.flat();
+        const minStock = new Map(products.map((row) => [row.id, Number(row.min_stock)]));
+        if (minStock.size !== productIds.length) throw new Error("تعذر التحقق من حدود إعادة الطلب لجميع منتجات المخزون.");
+        const lowStockCount = inventory.filter((row) => Number(row.quantity) <= (minStock.get(row.product_id) ?? 0)).length;
 
-      return {
-        totalToday, totalMonth, totalExpMonth,
-        profit, unknownCostItems,
-        salesTodayCount: (salesToday.data ?? []).length,
-        customersCount: customersCount.count ?? 0,
-        openSessions: (sessions.data ?? []).length,
-        lowStockCount,
-        trend, byCat,
+        return {
+          totalToday: todayTotal, totalYesterday: yesterdayTotal, totalMonth: monthTotal, totalExpMonth: expenseTotal,
+          profit, unknownCostItems: unknownCosts, salesTodayCount: salesCount.count ?? 0, customersCount: customersCount.count ?? 0,
+          openSessions: sessions.length, lowStockCount, trend, byCat,
+          salesChange: calculatePercentChange(todayTotal, yesterdayTotal),
+          ordersChange: calculatePercentChange(salesCount.count ?? 0, salesYesterday.length),
+          updatedAt: new Date().toISOString(), source: "live" as const,
+        };
       };
+
+      try {
+        const fresh = await loadLiveStats();
+        await writeOfflineCache(cacheKey, fresh);
+        return fresh;
+      } catch (error) {
+        const value = error as { status?: number; code?: string };
+        if (value?.status === 401 || value?.status === 403 || ["42501", "PGRST301"].includes(value?.code ?? "")) throw error;
+        const cached = await readOfflineCache<any>(cacheKey, 12 * 60 * 60 * 1000);
+        if (!cached) throw error;
+        return { ...cached.data, source: "offline" as const, cachedAt: new Date(cached.savedAt).toISOString() };
+      }
     },
-    enabled: !!tenantId,
+    enabled: !!tenantId && !!user?.id && (hasPermission("sales.view") || hasPermission("reports.view") || hasPermission("customers.view") || hasPermission("kitchen.view")),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+    retry: 1,
   });
 
 
@@ -563,11 +552,19 @@ function Dashboard() {
         <Card><CardContent className="p-6 text-center text-sm text-muted-foreground">لا توجد مؤسسة نشطة مرتبطة بهذا الحساب لعرض المؤشرات.</CardContent></Card>
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Kpi label="مبيعات اليوم" value={`${formatMoney(stats.data.totalToday)} ${currency}`} sub={`${stats.data.salesTodayCount} فاتورة`} icon={<Receipt className="h-5 w-5" />} tone="primary" />
-            <Kpi label="مبيعات الشهر" value={`${formatMoney(stats.data.totalMonth)} ${currency}`} icon={<TrendingUp className="h-5 w-5" />} tone="success" />
-            <Kpi label="مصروفات الشهر" value={`${formatMoney(stats.data.totalExpMonth)} ${currency}`} icon={<TrendingDown className="h-5 w-5" />} tone="destructive" />
-            <Kpi label="الربح التقديري" value={stats.data.profit === null ? "غير مكتمل" : `${formatMoney(stats.data.profit)} ${currency}`} sub={stats.data.unknownCostItems > 0 ? `${stats.data.unknownCostItems} صنفاً بلا تكلفة محفوظة` : "بعد تكلفة البضاعة والمصروفات المسجلة"} icon={<Wallet className="h-5 w-5" />} tone={stats.data.profit !== null && stats.data.profit >= 0 ? "success" : "destructive"} />
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span className={stats.data.source === "offline" ? "inline-flex items-center gap-1 text-amber-700" : "inline-flex items-center gap-1 text-emerald-700"}>
+              {stats.data.source === "offline" ? <WifiOff className="h-3.5 w-3.5" /> : <Wifi className="h-3.5 w-3.5" />}
+              {stats.data.source === "offline" ? "بيانات مخزنة محلياً — قد لا تشمل آخر التغييرات" : "بيانات مباشرة من قاعدة البيانات"}
+            </span>
+            <span>آخر تحديث: {new Date(stats.data.source === "offline" ? stats.data.cachedAt : stats.data.updatedAt).toLocaleString("ar", { dateStyle: "short", timeStyle: "short" })}</span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            {hasPermission("sales.view") && <Kpi label="إجمالي مبيعات اليوم" value={`${formatMoney(stats.data.totalToday)} ${currency}`} sub={`${stats.data.salesTodayCount} طلباً`} change={stats.data.salesChange} icon={<Receipt className="h-5 w-5" />} tone="primary" to="/reports" />}
+            {hasPermission("sales.view") && <Kpi label="عدد الطلبات" value={String(stats.data.salesTodayCount)} sub="طلبات اليوم غير الملغاة" change={stats.data.ordersChange} icon={<ClipboardList className="h-5 w-5" />} tone="success" to="/sales" />}
+            {hasPermission("customers.view") && <Kpi label="عدد العملاء" value={String(stats.data.customersCount)} sub="على مستوى الشركة" icon={<UsersIcon className="h-5 w-5" />} tone="primary" to="/customers" />}
+            {hasPermission("kitchen.view") && <Kpi label="قيد التحضير" value={String(kitchenStatusCounts.data?.preparing ?? "—")} sub="طلبات المطبخ الحالية" icon={<ChefHat className="h-5 w-5" />} tone="destructive" to="/kitchen" />}
+            {hasPermission("reports.view") && <Kpi label="صافي مبيعات الشهر" value={`${formatMoney(stats.data.totalMonth)} ${currency}`} sub="بعد خصم المرتجعات المسجلة" icon={<TrendingUp className="h-5 w-5" />} tone="success" to="/reports" />}
           </div>
 
           <div className="grid gap-4 lg:grid-cols-3">
@@ -612,8 +609,8 @@ function Dashboard() {
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <MiniStat label="ورديات مفتوحة" value={stats.data.openSessions} icon={<Wallet className="h-4 w-4" />} />
             <MiniStat label="نفاد مخزون" value={stats.data.lowStockCount} icon={<Package className="h-4 w-4" />} />
-            <MiniStat label="فواتير اليوم" value={stats.data.salesTodayCount} icon={<Receipt className="h-4 w-4" />} />
-            <MiniStat label="إجمالي العملاء" value={stats.data.customersCount} icon={<UsersIcon className="h-4 w-4" />} />
+            {hasPermission("sales.view") && <MiniStat label="طلبات اليوم" value={stats.data.salesTodayCount} icon={<Receipt className="h-4 w-4" />} />}
+            {hasPermission("customers.view") && <MiniStat label="إجمالي العملاء" value={stats.data.customersCount} icon={<UsersIcon className="h-4 w-4" />} />
           </div>
         </>
       )}
@@ -705,18 +702,24 @@ function Dashboard() {
   );
 }
 
-function Kpi({ label, value, sub, icon, tone }: { label: string; value: string; sub?: string; icon: React.ReactNode; tone: "primary" | "success" | "destructive" }) {
+function Kpi({ label, value, sub, icon, tone, change, to }: { label: string; value: string; sub?: string; icon: React.ReactNode; tone: "primary" | "success" | "destructive"; change?: number | null; to?: "/reports" | "/sales" | "/customers" | "/kitchen" }) {
   const bg = tone === "success" ? "bg-success/15 text-success" : tone === "destructive" ? "bg-destructive/15 text-destructive" : "bg-primary/15 text-primary";
-  return (
-    <Card><CardContent className="flex items-center justify-between p-4">
-      <div>
-        <div className="text-xs text-muted-foreground">{label}</div>
-        <div className="mt-1 text-2xl font-bold num">{value}</div>
-        {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
-      </div>
-      <div className={`grid h-11 w-11 place-items-center rounded-xl ${bg}`}>{icon}</div>
-    </CardContent></Card>
+  const content = (
+    <Card className={to ? "h-full transition hover:-translate-y-0.5 hover:shadow-md" : "h-full"}>
+      <CardContent className="flex h-full items-start justify-between gap-3 p-4">
+        <div className="min-w-0">
+          <div className="text-xs text-muted-foreground">{label}</div>
+          <div className="mt-1 text-xl font-extrabold num sm:text-2xl">{value}</div>
+          {sub && <div className="mt-1 text-xs text-muted-foreground">{sub}</div>}
+          {change !== undefined && <div className={`mt-2 inline-flex items-center gap-1 text-xs font-bold ${change === null ? "text-muted-foreground" : change >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+            {change === null ? "لا تتوفر مقارنة" : <>{change >= 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}{change > 0 ? "+" : ""}{change.toFixed(1)}% مقارنة بالأمس</>}
+          </div>}
+        </div>
+        <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${bg}`}>{icon}</div>
+      </CardContent>
+    </Card>
   );
+  return to ? <Link to={to} className="block h-full rounded-xl focus-visible:outline-none">{content}</Link> : content;
 }
 function MiniStat({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
   return (
