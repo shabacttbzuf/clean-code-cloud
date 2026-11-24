@@ -36,10 +36,11 @@ function TablesPage() {
   const [status, setStatus] = useState<RestaurantTable["status"]>("active");
 
   const branches = useQuery({
-    queryKey: ["restaurant-table-branches", tenantId, membership?.branch_id],
+    queryKey: ["restaurant-table-branches", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async (): Promise<Branch[]> => {
       let query = supabase.from("branches").select("id,name").eq("tenant_id", tenantId!).eq("is_active", true).order("name");
-      if (membership?.branch_id && !isAdmin && !isSuperOwner) query = query.eq("id", membership.branch_id);
+      if (!isSuperOwner && membership?.branch_id) query = query.eq("id", membership.branch_id);
+      else if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
       const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as Branch[];
@@ -48,6 +49,10 @@ function TablesPage() {
   });
 
   useEffect(() => {
+    if (branchId && branches.data && !branches.data.some((branch) => branch.id === branchId)) {
+      setBranchId(branches.data[0]?.id ?? "");
+      return;
+    }
     if (!branchId && branches.data?.length) setBranchId(branches.data[0].id);
   }, [branchId, branches.data]);
 
