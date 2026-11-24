@@ -4,6 +4,9 @@ import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("../src/lib/offline-sync.ts", import.meta.url), "utf8");
 const panel = readFileSync(new URL("../src/components/offline-sync-center.tsx", import.meta.url), "utf8");
+const handlers = readFileSync(new URL("../src/lib/offline-handlers.ts", import.meta.url), "utf8");
+const kitchen = readFileSync(new URL("../src/routes/_authenticated/kitchen.tsx", import.meta.url), "utf8");
+const migration = readFileSync(new URL("../supabase/migrations/20261125000100_offline_sync_kitchen_idempotency.sql", import.meta.url), "utf8");
 
 test("offline queue is durable and commits IndexedDB transactions before reporting success", () => {
   assert.match(source, /indexedDB\.open\(DB_NAME, DB_VERSION\)/);
@@ -51,4 +54,35 @@ test("workspace panel shows queued, failed, conflict and last-sync state", () =>
   assert.match(panel, /تعارض/);
   assert.match(panel, /آخر مزامنة/);
   assert.match(panel, /مزامنة الآن/);
+});
+
+test("identical pending requests are deduplicated before a second operation id is created", () => {
+  assert.match(source, /const duplicate = existing\.find/);
+  assert.match(source, /JSON\.stringify\(item\.payload\) === payloadKey/);
+});
+
+test("cross-tab workers claim operations through an IndexedDB lease", () => {
+  assert.match(source, /async function claimOperation/);
+  assert.match(source, /leaseExpiresAt/);
+  assert.match(source, /store\.put\(current\)/);
+  assert.match(source, /const syncPromises = new Map/);
+});
+
+test("only the non-financial kitchen workflow is registered as offline-safe", () => {
+  assert.match(handlers, /registerOfflineHandler\("kitchen_status"/);
+  assert.match(handlers, /set_kitchen_order_status_idempotent/);
+  assert.match(handlers, /auth\.uid\(\)/);
+  assert.match(kitchen, /enqueueOfflineOperation\(/);
+  assert.match(kitchen, /navigator\.onLine/);
+  assert.match(kitchen, /_idempotency_key: crypto\.randomUUID\(\)/);
+});
+
+test("kitchen replay RPC persists idempotency and rechecks permission and branch access", () => {
+  assert.match(migration, /PRIMARY KEY \(tenant_id, actor_id, idempotency_key\)/);
+  assert.match(migration, /ON CONFLICT \(tenant_id,actor_id,idempotency_key\) DO NOTHING/);
+  assert.match(migration, /private\.has_permission\(v_actor,v_order\.tenant_id,'kitchen\.manage'\)/);
+  assert.match(migration, /private\.can_access_branch\(v_actor,v_order\.tenant_id,v_order\.branch_id\)/);
+  assert.match(migration, /SET result=to_jsonb\(v_updated\)/);
+  assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.set_kitchen_order_status_idempotent/);
+  assert.match(migration, /REVOKE ALL ON TABLE private\.kitchen_order_sync_requests FROM PUBLIC, anon, authenticated/);
 });
