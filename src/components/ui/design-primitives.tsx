@@ -1,4 +1,4 @@
-import type { HTMLAttributes, ReactNode } from "react";
+import type { HTMLAttributes, ReactNode, SVGProps } from "react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -13,7 +13,7 @@ export function AppIcon({
   icon: LucideIcon;
   className?: string;
   decorative?: boolean;
-} & Omit<React.SVGProps<SVGSVGElement>, "ref">) {
+} & Omit<SVGProps<SVGSVGElement>, "ref">) {
   return (
     <Icon
       aria-hidden={decorative ? true : undefined}
