@@ -1,7 +1,28 @@
 import type { HTMLAttributes, ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type DivProps = HTMLAttributes<HTMLDivElement>;
+
+export function AppIcon({
+  icon: Icon,
+  className,
+  decorative = true,
+  ...props
+}: {
+  icon: LucideIcon;
+  className?: string;
+  decorative?: boolean;
+} & Omit<React.SVGProps<SVGSVGElement>, "ref">) {
+  return (
+    <Icon
+      aria-hidden={decorative ? true : undefined}
+      focusable={decorative ? false : undefined}
+      className={cn("size-4 shrink-0", className)}
+      {...props}
+    />
+  );
+}
 
 export function PageSection({ className, ...props }: DivProps) {
   return <section className={cn("min-w-0 space-y-5", className)} {...props} />;
