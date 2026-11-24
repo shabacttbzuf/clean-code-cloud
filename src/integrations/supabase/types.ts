@@ -27,6 +27,7 @@ export type Database = {
           sort_order: number
           starts_at: string | null
           status: string
+          target_branch_ids: string[]
           target_url: string | null
           tenant_id: string
           title: string
@@ -44,6 +45,7 @@ export type Database = {
           sort_order?: number
           starts_at?: string | null
           status?: string
+          target_branch_ids?: string[]
           target_url?: string | null
           tenant_id: string
           title: string
@@ -61,6 +63,7 @@ export type Database = {
           sort_order?: number
           starts_at?: string | null
           status?: string
+          target_branch_ids?: string[]
           target_url?: string | null
           tenant_id?: string
           title?: string
@@ -81,6 +84,60 @@ export type Database = {
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
+        ]
+      },
+      marketing_ad_placements: {
+        Row: {
+          company_id: string | null
+          created_at: string
+          description: string
+          id: string
+          is_enabled: boolean
+          name_ar: string
+          placement_key: string
+          sort_order: number
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string
+          description?: string
+          id?: string
+          is_enabled?: boolean
+          name_ar: string
+          placement_key: string
+          sort_order?: number
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string
+          description?: string
+          id?: string
+          is_enabled?: boolean
+          name_ar?: string
+          placement_key?: string
+          sort_order?: number
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_ad_placements_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketing_ad_placements_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          }
         ]
       },
       attendance: {
