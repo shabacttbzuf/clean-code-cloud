@@ -37,6 +37,8 @@ export function useSuperOwner() {
     isSuperOwner: query.data?.isSuperOwner ?? false,
     totalCount: query.data?.totalCount ?? 0,
     loading: query.isLoading,
+    statusKnown: !query.isLoading && !query.isError && query.data !== undefined,
+    statusError: query.error,
     refetch: query.refetch,
   };
 }
