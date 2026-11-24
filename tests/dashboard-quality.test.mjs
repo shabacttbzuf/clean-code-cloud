@@ -81,15 +81,15 @@ const userAdmin = readFileSync(new URL("../src/routes/_authenticated/users-admin
 test("dashboard and account menu use dynamic profile names without hardcoded account identities", () => {
   assert.match(dashboard, /أهلاً بك في نظام إدارة/);
   assert.match(dashboard, /إدارة أسهل/);
-  assert.match(dashboard, /profileQuery\\.data\\?\\.full_name/);
-  assert.match(dashboard, /profileQuery\\.data\\?\\.username/);
-  assert.match(dashboard, /مرحباً \\{displayName\\}/);
-  assert.doesNotMatch(dashboard, /shafiqalwatiry@gmail\\.com/);
+  assert.ok(dashboard.includes("profileQuery.data?.full_name"));
+  assert.ok(dashboard.includes("profileQuery.data?.username"));
+  assert.ok(dashboard.includes("مرحباً {displayName}"));
+  assert.doesNotMatch(dashboard, /shafiqalwatiry@gmail\.com/);
   assert.match(authLayout, /topbar-profile-name/);
-  assert.match(authLayout, /currentProfile\\?\\.full_name/);
-  assert.match(authLayout, /currentProfile\\?\\.username/);
+  assert.ok(authLayout.includes("currentProfile?.full_name"));
+  assert.ok(authLayout.includes("currentProfile?.username"));
   assert.doesNotMatch(authLayout, /شفيق الوتيري/);
-  assert.doesNotMatch(userAdmin, /u\\.email \\?\\? u\\.username/);
+  assert.doesNotMatch(userAdmin, /u\.email \?\? u\.username/);
 });;
 
 test("authenticated workspace removes the side drawer and keeps applications navigation in the top bar", () => {
