@@ -560,9 +560,9 @@ function Dashboard() {
             <span>آخر تحديث: {new Date(stats.data.source === "offline" ? stats.data.cachedAt : stats.data.updatedAt).toLocaleString("ar", { dateStyle: "short", timeStyle: "short" })}</span>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            {hasPermission("sales.view") && <Kpi label="إجمالي مبيعات اليوم" value={`${formatMoney(stats.data.totalToday)} ${currency}`} sub={`${stats.data.salesTodayCount} طلباً`} change={stats.data.salesChange} icon={<Receipt className="h-5 w-5" />} tone="primary" to="/reports" />}
-            {hasPermission("sales.view") && <Kpi label="عدد الطلبات" value={String(stats.data.salesTodayCount)} sub="طلبات اليوم غير الملغاة" change={stats.data.ordersChange} icon={<ClipboardList className="h-5 w-5" />} tone="success" to="/sales" />}
-            {hasPermission("customers.view") && <Kpi label="عدد العملاء" value={String(stats.data.customersCount)} sub="على مستوى الشركة" icon={<UsersIcon className="h-5 w-5" />} tone="primary" to="/customers" />}
+            {hasPermission("sales.view") && <Kpi label="إجمالي مبيعات اليوم" value={`${formatMoney(stats.data.totalToday)} ${currency}`} sub={`${stats.data.salesTodayCount} طلباً`} change={stats.data.salesChange} sparkline={stats.data.trend.slice(-7)} icon={<Receipt className="h-5 w-5" />} tone="primary" to="/reports" />}
+            {hasPermission("sales.view") && <Kpi label="عدد الطلبات" value={String(stats.data.salesTodayCount)} sub="طلبات اليوم غير الملغاة" change={stats.data.ordersChange} sparkline={stats.data.trend.slice(-7)} icon={<ClipboardList className="h-5 w-5" />} tone="success" to="/sales" />}
+            {hasPermission("customers.view") && !membership?.branch_id && !membership?.company_id && <Kpi label="عدد العملاء" value={String(stats.data.customersCount)} sub="إجمالي عملاء المؤسسة" icon={<UsersIcon className="h-5 w-5" />} tone="primary" to="/customers" />}
             {hasPermission("kitchen.view") && <Kpi label="قيد التحضير" value={String(kitchenStatusCounts.data?.preparing ?? "—")} sub="طلبات المطبخ الحالية" icon={<ChefHat className="h-5 w-5" />} tone="destructive" to="/kitchen" />}
             {hasPermission("reports.view") && <Kpi label="صافي مبيعات الشهر" value={`${formatMoney(stats.data.totalMonth)} ${currency}`} sub="بعد خصم المرتجعات المسجلة" icon={<TrendingUp className="h-5 w-5" />} tone="success" to="/reports" />}
           </div>
@@ -610,7 +610,7 @@ function Dashboard() {
             <MiniStat label="ورديات مفتوحة" value={stats.data.openSessions} icon={<Wallet className="h-4 w-4" />} />
             <MiniStat label="نفاد مخزون" value={stats.data.lowStockCount} icon={<Package className="h-4 w-4" />} />
             {hasPermission("sales.view") && <MiniStat label="طلبات اليوم" value={stats.data.salesTodayCount} icon={<Receipt className="h-4 w-4" />} />}
-            {hasPermission("customers.view") && <MiniStat label="إجمالي العملاء" value={stats.data.customersCount} icon={<UsersIcon className="h-4 w-4" />} />
+            {hasPermission("customers.view") && !membership?.branch_id && !membership?.company_id && <MiniStat label="إجمالي العملاء" value={stats.data.customersCount} icon={<UsersIcon className="h-4 w-4" />} />}
           </div>
         </>
       )}
@@ -702,7 +702,7 @@ function Dashboard() {
   );
 }
 
-function Kpi({ label, value, sub, icon, tone, change, to }: { label: string; value: string; sub?: string; icon: React.ReactNode; tone: "primary" | "success" | "destructive"; change?: number | null; to?: "/reports" | "/sales" | "/customers" | "/kitchen" }) {
+function Kpi({ label, value, sub, icon, tone, change, to, sparkline }: { label: string; value: string; sub?: string; icon: React.ReactNode; tone: "primary" | "success" | "destructive"; change?: number | null; to?: "/reports" | "/sales" | "/customers" | "/kitchen"; sparkline?: Array<{ total: number }> }) {
   const bg = tone === "success" ? "bg-success/15 text-success" : tone === "destructive" ? "bg-destructive/15 text-destructive" : "bg-primary/15 text-primary";
   const content = (
     <Card className={to ? "h-full transition hover:-translate-y-0.5 hover:shadow-md" : "h-full"}>
@@ -714,6 +714,7 @@ function Kpi({ label, value, sub, icon, tone, change, to }: { label: string; val
           {change !== undefined && <div className={`mt-2 inline-flex items-center gap-1 text-xs font-bold ${change === null ? "text-muted-foreground" : change >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
             {change === null ? "لا تتوفر مقارنة" : <>{change >= 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}{change > 0 ? "+" : ""}{change.toFixed(1)}% مقارنة بالأمس</>}
           </div>}
+          {sparkline && sparkline.length > 1 && <div className="mt-2 h-8 w-24" aria-hidden="true"><ResponsiveContainer width="100%" height="100%"><LineChart data={sparkline}><Line type="monotone" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} /></LineChart></ResponsiveContainer></div>}
         </div>
         <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${bg}`}>{icon}</div>
       </CardContent>
