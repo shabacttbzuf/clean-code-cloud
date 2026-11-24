@@ -78,7 +78,8 @@ test("only the non-financial kitchen workflow is registered as offline-safe", ()
   assert.match(handlers, /auth\.uid\(\)/);
   assert.match(kitchen, /enqueueOfflineOperation\(/);
   assert.match(kitchen, /navigator\.onLine/);
-  assert.match(kitchen, /const idempotencyKey = crypto\.randomUUID\(\)/);\n  assert.match(kitchen, /_idempotency_key: idempotencyKey/);
+  assert.match(kitchen, /const idempotencyKey = crypto\.randomUUID\(\)/);
+  assert.match(kitchen, /_idempotency_key: idempotencyKey/);
 });
 
 test("kitchen replay RPC persists idempotency and rechecks permission and branch access", () => {
