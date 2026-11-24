@@ -74,15 +74,21 @@ function Dashboard() {
   const campaignsQuery = useQuery({
     queryKey: ["dashboard-marketing-campaigns", tenantId, membership?.company_id ?? "tenant"],
     queryFn: async () => {
+      const now = new Date().toISOString();
       let query = supabase.from("marketing_campaigns")
         .select("id,title,description,image_url,target_url,starts_at,ends_at,sort_order")
         .eq("tenant_id", tenantId!)
         .eq("status", "active")
         .in("placement", ["dashboard_banner", "dashboard_card"])
+        .or(`starts_at.is.null,starts_at.lte.${now}`)
+        .or(`ends_at.is.null,ends_at.gt.${now}`)
         .order("sort_order")
         .limit(6);
       if (membership?.company_id) {
         query = query.or(`company_id.is.null,company_id.eq.${membership.company_id}`);
+      } else if (!isSuperOwner) {
+        // Branch-only and regular tenant members must never receive another company's campaigns.
+        query = query.is("company_id", null);
       }
       const { data, error } = await query;
       if (error) throw error;
