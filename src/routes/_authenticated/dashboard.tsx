@@ -11,6 +11,7 @@ import { Loader2, TrendingUp, TrendingDown, Receipt, Wallet, Package, Crown, Bui
 import { formatMoney } from "@/lib/format";
 import { Link } from "@tanstack/react-router";
 import { Sparkles, ShoppingBag, ArrowLeft, ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
+import { AdPlacement } from "@/components/ads/ad-placement";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -76,7 +77,7 @@ function Dashboard() {
     queryFn: async () => {
       const now = new Date().toISOString();
       let query = supabase.from("marketing_campaigns")
-        .select("id,title,description,image_url,target_url,starts_at,ends_at,sort_order")
+        .select("id,title,description,image_url,target_url,starts_at,ends_at,sort_order,target_branch_ids")
         .eq("tenant_id", tenantId!)
         .eq("status", "active")
         .in("placement", ["dashboard_banner", "dashboard_card"])
@@ -95,7 +96,8 @@ function Dashboard() {
       const nowMs = Date.now();
       return (data ?? []).filter((campaign) =>
         (!campaign.starts_at || new Date(campaign.starts_at).getTime() <= nowMs) &&
-        (!campaign.ends_at || new Date(campaign.ends_at).getTime() > nowMs)
+        (!campaign.ends_at || new Date(campaign.ends_at).getTime() > nowMs) &&
+        (!(campaign.target_branch_ids?.length) || (!!membership?.branch_id && campaign.target_branch_ids.includes(membership.branch_id)))
       );
     },
     enabled: !!tenantId,
@@ -493,6 +495,14 @@ function Dashboard() {
           <Link to="/pos" className="mt-4 inline-flex min-h-10 w-fit items-center gap-2 rounded-full bg-[#f2b632] px-5 py-2 text-sm font-extrabold text-[#102f5c] shadow-md transition hover:bg-[#ffd16b]"><ShoppingBag className="h-4 w-4" /> فتح نقطة البيع <ArrowLeft className="h-4 w-4" /></Link>
         </div>
       </section>
+
+      <AdPlacement placement="welcome" variant="banner" />
+      <AdPlacement placement="main" variant="banner" />
+      <div className="grid gap-3 lg:grid-cols-3">
+        <AdPlacement placement="sidebar" variant="card" />
+        <AdPlacement placement="offers" variant="card" />
+        <AdPlacement placement="in_page" variant="card" />
+      </div>
 
       {campaignsQuery.isError && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive" role="alert">
