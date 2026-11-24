@@ -14,6 +14,13 @@ type SavedField = {
 const STORAGE_PREFIX = "ras-workspace-form-state-v1";
 const FIELD_SELECTOR = "input, textarea, select, [contenteditable='true']";
 
+function isSensitiveField(element: HTMLElement): boolean {
+  const input = element as HTMLInputElement;
+  const identity = `${input.name ?? ""} ${element.id} ${input.autocomplete ?? ""}`.toLowerCase();
+  return element.hasAttribute("data-sensitive") ||
+    /password|token|secret|otp|one-time-code|cvv|cvc|card-number|credit-card/.test(identity);
+}
+
 function fieldKey(element: HTMLElement, index: number): string {
   return element.dataset.workspaceKey ||
     (element as HTMLInputElement).name ||
@@ -23,7 +30,7 @@ function fieldKey(element: HTMLElement, index: number): string {
 
 function collectFields(root: ParentNode): SavedField[] {
   return Array.from(root.querySelectorAll<HTMLElement>(FIELD_SELECTOR)).flatMap((element, index) => {
-    if (element.closest("[data-workspace-restore='off']")) return [];
+    if (element.closest("[data-workspace-restore='off']") || isSensitiveField(element)) return [];
     if (element instanceof HTMLInputElement) {
       const type = element.type.toLowerCase();
       if (["password", "file", "hidden", "button", "submit", "reset"].includes(type)) return [];
@@ -75,7 +82,12 @@ function applyFields(root: ParentNode, fields: SavedField[]) {
     } else if (element instanceof HTMLSelectElement) {
       const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
       if (element.multiple) {
-        const selected = new Set<string>(JSON.parse(saved.value ?? "[]"));
+        let selectedValues: string[] = [];
+        try {
+          const parsed: unknown = JSON.parse(saved.value ?? "[]");
+          if (Array.isArray(parsed)) selectedValues = parsed.filter((value): value is string => typeof value === "string");
+        } catch { selectedValues = []; }
+        const selected = new Set<string>(selectedValues);
         Array.from(element.options).forEach(option => { option.selected = selected.has(option.value); });
         element.dispatchEvent(new Event("change", { bubbles: true }));
       } else {
@@ -110,7 +122,11 @@ export function WorkspaceFormStateKeeper() {
       let fields: SavedField[] = [];
       try {
         const raw = sessionStorage.getItem(storageKey);
-        fields = raw ? JSON.parse(raw) as SavedField[] : [];
+        const parsed: unknown = raw ? JSON.parse(raw) : [];
+        fields = Array.isArray(parsed) ? parsed.filter((field): field is SavedField =>
+          !!field && typeof field === "object" && typeof field.key === "string" &&
+          typeof field.tag === "string" && typeof field.type === "string"
+        ) : [];
       } catch { fields = []; }
       if (fields.length) {
         restoring = true;
