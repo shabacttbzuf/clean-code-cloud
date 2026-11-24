@@ -1,4 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useActiveTenant } from "@/hooks/use-active-tenant";
+import { useAuthSession } from "@/hooks/use-auth-session";
+import { useSuperOwner } from "@/hooks/use-super-owner";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   X, Home, Pin, PinOff, ShoppingCart, Receipt, Armchair, ChefHat, Package,
@@ -11,7 +16,7 @@ type WorkspaceTab = { path: string; title: string; pinned?: boolean };
 type DirtyState = { path: string; dirty: boolean };
 
 // Pages dispatch ras-workspace-dirty-change with { path, dirty } when edits are pending.
-const STORAGE_KEY = "ras-workspace-tabs-v1";
+const STORAGE_KEY = "ras-workspace-tabs-v2";
 const MAX_TABS = 12;
 const MAX_PINNED_TABS = 6;
 const ROUTE_TITLES: Array<[string, string]> = [
@@ -83,9 +88,9 @@ function titleFor(path: string) {
   return match?.[1] ?? "صفحة النظام";
 }
 
-function readTabs(): WorkspaceTab[] {
+function readTabs(storageKey: string): WorkspaceTab[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey);
     const parsed = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(parsed)) return [];
     const valid = parsed.filter((tab): tab is WorkspaceTab =>
@@ -110,16 +115,31 @@ export function WorkspaceTabs() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const navigate = useNavigate();
   const [dirtyPaths, setDirtyPaths] = useState<Set<string>>(() => new Set());
-  const [tabs, setTabs] = useState<WorkspaceTab[]>(() => limitTabs([
+  const [tabs, setTabs] = useState<WorkspaceTab[]>([
     { path: "/dashboard", title: "الرئيسية", pinned: true },
-    ...readTabs().filter((tab) => tab.path !== "/dashboard"),
-  ]));
+  ]);
 
   function persist(nextTabs: WorkspaceTab[]) {
     const limited = limitTabs(nextTabs);
     setTabs(limited);
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(limited)); } catch { /* storage is optional */ }
+    if (storageKey) {
+      try { localStorage.setItem(storageKey, JSON.stringify(limited)); } catch { /* storage is optional */ }
+    }
   }
+
+  useEffect(() => {
+    if (!storageKey || (!isSuperOwner && permissionQuery.isLoading)) return;
+    if (restoredScope.current === storageKey) return;
+    restoredScope.current = storageKey;
+    const restored = readTabs(storageKey).filter((tab) => {
+      const permission = requiredPermission(tab.path);
+      return isSuperOwner || !permission || permissionQuery.data?.has(permission) === true;
+    });
+    setTabs(limitTabs([
+      { path: "/dashboard", title: "الرئيسية", pinned: true },
+      ...restored.filter((tab) => tab.path !== "/dashboard"),
+    ]));
+  }, [storageKey, isSuperOwner, permissionQuery.data, permissionQuery.isLoading]);
 
   useEffect(() => {
     setTabs((current) => {
@@ -128,10 +148,12 @@ export function WorkspaceTabs() {
         ? current.map((tab) => tab.path === pathname ? { ...tab, title: titleFor(pathname) } : tab)
         : [...current, { path: pathname, title: titleFor(pathname) }];
       const limited = limitTabs(next);
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(limited)); } catch { /* storage is optional */ }
+      if (storageKey) {
+        try { localStorage.setItem(storageKey, JSON.stringify(limited)); } catch { /* storage is optional */ }
+      }
       return limited;
     });
-  }, [pathname]);
+  }, [pathname, storageKey]);
 
   const activePath = useMemo(() => pathname, [pathname]);
 
@@ -187,7 +209,7 @@ export function WorkspaceTabs() {
   }
 
   return (
-    <nav aria-label="تبويبات الصفحات المفتوحة" className="workspace-tabs flex min-h-[58px] min-w-0 items-center gap-2 overflow-x-auto border-b border-[#dce5f3] bg-[#f7faff]/95 px-3 py-2.5" role="tablist">
+    <nav aria-label="تبويبات الصفحات المفتوحة" className="workspace-tabs flex min-h-[58px] min-w-0 items-center gap-2 overflow-x-auto overscroll-x-contain border-b border-[#dce5f3] bg-[#f7faff]/95 px-3 py-2.5" role="tablist">
       {tabs.map((tab) => {
         const active = activePath === tab.path;
         return (
