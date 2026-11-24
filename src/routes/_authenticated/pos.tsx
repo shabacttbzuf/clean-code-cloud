@@ -31,6 +31,7 @@ import { formatMoney } from "@/lib/format";
 import { printInvoiceHTML, type InvoiceData } from "@/lib/invoice-pdf";
 import { PageHeader } from "@/components/page-header";
 import { getMyPosAccessStatus, verifyMyPosPasscode } from "@/lib/pos-access.functions";
+import { getUserSettingsPreferences } from "@/lib/settings-preferences";
 
 export const Route = createFileRoute("/_authenticated/pos")({
   component: POSPage,
@@ -221,7 +222,8 @@ function POSWorkspace() {
   useEffect(() => {
     setDrafts(loadDrafts(draftsStorageKey));
   }, [draftsStorageKey]);
-  const [paperSize, setPaperSize] = useState<"58mm" | "80mm" | "A4">(restoredWorkspace.paperSize ?? "80mm");
+  const userSettings = useMemo(() => getUserSettingsPreferences(userId), [userId]);
+  const [paperSize, setPaperSize] = useState<"58mm" | "80mm" | "A4">(restoredWorkspace.paperSize ?? userSettings.paperSize);
   const [reviewOpen, setReviewOpen] = useState(restoredWorkspace.reviewOpen ?? false);
   const [reviewMethod, setReviewMethod] = useState<PaymentUI>(restoredWorkspace.reviewMethod ?? "cash");
   const printWindowRef = useRef<Window | null>(null);
@@ -706,8 +708,13 @@ function POSWorkspace() {
       toast.success(`تم إصدار فاتورة #${sale.invoice_no}`);
       const inv = buildInvoice(sale, items, method, sale.payment_method);
       try {
-        const printed = printInvoiceHTML(inv, paperSize, printWindowRef.current);
-        if (!printed) toast.warning("تم إصدار الفاتورة، لكن نافذة الطباعة لم تفتح. استخدم زر معاينة الفاتورة.");
+        if (userSettings.autoPrint) {
+          const printed = printInvoiceHTML(inv, paperSize, printWindowRef.current);
+          if (!printed) toast.warning("تم إصدار الفاتورة، لكن نافذة الطباعة لم تفتح. استخدم زر معاينة الفاتورة.");
+        } else {
+          printWindowRef.current?.close();
+          toast.info("تم إصدار الفاتورة. الطباعة التلقائية متوقفة حسب تفضيلاتك؛ يمكنك الطباعة من معاينة الفاتورة.");
+        }
       } catch (e) {
         console.error(e);
         toast.warning("تم إصدار الفاتورة، وتعذرت الطباعة التلقائية. يمكنك معاينتها وإعادة طباعتها.");
