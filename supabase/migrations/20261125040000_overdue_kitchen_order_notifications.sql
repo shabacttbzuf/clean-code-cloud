@@ -2,6 +2,9 @@
 -- Uses the existing kitchen_orders workflow and notification/RLS pipeline; never mutates orders or sales.
 BEGIN;
 
+-- Supabase PostgreSQL ships pg_cron; enable it idempotently so the SLA scanner is actually scheduled.
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
 CREATE OR REPLACE FUNCTION private.emit_overdue_kitchen_order_notifications()
 RETURNS integer
 LANGUAGE plpgsql
