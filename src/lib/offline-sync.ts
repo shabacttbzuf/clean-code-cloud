@@ -125,6 +125,15 @@ export async function enqueueOfflineOperation(
     throw new Error("هذه العملية تتطلب اتصالاً بالخادم ولا يمكن حفظها كعملية قابلة للإرسال.");
   }
   if (!scope.userId || !scope.tenantId) throw new Error("تعذر تحديد المستخدم والمؤسسة للعملية.");
+  const existing = await listOfflineOperations(scope);
+  const payloadKey = JSON.stringify(payload);
+  const duplicate = existing.find((item) =>
+    item.type === type &&
+    item.status !== "synced" &&
+    item.status !== "conflict" &&
+    JSON.stringify(item.payload) === payloadKey
+  );
+  if (duplicate) return duplicate;
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const operation: OfflineOperation = {
