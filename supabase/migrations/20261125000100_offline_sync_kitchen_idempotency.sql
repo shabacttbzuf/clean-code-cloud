@@ -120,7 +120,8 @@ BEGIN
 END;
 $function$;
 
-REVOKE ALL ON FUNCTION private.set_kitchen_order_status_idempotent(uuid,text,text,uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.set_kitchen_order_status_idempotent(uuid,text,text,uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION private.set_kitchen_order_status_idempotent(uuid,text,text,uuid) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.set_kitchen_order_status_idempotent(
   _order_id uuid,
@@ -130,7 +131,7 @@ CREATE OR REPLACE FUNCTION public.set_kitchen_order_status_idempotent(
 )
 RETURNS public.kitchen_orders
 LANGUAGE sql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path TO 'pg_catalog', 'public', 'private'
 AS $function$
   SELECT private.set_kitchen_order_status_idempotent(
