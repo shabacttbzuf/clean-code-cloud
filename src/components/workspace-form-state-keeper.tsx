@@ -104,15 +104,18 @@ export function WorkspaceFormStateKeeper() {
     const storageKey = `${scope}:${pathname}`;
     const root = document.querySelector("main") ?? document.body;
     let restored = false;
+    let restoring = false;
     const restore = () => {
-      if (restored) return;
+      if (restored || root.querySelectorAll(FIELD_SELECTOR).length === 0) return;
       let fields: SavedField[] = [];
       try {
         const raw = sessionStorage.getItem(storageKey);
         fields = raw ? JSON.parse(raw) as SavedField[] : [];
       } catch { fields = []; }
       if (fields.length) {
-        applyFields(root, fields);
+        restoring = true;
+        try { applyFields(root, fields); }
+        finally { restoring = false; }
         window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: pathname, dirty: true } }));
       }
       restored = true;
@@ -124,6 +127,7 @@ export function WorkspaceFormStateKeeper() {
       } catch { /* session storage is optional */ }
     };
     const markDirty = () => {
+      if (restoring || !restored) return;
       save();
       window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: pathname, dirty: true } }));
     };
@@ -134,12 +138,17 @@ export function WorkspaceFormStateKeeper() {
       window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: pathname, dirty: false } }));
     };
 
-    const timer = window.setTimeout(restore, 80);
+    const observer = new MutationObserver(() => restore());
+    observer.observe(root, { childList: true, subtree: true });
+    const timer = window.setTimeout(restore, 120);
+    const maxWait = window.setTimeout(() => { observer.disconnect(); }, 15_000);
     root.addEventListener("input", markDirty, true);
     root.addEventListener("change", markDirty, true);
     window.addEventListener("ras-workspace-form-saved", onSaved);
     return () => {
       window.clearTimeout(timer);
+      window.clearTimeout(maxWait);
+      observer.disconnect();
       save();
       root.removeEventListener("input", markDirty, true);
       root.removeEventListener("change", markDirty, true);
