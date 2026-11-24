@@ -365,15 +365,21 @@ function POSWorkspace() {
   const posPromos = useQuery({
     queryKey: ["pos-marketing-campaigns", tenantId, membership?.company_id ?? "tenant"],
     queryFn: async () => {
+      const now = new Date().toISOString();
       let query = supabase.from("marketing_campaigns")
         .select("id,title,description,image_url,target_url,starts_at,ends_at")
         .eq("tenant_id", tenantId!)
         .eq("status", "active")
         .eq("placement", "pos_promo")
+        .or(`starts_at.is.null,starts_at.lte.${now}`)
+        .or(`ends_at.is.null,ends_at.gt.${now}`)
         .order("sort_order")
         .limit(3);
       if (membership?.company_id) {
         query = query.or(`company_id.is.null,company_id.eq.${membership.company_id}`);
+      } else if (!isSuperOwner) {
+        // Do not expose company-specific campaigns to accounts without a company scope.
+        query = query.is("company_id", null);
       }
       const { data, error } = await query;
       if (error) throw error;
