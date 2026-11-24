@@ -304,6 +304,7 @@ function SettingsPage() {
     if (customTabs.length >= 12) { toast.error("الحد الأقصى 12 اختصاراً"); return; }
     persistCustomTabs([...customTabs, { title, url: newTabUrl }]);
     setNewTabTitle("");
+    setNewTabUrl("/dashboard");
   }
 
   async function uploadRestaurantLogo(file?: File) {
