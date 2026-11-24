@@ -120,6 +120,12 @@ const ROUTE_PERMISSION_RULES: Array<{ prefix: string; permission: string }> = [
   { prefix: "/settings", permission: "settings.view" },
 ];
 
+const AUTHENTICATED_OPEN_PATHS = new Set(["/profile", "/support"]);
+
+function normalizeRoutePath(pathname: string) {
+  return pathname.length > 1 ? pathname.replace(/\\/+$/, "") : pathname;
+}
+
 function permissionForPath(pathname: string): string | null {
   const match = ROUTE_PERMISSION_RULES
     .filter((rule) => pathname === rule.prefix || pathname.startsWith(rule.prefix + "/"))
@@ -129,10 +135,13 @@ function permissionForPath(pathname: string): string | null {
 
 function PermissionRouteGuard() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const normalizedPath = normalizeRoutePath(pathname);
   const { tenantId, userId, loading: tenantLoading } = useActiveTenant();
-  const { isSuperOwner, totalCount, loading: ownerLoading } = useSuperOwner();
-  const requiredPermission = permissionForPath(pathname);
-  const ownerOnly = pathname === "/owner-center" || (pathname === "/admin" && totalCount > 0);
+  const { isSuperOwner, totalCount, loading: ownerLoading, statusKnown: superOwnerStatusKnown, statusError: superOwnerStatusError, refetch: refetchSuperOwnerStatus } = useSuperOwner();
+  const requiredPermission = permissionForPath(normalizedPath);
+  const ownerOnly = normalizedPath === "/owner-center" || (normalizedPath === "/admin" && (!superOwnerStatusKnown || totalCount > 0));
+  const isExplicitlyPublic = AUTHENTICATED_OPEN_PATHS.has(normalizedPath);
+  const isKnownRoute = !!requiredPermission || ownerOnly || isExplicitlyPublic;
 
   const permissionsQuery = useQuery({
     queryKey: ["route-effective-permissions", tenantId, userId],
@@ -150,6 +159,24 @@ function PermissionRouteGuard() {
     return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
   }
 
+  if (!isKnownRoute) {
+    return (
+      <div role="alert" className="mx-auto max-w-xl rounded-lg border border-destructive/30 p-6 text-center text-sm">
+        لم يتم ربط هذا المسار بصلاحية معتمدة؛ تم منع الوصول احتياطياً حتى تتم مراجعته.
+      </div>
+    );
+  }
+
+  if (normalizedPath === "/admin" && !superOwnerStatusKnown) {
+    return (
+      <div role="alert" className="mx-auto max-w-xl rounded-lg border border-destructive/30 p-6 text-center text-sm">
+        <p>تعذر التحقق من حالة المالك الرئيسي. تم إيقاف الوصول إلى شاشة الإدارة احتياطياً.</p>
+        {superOwnerStatusError instanceof Error && <p className="mt-2 text-xs text-muted-foreground">{superOwnerStatusError.message}</p>}
+        <Button type="button" variant="outline" className="mt-3" onClick={() => void refetchSuperOwnerStatus()}>إعادة التحقق</Button>
+      </div>
+    );
+  }
+
   if (ownerOnly && !isSuperOwner) {
     return <div role="alert" className="mx-auto max-w-xl rounded-lg border border-destructive/30 p-6 text-center text-sm">هذه الصفحة متاحة لمالك النظام الرئيسي فقط.</div>;
   }
@@ -157,7 +184,12 @@ function PermissionRouteGuard() {
   if (requiredPermission && !isSuperOwner) {
     const granted = !!permissionsQuery.data?.has(requiredPermission);
     if (!granted) {
-      return <div role="alert" className="mx-auto max-w-xl rounded-lg border border-destructive/30 p-6 text-center text-sm">{permissionsQuery.isError ? "تعذر التحقق من الصلاحيات. أعد المحاولة لاحقاً." : "ليس لديك صلاحية الوصول إلى هذه الصفحة."}</div>;
+      return (
+        <div role="alert" className="mx-auto max-w-xl rounded-lg border border-destructive/30 p-6 text-center text-sm">
+          <p>{permissionsQuery.isError ? "تعذر التحقق من الصلاحيات؛ تم منع الوصول احتياطياً." : "ليس لديك صلاحية الوصول إلى هذه الصفحة."}</p>
+          {permissionsQuery.isError && <Button type="button" variant="outline" className="mt-3" onClick={() => void permissionsQuery.refetch()}>إعادة التحقق من الصلاحيات</Button>}
+        </div>
+      );
     }
   }
 
@@ -348,12 +380,6 @@ function TopBar() {
       } catch (historyError) {
         console.warn("Could not record logout history", historyError);
       }
-      try {
-        for (let index = window.sessionStorage.length - 1; index >= 0; index--) {
-          const key = window.sessionStorage.key(index);
-          if (key?.startsWith("pos-access-unlocked-v1:")) window.sessionStorage.removeItem(key);
-        }
-      } catch { /* session storage may be unavailable */ }
       await supabase.auth.signOut();
       navigate({ to: "/auth", replace: true });
       toast.success("تم تسجيل الخروج");
