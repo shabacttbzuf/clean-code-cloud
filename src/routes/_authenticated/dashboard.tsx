@@ -624,7 +624,7 @@ function Dashboard() {
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie data={stats.data.byCat} dataKey="value" nameKey="name" outerRadius={80} label>
-                          {stats.data.byCat.map((e, i) => <Cell key={i} fill={e.color ?? "hsl(var(--primary))"} />)}
+                          {stats.data.byCat.map((entry: { name: string; value: number; color: string | null }, index: number) => <Cell key={index} fill={entry.color ?? "hsl(var(--primary))"} />)}
                         </Pie>
                         <Tooltip />
                         <Legend wrapperStyle={{ fontSize: 11 }} />
