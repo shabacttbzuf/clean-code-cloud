@@ -101,6 +101,14 @@ function KitchenPage() {
   });
 
   useEffect(() => {
+    const refreshAfterSync = () => {
+      void qc.invalidateQueries({ queryKey: ["kitchen-queue", tenantId, branchId] });
+    };
+    window.addEventListener("offline-sync:changed", refreshAfterSync);
+    return () => window.removeEventListener("offline-sync:changed", refreshAfterSync);
+  }, [qc, tenantId, branchId]);
+
+  useEffect(() => {
     if (!tenantId) return;
     const channel = supabase.channel(`kitchen-orders-${tenantId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "kitchen_orders", filter: `tenant_id=eq.${tenantId}` }, () => {
