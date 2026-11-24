@@ -19,9 +19,10 @@ SELECT is(
    JOIN pg_namespace n ON n.oid = p.pronamespace
    WHERE n.nspname = 'public'
      AND p.prosecdef
-     AND has_function_privilege('anon', p.oid, 'EXECUTE')),
+     AND (has_function_privilege('anon', p.oid, 'EXECUTE')
+       OR has_function_privilege('authenticated', p.oid, 'EXECUTE'))),
   0,
-  'No public SECURITY DEFINER function is executable by anon'
+  'No public SECURITY DEFINER function is executable by API roles'
 );
 
 SELECT is(
