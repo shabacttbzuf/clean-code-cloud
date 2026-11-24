@@ -28,7 +28,9 @@ test("financial and stock-ledger mutations are explicitly blocked from generic o
   for (const type of ["invoice", "sale", "payment", "refund", "return", "inventory_deduction", "stock_adjustment", "purchase_receipt", "cash_movement", "payroll"]) {
     assert.ok(source.includes(`"${type}"`), `missing guard for ${type}`);
   }
-  assert.match(source, /isFinancialOrInventoryOperation\(type\) \|\| !handlers\.has\(type\)/);\n  assert.match(source, /BLOCKED_OPERATION_PATTERN/);\n  assert.match(source, /pos\|checkout\|sale\|sales\|invoice/);
+  assert.match(source, /isFinancialOrInventoryOperation\(type\) \|\| !handlers\.has\(type\)/);
+  assert.match(source, /BLOCKED_OPERATION_PATTERN/);
+  assert.match(source, /pos\|checkout\|sale\|sales\|invoice/);
 });
 
 test("sync preserves dependency order, isolates active tenant/branch/company and records partial failures", () => {
