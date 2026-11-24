@@ -513,7 +513,7 @@ function ReportsPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
         <Kpi icon={<TrendingUp className="h-5 w-5" />} label="المبيعات بعد المرتجعات" value={`${formatMoney(totals.salesTotal)} ${tenant?.currency ?? ""}`} tone="primary" />
-        <Kpi icon={<Wallet className="h-5 w-5" />} label="المصروفات" value={`${formatMoney(totals.expensesTotal)} ${tenant?.currency ?? ""}`} tone="destructive" />
+        {canViewFinancialReports && <Kpi icon={<Wallet className="h-5 w-5" />} label="المصروفات" value={`${formatMoney(totals.expensesTotal)} ${tenant?.currency ?? ""}`} tone="destructive" />}
         {canViewFinancialReports && <Kpi icon={<Package className="h-5 w-5" />} label="تكلفة البضاعة" value={profitMetrics.costOfGoods === null ? "غير مكتملة" : `${formatMoney(profitMetrics.costOfGoods)} ${tenant?.currency ?? ""}`} tone="primary" />}
         {canViewFinancialReports && <Kpi icon={<FileText className="h-5 w-5" />} label="مجمل الربح" value={profitMetrics.grossProfit === null ? "غير متاح" : `${formatMoney(profitMetrics.grossProfit)} ${tenant?.currency ?? ""}`} tone={profitMetrics.grossProfit !== null && profitMetrics.grossProfit >= 0 ? "success" : "destructive"} />}
         {canViewFinancialReports && <Kpi icon={<Wallet className="h-5 w-5" />} label="صافي الربح التشغيلي" value={profitMetrics.netProfit === null ? "غير متاح" : `${formatMoney(profitMetrics.netProfit)} ${tenant?.currency ?? ""}`} tone={profitMetrics.netProfit !== null && profitMetrics.netProfit >= 0 ? "success" : "destructive"} />}
@@ -539,6 +539,15 @@ function ReportsPage() {
         </div>
       )}
 
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Kpi icon={<Package className="h-5 w-5" />} label="المشتريات خلال الفترة" value={String(purchaseTotals.count)} tone="primary" />
+        {canViewFinancialReports && <Kpi icon={<Wallet className="h-5 w-5" />} label="إجمالي قيمة المشتريات" value={formatMoney(purchaseTotals.total)} tone="primary" />}
+        <Kpi icon={<Users className="h-5 w-5" />} label="الموظفون ضمن النطاق" value={String(staffTotals.employees)} tone="primary" />
+        <Kpi icon={<Users className="h-5 w-5" />} label="سجلات الحضور" value={String(staffTotals.attendance)} tone="primary" />
+        <Kpi icon={<Users className="h-5 w-5" />} label="حالات التأخر المسجلة" value={String(staffTotals.late)} tone={staffTotals.late ? "destructive" : "success"} />
+        <Kpi icon={<FileText className="h-5 w-5" />} label="الحملات الإعلانية" value={campaignTotals.active + " نشطة من " + campaignTotals.total} tone="primary" />
+      </div>
+
       <Tabs defaultValue="sales">
         <TabsList className="grid w-full grid-cols-4 sm:w-auto sm:inline-grid">
           <TabsTrigger value="sales">المبيعات</TabsTrigger>
@@ -560,7 +569,7 @@ function ReportsPage() {
                     المبيعات: g.sales,
                     "عدد الفواتير": g.count,
                     المصروفات: g.expenses,
-                    "الفائض قبل تكلفة البضاعة": g.sales - g.expenses,
+                    ...(canViewFinancialReports ? { "المبيعات بعد المصروفات قبل تكلفة البضاعة": g.sales - g.expenses, المصروفات: g.expenses } : {}),
                   })),
                   `sales-report-${from}-${to}.csv`,
                 )
@@ -577,8 +586,8 @@ function ReportsPage() {
                     <tr>
                       <th className="p-3 font-medium">الفترة</th>
                       <th className="p-3 font-medium">المبيعات</th>
-                      <th className="p-3 font-medium">المصروفات</th>
-                      <th className="p-3 font-medium">الصافي</th>
+                      {canViewFinancialReports && <th className="p-3 font-medium">المصروفات</th>}
+                      {canViewFinancialReports && <th className="p-3 font-medium">المبيعات بعد المصروفات (قبل تكلفة البضاعة)</th>}
                       <th className="p-3 font-medium">عدد الفواتير</th>
                     </tr>
                   </thead>
@@ -587,13 +596,13 @@ function ReportsPage() {
                       <tr key={key} className="border-t hover:bg-muted/30">
                         <td className="p-3">{g.label}</td>
                         <td className="p-3 num font-bold text-primary">{formatMoney(g.sales)}</td>
-                        <td className="p-3 num text-destructive">{formatMoney(g.expenses)}</td>
-                        <td className={`p-3 num font-medium ${g.sales - g.expenses >= 0 ? "text-success" : "text-destructive"}`}>{formatMoney(g.sales - g.expenses)}</td>
+                        {canViewFinancialReports && <td className="p-3 num text-destructive">{formatMoney(g.expenses)}</td>}
+                        {canViewFinancialReports && <td className={`p-3 num font-medium ${g.sales - g.expenses >= 0 ? "text-success" : "text-destructive"}`}>{formatMoney(g.sales - g.expenses)}</td>}
                         <td className="p-3 num">{g.count}</td>
                       </tr>
                     ))}
                     {groupedSales.length === 0 && (
-                      <tr><td colSpan={5} className="p-8 text-center text-muted-foreground">لا توجد بيانات في الفترة المحددة</td></tr>
+                      <tr><td colSpan={canViewFinancialReports ? 5 : 3} className="p-8 text-center text-muted-foreground">لا توجد بيانات في الفترة المحددة</td></tr>
                     )}
                   </tbody>
                 </table>
