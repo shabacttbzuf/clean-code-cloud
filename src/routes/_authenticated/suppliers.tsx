@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
@@ -199,7 +199,7 @@ function SuppliersPage() {
         action={isAdmin && (
           <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditing(null); }}>
             <DialogTrigger asChild><Button><Plus className="ml-2 h-4 w-4" />مورد جديد</Button></DialogTrigger>
-            <SupplierDialog initial={editing} tenantId={tenantId!} onSubmit={(v) => upsert.mutate(v)} pending={upsert.isPending} />
+            <SupplierDialog key={`${open}-${editing?.id ?? "new"}`} open={open} initial={editing} tenantId={tenantId!} onSubmit={(v) => upsert.mutate(v)} pending={upsert.isPending} />
           </Dialog>
         )}
       />
@@ -308,8 +308,8 @@ function SuppliersPage() {
   );
 }
 
-function SupplierDialog({ initial, tenantId, onSubmit, pending }: {
-  initial: Supplier | null; tenantId: string; onSubmit: (v: z.infer<typeof schema>) => void; pending: boolean;
+function SupplierDialog({ open, initial, tenantId, onSubmit, pending }: {
+  open: boolean; initial: Supplier | null; tenantId: string; onSubmit: (v: z.infer<typeof schema>) => void; pending: boolean;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [phone, setPhone] = useState(initial?.phone ?? "");
@@ -317,6 +317,16 @@ function SupplierDialog({ initial, tenantId, onSubmit, pending }: {
   const [address, setAddress] = useState(initial?.address ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [logoUrl, setLogoUrl] = useState<string | null>(initial?.logo_url ?? null);
+
+  useEffect(() => {
+    const dirty = open && (
+      name !== (initial?.name ?? "") || phone !== (initial?.phone ?? "") ||
+      email !== (initial?.email ?? "") || address !== (initial?.address ?? "") ||
+      notes !== (initial?.notes ?? "") || logoUrl !== (initial?.logo_url ?? null)
+    );
+    window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/suppliers", dirty } }));
+    return () => window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/suppliers", dirty: false } }));
+  }, [open, initial, name, phone, email, address, notes, logoUrl]);
 
   return (
     <DialogContent className="max-h-[90vh] overflow-y-auto">
