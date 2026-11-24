@@ -149,7 +149,7 @@ function ReportsPage() {
         }) : Promise.resolve([]),
         canViewPurchases ? fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("purchases")
-            .select(canViewFinancialReports ? "id, branch_id, received_at, total, status, supplier_id" : "id, branch_id, received_at, status, supplier_id")
+            .select(canViewFinancialReports ? "id, branch_id, received_at, total, status, supplier_id, reference" : "id, branch_id, received_at, status, supplier_id, reference")
             .eq("tenant_id", tenantId).gte("received_at", fromDate).lte("received_at", toDate);
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
@@ -673,6 +673,19 @@ function ReportsPage() {
         {canManageAds && <Kpi icon={<FileText className="h-5 w-5" />} label="الحملات والإعلانات" value={branchId === "all" ? campaignTotals.active + " نشطة · " + campaignTotals.impressions + " ظهور · " + campaignTotals.clicks + " نقرة" : campaignTotals.total + " حملة على مستوى الشركة"} tone="primary" />}
         {canManagePromotions && <Kpi icon={<FileText className="h-5 w-5" />} label="العروض والاستردادات" value={promotionTotals.offers + " عرض · " + promotionTotals.redemptions + " استخدام" + (canViewFinancialReports ? " · خصومات " + formatMoney(promotionTotals.discount) : "")} tone="primary" />}
       </div>
+
+      {canViewPurchases && <Card><CardContent className="p-4">
+        <h3 className="mb-3 font-semibold">تفاصيل المشتريات</h3>
+        <div className="overflow-x-auto"><table className="w-full text-sm">
+          <thead className="bg-muted/50 text-right"><tr><th className="p-2">التاريخ</th><th className="p-2">المرجع</th><th className="p-2">الفرع</th><th className="p-2">الحالة</th>{canViewFinancialReports && <th className="p-2">الإجمالي</th>}</tr></thead>
+          <tbody>{safe.purchases.slice(0, 100).map((purchase: any) => <tr key={purchase.id} className="border-t">
+            <td className="p-2">{new Date(purchase.received_at).toLocaleDateString("ar-EG")}</td><td className="p-2">{purchase.reference || "—"}</td>
+            <td className="p-2">{(branchesQuery.data ?? []).find((branch) => branch.id === purchase.branch_id)?.name ?? "—"}</td>
+            <td className="p-2">{purchase.status}</td>{canViewFinancialReports && <td className="p-2 num font-semibold">{formatMoney(purchase.total ?? 0)}</td>}
+          </tr>)}
+          {safe.purchases.length === 0 && <tr><td colSpan={canViewFinancialReports ? 5 : 4} className="p-6 text-center text-muted-foreground">لا توجد مشتريات في الفترة المحددة.</td></tr>}</tbody>
+        </table></div>
+      </CardContent></Card>}
 
       {canViewSalesReports && <Card>
         <CardContent className="p-4">
