@@ -111,9 +111,46 @@ function limitTabs(tabs: WorkspaceTab[]) {
   return [...pinned, ...unpinned.slice(-(MAX_TABS - pinned.length))];
 }
 
+const ROUTE_PERMISSIONS: Array<[string, string]> = [
+  ["/dashboard", "dashboard.view"], ["/pos", "pos.use"], ["/sales", "sales.view"],
+  ["/tables", "tables.view"], ["/kitchen", "kitchen.view"], ["/inventory/movements", "inventory.movements.view"],
+  ["/inventory", "inventory.view"], ["/purchases", "purchases.view"], ["/suppliers", "suppliers.view"],
+  ["/products", "products.view"], ["/categories", "categories.view"], ["/customers", "customers.view"],
+  ["/cash-sessions", "cash.view"], ["/expenses", "expenses.view"], ["/reports", "reports.view"],
+  ["/hr/employees", "hr.employees.view"], ["/hr/attendance", "hr.attendance.view"], ["/hr/leaves", "hr.leaves.view"],
+  ["/hr/payroll", "hr.payroll.view"], ["/hr/compensation", "hr.compensation.view"], ["/branches", "branches.view"],
+  ["/companies", "companies.view"], ["/users", "users.view"], ["/users-admin", "users.manage"],
+  ["/team-permissions", "permissions.view"], ["/roles", "roles.view"], ["/departments", "departments.view"],
+  ["/job-titles", "job_titles.view"], ["/employment-types", "employment_types.view"],
+  ["/notifications", "notifications.view"], ["/settings", "settings.view"], ["/ads", "ads.manage"],
+  ["/promotions", "promotions.manage"], ["/audit-logs", "audit.view"], ["/login-history", "login_history.view"],
+  ["/expense-categories", "expense_categories.manage"],
+];
+function requiredPermission(path: string): string | null {
+  return ROUTE_PERMISSIONS
+    .filter(([prefix]) => path === prefix || path.startsWith(prefix + "/"))
+    .sort((a, b) => b[0].length - a[0].length)[0]?.[1] ?? null;
+}
+
 export function WorkspaceTabs() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const navigate = useNavigate();
+  const { tenantId } = useActiveTenant();
+  const { user } = useAuthSession();
+  const { isSuperOwner } = useSuperOwner();
+  const storageKey = tenantId && user?.id ? `${STORAGE_KEY}:${user.id}:${tenantId}` : null;
+  const permissionQuery = useQuery({
+    queryKey: ["workspace-tabs-permissions", tenantId, user?.id],
+    queryFn: async () => {
+      if (!tenantId) return new Set<string>();
+      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId });
+      if (error) throw error;
+      return new Set<string>((data ?? []) as string[]);
+    },
+    enabled: !!tenantId && !!user?.id && !isSuperOwner,
+    staleTime: 30_000,
+  });
+  const restoredScope = useRef<string | null>(null);
   const [dirtyPaths, setDirtyPaths] = useState<Set<string>>(() => new Set());
   const [tabs, setTabs] = useState<WorkspaceTab[]>([
     { path: "/dashboard", title: "الرئيسية", pinned: true },
