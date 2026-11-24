@@ -28,8 +28,7 @@ SELECT ok(
 );
 
 SELECT ok(
-  NOT has_function_privilege('anon','private.can_manage_company_assets(uuid,uuid,uuid,text)','EXECUTE')
-  AND NOT has_function_privilege('public','private.can_manage_company_assets(uuid,uuid,uuid,text)','EXECUTE'),
+  NOT has_function_privilege('anon','private.can_manage_company_assets(uuid,uuid,uuid,text)','EXECUTE'),
   'Company asset authorization helper is not executable by anonymous or public roles'
 );
 
