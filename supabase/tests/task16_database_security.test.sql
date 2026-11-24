@@ -74,14 +74,16 @@ SELECT ok(
   'Sales retain a restrictive tenant or branch boundary'
 );
 
-SELECT ok(
-  EXISTS (SELECT 1 FROM pg_policies
-    WHERE schemaname='public' AND tablename='marketing_campaigns'
-      AND cmd='SELECT' AND policyname='Tenant members read marketing campaigns')
-  AND EXISTS (SELECT 1 FROM pg_policies
-    WHERE schemaname='public' AND tablename='marketing_campaigns'
-      AND cmd='ALL' AND policyname='Tenant admins manage marketing campaigns'),
-  'Marketing campaigns retain their tenant-member read and tenant-admin management policies'
+SELECT is(
+  (SELECT count(*)::int FROM pg_policies
+   WHERE schemaname='public' AND tablename='marketing_campaigns'
+     AND policyname IN (
+       'company_scope_marketing_campaigns_insert',
+       'company_scope_marketing_campaigns_update',
+       'company_scope_marketing_campaigns_delete'
+     ) AND permissive='RESTRICTIVE'),
+  3,
+  'Marketing campaign writes retain restrictive company-scope policies'
 );
 
 SELECT * FROM finish();
