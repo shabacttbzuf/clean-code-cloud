@@ -125,7 +125,7 @@ function ReportsPage() {
             .select("id, paid_at, amount, category_id, description, branch_id")
             .eq("tenant_id", tenantId).gte("paid_at", from).lte("paid_at", to);
           if (branchId !== "all") query = query.eq("branch_id", branchId);
-          else if (!isSuperOwner) query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
+          else if (!isSuperOwner || companyId !== "all") query = query.in("branch_id", (branchesQuery.data ?? []).map((branch) => branch.id));
           return query.order("paid_at", { ascending: false }).range(pageFrom, pageTo);
         }) : Promise.resolve([]),
         canViewSalesReports ? fetchAllRows((pageFrom, pageTo) => supabase.from("sale_items")
@@ -176,15 +176,18 @@ function ReportsPage() {
           let query = (supabase as any).from("marketing_campaign_events")
             .select("campaign_id, event_type, event_day, company_id")
             .eq("tenant_id", tenantId).gte("event_day", from).lte("event_day", to);
-          if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
+          if (companyId !== "all") query = query.eq("company_id", companyId);
+          else if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
           else if (!isSuperOwner) return [];
+          if (branchId !== "all") return [];
           return query.range(pageFrom, pageTo);
         }) : Promise.resolve([]),
         canManagePromotions ? fetchAllRows((pageFrom, pageTo) => {
           let query = (supabase as any).from("promotional_offers")
             .select("id, name, status, company_id, branch_id")
             .eq("tenant_id", tenantId);
-          if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
+          if (companyId !== "all") query = query.eq("company_id", companyId);
+          else if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
           else if (!isSuperOwner) return [];
           if (branchId !== "all") query = query.or("branch_id.is.null,branch_id.eq." + branchId);
           return query.range(pageFrom, pageTo);
