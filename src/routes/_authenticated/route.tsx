@@ -28,6 +28,13 @@ import { resolveAvatarUrl } from "@/lib/storage";
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
+    // Supabase persists the session locally. Offline navigation may use that
+    // existing session only; online navigation still validates it with Auth.
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session?.user) throw redirect({ to: "/auth" });
+      return { userId: data.session.user.id, email: data.session.user.email };
+    }
     const { data } = await supabase.auth.getUser();
     if (!data.user) throw redirect({ to: "/auth" });
     return { userId: data.user.id, email: data.user.email };
