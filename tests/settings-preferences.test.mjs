@@ -34,3 +34,35 @@ test("advertising and promotions are explicitly kept separate from settings", ()
   assert.match(settings, /\/ads/);
   assert.match(settings, /\/promotions/);
 });
+
+test("POS applies saved print defaults, automatic print, and copy count without changing checkout totals", async () => {
+  const pos = await readFile(new URL("../src/routes/_authenticated/pos.tsx", import.meta.url), "utf8");
+  const preferences = await readFile(new URL("../src/lib/settings-preferences.ts", import.meta.url), "utf8");
+  const invoice = await readFile(new URL("../src/lib/invoice-pdf.ts", import.meta.url), "utf8");
+  assert.match(pos, /restoredWorkspace\.paperSize \?\? userSettings\.paperSize/);
+  assert.match(pos, /if \(userSettings\.autoPrint\)/);
+  assert.match(pos, /Number\(userSettings\.copies\)/);
+  assert.match(pos, /formatUserDateTime\(inv\.created_at, userSettings\)/);
+  assert.match(preferences, /autoPrint: true/);
+  assert.match(invoice, /safeCopies = Math\.max\(1, Math\.min\(3/);
+});
+
+test("notification preferences filter the user's list while critical alerts remain visible", async () => {
+  const notifications = await readFile(new URL("../src/routes/_authenticated/notifications.tsx", import.meta.url), "utf8");
+  const preferences = await readFile(new URL("../src/lib/settings-preferences.ts", import.meta.url), "utf8");
+  assert.match(notifications, /isNotificationEnabled\(n, preferences\)/);
+  assert.match(notifications, /formatUserDateTime\(n\.created_at, preferences\)/);
+  assert.match(preferences, /if \(notification\.urgency === "critical"\) return true/);
+  assert.match(preferences, /notifyLowStock/);
+  assert.match(preferences, /notifyInvoices/);
+  assert.match(preferences, /notifyDelayedOrders/);
+  assert.match(preferences, /notifyHr/);
+});
+
+test("date and time preferences are validated and applied using the selected time zone", async () => {
+  const preferences = await readFile(new URL("../src/lib/settings-preferences.ts", import.meta.url), "utf8");
+  assert.match(preferences, /timeZone: \["Asia\/Aden", "Asia\/Riyadh", "UTC", "local"\]/);
+  assert.match(preferences, /preferences\.timeFormat === "12"/);
+  assert.match(preferences, /preferences\.dateFormat === "DD\/MM\/YYYY"/);
+  assert.match(preferences, /timeZone: preferences\.timeZone/);
+});
