@@ -6,6 +6,7 @@ const hook = readFileSync(new URL("../src/hooks/use-notification-sync.ts", impor
 const migration = readFileSync(new URL("../supabase/migrations/20261125010000_notification_realtime_publication.sql", import.meta.url), "utf8");
 const topbar = readFileSync(new URL("../src/routes/_authenticated/route.tsx", import.meta.url), "utf8");
 const page = readFileSync(new URL("../src/routes/_authenticated/notifications.tsx", import.meta.url), "utf8");
+const lowStockMigration = readFileSync(new URL("../supabase/migrations/20261125020000_low_stock_event_notifications.sql", import.meta.url), "utf8");
 
 test("notification realtime refreshes existing RLS-backed queries and never renders event payloads", () => {
   assert.match(hook, /postgres_changes/);
@@ -16,7 +17,7 @@ test("notification realtime refreshes existing RLS-backed queries and never rend
   assert.match(hook, /addEventListener\("online"/);
   assert.match(hook, /visibilitychange/);
   assert.match(topbar, /useNotificationSync\(tenantId, user\?\.id\)/);
-  assert.match(page, /useNotificationSync\(tenantId, user\?\.id\)/);
+  assert.doesNotMatch(page, /useNotificationSync/); // TopBar owns one shared subscription.
 });
 
 test("realtime publication adds only the existing notification tables idempotently", () => {
@@ -25,4 +26,17 @@ test("realtime publication adds only the existing notification tables idempotent
   assert.match(migration, /ADD TABLE public\.notifications/);
   assert.match(migration, /ADD TABLE public\.notification_reads/);
   assert.doesNotMatch(migration, /DROP PUBLICATION|CREATE PUBLICATION|DISABLE ROW LEVEL SECURITY/i);
+});
+
+test("low-stock alerts are emitted only when real inventory crosses its configured threshold", () => {
+  assert.match(lowStockMigration, /AFTER INSERT OR UPDATE OF quantity ON public\.inventory/);
+  assert.match(lowStockMigration, /NEW\.quantity <= v_product\.min_stock/);
+  assert.match(lowStockMigration, /OLD\.quantity > v_product\.min_stock/);
+  assert.match(lowStockMigration, /v_product\.min_stock <= 0/);
+  assert.match(lowStockMigration, /'low_stock'/);
+  assert.match(lowStockMigration, /'branch'/);
+  assert.match(lowStockMigration, /NEW\.branch_id/);
+  assert.match(lowStockMigration, /'urgent'/);
+  assert.match(lowStockMigration, /'/);
+  assert.doesNotMatch(lowStockMigration, /UPDATE public\.(sales|payments|cash_sessions)|DELETE FROM public\.(sales|payments|cash_sessions)/i);
 });
