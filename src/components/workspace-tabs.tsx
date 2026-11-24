@@ -151,6 +151,7 @@ export function WorkspaceTabs() {
     staleTime: 30_000,
   });
   const restoredScope = useRef<string | null>(null);
+  const skipPersistScope = useRef<string | null>(null);
   const [dirtyPaths, setDirtyPaths] = useState<Set<string>>(() => new Set());
   const [tabs, setTabs] = useState<WorkspaceTab[]>([
     { path: "/dashboard", title: "الرئيسية", pinned: true },
@@ -165,6 +166,7 @@ export function WorkspaceTabs() {
     if (!storageKey || (!isSuperOwner && permissionQuery.isLoading)) return;
     if (restoredScope.current === storageKey) return;
     restoredScope.current = storageKey;
+    skipPersistScope.current = storageKey;
     const restored = readTabs(storageKey).filter((tab) => {
       const permission = requiredPermission(tab.path);
       return isSuperOwner || !permission || permissionQuery.data?.has(permission) === true;
@@ -188,6 +190,11 @@ export function WorkspaceTabs() {
 
   useEffect(() => {
     if (!storageKey || (!isSuperOwner && permissionQuery.isLoading)) return;
+    if (skipPersistScope.current === storageKey) {
+      skipPersistScope.current = null;
+      return;
+    }
+    if (restoredScope.current !== storageKey) return;
     try { localStorage.setItem(storageKey, JSON.stringify(tabs)); } catch { /* storage is optional */ }
   }, [tabs, storageKey, isSuperOwner, permissionQuery.isLoading]);
 
