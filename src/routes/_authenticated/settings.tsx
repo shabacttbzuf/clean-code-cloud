@@ -206,11 +206,25 @@ function SettingsPage() {
 
   useEffect(() => {
     if (!tenant) return;
+    const savedPlatformBrand = platformBrandQuery.data ? {
+      brand_name: platformBrandQuery.data.brand_name ?? "إدارة الوتيري بلس",
+      phone: platformBrandQuery.data.phone ?? "",
+      promotional_text: platformBrandQuery.data.promotional_text ?? "",
+      website_url: platformBrandQuery.data.website_url ?? "",
+      logo_url: platformBrandQuery.data.logo_url ?? "",
+      enabled: platformBrandQuery.data.enabled ?? true,
+      placement: platformBrandQuery.data.placement ?? "footer",
+    } : { brand_name: "إدارة الوتيري بلس", phone: "", promotional_text: "", website_url: "", logo_url: "", enabled: true, placement: "footer" };
+    const platformBrandDirty = isSuperOwner && !platformBrandQuery.isLoading && !platformBrandQuery.isError &&
+      JSON.stringify(platformBrand) !== JSON.stringify(savedPlatformBrand);
     const dirty = name !== tenant.name ||
       currency !== tenant.currency ||
       tax !== String(tenant.tax_rate) ||
       logoUrl !== (tenant.logo_url ?? "") ||
-      JSON.stringify(designDraft) !== JSON.stringify(design);
+      JSON.stringify(designDraft) !== JSON.stringify(design) ||
+      platformBrandDirty ||
+      !!newTabTitle.trim() || newTabUrl !== "/dashboard" ||
+      uploadingLogo || uploadingBackground;
     window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
       detail: { path: "/settings", dirty },
     }));
@@ -219,7 +233,7 @@ function SettingsPage() {
         detail: { path: "/settings", dirty: false },
       }));
     };
-  }, [tenant, name, currency, tax, logoUrl, designDraft, design]);
+  }, [tenant, name, currency, tax, logoUrl, designDraft, design, platformBrand, platformBrandQuery.data, platformBrandQuery.isLoading, platformBrandQuery.isError, isSuperOwner, newTabTitle, newTabUrl, uploadingLogo, uploadingBackground]);
 
   async function uploadBackground(file?: File) {
     if (!file || !tenantId || !isSuperOwner) return;
