@@ -60,6 +60,24 @@ import {
 export type AppNavigationItem = { title: string; url: string; icon: typeof LayoutDashboard; permission?: string };
 export type AppNavigationGroup = { label: string; items: AppNavigationItem[] };
 
+export function navigationIconTone(url: string) {
+  if (url.startsWith("/pos") || url.startsWith("/sales")) return "text-blue-600 bg-blue-50 ring-blue-100";
+  if (url.startsWith("/tables")) return "text-rose-600 bg-rose-50 ring-rose-100";
+  if (url.startsWith("/kitchen")) return "text-orange-600 bg-orange-50 ring-orange-100";
+  if (url.startsWith("/inventory") || url.startsWith("/products") || url.startsWith("/categories")) return "text-violet-600 bg-violet-50 ring-violet-100";
+  if (url.startsWith("/purchases") || url.startsWith("/suppliers")) return "text-emerald-600 bg-emerald-50 ring-emerald-100";
+  if (url.startsWith("/customers") || url.startsWith("/users")) return "text-fuchsia-600 bg-fuchsia-50 ring-fuchsia-100";
+  if (url.startsWith("/cash") || url.startsWith("/expenses")) return "text-amber-600 bg-amber-50 ring-amber-100";
+  if (url.startsWith("/reports")) return "text-sky-600 bg-sky-50 ring-sky-100";
+  if (url.startsWith("/ads") || url.startsWith("/promotions")) return "text-pink-600 bg-pink-50 ring-pink-100";
+  if (url.startsWith("/hr/")) return "text-indigo-600 bg-indigo-50 ring-indigo-100";
+  if (url.startsWith("/branches") || url.startsWith("/companies") || url.startsWith("/departments")) return "text-cyan-700 bg-cyan-50 ring-cyan-100";
+  if (url.startsWith("/notifications")) return "text-red-600 bg-red-50 ring-red-100";
+  if (url.startsWith("/settings") || url.startsWith("/team-permissions") || url.startsWith("/roles")) return "text-slate-600 bg-slate-100 ring-slate-200";
+  if (url.startsWith("/support")) return "text-teal-600 bg-teal-50 ring-teal-100";
+  return "text-[#174b91] bg-blue-50 ring-blue-100";
+}
+
 export const appNavigationGroups: AppNavigationGroup[] = [
   {
     label: "الرئيسية",
@@ -256,7 +274,7 @@ export function AppSidebar() {
                       <SidebarMenuButton asChild isActive={active} tooltip={item.title}>
                         {item.url.includes("#") ? (
                           <a href={item.url} className="flex items-center gap-2">
-                            <item.icon className="h-4 w-4 shrink-0" />
+                            <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl ring-1 ${navigationIconTone(item.url)}`}><item.icon className="h-4 w-4" /></span>
                             <span>{item.title}</span>
                           </a>
                         ) : (
