@@ -35,6 +35,7 @@ test("user permission mutations verify actor, target membership and protect supe
   assert.match(action, /المستخدم المستهدف لا ينتمي إلى المؤسسة المحددة/);
   assert.match(action, /targetRoles\.some\(\(row\) => row\.role === "owner" \|\| row\.role === "manager"\)/);
   assert.match(action, /row\.hired_by !== context\.userId/);
+  assert.match(action, /row\.company_id !== actorManager\.company_id/);
   assert.match(action, /get_my_permissions/);
   assert.match(action, /لا يمكنك منح صلاحية لا تملكها بنفسك/);
 });
