@@ -4,10 +4,45 @@ const STATIC_CACHE = CACHE_PREFIX + "static-v1";
 const SHELL_CACHE = CACHE_PREFIX + "shell-v1";
 const SHELL_URLS = ["/", "/offline.html", "/manifest.webmanifest", "/icons/app-icon.svg"];
 
+async function precacheShellAssets() {
+  const shellCache = await caches.open(SHELL_CACHE);
+  await shellCache.addAll(SHELL_URLS);
+
+  // "/" is a public client-rendered shell (the route has ssr:false).
+  const shellResponse = await shellCache.match("/");
+  if (!shellResponse) return;
+  const html = await shellResponse.text();
+  const assetPaths = [...html.matchAll(/(?:src|href)=["']([^"']+)["']/g)]
+    .map((match) => match[1])
+    .filter((path) => /\\.(?:js|mjs|css|woff2?|ttf|otf|eot)$/i.test(new URL(path, self.location.origin).pathname));
+
+  const staticCache = await caches.open(STATIC_CACHE);
+  const cssPaths = assetPaths.filter((path) => /\\.css(?:$|\\?)/i.test(path));
+  await Promise.all(assetPaths.map(async (path) => {
+    const url = new URL(path, self.location.origin);
+    if (url.origin !== self.location.origin) return;
+    try {
+      const response = await fetch(url.href);
+      if (response.ok && response.type === "basic") await staticCache.put(url.href, response.clone());
+      if (response.ok && cssPaths.includes(path)) {
+        const css = await response.clone().text();
+        const fonts = [...css.matchAll(/url\\(["']?([^"')]+)["']?\\)/g)].map((match) => match[1]);
+        await Promise.all(fonts.map(async (font) => {
+          const fontUrl = new URL(font, url);
+          if (fontUrl.origin !== self.location.origin || !/\\.(?:woff2?|ttf|otf|eot)$/i.test(fontUrl.pathname)) return;
+          try {
+            const fontResponse = await fetch(fontUrl.href);
+            if (fontResponse.ok && fontResponse.type === "basic") await staticCache.put(fontUrl.href, fontResponse);
+          } catch { /* A font can be fetched and cached on its first later use. */ }
+        }));
+      }
+    } catch { /* Optional build assets are cached when first requested. */ }
+  }));
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
-    const cache = await caches.open(SHELL_CACHE);
-    await cache.addAll(SHELL_URLS);
+    await precacheShellAssets();
     await self.skipWaiting();
   })());
 });
