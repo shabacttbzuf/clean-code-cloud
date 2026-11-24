@@ -7,10 +7,11 @@ const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta
 const layout = readFileSync(new URL("../src/routes/_authenticated/route.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 
-test("dashboard rejects partial query failures instead of presenting misleading totals", () => {
-  assert.match(dashboard, /for \(const result of \[salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount\]\)/);
-  assert.match(dashboard, /if \(result\.error\) throw result\.error/);
-  assert.match(dashboard, /if \(catsRes\.error\) throw catsRes\.error/);
+test("dashboard rejects partial query failures and paginates all metric datasets", () => {
+  assert.match(dashboard, /fetchAllRows\(\(from, to\) => salesTodayQ/);
+  assert.match(dashboard, /fetchAllRows\(\(from, to\) => salesMonthQ/);
+  assert.match(dashboard, /if \(error\) throw error/);
+  assert.match(dashboard, /if \(salesCount\.error\) throw salesCount\.error/);
   assert.match(dashboard, /لم يتم عرض أرقام جزئية أو مضللة/);
 });
 
