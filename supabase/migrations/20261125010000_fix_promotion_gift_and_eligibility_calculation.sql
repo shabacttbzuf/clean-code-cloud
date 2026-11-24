@@ -119,12 +119,12 @@ BEGIN
     FROM jsonb_array_elements(_items) item
     WHERE (item->>'product_id')::uuid=coalesce(v_offer.reward_product_id,v_offer.product_id);
 
-    -- When the gift is the same product, purchased qualifying units are not gifts.
     IF coalesce(v_offer.reward_product_id,v_offer.product_id)=v_offer.product_id THEN
-      v_reward_qty := greatest(0, v_reward_qty-v_buy_qty);
+      -- Same-SKU bundles: buy X + get Y are fulfilled in complete (X+Y) bundles.
+      v_free_qty := (v_reward_qty / (v_offer.buy_quantity + v_offer.get_quantity)) * v_offer.get_quantity;
+    ELSE
+      v_free_qty := least(v_reward_qty, (v_buy_qty / v_offer.buy_quantity) * v_offer.get_quantity);
     END IF;
-
-    v_free_qty := least(v_reward_qty, (v_buy_qty / v_offer.buy_quantity) * v_offer.get_quantity);
     SELECT p.sale_price INTO v_reward_price
     FROM public.products p
     WHERE p.id=coalesce(v_offer.reward_product_id,v_offer.product_id)
