@@ -20,7 +20,7 @@ export const Route = createFileRoute("/_authenticated/expenses")({ component: Pa
 type Expense = { id: string; amount: number; description: string | null; paid_at: string; category_id: string | null; branch_id: string | null };
 
 function Page() {
-  const { tenantId, userId, tenant, isAdmin } = useActiveTenant();
+  const { tenantId, userId, tenant, isAdmin, membership, isSuperOwner } = useActiveTenant();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
 
@@ -30,8 +30,15 @@ function Page() {
     enabled: !!tenantId,
   });
   const branches = useQuery({
-    queryKey: ["branches-exp", tenantId],
-    queryFn: async () => { const { data } = await supabase.from("branches").select("id, name").eq("tenant_id", tenantId!); return (data ?? []) as Array<{ id: string; name: string }>; },
+    queryKey: ["branches-exp", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryFn: async () => {
+      let query = supabase.from("branches").select("id, name").eq("tenant_id", tenantId!);
+      if (!isSuperOwner && membership?.branch_id) query = query.eq("id", membership.branch_id);
+      else if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []) as Array<{ id: string; name: string }>;
+    },
     enabled: !!tenantId,
   });
   const q = useQuery({
