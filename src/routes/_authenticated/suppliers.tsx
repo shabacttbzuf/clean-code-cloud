@@ -55,7 +55,7 @@ function SuppliersPage() {
       paymentBranchId !== (membership?.branch_id ?? "") || !!paymentReference.trim() || !!paymentNotes.trim()
     );
     window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/suppliers", dirty } }));
-    return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/suppliers", dirty: false } }));; };
+    return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/suppliers", dirty: false } })); };
   }, [paymentSupplier, paymentAmount, paymentMethod, cashSessionId, paymentBranchId, paymentReference, paymentNotes, membership?.branch_id]);
 
   const q = useQuery({
@@ -345,7 +345,7 @@ function SupplierDialog({ open, initial, tenantId, onSubmit, pending }: {
       notes !== (initial?.notes ?? "") || logoUrl !== (initial?.logo_url ?? null)
     );
     window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/suppliers", dirty } }));
-    return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/suppliers", dirty: false } }));; };
+    return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/suppliers", dirty: false } })); };
   }, [open, initial, name, phone, email, address, notes, logoUrl]);
 
   return (
