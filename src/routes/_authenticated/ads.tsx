@@ -367,7 +367,7 @@ export function AdsPage() {
             <div className="overflow-hidden rounded-xl border bg-card" aria-label="معاينة الإعلان">
               {imageUrl ? <img src={imageUrl} alt="صورة معاينة الإعلان" className="h-44 w-full object-cover" /> : <div className="grid h-32 place-items-center bg-muted text-sm text-muted-foreground">لا توجد صورة مرفقة</div>}
               <div className="space-y-2 p-4">
-                <div className="text-xs font-medium text-primary">{placement === "dashboard_banner" ? "معاينة الشريط الرئيسي" : placement === "dashboard_card" ? "معاينة بطاقة لوحة التحكم" : "معاينة مساحة نقطة البيع"}</div>
+                <div className="text-xs font-medium text-primary">معاينة {PLACEMENT_LABELS[placement] ?? placement}</div>
                 <h3 className="text-lg font-bold">{title.trim() || "عنوان الإعلان"}</h3>
                 <p className="text-sm text-muted-foreground">{description.trim() || "سيظهر وصف الإعلان هنا."}</p>
                 {targetUrl.trim() && <div dir="ltr" className="truncate text-xs text-muted-foreground">{targetUrl.trim()}</div>}
