@@ -388,6 +388,27 @@ function ReportsPage() {
     return { salesTotal, grossSalesTotal, refundsTotal, expensesTotal, discountTotal, taxTotal, net };
   }, [safe]);
 
+  const cashTotals = useMemo(() => ({
+    closed: safe.sessions.filter((row: any) => row.status === "closed").length,
+    difference: safe.sessions.reduce((sum: number, row: any) => sum + Number(row.cash_difference ?? 0), 0),
+  }), [safe.sessions]);
+  const employeeAttendanceStats = useMemo(() => {
+    const byEmployee = new Map<string, { days: number; hours: number; late: number }>();
+    for (const row of safe.attendance) {
+      const current = byEmployee.get(row.employee_id) ?? { days: 0, hours: 0, late: 0 };
+      current.days += 1;
+      current.hours += Number(row.hours_worked ?? 0);
+      if (row.is_late) current.late += 1;
+      byEmployee.set(row.employee_id, current);
+    }
+    return safe.employees.map((employee: any) => ({
+      id: employee.id,
+      name: employee.full_name,
+      status: employee.status,
+      ...(byEmployee.get(employee.id) ?? { days: 0, hours: 0, late: 0 }),
+    }));
+  }, [safe.employees, safe.attendance]);
+
   const purchaseTotals = useMemo(() => ({
     count: safe.purchases.length,
     total: safe.purchases.filter((row: any) => row.status !== "cancelled" && row.status !== "void").reduce((sum: number, row: any) => sum + Number(row.total ?? 0), 0),
@@ -645,6 +666,7 @@ function ReportsPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {canViewPurchases && <Kpi icon={<Package className="h-5 w-5" />} label="المشتريات خلال الفترة" value={String(purchaseTotals.count)} tone="primary" />}
         {canViewFinancialReports && <Kpi icon={<Wallet className="h-5 w-5" />} label="إجمالي قيمة المشتريات" value={formatMoney(purchaseTotals.total)} tone="primary" />}
+        {canViewCash && <Kpi icon={<Wallet className="h-5 w-5" />} label="فروقات إغلاق الصندوق" value={formatMoney(cashTotals.difference)} tone={cashTotals.difference === 0 ? "success" : "destructive"} />}
         {canViewEmployees && <Kpi icon={<Users className="h-5 w-5" />} label="الموظفون ضمن النطاق" value={String(staffTotals.employees)} tone="primary" />}
         {canViewAttendance && <Kpi icon={<Users className="h-5 w-5" />} label="سجلات الحضور" value={String(staffTotals.attendance)} tone="primary" />}
         {canViewAttendance && <Kpi icon={<Users className="h-5 w-5" />} label="حالات التأخر المسجلة" value={String(staffTotals.late)} tone={staffTotals.late ? "destructive" : "success"} />}
