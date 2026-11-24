@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useRouterState } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity, AlertTriangle, BookOpen, BarChart3, Building2, CheckCircle2, CircleHelp,
   Clock3, Copy, Database, Gift, Globe, LifeBuoy, Megaphone, Package, Receipt,
@@ -58,6 +58,7 @@ function SupportPage() {
   const [services, setServices] = useState<ServiceCheck[]>(initialServices);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  const checkInProgress = useRef(false);
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const filtered = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("ar");
@@ -66,7 +67,8 @@ function SupportPage() {
   }, [search]);
 
   const checkServices = useCallback(async () => {
-    if (checking) return;
+    if (checkInProgress.current) return;
+    checkInProgress.current = true;
     setChecking(true);
     setServices((current) => current.map((service) => ({ ...service, state: "checking", detail: "جارٍ التحقق من الخدمة..." })));
     const now = () => new Date().toISOString();
@@ -117,8 +119,9 @@ function SupportPage() {
     }
     setServices(initialServices.map((service) => results.get(service.id) ?? service));
     setLastChecked(now());
+    checkInProgress.current = false;
     setChecking(false);
-  }, [checking]);
+  }, []);
 
   useEffect(() => {
     void checkServices();
