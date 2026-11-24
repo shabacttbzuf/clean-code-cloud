@@ -75,9 +75,10 @@ test("buildCsv escapes cells and neutralizes formula-like untrusted text", async
     { المنتج: '=HYPERLINK("https://example.invalid","افتح")', الكمية: 2, ملاحظة: '  @SUM(1,2)' },
     { المنتج: 'عصير "طازج"', الكمية: -1, ملاحظة: null },
   ]);
-  assert.equal(
-    csv,
-    '"المنتج","الكمية","ملاحظة"\r\n"\'=HYPERLINK(""https://example.invalid"",""افتح"")","2","'  @SUM(1,2)"\r\n"عصير ""طازج""","-1",""',
-  );
+  assert.equal(csv, [
+    `"المنتج","الكمية","ملاحظة"`,
+    `"'=HYPERLINK(""https://example.invalid"",""افتح"")","2","'  @SUM(1,2)"`,
+    `"عصير ""طازج""","-1",""`,
+  ].join("\\r\\n"));
   assert.equal(buildCsv([]), "");
 });
