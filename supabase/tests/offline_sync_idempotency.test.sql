@@ -5,7 +5,8 @@ create extension if not exists pgtap with schema extensions;
 select plan(7);
 
 select ok(
-  to_regclass('private.kitchen_order_sync_requests') is not null,
+  to_regclass('private.kitchen_order_sync_requests') is not null
+  and (select relrowsecurity from pg_class where oid='private.kitchen_order_sync_requests'::regclass),
   'The idempotency ledger exists only in the private schema'
 );
 
