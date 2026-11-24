@@ -120,10 +120,19 @@ function Dashboard() {
 
   useEffect(() => {
     if (!activeCampaign?.id) return;
-    void (supabase.rpc as any)("record_marketing_campaign_event", {
-      _campaign_id: activeCampaign.id,
-      _event_type: "impression",
-    }).catch((error: unknown) => console.warn("Campaign impression tracking failed", error));
+    // Supabase RPC builders are thenable, but they do not expose Promise.catch().
+    // Await the RPC inside an async task so analytics failures never crash the dashboard.
+    void (async () => {
+      try {
+        const { error } = await (supabase.rpc as any)("record_marketing_campaign_event", {
+          _campaign_id: activeCampaign.id,
+          _event_type: "impression",
+        });
+        if (error) console.warn("Campaign impression tracking failed", error);
+      } catch (error) {
+        console.warn("Campaign impression tracking failed", error);
+      }
+    })();
   }, [activeCampaign?.id]);
 
   const systemStatusQuery = useQuery({
