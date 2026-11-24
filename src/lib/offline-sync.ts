@@ -54,6 +54,11 @@ const FINANCIAL_TYPES = new Set([
   "invoice", "sale", "payment", "refund", "return", "inventory_deduction",
   "stock_adjustment", "purchase_receipt", "cash_movement", "payroll",
 ]);
+const BLOCKED_OPERATION_PATTERN = /(^|[._-])(pos|checkout|sale|sales|invoice|payment|payments|refund|refunds|return|returns|inventory|stock|purchase|purchases|cash|payroll|accounting|journal|tax|ledger)([._-]|$)/i;
+
+function isFinancialOrInventoryOperation(type: string) {
+  return FINANCIAL_TYPES.has(type) || BLOCKED_OPERATION_PATTERN.test(type);
+}
 const handlers = new Map<string, OfflineHandler>();
 const syncPromises = new Map<string, Promise<void>>();
 const workerId = typeof crypto !== "undefined" ? crypto.randomUUID() : "server-render";
@@ -109,7 +114,7 @@ function notifyQueueChanged() {
 }
 
 export function registerOfflineHandler(type: string, handler: OfflineHandler) {
-  if (!type.trim() || FINANCIAL_TYPES.has(type)) {
+  if (!type.trim() || isFinancialOrInventoryOperation(type)) {
     throw new Error("هذا النوع من العمليات لا يسمح بتسجيله للمزامنة دون اتصال.");
   }
   if (handler.offlineSafe !== true || handler.idempotentServerSide !== true) throw new Error("يجب تأكيد أمان العملية ودعم الخادم لمفتاح منع التكرار.");
@@ -124,7 +129,7 @@ export async function enqueueOfflineOperation(
   dependencies: string[] = [],
   idempotencyKey?: string,
 ): Promise<OfflineOperation> {
-  if (FINANCIAL_TYPES.has(type) || !handlers.has(type)) {
+  if (isFinancialOrInventoryOperation(type) || !handlers.has(type)) {
     throw new Error("هذه العملية تتطلب اتصالاً بالخادم ولا يمكن حفظها كعملية قابلة للإرسال.");
   }
   if (!scope.userId || !scope.tenantId) throw new Error("تعذر تحديد المستخدم والمؤسسة للعملية.");
