@@ -47,7 +47,7 @@ function safeCampaignTarget(value: string | null): string | null {
 function Dashboard() {
   const [activeCampaignIndex, setActiveCampaignIndex] = useState(0);
   const [campaignRotationPaused, setCampaignRotationPaused] = useState(false);
-  const { tenantId, tenant, user, membership, hasPermission } = useActiveTenant();
+  const { tenantId, tenant, user, membership, role, hasPermission } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
   const profileQuery = useQuery({
     queryKey: ["dashboard-profile-name", user?.id],
@@ -86,7 +86,7 @@ function Dashboard() {
         .limit(6);
       if (membership?.company_id) {
         query = query.or(`company_id.is.null,company_id.eq.${membership.company_id}`);
-      } else if (!isSuperOwner) {
+      } else if (!isSuperOwner && !(role === "owner" && !membership?.company_id)) {
         // Branch-only and regular tenant members must never receive another company's campaigns.
         query = query.is("company_id", null);
       }
