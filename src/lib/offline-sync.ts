@@ -83,8 +83,11 @@ async function transaction<T>(
     return await new Promise<T>((resolve, reject) => {
       const tx = db.transaction(stores, mode);
       const request = run(tx);
-      request.onsuccess = () => resolve(request.result);
+      let result: T;
+      request.onsuccess = () => { result = request.result; };
       request.onerror = () => reject(request.error);
+      tx.oncomplete = () => resolve(result);
+      tx.onerror = () => reject(tx.error ?? new Error("فشلت العملية المحلية."));
       tx.onabort = () => reject(tx.error ?? new Error("تم إلغاء العملية المحلية."));
     });
   } finally {
