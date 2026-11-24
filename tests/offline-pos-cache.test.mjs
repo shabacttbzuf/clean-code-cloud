@@ -47,6 +47,12 @@ test("POS caches only branch list and product/category reference catalog", () =>
   assert.match(pos, /queryKey: \["categories-min", tenantId, userId/);
 });
 
+test("POS inventory snapshots are isolated to the active user, company and branch", () => {
+  assert.match(cache, /OFFLINE_INVENTORY_CACHE_MAX_AGE_MS = 60 \* 60 \* 1000/);
+  assert.match(pos, /offlineCacheKey\(\{ \.\.\.offlineScope, branchId \}, "pos-inventory"\)/);
+  assert.match(pos, /OFFLINE_INVENTORY_CACHE_MAX_AGE_MS/);
+});
+
 test("offline POS is draft-only and blocks all sale submission", () => {
   assert.match(pos, /لا يمكن إتمام البيع دون اتصال/);
   assert.match(pos, /if \(!navigator\.onLine\) throw new Error/);
