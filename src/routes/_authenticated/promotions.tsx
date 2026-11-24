@@ -38,6 +38,7 @@ function PromotionsPage() {
   const canManage = isSuperOwner || isTenantOwner || hasPermission("promotions.manage");
   const [form, setForm] = useState({ ...emptyForm, branch_id: membership?.branch_id && !membership?.company_id ? membership.branch_id : "" });
   const [editing, setEditing] = useState<string | null>(null);
+  const [editingCompanyId, setEditingCompanyId] = useState<string | null>(null);
   const [formTouched, setFormTouched] = useState(false);
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
@@ -131,7 +132,7 @@ function PromotionsPage() {
       if (usageLimit !== null && (!Number.isInteger(usageLimit) || usageLimit < 1)) throw new Error("عدد مرات الاستخدام غير صحيح");
       const payload = {
         tenant_id: tenantId,
-        company_id: membership?.company_id ?? null,
+        company_id: editing ? editingCompanyId : (membership?.company_id ?? null),
         branch_id: form.branch_id || null,
         name, description: form.description.trim(), offer_type: form.offer_type,
         discount_value: form.offer_type === "buy_x_get_y" ? 0 : value,
@@ -145,9 +146,10 @@ function PromotionsPage() {
       };
       const table = supabase.from("promotional_offers" as any) as any;
       const result = editing
-        ? await table.update(payload).eq("id", editing).eq("tenant_id", tenantId)
-        : await table.insert({ ...payload, status: "draft" });
+        ? await table.update(payload).eq("id", editing).eq("tenant_id", tenantId).select("id").maybeSingle()
+        : await table.insert({ ...payload, status: "draft" }).select("id").single();
       if (result.error) throw result.error;
+      if (!result.data?.id) throw new Error("لم يتم العثور على العرض ضمن نطاق الشركة والفرع الحاليين؛ لم يُنفّذ الحفظ.");
     },
     onSuccess: () => {
       toast.success(editing ? "تم تحديث العرض" : "تم حفظ العرض كمسودة");
@@ -159,18 +161,20 @@ function PromotionsPage() {
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: {id:string;status:string}) => {
-      const { error } = await (supabase.from("promotional_offers" as any) as any)
-        .update({ status }).eq("id", id).eq("tenant_id", tenantId!);
+      const { data, error } = await (supabase.from("promotional_offers" as any) as any)
+        .update({ status }).eq("id", id).eq("tenant_id", tenantId!).select("id").maybeSingle();
       if (error) throw error;
+      if (!data?.id) throw new Error("لم يتم العثور على العرض ضمن نطاقك المصرح به.");
     },
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["promotional-offers", tenantId] }),
     onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر تحديث حالة العرض"),
   });
   const remove = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await (supabase.from("promotional_offers" as any) as any)
-        .delete().eq("id", id).eq("tenant_id", tenantId!);
+      const { data, error } = await (supabase.from("promotional_offers" as any) as any)
+        .delete().eq("id", id).eq("tenant_id", tenantId!).select("id").maybeSingle();
       if (error) throw error;
+      if (!data?.id) throw new Error("لم يتم العثور على العرض أو لا تملك صلاحية حذفه.");
     },
     onSuccess: () => {
       toast.success("تم حذف العرض");
@@ -179,11 +183,12 @@ function PromotionsPage() {
     onError: (error) => toast.error(error instanceof Error ? error.message : "لا يمكن حذف عرض مستخدم؛ قم بأرشفته"),
   });
 
-  function resetForm() { setFormTouched(false); setForm({ ...emptyForm, branch_id: membership?.branch_id && !membership?.company_id ? membership.branch_id : "" }); setEditing(null); }
+  function resetForm() { setFormTouched(false); setForm({ ...emptyForm, branch_id: membership?.branch_id && !membership?.company_id ? membership.branch_id : "" }); setEditing(null); setEditingCompanyId(null); }
   function editOffer(offer: Offer) {
     setFormTouched(false);
     const local = (v: string | null) => v ? new Date(new Date(v).getTime() - new Date(v).getTimezoneOffset() * 60000).toISOString().slice(0,16) : "";
     setEditing(offer.id);
+    setEditingCompanyId(offer.company_id);
     setForm({
       name: offer.name, description: offer.description, offer_type: offer.offer_type,
       discount_value: String(offer.discount_value), minimum_subtotal: String(offer.minimum_subtotal),
