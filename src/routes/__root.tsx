@@ -15,6 +15,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ThemeProvider } from "@/lib/theme";
 import { Toaster } from "@/components/ui/sonner";
 import { OfflineIndicator } from "@/components/offline-indicator";
+import { clearOfflineCache } from "@/lib/offline-reference-cache";
 import { supabase } from "@/integrations/supabase/client";
 
 function NotFoundComponent() {
@@ -151,6 +152,7 @@ function RootComponent() {
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_OUT" || event === "SIGNED_IN") {
         // Never retain one user's cached tenant data for another session.
+        if (event === "SIGNED_OUT") void clearOfflineCache();
         queryClient.clear();
         router.invalidate();
         return;
