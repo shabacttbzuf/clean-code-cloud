@@ -52,6 +52,7 @@ function ReportsPage() {
   const canViewFinancialReports = canViewExpenses && canViewSalesReports;
   const canExportReports = isSuperOwner || permissionsQuery.data?.has("reports.export") === true;
   const canFilterReports = isSuperOwner || permissionsQuery.data?.has("reports.filter") === true;
+  const permissionFingerprint = [...(permissionsQuery.data ?? [])].sort().join("|");
   const [from, setFrom] = useState(() => {
     const d = new Date();
     d.setMonth(d.getMonth() - 1);
@@ -77,7 +78,7 @@ function ReportsPage() {
   useEffect(() => {
     if (!isSuperOwner && membership?.company_id && companyId !== membership.company_id) setCompanyId(membership.company_id);
   }, [isSuperOwner, membership?.company_id, companyId]);
-  const branchesQuery = useQuery({ queryKey: ["report-branches", tenantId, companyId, membership?.company_id, membership?.branch_id, isSuperOwner],
+  const branchesQuery = useQuery({ queryKey: ["report-branches", tenantId, userId, companyId, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
       if (!isSuperOwner && !membership?.branch_id && !membership?.company_id) return [];
       let query = supabase.from("branches").select("id,name").eq("tenant_id", tenantId!).order("name");
@@ -96,7 +97,7 @@ function ReportsPage() {
   }, [branchId, branchesQuery.data]);
 
   const report = useQuery({
-    queryKey: ["reports", tenantId, userId, membership?.company_id, membership?.branch_id, companyId, isSuperOwner, canViewFinancialReports, from, to, branchId],
+    queryKey: ["reports", tenantId, userId, membership?.company_id, membership?.branch_id, companyId, isSuperOwner, permissionFingerprint, from, to, branchId],
     queryFn: async () => {
       if (!tenantId) return null;
       if (!canViewReports) throw new Error("ليس لديك صلاحية عرض التقارير.");
