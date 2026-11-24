@@ -27,6 +27,7 @@ function parseKitchenPayload(operation: OfflineOperation): KitchenStatusPayload 
 
 registerOfflineHandler("kitchen_status", {
   offlineSafe: true,
+  idempotentServerSide: true,
   send: async (operation) => {
     const payload = parseKitchenPayload(operation);
     // The RPC derives the actor from auth.uid(), checks current kitchen.manage
