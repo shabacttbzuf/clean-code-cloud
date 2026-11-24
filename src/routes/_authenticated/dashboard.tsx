@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { useSuperOwner } from "@/hooks/use-super-owner";
@@ -48,6 +48,7 @@ function Dashboard() {
   const [activeCampaignIndex, setActiveCampaignIndex] = useState(0);
   const [campaignRotationPaused, setCampaignRotationPaused] = useState(false);
   const { tenantId, tenant, user, membership, role, hasPermission } = useActiveTenant();
+  const queryClient = useQueryClient();
   const { isSuperOwner } = useSuperOwner();
   const profileQuery = useQuery({
     queryKey: ["dashboard-profile-name", user?.id],
@@ -393,7 +394,7 @@ function Dashboard() {
     queryKey: ["dashboard-latest-orders", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
       if (!tenantId) return [];
-      let query = supabase.from("sales").select("id,invoice_no,total,status,created_at,order_type,customer_id")
+      let query = supabase.from("sales").select("id,invoice_no,total,status,created_at,order_type,customer_id,notes")
         .eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(8);
       if (!isSuperOwner && membership?.branch_id) {
         query = query.eq("branch_id", membership.branch_id);
@@ -474,6 +475,22 @@ function Dashboard() {
     refetchInterval: 15_000,
     staleTime: 5_000,
   });
+
+  // Keep the dashboard live while preserving React Query's cache and page state.
+  useEffect(() => {
+    if (!tenantId) return;
+    const channel = supabase.channel(`dashboard-orders-${tenantId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "sales", filter: `tenant_id=eq.${tenantId}` }, () => {
+        void queryClient.invalidateQueries({ queryKey: ["dashboard-latest-orders", tenantId] });
+        void queryClient.invalidateQueries({ queryKey: ["dashboard-stats", tenantId] });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "kitchen_orders", filter: `tenant_id=eq.${tenantId}` }, () => {
+        void queryClient.invalidateQueries({ queryKey: ["dashboard-kitchen-overview", tenantId] });
+        void queryClient.invalidateQueries({ queryKey: ["dashboard-kitchen-counts", tenantId] });
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [tenantId, queryClient]);
 
   const currency = tenant?.currency ?? "";
 
