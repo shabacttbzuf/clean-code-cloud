@@ -613,7 +613,7 @@ function Dashboard() {
                   </ResponsiveContainer>
                 </div>
               </CardContent>
-            </Card>
+            </Card>}
             {hasPermission("expenses.view") && <Card>
               <CardContent className="p-4">
                 <div className="mb-3 text-sm font-semibold">توزيع المصروفات</div>
@@ -638,7 +638,7 @@ function Dashboard() {
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {hasPermission("cash.view") && <MiniStat label="ورديات مفتوحة" value={stats.data.openSessions} icon={<Wallet className="h-4 w-4" />} />}
-            {hasPermission("inventory.view") && <MiniStat label="نفاد مخزون" value={stats.data.lowStockCount} icon={<Package className="h-4 w-4" />} />
+            {hasPermission("inventory.view") && <MiniStat label="نفاد مخزون" value={stats.data.lowStockCount} icon={<Package className="h-4 w-4" />} />}
             {hasPermission("sales.view") && <MiniStat label="طلبات اليوم" value={stats.data.salesTodayCount} icon={<Receipt className="h-4 w-4" />} />}
 
           </div>
