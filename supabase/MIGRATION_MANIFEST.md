@@ -202,3 +202,7 @@
 98. `supabase/migrations/20261120020000_leave_rejection_actor_integrity.sql`
 
 **الإجمالي: 98 ترحيلاً.**
+
+99. `supabase/migrations/20261125010000_fix_promotion_gift_and_eligibility_calculation.sql`
+
+**الإجمالي: 99 ترحيلاً.**
