@@ -377,3 +377,47 @@ textarea,
     min-width: 32rem;
   }
 }
+
+
+/* Shared overlay primitives: preserve component-specific placement and behavior. */
+:where([role="dialog"], [data-radix-dialog-content], [data-vaul-drawer]) {
+  border-radius: var(--radius-dialog);
+  box-shadow: var(--shadow-elevated);
+}
+
+:where([role="dialog"], [data-radix-dialog-content]) :where(h1, h2, h3) {
+  text-wrap: pretty;
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+select,
+textarea) {
+  min-width: 0;
+  font-family: inherit;
+}
+
+:where(input, select, textarea)::placeholder {
+  opacity: 1;
+  color: var(--color-muted-foreground);
+}
+
+:where(button, [role="button"]) :where(svg) {
+  flex: none;
+}
+
+:where(table) {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+:where(th, td) {
+  vertical-align: middle;
+}
+
+@media (max-width: 640px) {
+  :where([role="dialog"], [data-radix-dialog-content]) {
+    max-width: calc(100vw - 1rem);
+    max-height: calc(100dvh - 1rem);
+    overflow-y: auto;
+  }
+}
