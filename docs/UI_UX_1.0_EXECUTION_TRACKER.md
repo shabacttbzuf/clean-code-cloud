@@ -369,3 +369,12 @@
 - أضيف اختبار مصدر أولي `tests/offline-pwa.test.mjs` لحدود التخزين وصفحة fallback وبيانات manifest؛ لم يُشغّل بعد في هذه الدفعة.
 - لم تُضف مكتبات أو جداول أو ترحيلات Supabase، ولم تتغير بيانات الإنتاج أو RLS أو آثار العمليات المالية/المخزنية.
 - لا يزال يلزم فحص TypeScript/Lint/Tests/Production Build عبر CI، والتحقق عملياً من التثبيت والعمل دون اتصال على localhost وHTTPS المنشور. لم يتم الدمج إلى `main`.
+
+## إصلاح عزل دوال تحليلات الحملات — 24 نوفمبر 2026
+- كشف فحص Supabase Security Advisor وفحص كتالوج PostgreSQL أن الدالتين `public.record_marketing_campaign_event(uuid,text)` و`public.get_marketing_campaign_analytics(uuid)` كانتا `SECURITY DEFINER` وقابلتين للتنفيذ من دور `authenticated` في مخطط API العام.
+- أُضيف ترحيل أمامي `supabase/migrations/20261124151227_move_marketing_analytics_to_private_wrappers.sql`: نقل التنفيذين الأصليين إلى مخطط `private` مع الحفاظ على منطق التحقق الموجود، وأسماء RPC وتواقيعها العامة عبر أغلفة `SECURITY INVOKER`. مُنحت صلاحية التنفيذ اللازمة للأدوار المحددة فقط، مع سحب التنفيذ من `PUBLIC` و`anon`.
+- أضيفت ستة تأكيدات pgTAP للتحقق من بقاء RPC العامة قابلة للاستدعاء، وأنها `SECURITY INVOKER`، وأن التنفيذين الأصليين بقيا `SECURITY DEFINER` داخل `private`.
+- حُدّث Snapshot قاعدة البيانات وManifest الترحيلات ليشملا الترحيل رقم 114.
+- أُنشئ التغيير على فرع العمل فقط؛ لم يُطبّق أي SQL على مشروع Supabase الإنتاجي. لم يتغير `main` ولم يُدمج PR #49.
+- التحقق المتبقي: تشغيل CI على commit هذا التغيير، والتأكد من نجاح pgTAP وTypeScript وLint والاختبارات والبناء. لم نعلن نجاح الإصلاح قبل ظهور النتائج.
+- ملاحظات Advisor منفصلة لم تُعالج في هذه الدفعة: تنبيهان عن جداول RLS بلا سياسات (`marketing_campaign_events` و`pos_access_credentials`) وتنبيه تعطيل حماية كلمات المرور المسرّبة. يلزم تقييمها مستقلاً دون إضافة سياسات وصول مباشرة للبيانات الحساسة.

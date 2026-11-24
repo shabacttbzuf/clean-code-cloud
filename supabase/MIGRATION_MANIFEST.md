@@ -262,3 +262,7 @@
 113. `supabase/migrations/20261124021000_marketing_campaign_events_fk_indexes.sql`
 
 **الإجمالي: 113 ترحيلاً.**
+
+114. `supabase/migrations/20261124151227_move_marketing_analytics_to_private_wrappers.sql`
+
+**الإجمالي: 114 ترحيلاً.**
