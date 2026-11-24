@@ -40,5 +40,5 @@ test("responsive and accessibility safeguards remain in the shared stylesheet", 
   assert.match(styles, /@media \(max-width:\s*640px\)/);
   assert.match(styles, /prefers-reduced-motion/);
   assert.match(styles, /:focus-visible/);
-  assert.match(styles, /overflow-x:\s*auto/);
+  assert.match(table, /overflow-auto/);
 });
