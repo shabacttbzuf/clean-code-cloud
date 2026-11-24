@@ -138,8 +138,9 @@ export function AdsPage() {
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await supabase.from("marketing_campaigns").update({ status }).eq("id", id).eq("tenant_id", tenantId!);
+      const { data, error } = await supabase.from("marketing_campaigns").update({ status }).eq("id", id).eq("tenant_id", tenantId!).select("id").maybeSingle();
       if (error) throw error;
+      if (!data?.id) throw new Error("لم يتم العثور على الحملة ضمن نطاق الشركة المصرح به.");
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["marketing-campaigns", tenantId] }),
     onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر تحديث حالة الحملة"),
@@ -147,8 +148,9 @@ export function AdsPage() {
 
   const deleteCampaign = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("marketing_campaigns").delete().eq("id", id).eq("tenant_id", tenantId!);
+      const { data, error } = await supabase.from("marketing_campaigns").delete().eq("id", id).eq("tenant_id", tenantId!).select("id").maybeSingle();
       if (error) throw error;
+      if (!data?.id) throw new Error("لم يتم العثور على الحملة أو لا تملك صلاحية حذفها.");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["marketing-campaigns", tenantId] });
