@@ -145,8 +145,14 @@ function PromotionsPage() {
         usage_limit: usageLimit,
       };
       const table = supabase.from("promotional_offers" as any) as any;
+      let updateQuery = table.update(payload).eq("id", editing ?? "").eq("tenant_id", tenantId);
+      if (editing && !isSuperOwner && !isTenantOwner) {
+        if (membership?.company_id) updateQuery = updateQuery.eq("company_id", membership.company_id);
+        else if (membership?.branch_id) updateQuery = updateQuery.eq("branch_id", membership.branch_id);
+        else throw new Error("لا يوجد نطاق شركة أو فرع مصرح به لتعديل هذا العرض.");
+      }
       const result = editing
-        ? await table.update(payload).eq("id", editing).eq("tenant_id", tenantId).select("id").maybeSingle()
+        ? await updateQuery.select("id").maybeSingle()
         : await table.insert({ ...payload, status: "draft" }).select("id").single();
       if (result.error) throw result.error;
       if (!result.data?.id) throw new Error("لم يتم العثور على العرض ضمن نطاق الشركة والفرع الحاليين؛ لم يُنفّذ الحفظ.");
@@ -161,8 +167,14 @@ function PromotionsPage() {
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: {id:string;status:string}) => {
-      const { data, error } = await (supabase.from("promotional_offers" as any) as any)
-        .update({ status }).eq("id", id).eq("tenant_id", tenantId!).select("id").maybeSingle();
+      let query = (supabase.from("promotional_offers" as any) as any)
+        .update({ status }).eq("id", id).eq("tenant_id", tenantId!);
+      if (!isSuperOwner && !isTenantOwner) {
+        if (membership?.company_id) query = query.eq("company_id", membership.company_id);
+        else if (membership?.branch_id) query = query.eq("branch_id", membership.branch_id);
+        else throw new Error("لا يوجد نطاق شركة أو فرع مصرح به لإدارة هذا العرض.");
+      }
+      const { data, error } = await query.select("id").maybeSingle();
       if (error) throw error;
       if (!data?.id) throw new Error("لم يتم العثور على العرض ضمن نطاقك المصرح به.");
     },
@@ -171,8 +183,14 @@ function PromotionsPage() {
   });
   const remove = useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await (supabase.from("promotional_offers" as any) as any)
-        .delete().eq("id", id).eq("tenant_id", tenantId!).select("id").maybeSingle();
+      let query = (supabase.from("promotional_offers" as any) as any)
+        .delete().eq("id", id).eq("tenant_id", tenantId!);
+      if (!isSuperOwner && !isTenantOwner) {
+        if (membership?.company_id) query = query.eq("company_id", membership.company_id);
+        else if (membership?.branch_id) query = query.eq("branch_id", membership.branch_id);
+        else throw new Error("لا يوجد نطاق شركة أو فرع مصرح به لحذف هذا العرض.");
+      }
+      const { data, error } = await query.select("id").maybeSingle();
       if (error) throw error;
       if (!data?.id) throw new Error("لم يتم العثور على العرض أو لا تملك صلاحية حذفه.");
     },
