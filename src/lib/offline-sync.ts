@@ -84,7 +84,7 @@ async function transaction<T>(
     return await new Promise<T>((resolve, reject) => {
       const tx = db.transaction(stores, mode);
       const request = run(tx);
-      let result: T;
+      let result!: T;
       request.onsuccess = () => { result = request.result; };
       request.onerror = () => reject(request.error);
       tx.oncomplete = () => resolve(result);
