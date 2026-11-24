@@ -13,6 +13,7 @@ import { z } from "zod";
 import { PageHeader } from "@/components/page-header";
 import { useTheme, DEFAULT_DESIGN, type DesignSettings } from "@/lib/theme";
 import { useSuperOwner } from "@/hooks/use-super-owner";
+import { getUserSettingsPreferences } from "@/lib/settings-preferences";
 import { isAllowedCustomShortcutRoute, normalizeCustomShortcuts } from "@/lib/navigation-shortcuts";
 import { Palette, RotateCcw, Plus, Trash2, MonitorCog, Image, Building2 } from "lucide-react";
 
@@ -99,7 +100,7 @@ function SettingsPage() {
     timeZone: "Asia/Aden",
     paperSize: "80mm",
     copies: "1",
-    autoPrint: false,
+    autoPrint: true,
     notifyLowStock: true,
     notifyDelayedOrders: true,
     notifyInvoices: true,
@@ -110,23 +111,13 @@ function SettingsPage() {
   useEffect(() => {
     setPreferencesLoaded(false);
     try {
-      const raw = window.localStorage.getItem(preferencesKey);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Partial<typeof preferences>;
-        setPreferences((current) => ({ ...current, ...parsed }));
-      } else {
-        setPreferences({
-          language: "ar", dateFormat: "YYYY-MM-DD", timeFormat: "24", timeZone: "Asia/Aden",
-          paperSize: "80mm", copies: "1", autoPrint: false, notifyLowStock: true,
-          notifyDelayedOrders: true, notifyInvoices: true, notifyAdministration: true, notifyHr: true,
-        });
-      }
+      setPreferences(getUserSettingsPreferences(userId));
     } catch {
       toast.error("تعذر قراءة تفضيلاتك المحفوظة؛ تم الإبقاء على القيم الافتراضية.");
     } finally {
       setPreferencesLoaded(true);
     }
-  }, [preferencesKey]);
+  }, [preferencesKey, userId]);
   function savePreferences() {
     try {
       window.localStorage.setItem(preferencesKey, JSON.stringify(preferences));
