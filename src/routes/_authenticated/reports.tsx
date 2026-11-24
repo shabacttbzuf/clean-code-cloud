@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, FileText, Download, Calendar, TrendingUp, Wallet, Package, Users, Printer } from "lucide-react";
 import { formatMoney, formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
-import { calculatePercentChange, calculateProfitMetrics, fetchAllRows } from "@/lib/report-analytics";
+import { buildCsv, calculatePercentChange, calculateProfitMetrics, fetchAllRows } from "@/lib/report-analytics";
 
 export const Route = createFileRoute("/_authenticated/reports")({
   component: ReportsPage,
@@ -376,17 +376,17 @@ function ReportsPage() {
   }
 
   const exportCsv = (rows: Array<Record<string, string | number>>, filename: string) => {
-    if (rows.length === 0) return;
-    const headers = Object.keys(rows[0]);
-    const escapeCell = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
-    const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => escapeCell(r[h])).join(","))].join("\n");
-    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+    const csv = buildCsv(rows);
+    if (!csv) return;
+    const blob = new Blob(["\\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   return (
