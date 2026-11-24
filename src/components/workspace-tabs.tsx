@@ -59,6 +59,24 @@ function iconFor(path: string) {
   return LayoutGrid;
 }
 
+function iconToneFor(path: string) {
+  if (path.startsWith("/pos") || path.startsWith("/sales")) return "text-blue-600 bg-blue-50";
+  if (path.startsWith("/tables")) return "text-rose-600 bg-rose-50";
+  if (path.startsWith("/kitchen")) return "text-orange-600 bg-orange-50";
+  if (path.startsWith("/inventory") || path.startsWith("/products") || path.startsWith("/categories")) return "text-violet-600 bg-violet-50";
+  if (path.startsWith("/purchases") || path.startsWith("/suppliers")) return "text-emerald-600 bg-emerald-50";
+  if (path.startsWith("/customers") || path.startsWith("/users")) return "text-fuchsia-600 bg-fuchsia-50";
+  if (path.startsWith("/cash") || path.startsWith("/expenses")) return "text-amber-600 bg-amber-50";
+  if (path.startsWith("/reports")) return "text-sky-600 bg-sky-50";
+  if (path.startsWith("/ads") || path.startsWith("/promotions")) return "text-pink-600 bg-pink-50";
+  if (path.startsWith("/hr/")) return "text-indigo-600 bg-indigo-50";
+  if (path.startsWith("/branches") || path.startsWith("/companies") || path.startsWith("/departments")) return "text-cyan-700 bg-cyan-50";
+  if (path.startsWith("/notifications")) return "text-red-600 bg-red-50";
+  if (path.startsWith("/settings") || path.startsWith("/team-permissions") || path.startsWith("/roles")) return "text-slate-600 bg-slate-100";
+  if (path.startsWith("/support")) return "text-teal-600 bg-teal-50";
+  return "text-[#174b91] bg-blue-50";
+}
+
 function titleFor(path: string) {
   const match = ROUTE_TITLES.find(([route]) => path === route || path.startsWith(route + "/"));
   if (path.startsWith("/sales/")) return "تفاصيل الفاتورة";
@@ -169,13 +187,13 @@ export function WorkspaceTabs() {
   }
 
   return (
-    <nav aria-label="تبويبات الصفحات المفتوحة" className="workspace-tabs flex min-h-12 min-w-0 items-center gap-2 overflow-x-auto border-b px-3 py-2" role="tablist">
+    <nav aria-label="تبويبات الصفحات المفتوحة" className="workspace-tabs flex min-h-[58px] min-w-0 items-center gap-2 overflow-x-auto border-b border-[#dce5f3] bg-[#f7faff]/95 px-3 py-2.5" role="tablist">
       {tabs.map((tab) => {
         const active = activePath === tab.path;
         return (
-          <div key={tab.path} className={`group inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-colors ${active ? "border-primary/30 bg-primary text-primary-foreground shadow-sm" : "border-border bg-card text-foreground hover:border-primary/30 hover:bg-primary/5"}`}>
+          <div key={tab.path} className={`group inline-flex min-h-11 shrink-0 items-center gap-2 rounded-2xl border px-3.5 py-2 text-sm font-semibold shadow-sm transition-all duration-200 ${active ? "border-[#174b91] bg-[#174b91] text-white shadow-md shadow-blue-900/15" : "border-[#dce5f3] bg-white text-[#344b70] hover:-translate-y-0.5 hover:border-[#9bb7df] hover:bg-[#f8fbff] hover:shadow-md"}`}>
             <button type="button" onClick={() => navigate({ to: tab.path as any })} className="inline-flex min-h-8 items-center gap-2 whitespace-nowrap" role="tab" aria-selected={active} aria-current={active ? "page" : undefined}>
-              {(() => { const TabIcon = iconFor(tab.path); return <TabIcon className="h-4 w-4 shrink-0" aria-hidden="true" />; })()}
+              {(() => { const TabIcon = iconFor(tab.path); return <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${active ? "bg-white/15 text-white" : iconToneFor(tab.path)}`}><TabIcon className="h-4 w-4" aria-hidden="true" /></span>; })()}
               <span>{tab.title}</span>
               {dirtyPaths.has(tab.path) && <span className="h-2 w-2 rounded-full bg-amber-400" title="تغييرات غير محفوظة" aria-label="تغييرات غير محفوظة" />}
             </button>
