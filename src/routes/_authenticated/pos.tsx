@@ -30,6 +30,7 @@ import { toast } from "sonner";
 import { formatMoney } from "@/lib/format";
 import { printInvoiceHTML, type InvoiceData } from "@/lib/invoice-pdf";
 import { PageHeader } from "@/components/page-header";
+import { AdPlacement } from "@/components/ads/ad-placement";
 import { getMyPosAccessStatus, verifyMyPosPasscode } from "@/lib/pos-access.functions";
 import { offlineCacheKey, withOfflineFallback, OFFLINE_INVENTORY_CACHE_MAX_AGE_MS } from "@/lib/offline-reference-cache";
 
@@ -996,6 +997,8 @@ function POSWorkspace() {
           </div>
         }
       />
+
+      <AdPlacement placement="pos_promo" variant="card" />
 
       {posPromos.isError && (
         <div className="shrink-0 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive" role="alert">
