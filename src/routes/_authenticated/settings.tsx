@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -75,7 +75,7 @@ const schema = z.object({
 });
 
 function SettingsPage() {
-  const { tenant, tenantId, role, membership } = useActiveTenant();
+  const { tenant, tenantId, role, membership, userId } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
   const { design, saveDesign, resetDesign } = useTheme();
   const qc = useQueryClient();
@@ -91,6 +91,51 @@ function SettingsPage() {
   const [newTabTitle, setNewTabTitle] = useState("");
   const [newTabUrl, setNewTabUrl] = useState("/dashboard");
   const [platformBrand, setPlatformBrand] = useState({ brand_name: "إدارة الوتيري بلس", phone: "", promotional_text: "", website_url: "", logo_url: "", enabled: true, placement: "footer" });
+  const preferencesKey = `ras-settings-preferences-v1:${userId ?? "guest"}`;
+  const [preferences, setPreferences] = useState({
+    language: "ar",
+    dateFormat: "YYYY-MM-DD",
+    timeFormat: "24",
+    timeZone: "Asia/Aden",
+    paperSize: "80mm",
+    copies: "1",
+    autoPrint: false,
+    notifyLowStock: true,
+    notifyDelayedOrders: true,
+    notifyInvoices: true,
+    notifyAdministration: true,
+    notifyHr: true,
+  });
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
+  useEffect(() => {
+    setPreferencesLoaded(false);
+    try {
+      const raw = window.localStorage.getItem(preferencesKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<typeof preferences>;
+        setPreferences((current) => ({ ...current, ...parsed }));
+      } else {
+        setPreferences({
+          language: "ar", dateFormat: "YYYY-MM-DD", timeFormat: "24", timeZone: "Asia/Aden",
+          paperSize: "80mm", copies: "1", autoPrint: false, notifyLowStock: true,
+          notifyDelayedOrders: true, notifyInvoices: true, notifyAdministration: true, notifyHr: true,
+        });
+      }
+    } catch {
+      toast.error("تعذر قراءة تفضيلاتك المحفوظة؛ تم الإبقاء على القيم الافتراضية.");
+    } finally {
+      setPreferencesLoaded(true);
+    }
+  }, [preferencesKey]);
+  function savePreferences() {
+    try {
+      window.localStorage.setItem(preferencesKey, JSON.stringify(preferences));
+      window.dispatchEvent(new Event("ras-settings-preferences-updated"));
+      toast.success("تم حفظ تفضيلات المستخدم على هذا الجهاز");
+    } catch {
+      toast.error("تعذر حفظ التفضيلات على هذا الجهاز");
+    }
+  }
   const platformBrandQuery = useQuery({
     queryKey: ["platform-branding"],
     queryFn: async () => {
@@ -479,6 +524,68 @@ function SettingsPage() {
           </CardContent>
         </Card>
       )}
+
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold">إعدادات الشركة والفروع</h2>
+          <p className="text-sm text-muted-foreground">إدارة بيانات الشركة من البطاقة أعلاه، وإدارة بيانات الفروع وصلاحيات نطاقها من صفحاتها المخصصة.</p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Card>
+            <CardHeader><CardTitle>إعدادات الفروع</CardTitle><CardDescription>إدارة أسماء الفروع وبياناتها وحالة كل فرع ونطاق المستخدمين.</CardDescription></CardHeader>
+            <CardContent><Button asChild variant="outline"><Link to="/branches">فتح إدارة الفروع</Link></Button></CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle>إعدادات المستخدمين</CardTitle><CardDescription>إدارة حسابك الشخصي وحسابات الفريق والأدوار والصلاحيات.</CardDescription></CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+              <Button asChild variant="outline"><Link to="/profile">ملفي الشخصي</Link></Button>
+              <Button asChild variant="outline"><Link to="/users-admin">إدارة المستخدمين</Link></Button>
+              <Button asChild variant="outline"><Link to="/team-permissions">الصلاحيات</Link></Button>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      <Card>
+        <CardHeader><CardTitle>إعدادات الطباعة والفواتير</CardTitle><CardDescription>تفضيلات العرض والطباعة فقط. لا تغير هذه الخيارات الضرائب أو تسلسل أرقام الفواتير أو آلية إصدارها.</CardDescription></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <label className="space-y-2 text-sm"><span className="block font-medium">حجم الورق الافتراضي</span><select className="h-10 w-full rounded-md border bg-background px-3" value={preferences.paperSize} onChange={(e) => setPreferences((p) => ({ ...p, paperSize: e.target.value }))}><option value="80mm">حراري 80 مم</option><option value="58mm">حراري 58 مم</option><option value="A4">A4</option></select></label>
+            <label className="space-y-2 text-sm"><span className="block font-medium">عدد النسخ</span><select className="h-10 w-full rounded-md border bg-background px-3" value={preferences.copies} onChange={(e) => setPreferences((p) => ({ ...p, copies: e.target.value }))}><option value="1">نسخة واحدة</option><option value="2">نسختان</option><option value="3">3 نسخ</option></select></label>
+            <label className="flex items-center gap-2 self-end rounded-lg border p-3 text-sm"><input type="checkbox" checked={preferences.autoPrint} onChange={(e) => setPreferences((p) => ({ ...p, autoPrint: e.target.checked }))} /> تفعيل الطباعة التلقائية عند دعم صفحة الطباعة لها</label>
+          </div>
+          <p className="text-xs text-muted-foreground">تُحفظ هذه التفضيلات للمستخدم على الجهاز الحالي. تطبيق حجم الورق وعدد النسخ يعتمد على توافق قالب الطباعة والطابعة.</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>الإشعارات والتنبيهات</CardTitle><CardDescription>تحديد أنواع التنبيهات التي ترغب في متابعتها. لا يؤدي إيقاف النوع هنا إلى حذف الإشعارات السابقة.</CardDescription></CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2">
+          {([
+            ["notifyLowStock", "انخفاض المخزون"],
+            ["notifyDelayedOrders", "الطلبات المتأخرة"],
+            ["notifyInvoices", "الفواتير"],
+            ["notifyAdministration", "التنبيهات الإدارية"],
+            ["notifyHr", "الموارد البشرية"],
+          ] as const).map(([key, label]) => <label key={key} className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm"><span>{label}</span><input type="checkbox" checked={preferences[key]} onChange={(e) => setPreferences((p) => ({ ...p, [key]: e.target.checked }))} /></label>)}
+          <p className="text-xs text-muted-foreground sm:col-span-2">هذه تفضيلات شخصية محفوظة محلياً؛ لا تغيّر قواعد إنشاء الإشعارات أو صلاحيات الوصول إليها.</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>اللغة والتاريخ والوقت</CardTitle><CardDescription>الواجهة الحالية باللغة العربية واتجاه RTL. اختيار لغة إضافية لن يُعرض قبل توفر ترجمة كاملة للنظام.</CardDescription></CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="space-y-2 text-sm"><span className="block font-medium">لغة الواجهة</span><select className="h-10 w-full rounded-md border bg-background px-3" value={preferences.language} onChange={(e) => setPreferences((p) => ({ ...p, language: e.target.value }))}><option value="ar">العربية</option></select></label>
+          <label className="space-y-2 text-sm"><span className="block font-medium">تنسيق التاريخ</span><select className="h-10 w-full rounded-md border bg-background px-3" value={preferences.dateFormat} onChange={(e) => setPreferences((p) => ({ ...p, dateFormat: e.target.value }))}><option value="YYYY-MM-DD">2026-11-25</option><option value="DD/MM/YYYY">25/11/2026</option><option value="DD-MM-YYYY">25-11-2026</option></select></label>
+          <label className="space-y-2 text-sm"><span className="block font-medium">تنسيق الوقت</span><select className="h-10 w-full rounded-md border bg-background px-3" value={preferences.timeFormat} onChange={(e) => setPreferences((p) => ({ ...p, timeFormat: e.target.value }))}><option value="24">24 ساعة</option><option value="12">12 ساعة</option></select></label>
+          <label className="space-y-2 text-sm"><span className="block font-medium">المنطقة الزمنية</span><select className="h-10 w-full rounded-md border bg-background px-3" value={preferences.timeZone} onChange={(e) => setPreferences((p) => ({ ...p, timeZone: e.target.value }))}><option value="Asia/Aden">عدن / اليمن</option><option value="Asia/Riyadh">الرياض</option><option value="UTC">UTC</option><option value="local">حسب الجهاز</option></select></label>
+        </CardContent>
+      </Card>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4">
+        <div><h2 className="font-semibold">التفضيلات الشخصية</h2><p className="text-xs text-muted-foreground">تُحفظ بشكل مستقل لكل مستخدم، ولا تستبدل إعدادات الشركة أو بياناتها.</p></div>
+        <Button type="button" onClick={savePreferences} disabled={!preferencesLoaded}>حفظ تفضيلاتي</Button>
+      </div>
     </div>
   );
 }
