@@ -279,7 +279,7 @@ export function AppSidebar() {
                           </a>
                         ) : (
                           <Link to={item.url} className="flex items-center gap-2">
-                            <item.icon className="h-4 w-4 shrink-0" />
+                            <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl ring-1 ${navigationIconTone(item.url)}`}><item.icon className="h-4 w-4" /></span>
                             <span>{item.title}</span>
                           </Link>
                         )}
