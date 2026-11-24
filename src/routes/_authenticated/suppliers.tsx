@@ -100,8 +100,10 @@ function SuppliersPage() {
         .eq("tenant_id", tenantId!).eq("status", "open");
       if (!isSuperOwner && membership?.branch_id) query = query.eq("branch_id", membership.branch_id);
       else if (!isSuperOwner && membership?.company_id) {
-        const allowedBranchIds = (branches.data ?? []).map((branch) => branch.id);
-        query = query.in("branch_id", allowedBranchIds);
+        const { data: allowedBranches, error: branchError } = await supabase.from("branches").select("id")
+          .eq("tenant_id", tenantId!).eq("company_id", membership.company_id);
+        if (branchError) throw branchError;
+        query = query.in("branch_id", (allowedBranches ?? []).map((branch) => branch.id));
       }
       if (paymentBranchId) query = query.eq("branch_id", paymentBranchId);
       const { data, error } = await query.order("opened_at", { ascending: false });
