@@ -54,6 +54,8 @@ test("workspace panel shows queued, failed, conflict and last-sync state", () =>
   assert.match(panel, /تعارض/);
   assert.match(panel, /آخر مزامنة/);
   assert.match(panel, /مزامنة الآن/);
+  assert.match(panel, /تفاصيل العمليات المحفوظة محلياً/);
+  assert.match(panel, /تعارض — يتطلب مراجعة/);
 });
 
 test("identical pending requests are deduplicated before a second operation id is created", () => {
@@ -70,6 +72,8 @@ test("cross-tab workers claim operations through an IndexedDB lease", () => {
 
 test("only the non-financial kitchen workflow is registered as offline-safe", () => {
   assert.match(handlers, /registerOfflineHandler\("kitchen_status"/);
+  assert.match(handlers, /idempotentServerSide: true/);
+  assert.match(source, /handler\.idempotentServerSide !== true/);
   assert.match(handlers, /set_kitchen_order_status_idempotent/);
   assert.match(handlers, /auth\.uid\(\)/);
   assert.match(kitchen, /enqueueOfflineOperation\(/);
