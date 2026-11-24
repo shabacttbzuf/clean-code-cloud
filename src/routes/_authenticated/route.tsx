@@ -186,23 +186,12 @@ function PermissionRouteGuard() {
 
 function TopBar() {
   const { theme, toggle } = useTheme();
-  const { tenantId, tenant, membership, memberships, switchTenant, permissions, permissionsLoading, permissionsError } = useActiveTenant();
+  const { tenantId, tenant, membership, memberships, switchTenant, permissions, permissionsLoading, permissionsError, branchOptions, activeBranchId, switchBranch, branchLoading } = useActiveTenant();
   const { user } = useAuthSession();
   const { isSuperOwner } = useSuperOwner();
   const [globalSearch, setGlobalSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
-  const branchQuery = useQuery({
-    queryKey: ["topbar-active-branch", tenantId, membership?.branch_id],
-    queryFn: async () => {
-      if (!tenantId || !membership?.branch_id) return null;
-      const { data, error } = await supabase.from("branches").select("id,name").eq("tenant_id", tenantId).eq("id", membership.branch_id).maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!tenantId && !!membership?.branch_id,
-    staleTime: 60_000,
-  });
   const tenantOptionsQuery = useQuery({
     queryKey: ["topbar-tenant-options", user?.id, memberships.map((item) => item.tenant_id).sort().join(":")],
     queryFn: async () => {
@@ -412,7 +401,10 @@ function TopBar() {
       return permitted && searchQuery.length > 0 && item.title.toLocaleLowerCase("ar").includes(searchQuery);
     }).slice(0, 10);
 
-  const activeBranchLabel = branchQuery.data?.name || (membership?.branch_id ? "الفرع المحدد" : membership?.company_id ? "فروع الشركة" : "جميع الفروع");
+  const canSelectAllBranches = isSuperOwner || permissions.has("branches.view");
+  const activeBranchLabel = activeBranchId
+    ? branchOptions.find((item) => item.id === activeBranchId)?.name || "الفرع المحدد"
+    : canSelectAllBranches ? "جميع الفروع" : branchOptions[0]?.name || (membership?.company_id ? "فروع الشركة" : "جميع الفروع");
 
   const initial = displayName.charAt(0) || "?";
 
@@ -450,7 +442,38 @@ function TopBar() {
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
-        <div className="hidden items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 text-xs font-bold text-[#174b91] shadow-sm lg:flex"><Building2 className="h-4 w-4" />{activeBranchLabel}</div>
+        {branchOptions.length > 0 && (branchOptions.length > 1 || canSelectAllBranches) ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline" className="hidden max-w-44 items-center gap-2 rounded-full border-border bg-background px-3 text-xs font-bold lg:inline-flex" aria-label="اختيار الفرع" disabled={branchLoading}>
+                <Building2 className="h-4 w-4 shrink-0" /><span className="truncate">{branchLoading ? "جارٍ تحميل الفروع..." : activeBranchLabel}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-60">
+              <DropdownMenuLabel>الفروع المتاحة لحسابك</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {canSelectAllBranches && (
+                <DropdownMenuItem onSelect={() => { switchBranch(null); toast.success("تم اختيار جميع الفروع"); }}>
+                  <Building2 className="ml-2 h-4 w-4" />جميع الفروع
+                  {!activeBranchId && <span className="mr-auto text-xs text-emerald-600">الحالي</span>}
+                </DropdownMenuItem>
+              )}
+              {branchOptions.map((item) => (
+                <DropdownMenuItem key={item.id} onSelect={() => {
+                  if (item.id !== activeBranchId) {
+                    switchBranch(item.id);
+                    toast.success(`تم التبديل إلى ${item.name}`);
+                  }
+                }}>
+                  <Building2 className="ml-2 h-4 w-4" /><span className="min-w-0 flex-1 truncate">{item.name}</span>
+                  {item.id === activeBranchId && <span className="text-xs text-emerald-600">الحالي</span>}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <div className="hidden items-center gap-2 rounded-full border border-border bg-background px-3 py-2 text-xs font-bold text-foreground lg:flex"><Building2 className="h-4 w-4" />{activeBranchLabel}</div>
+        )}
       </div>
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
         <div className="hidden items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 text-[11px] font-semibold text-[#425b7d] shadow-sm md:flex" aria-label={clock.toLocaleString("ar-YE")}><CalendarDays className="h-4 w-4 text-[#174b91]" /><span>{clock.toLocaleDateString("ar-YE",{weekday:"long",day:"numeric",month:"long"})}</span><span aria-hidden="true" className="text-slate-300">•</span><time dateTime={clock.toISOString()}>{clock.toLocaleTimeString("ar-YE",{hour:"2-digit",minute:"2-digit"})}</time></div>
