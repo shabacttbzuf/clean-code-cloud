@@ -5,7 +5,7 @@ import test from "node:test";
 const config = await readFile(new URL("../capacitor.config.ts", import.meta.url), "utf8");
 const fallback = await readFile(new URL("../android-web/index.html", import.meta.url), "utf8");
 const workflow = await readFile(
-  new URL("../.github/workflows/android-wrapper.yml", import.meta.url),
+  new URL("../.github/workflows/ci.yml", import.meta.url),
   "utf8",
 );
 
