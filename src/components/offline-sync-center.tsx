@@ -5,6 +5,7 @@ import "@/lib/offline-handlers";
 import {
   getLastOfflineSyncAt,
   listOfflineOperations,
+  retryFailedOfflineOperations,
   startOfflineSync,
   syncOfflineOperations,
   type OfflineOperation,
@@ -75,6 +76,7 @@ export function OfflineSyncCenter() {
     if (!scope || !online || busy) return;
     setBusy(true);
     try {
+      if (failed > 0) await retryFailedOfflineOperations(scope);
       await syncOfflineOperations(scope);
       await refresh();
     } finally {
@@ -102,7 +104,7 @@ export function OfflineSyncCenter() {
           </p>
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {conflicts > 0 && <span className="inline-flex items-center gap-1 text-amber-600"><AlertTriangle className="h-4 w-4" /> تعارض يحتاج مراجعة</span>}
         {storageError && <span role="alert" className="text-destructive">{storageError}</span>}
         <button
@@ -112,9 +114,28 @@ export function OfflineSyncCenter() {
           className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-primary px-3 py-2 font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-          مزامنة الآن
+          {failed > 0 ? "إعادة محاولة ومزامنة" : "مزامنة الآن"}
         </button>
       </div>
+      <details className="basis-full border-t pt-2">
+        <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+          تفاصيل العمليات المحفوظة محلياً ({operations.length})
+        </summary>
+        <ul className="mt-2 max-h-56 space-y-2 overflow-y-auto">
+          {operations.map((operation) => (
+            <li key={operation.id} className="rounded-lg bg-muted/50 p-2 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-semibold">{operation.type} · {operation.id.slice(0, 8)}</span>
+                <span>{operation.status === "synced" ? "مكتملة" : operation.status === "conflict" ? "تعارض — يتطلب مراجعة" : operation.status === "failed" ? "فشلت — قابلة لإعادة المحاولة" : operation.status === "processing" ? "قيد الإرسال" : "بانتظار المزامنة"}</span>
+              </div>
+              <p className="mt-1 text-muted-foreground">أُنشئت: {new Date(operation.createdAt).toLocaleString("ar")} · المحاولات: {operation.attempts}</p>
+              {operation.lastError && <p role="alert" className="mt-1 break-words text-destructive">{operation.lastError}</p>}
+            </li>
+          ))}
+          {operations.length === 0 && <li className="text-muted-foreground">لا توجد عمليات محفوظة.</li>}
+        </ul>
+        {conflicts > 0 && <p className="mt-2 text-xs text-amber-700">لم نعد إرسال العمليات المتعارضة تلقائياً منعاً لاستبدال بيانات أحدث. افتح السجل الأصلي وراجع حالته على الخادم قبل إنشاء تحديث جديد.</p>}
+      </details>
     </section>
   );
 }
