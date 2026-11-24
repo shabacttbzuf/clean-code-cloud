@@ -304,7 +304,7 @@ function BranchDialog({
       openTime !== (initial?.working_hours?.open ?? "") || closeTime !== (initial?.working_hours?.close ?? "")
     );
     window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/branches", dirty } }));
-    return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/branches", dirty: false } }));; };
+    return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/branches", dirty: false } })); };
   }, [open, initial, defaultCompanyId, name, companyId, address, phone, tax, currency, active, description, imageUrl, managerId, openTime, closeTime]);
 
   return (
