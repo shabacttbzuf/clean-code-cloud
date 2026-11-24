@@ -197,7 +197,7 @@ async function claimOperation(id: string): Promise<OfflineOperation | null> {
         const current = request.result as OfflineOperation | undefined;
         if (!current || current.status === "synced" || current.status === "conflict") return;
         const now = Date.now();
-        if (current.leaseExpiresAt && new Date(current.leaseExpiresAt).getTime() > now && current.leaseOwner !== workerId) return;
+        if (current.leaseExpiresAt && new Date(current.leaseExpiresAt).getTime() > now) return;
         if (current.nextRetryAt && new Date(current.nextRetryAt).getTime() > now) return;
         current.status = "processing";
         current.attempts += 1;
