@@ -168,6 +168,7 @@ export function WorkspaceTabs() {
     restoredScope.current = storageKey;
     skipPersistScope.current = storageKey;
     const restored = readTabs(storageKey).filter((tab) => {
+      if (tab.path === "/owner-center" || tab.path === "/admin") return isSuperOwner;
       const permission = requiredPermission(tab.path);
       return isSuperOwner || !permission || permissionQuery.data?.has(permission) === true;
     });
