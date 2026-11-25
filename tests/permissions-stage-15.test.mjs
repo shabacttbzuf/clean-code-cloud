@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const routeGuard = readFileSync(new URL("../src/routes/_authenticated/route.tsx", import.meta.url), "utf8");
+const activeTenantHook = readFileSync(new URL("../src/hooks/use-active-tenant.ts", import.meta.url), "utf8");
 const superOwnerHook = readFileSync(new URL("../src/hooks/use-super-owner.ts", import.meta.url), "utf8");
 const permissionActions = readFileSync(new URL("../src/lib/demo-data.functions.ts", import.meta.url), "utf8");
 const granularMigration = readFileSync(new URL("../supabase/migrations/20261125010000_granular_section_action_permissions.sql", import.meta.url), "utf8");
@@ -12,6 +13,14 @@ test("authenticated routes fail closed when no permission mapping exists", () =>
   assert.ok(routeGuard.includes("const isKnownRoute = !!requiredPermission || ownerOnly || isExplicitlyPublic || isFirstOwnerBootstrap"));
   assert.ok(routeGuard.includes("if (!isKnownRoute)"));
   assert.ok(routeGuard.includes("تم منع الوصول احتياطياً"));
+});
+
+test("cached permissions and Super Owner status fail closed after a refresh error", () => {
+  assert.ok(activeTenantHook.includes("!superOwnerQuery.isError && superOwnerQuery.data === true"));
+  assert.ok(activeTenantHook.includes("permissionsQuery.isError ? [] : permissionsQuery.data ?? []"));
+  assert.ok(superOwnerHook.includes("!query.isError && query.data?.isSuperOwner === true"));
+  assert.ok(superOwnerHook.includes("query.isError ? 0 : query.data?.totalCount ?? 0"));
+  assert.ok(routeGuard.includes("!permissionsQuery.isError && !!permissionsQuery.data?.has(requiredPermission)"));
 });
 
 test("advertising, promotions and settings routes require view permissions", () => {
