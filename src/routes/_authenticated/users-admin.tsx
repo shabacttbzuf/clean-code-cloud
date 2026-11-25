@@ -77,13 +77,27 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 function UsersAdminPage() {
-  const { tenantId, role, loading } = useActiveTenant();
+  const { tenantId, userId, membership, role, loading } = useActiveTenant();
+  const usersViewKey = `workspace-users-admin-v1:${tenantId ?? "none"}:${userId ?? "none"}:${membership?.company_id ?? "none"}`;
+  const [search, setSearch] = useState(() => {
+    try { return sessionStorage.getItem(usersViewKey + ":search") ?? ""; } catch { return ""; }
+  });
+  const [statusFilter, setStatusFilter] = useState<string>(() => {
+    try {
+      const value = sessionStorage.getItem(usersViewKey + ":status");
+      return ["all", "active", "inactive", "pending", "suspended"].includes(value ?? "") ? value! : "all";
+    } catch { return "all"; }
+  });
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(usersViewKey + ":search", search.slice(0, 100));
+      sessionStorage.setItem(usersViewKey + ":status", statusFilter);
+    } catch { /* Session storage is optional. */ }
+  }, [usersViewKey, search, statusFilter]);
   const { isSuperOwner } = useSuperOwner();
   const qc = useQueryClient();
 
   const canAccess = role === "owner" || role === "manager" || isSuperOwner;
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [editing, setEditing] = useState<EnterpriseUser | null>(null);
 
   const setStatusFn = useServerFn(setUserStatus);
