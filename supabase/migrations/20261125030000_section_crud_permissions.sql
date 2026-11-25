@@ -131,7 +131,7 @@ INSERT INTO public.role_permissions (tenant_id, role_kind, builtin_role, custom_
 SELECT rp.tenant_id, rp.role_kind, rp.builtin_role, rp.custom_role_id, pm.new_key
 FROM public.role_permissions rp
 JOIN permission_map pm ON pm.legacy_key=rp.permission_key
-WHERE (rp.role_kind='builtin' AND rp.tenant_id IS NULL)
+WHERE rp.role_kind='builtin'
    OR (rp.role_kind='custom' AND rp.tenant_id IS NOT NULL AND rp.custom_role_id IS NOT NULL)
 ON CONFLICT DO NOTHING;
 
