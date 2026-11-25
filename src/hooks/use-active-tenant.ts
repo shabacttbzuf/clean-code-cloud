@@ -90,7 +90,7 @@ export function useActiveTenant() {
 
   const role = membership?.role ?? null;
   const isAdmin = role === "owner" || role === "manager";
-  const isSuperOwner = superOwnerQuery.data === true;
+  const isSuperOwner = !superOwnerQuery.isError && superOwnerQuery.data === true;
 
   const permissionsQuery = useQuery({
     queryKey: ["effective-permissions", user?.id, activeId],
@@ -102,7 +102,10 @@ export function useActiveTenant() {
     enabled: !!user?.id && !!activeId,
     staleTime: 15_000,
   });
-  const permissions = useMemo(() => new Set(permissionsQuery.data ?? []), [permissionsQuery.data]);
+  const permissions = useMemo(
+    () => new Set(permissionsQuery.isError ? [] : permissionsQuery.data ?? []),
+    [permissionsQuery.data, permissionsQuery.isError],
+  );
   const hasPermission = (permission: string) => isSuperOwner || permissions.has(permission);
 
   return {
