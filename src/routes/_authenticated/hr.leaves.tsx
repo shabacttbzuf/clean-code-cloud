@@ -36,10 +36,11 @@ const statusColors: Record<string, string> = {
 };
 
 function LeavesPage() {
-  const { tenantId, isAdmin, userId, hasPermission } = useActiveTenant();
+  const { tenantId, isSuperOwner, userId, hasPermission } = useActiveTenant();
   const canApproveLeaves = hasPermission("hr.leaves.approve");
   const canRejectLeaves = hasPermission("hr.leaves.reject");
   const canPrintLeaves = hasPermission("hr.leaves.print");
+  const canDeleteLeaves = isSuperOwner || hasPermission("hr.leaves.delete") || hasPermission("hr.manage");
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("all");
@@ -98,6 +99,7 @@ function LeavesPage() {
 
   const remove = useMutation({
     mutationFn: async (id: string) => {
+      if (!canDeleteLeaves) throw new Error("لا تملك صلاحية حذف طلبات الإجازة.");
       if (!tenantId) throw new Error("المؤسسة غير محددة");
       const { data, error } = await supabase.from("leave_requests").delete()
         .eq("id", id).eq("tenant_id", tenantId).select("id").maybeSingle();
@@ -187,7 +189,7 @@ function LeavesPage() {
                     </Button>}
                   </div>
                 )}
-                {isAdmin && (
+                {canDeleteLeaves && (
                   <Button size="sm" variant="ghost" className="text-destructive" disabled={remove.isPending} onClick={() => {
                     if (window.confirm("هل تريد حذف طلب الإجازة؟ سيتم منع الحذف إذا احتُسب ضمن مسير رواتب معتمد أو مدفوع.")) remove.mutate(l.id);
                   }}>
