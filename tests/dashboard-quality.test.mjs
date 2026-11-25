@@ -149,7 +149,7 @@ test("workspace tabs preserve pinned pages and enforce a stable maximum", () => 
   assert.match(workspaceTabs, /restoreWorkspaceTabs/);
   assert.match(workspaceTabs, /closeOtherWorkspaceTabs/);
   assert.match(workspaceTabs, /useBlocker/);
-  assert.match(workspaceTabs, /function limitTabs/);
+  assert.match(workspaceTabs, /limitWorkspaceTabs/);
   assert.match(workspaceTabs, /function togglePinned/);
   assert.match(workspaceTabs, /PinOff/);
   assert.match(workspaceTabs, /tab\.pinned/);
