@@ -214,4 +214,117 @@ USING (
   AND private.can_access_branch((select auth.uid()), tenant_id, branch_id)
 );
 
+-- The action-only permissive policies below must never become a tenant-wide
+-- bypass. Add independent restrictive row-scope checks before using them.
+DROP POLICY IF EXISTS promotional_offers_granular_scope_select ON public.promotional_offers;
+CREATE POLICY promotional_offers_granular_scope_select
+ON public.promotional_offers AS RESTRICTIVE FOR SELECT TO authenticated
+USING (
+  public.is_super_owner((select auth.uid()))
+  OR (
+    private.is_tenant_member((select auth.uid()), tenant_id)
+    AND (
+      (company_id IS NULL AND branch_id IS NULL AND EXISTS (
+        SELECT 1 FROM public.user_roles ur
+        WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=promotional_offers.tenant_id
+          AND ur.company_id IS NULL
+      ))
+      OR (
+        company_id IS NOT NULL
+        AND (private.is_company_member(tenant_id, company_id)
+          OR (branch_id IS NOT NULL AND private.can_access_branch((select auth.uid()), tenant_id, branch_id)))
+        AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+      )
+    )
+  )
+);
+
+DROP POLICY IF EXISTS promotional_offers_granular_scope_insert ON public.promotional_offers;
+CREATE POLICY promotional_offers_granular_scope_insert
+ON public.promotional_offers AS RESTRICTIVE FOR INSERT TO authenticated
+WITH CHECK (
+  public.is_super_owner((select auth.uid()))
+  OR (
+    private.is_tenant_member((select auth.uid()), tenant_id)
+    AND (
+      (company_id IS NULL AND branch_id IS NULL AND EXISTS (
+        SELECT 1 FROM public.user_roles ur
+        WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=promotional_offers.tenant_id
+          AND ur.company_id IS NULL
+      ))
+      OR (
+        company_id IS NOT NULL
+        AND (private.is_company_member(tenant_id, company_id)
+          OR (branch_id IS NOT NULL AND private.can_access_branch((select auth.uid()), tenant_id, branch_id)))
+        AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+      )
+    )
+  )
+);
+
+DROP POLICY IF EXISTS promotional_offers_granular_scope_update ON public.promotional_offers;
+CREATE POLICY promotional_offers_granular_scope_update
+ON public.promotional_offers AS RESTRICTIVE FOR UPDATE TO authenticated
+USING (
+  public.is_super_owner((select auth.uid()))
+  OR (
+    private.is_tenant_member((select auth.uid()), tenant_id)
+    AND (
+      (company_id IS NULL AND branch_id IS NULL AND EXISTS (
+        SELECT 1 FROM public.user_roles ur
+        WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=promotional_offers.tenant_id
+          AND ur.company_id IS NULL
+      ))
+      OR (
+        company_id IS NOT NULL
+        AND (private.is_company_member(tenant_id, company_id)
+          OR (branch_id IS NOT NULL AND private.can_access_branch((select auth.uid()), tenant_id, branch_id)))
+        AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+      )
+    )
+  )
+)
+WITH CHECK (
+  public.is_super_owner((select auth.uid()))
+  OR (
+    private.is_tenant_member((select auth.uid()), tenant_id)
+    AND (
+      (company_id IS NULL AND branch_id IS NULL AND EXISTS (
+        SELECT 1 FROM public.user_roles ur
+        WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=promotional_offers.tenant_id
+          AND ur.company_id IS NULL
+      ))
+      OR (
+        company_id IS NOT NULL
+        AND (private.is_company_member(tenant_id, company_id)
+          OR (branch_id IS NOT NULL AND private.can_access_branch((select auth.uid()), tenant_id, branch_id)))
+        AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+      )
+    )
+  )
+);
+
+DROP POLICY IF EXISTS promotional_offers_granular_scope_delete ON public.promotional_offers;
+CREATE POLICY promotional_offers_granular_scope_delete
+ON public.promotional_offers AS RESTRICTIVE FOR DELETE TO authenticated
+USING (
+  public.is_super_owner((select auth.uid()))
+  OR (
+    private.is_tenant_member((select auth.uid()), tenant_id)
+    AND (
+      (company_id IS NULL AND branch_id IS NULL AND EXISTS (
+        SELECT 1 FROM public.user_roles ur
+        WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=promotional_offers.tenant_id
+          AND ur.company_id IS NULL
+      ))
+      OR (
+        company_id IS NOT NULL
+        AND (private.is_company_member(tenant_id, company_id)
+          OR (branch_id IS NOT NULL AND private.can_access_branch((select auth.uid()), tenant_id, branch_id)))
+        AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+      )
+    )
+  )
+);
+
 COMMIT;
