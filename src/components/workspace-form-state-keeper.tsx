@@ -177,11 +177,11 @@ export function WorkspaceFormStateKeeper() {
   const { tenantId, membership } = useActiveTenant();
   const { user } = useAuthSession();
   const sessionScope = createWorkspaceTabScope(user?.id, tenantId, membership?.company_id, membership?.branch_id);
-  const scope = sessionScope ? \`\${STORAGE_PREFIX}:\${sessionScope}\` : null;
+  const scope = sessionScope ? `${STORAGE_PREFIX}:${sessionScope}` : null;
 
   useLayoutEffect(() => {
     if (!scope || !sessionScope || !pathname) return;
-    const storageKey = \`\${scope}:\${routeKey}\`;
+    const storageKey = `${scope}:${routeKey}`;
     const root = document.querySelector("main") ?? document.body;
     let restored = false;
     let restoring = false;
