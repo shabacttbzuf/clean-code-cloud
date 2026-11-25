@@ -74,7 +74,11 @@ test("operational pages use action-level controls rather than administrator-role
     ["purchases.tsx",["purchases.create","purchases.returns.create"]],
     ["companies.tsx",["companies.create","companies.edit","companies.delete"]],
     ["companies.$companyId.tsx",["companies.print"]],
-    ["branches.$branchId.tsx",["branches.print"]]
+    ["branches.$branchId.tsx",["branches.print"]],
+    ["users.tsx",["users.create","users.change_role","users.change_branch","users.change_password","users.suspend","users.approve"]],
+    ["audit-logs.tsx",["audit.view"]],
+    ["cash-sessions.tsx",["cash.close"]],
+    ["reports.tsx",["reports.print"]]
   ];
   for (const [file, keys] of expected) {
     const text = source(file);
