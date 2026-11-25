@@ -78,7 +78,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 function UsersAdminPage() {
   const { tenantId, userId, membership, role, loading } = useActiveTenant();
-  const usersViewKey = `workspace-users-admin-v1:${tenantId ?? "none"}:${userId ?? "none"}:${membership?.company_id ?? "none"}`;
+  const usersViewKey = `workspace-users-admin-v1:${tenantId ?? "none"}:${userId ?? "none"}:${membership?.company_id ?? "none"}:${membership?.branch_id ?? "none"}`;
   const [search, setSearch] = useState(() => {
     try { return sessionStorage.getItem(usersViewKey + ":search") ?? ""; } catch { return ""; }
   });
