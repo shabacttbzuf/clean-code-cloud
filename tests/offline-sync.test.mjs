@@ -38,7 +38,10 @@ test("sync preserves dependency order, isolates active tenant/branch/company and
   assert.match(source, /row\.scope\.tenantId === scope\.tenantId/);
   assert.match(source, /row\.scope\.branchId === scope\.branchId/);
   assert.match(source, /row\.scope\.companyId === scope\.companyId/);
-  assert.match(source, /operation\.status = \/conflict\|version\|stale\|تعارض\/i\.test\(message\)/);
+  assert.match(source, /const isConflict = \/conflict\|version\|stale\|تعارض\/i\.test\(message\)/);
+  assert.match(source, /MAX_AUTOMATIC_ATTEMPTS = 12/);
+  assert.match(source, /isPermanentFailure\(error\)/);
+  assert.match(source, /operation\.status = isConflict \? "conflict" : isPermanent \? "blocked" : "failed"/);
   assert.match(source, /operation\.status = "failed"/);
   assert.match(source, /nextRetryAt/);
 });
@@ -46,6 +49,8 @@ test("sync preserves dependency order, isolates active tenant/branch/company and
 test("queued operations cannot replay under a different signed-in user", () => {
   assert.match(handlers, /supabase\.auth\.getUser\(\)/);
   assert.match(handlers, /authData\.user\.id !== operation\.scope\.userId/);
+  assert.match(handlers, /_expected_actor_id: operation\.scope\.userId/);
+  assert.match(migration, /_expected_actor_id IS DISTINCT FROM v_actor/);
   assert.match(handlers, /تغير المستخدم المسجل/);
 });
 
@@ -59,6 +64,7 @@ test("automatic sync listens for restored connectivity and periodically probes r
 test("workspace panel shows queued, failed, conflict and last-sync state", () => {
   assert.match(panel, /معلّق/);
   assert.match(panel, /فاشل/);
+  assert.match(panel, /متوقف نهائياً/);
   assert.match(panel, /تعارض/);
   assert.match(panel, /آخر مزامنة/);
   assert.match(panel, /مزامنة الآن/);
@@ -101,4 +107,24 @@ test("kitchen replay RPC persists idempotency and rechecks permission and branch
   assert.match(migration, /SET result=to_jsonb\(v_updated\)/);
   assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.set_kitchen_order_status_idempotent/);
   assert.match(migration, /REVOKE ALL ON TABLE private\.kitchen_order_sync_requests FROM PUBLIC, anon, authenticated/);
+});
+
+test("scope matching is exact, including null company and selected branch", () => {
+  assert.match(source, /row\.scope\.branchId === scope\.branchId/);
+  assert.match(source, /row\.scope\.companyId === scope\.companyId/);
+  assert.match(source, /!sameScope\(current\.scope, scope\)/);
+  assert.match(source, /يجب تحديد الفرع صراحةً/);
+});
+
+test("idempotency-key collisions and IndexedDB quota failures are handled explicitly", () => {
+  assert.match(source, /QuotaExceededError/);
+  assert.match(source, /sameScope/);
+  assert.match(source, /idempotencyKey/);
+});
+
+test("permanent failures stop automatic retry and remain manually re-evaluable", () => {
+  assert.match(source, /MAX_AUTOMATIC_ATTEMPTS = 12/);
+  assert.match(source, /status = isConflict \? "conflict" : isPermanent \? "blocked" : "failed"/);
+  assert.match(source, /operation\.status !== "blocked"/);
+  assert.match(panel, /blocked/);
 });
