@@ -21,8 +21,13 @@ test("CI runs on the active feature branch and supports a manual verification ru
 
 
 test("dashboard metrics are permission-gated and do not query or display financial summaries without reports.view", () => {
-  assert.match(dashboard, /enabled: !!tenantId && hasPermission\("reports\.view"\)/);
+  assert.match(dashboard, /enabled: !!tenantId && hasPermission\("reports\.view"\) && hasPermission\("sales\.view"\) && hasPermission\("expenses\.view"\)/);
   assert.match(dashboard, /!hasPermission\("reports\.view"\)[\s\S]{0,240}لا تملك الصلاحية اللازمة لعرض المؤشرات المالية/);
+  assert.match(dashboard, /hasPermission\("inventory\.view"\) \? lowStockQuery/);
+  assert.match(dashboard, /hasPermission\("cash\.view"\) \? sessionsQuery/);
+  assert.match(dashboard, /hasPermission\("customers\.view"\)[\s\S]{0,120}from\("customers"\)/);
+  assert.match(dashboard, /stats\.data\.openSessions !== null/);
+  assert.match(dashboard, /stats\.data\.lowStockCount !== null/);
 });
 
 test("dashboard query caches are isolated by active user, company, and branch", () => {
