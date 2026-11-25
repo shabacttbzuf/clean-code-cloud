@@ -154,7 +154,7 @@ function AttendancePage() {
   return (
     <div className="space-y-6">
       <PageHeader title="سجل الحضور" subtitle={formatDate(date)}
-        action={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={printAttendance}><Printer className="ml-2 h-4 w-4" />طباعة الكشف</Button>{(canCreateAttendance || canEditAttendance) && (
+        action={<div className="flex flex-wrap gap-2">{canPrintAttendance && <Button variant="outline" onClick={printAttendance}><Printer className="ml-2 h-4 w-4" />طباعة الكشف</Button>}{(canCreateAttendance || canEditAttendance) && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild><Button><Plus className="ml-2 h-4 w-4" />تسجيل يدوي</Button></DialogTrigger>
             <AttendanceDialog defaultDate={date} employees={employees.data ?? []} onSubmit={(v) => create.mutate(v)} pending={create.isPending} />
@@ -167,7 +167,7 @@ function AttendancePage() {
         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-44" />
       </div>
 
-      {canManageAttendance && (
+      {(canCreateAttendance || canEditAttendance) && (
         <Card><CardContent className="space-y-3 p-4">
           <div><h3 className="font-semibold">التسجيل السريع</h3><p className="text-xs text-muted-foreground">تسجيل دخول أو انصراف بنقرة واحدة، مع منع التكرار والانصراف قبل تسجيل الدخول.</p></div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
