@@ -110,7 +110,7 @@ const ROUTE_PERMISSION_RULES: Array<{ prefix: string; permission: string }> = [
   { prefix: "/suppliers", permission: "suppliers.view" },
   { prefix: "/purchases", permission: "purchases.view" },
   { prefix: "/expenses", permission: "expenses.view" },
-  { prefix: "/expense-categories", permission: "expense_categories.view" },
+  { prefix: "/expense-categories", permission: "expense_categories.manage" },
   { prefix: "/hr/employees", permission: "hr.employees.view" },
   { prefix: "/hr/attendance", permission: "hr.attendance.view" },
   { prefix: "/hr/leaves", permission: "hr.leaves.view" },
