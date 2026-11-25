@@ -35,15 +35,15 @@ Only explicitly approved, non-financial operations may be registered with `regis
 
 ## Current UI and behavior
 
-- The authenticated workspace displays network state, queued / failed / conflict / synced counts and the last successful sync timestamp for the active user and workspace scope.
+- The authenticated workspace displays network state, queued / failed / blocked / conflict / synced counts and the last successful sync timestamp for the active user and workspace scope.
 - The queue stores UUID, idempotency key, payload, creation/update times, user/tenant/company/branch scope, dependencies, attempt count, status, retry time, error and successful sync time.
 - Automatic replay starts on browser `online` events and a periodic online check. Failed operations use bounded exponential backoff. Independent operations may continue after another operation fails.
-- Conflicts remain visible with their error details and are not overwritten or retried automatically. Failed operations can be explicitly retried. Identical pending payloads are deduplicated locally. IndexedDB leases reduce duplicate sends across tabs; the server idempotency ledger remains the final duplicate-delivery guarantee.
+- Conflicts remain visible with their error details and are not overwritten or retried automatically. Transient failures use bounded exponential backoff and stop after 12 automatic attempts; authorization / validation / missing-record failures become blocked, and users can explicitly re-evaluate blocked or failed work after fixing the cause. Conflicts are never automatically retried. Identical pending payloads are deduplicated atomically inside a single IndexedDB readwrite transaction, and a reused idempotency key with a different payload is rejected. IndexedDB leases reduce duplicate sends across tabs; the server idempotency ledger remains the final duplicate-delivery guarantee.
 - Successful kitchen replays update the local operation state and invalidate the kitchen queue query.
 - No hosted Supabase migration or production database write is part of this change.
 
 ## Required acceptance tests before production
 
-The migration adds pgTAP checks for the private ledger, grants, fixed privileged boundary, replay authorization, and atomic result persistence. Browser + local Supabase end-to-end testing is still required for repeated offline/online transitions, reload with pending work, duplicate delivery, server commit followed by lost response, stale-version conflict, expired session / revoked permission, user switching, tenant/company/branch switching, dependency failure, partial batch success, IndexedDB transaction abort, and storage quota failure.
+The migration adds pgTAP checks for the private ledger, grants, fixed privileged boundary, replay authorization, and atomic result persistence. Browser + local Supabase end-to-end testing is still required for repeated offline/online transitions, reload with pending work, duplicate delivery, server commit followed by lost response, stale-version conflict, expired session / revoked permission, user switching, tenant/company/branch switching, null-company and exact branch isolation, idempotency-key reuse with altered payload, dependency failure, partial batch success, IndexedDB transaction abort, and storage quota failure.
 
 Do not merge or enable business handlers until the tests above and the CI typecheck, unit tests, production build, and clean Supabase migration reset pass.
