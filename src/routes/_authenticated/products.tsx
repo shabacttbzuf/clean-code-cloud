@@ -48,12 +48,15 @@ const schema = z.object({
 });
 
 function ProductsPage() {
-  const { tenantId, isAdmin, tenant, membership } = useActiveTenant();
+  const { tenantId, tenant, membership, isSuperOwner, hasPermission } = useActiveTenant();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState<string>("all");
+  const canCreateProduct = isSuperOwner || hasPermission("products.create");
+  const canEditProduct = isSuperOwner || hasPermission("products.edit");
+  const canDeleteProduct = isSuperOwner || hasPermission("products.delete");
 
   const cats = useQuery({
     queryKey: ["categories-min", tenantId],
@@ -89,6 +92,7 @@ function ProductsPage() {
 
   const upsert = useMutation({
     mutationFn: async (v: z.infer<typeof schema>) => {
+      if (editing ? !canEditProduct : !canCreateProduct) throw new Error("لا تملك صلاحية إنشاء المنتجات أو تعديلها.");
       const payload = { ...v, sku: v.sku || null, tenant_id: tenantId! };
       if (editing) {
         const { error } = await supabase.from("products").update(payload).eq("id", editing.id);
@@ -108,6 +112,7 @@ function ProductsPage() {
 
   const del = useMutation({
     mutationFn: async (id: string) => {
+      if (!canDeleteProduct) throw new Error("لا تملك صلاحية حذف المنتجات.");
       const { error } = await supabase.from("products").delete().eq("id", id);
       if (error) throw error;
     },
@@ -124,7 +129,7 @@ function ProductsPage() {
         title="المنتجات"
         subtitle="أدر منتجات مطعمك مع الأسعار والصور والحد الأدنى للمخزون."
         action={
-          isAdmin && (
+          canCreateProduct && (
             <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditing(null); }}>
               <DialogTrigger asChild>
                 <Button><Plus className="ml-2 h-4 w-4" />منتج جديد</Button>
@@ -192,16 +197,16 @@ function ProductsPage() {
                   </span>
                   <span className="text-xs text-muted-foreground">/{p.unit}</span>
                 </div>
-                {isAdmin && (
+                {(canEditProduct || canDeleteProduct) && (
                   <div className="mt-3 flex gap-1 border-t pt-3">
-                    <Button size="sm" variant="ghost" className="flex-1" onClick={() => { setEditing(p); setOpen(true); }}>
+                    {canEditProduct && <Button size="sm" variant="ghost" className="flex-1" onClick={() => { setEditing(p); setOpen(true); }}>
                       <Edit className="ml-2 h-3 w-3" />تعديل
-                    </Button>
-                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => {
+                    </Button>}
+                    {canDeleteProduct && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => {
                       if (confirm(`حذف "${p.name}"؟`)) del.mutate(p.id);
                     }}>
                       <Trash2 className="h-3 w-3" />
-                    </Button>
+                    </Button>}
                   </div>
                 )}
               </CardContent>
