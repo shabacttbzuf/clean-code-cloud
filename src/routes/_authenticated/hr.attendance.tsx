@@ -62,7 +62,8 @@ const statusColors: Record<string, string> = {
 
 function AttendancePage() {
   const { tenantId, tenant, hasPermission } = useActiveTenant();
-  const canManageAttendance = hasPermission("hr.attendance.manage");
+  const canCreateAttendance = hasPermission("hr.attendance.create") || hasPermission("hr.attendance.manage");
+  const canEditAttendance = hasPermission("hr.attendance.edit") || hasPermission("hr.attendance.manage");
   const canPrintAttendance = hasPermission("hr.attendance.print");
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -92,8 +93,8 @@ function AttendancePage() {
 
   const quickPunch = useMutation({
     mutationFn: async ({ employeeId, kind }: { employeeId: string; kind: "in" | "out" }) => {
-      if (!canManageAttendance) throw new Error("لا تملك صلاحية تسجيل الحضور والانصراف.");
       const existing = (rows.data ?? []).find((r) => r.employee_id === employeeId);
+      if (existing ? !canEditAttendance : !canCreateAttendance) throw new Error("لا تملك صلاحية تسجيل أو تعديل الحضور والانصراف.");
       const now = new Date().toISOString();
       if (kind === "in" && existing?.check_in) throw new Error("تم تسجيل دخول هذا الموظف مسبقاً اليوم");
       if (kind === "out" && !existing?.check_in) throw new Error("يجب تسجيل الدخول أولاً");
@@ -127,7 +128,10 @@ function AttendancePage() {
 
   const create = useMutation({
     mutationFn: async (v: { employee_id: string; date: string; status: string; check_in: string; check_out: string; notes: string }) => {
-      if (!canManageAttendance) throw new Error("لا تملك صلاحية إضافة أو تعديل سجلات الحضور.");
+      const { data: existingRecord, error: existingRecordError } = await supabase.from("attendance")
+        .select("id").eq("tenant_id", tenantId!).eq("employee_id", v.employee_id).eq("date", v.date).maybeSingle();
+      if (existingRecordError) throw existingRecordError;
+      if (existingRecord ? !canEditAttendance : !canCreateAttendance) throw new Error("لا تملك صلاحية إضافة أو تعديل سجلات الحضور.");
       let hours = 0;
       if (v.check_in && v.check_out) {
         const [h1, m1] = v.check_in.split(":").map(Number);
@@ -150,7 +154,7 @@ function AttendancePage() {
   return (
     <div className="space-y-6">
       <PageHeader title="سجل الحضور" subtitle={formatDate(date)}
-        action={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={printAttendance}><Printer className="ml-2 h-4 w-4" />طباعة الكشف</Button>{canManageAttendance && (
+        action={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={printAttendance}><Printer className="ml-2 h-4 w-4" />طباعة الكشف</Button>{(canCreateAttendance || canEditAttendance) && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild><Button><Plus className="ml-2 h-4 w-4" />تسجيل يدوي</Button></DialogTrigger>
             <AttendanceDialog defaultDate={date} employees={employees.data ?? []} onSubmit={(v) => create.mutate(v)} pending={create.isPending} />
