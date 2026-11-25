@@ -16098,7 +16098,6 @@ GRANT EXECUTE ON FUNCTION public.create_purchase_return(uuid, uuid, text, jsonb)
 COMMIT;
 
 -- SOURCE MIGRATION: 20261125080000_permission_override_write_gates.sql
--- =====================================================================
 -- Direct Data API writes to permission overrides must enforce the same
 -- authority checks as the validated setUserPermission server action.
 -- These restrictive policies are ANDed with existing role/tenant policies.
@@ -16141,7 +16140,7 @@ AS $function$
             AND actor_role.branch_id IS NULL
         )
         OR (
-          NOT public.user_has_role_in_tenant(
+          NOT private.user_has_role_in_tenant(
             _target_user_id, _tenant_id, ARRAY['owner','manager']
           )
           -- Every target membership must match one complete actor scope tuple.
@@ -16286,10 +16285,7 @@ USING (
 );
 
 COMMIT;
--- END MIGRATION: 20261125080000_permission_override_write_gates.sql
 
-
--- =====================================================================
 -- SOURCE MIGRATION: 20261125090000_sensitive_action_audit_triggers.sql
 -- =====================================================================
 -- Extend the existing audit trail to permission-default, refund/return,
