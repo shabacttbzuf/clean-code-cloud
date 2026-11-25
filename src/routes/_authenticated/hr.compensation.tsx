@@ -72,7 +72,7 @@ function CompensationPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: window.location.pathname } })); qc.invalidateQueries({ queryKey: [table, tenantId] }); toast.success("تم"); setOpen(false); },
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/hr/compensation" } })); qc.invalidateQueries({ queryKey: [table, tenantId] }); toast.success("تم"); setOpen(false); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشل"),
   });
 
