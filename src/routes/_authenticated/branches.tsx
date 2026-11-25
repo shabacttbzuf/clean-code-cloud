@@ -125,7 +125,7 @@ function BranchesPage() {
       }
     },
     onSuccess: () => {
-      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: window.location.pathname } }));
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/branches" } }));
       qc.invalidateQueries({ queryKey: ["branches", tenantId] });
       toast.success(editing ? "تم التعديل" : "تم إنشاء الفرع");
       setOpen(false);
