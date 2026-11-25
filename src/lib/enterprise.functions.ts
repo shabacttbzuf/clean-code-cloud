@@ -98,7 +98,7 @@ async function assertTargetUserManageable(
   const actorBranchIds = Array.from(new Set(
     actorRows.map((row: any) => row.branch_id).filter(Boolean),
   )) as string[];
-  if (actorCompanyIds.length !== 1) {
+  if (actorCompanyIds.length > 1 || (actorCompanyIds.length === 0 && actorBranchIds.length === 0)) {
     throw new Error("لا يمكن تحديد نطاق الشركة المخول لحسابك؛ تم رفض العملية احتياطياً.");
   }
   let actorCompanyId = actorCompanyIds[0] ?? null;
