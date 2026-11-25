@@ -47,12 +47,16 @@ ALTER TABLE public.inventory
   DROP CONSTRAINT IF EXISTS inventory_product_id_fkey;
 ALTER TABLE public.inventory
   ADD CONSTRAINT inventory_product_id_fkey
-  FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE RESTRICT;
+  FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE RESTRICT NOT VALID;
+ALTER TABLE public.inventory
+  VALIDATE CONSTRAINT inventory_product_id_fkey;
 
 ALTER TABLE public.inventory_transactions
   DROP CONSTRAINT IF EXISTS inventory_transactions_product_id_fkey;
 ALTER TABLE public.inventory_transactions
   ADD CONSTRAINT inventory_transactions_product_id_fkey
-  FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE RESTRICT;
+  FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE RESTRICT NOT VALID;
+ALTER TABLE public.inventory_transactions
+  VALIDATE CONSTRAINT inventory_transactions_product_id_fkey;
 
 COMMIT;
