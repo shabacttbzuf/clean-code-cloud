@@ -328,7 +328,7 @@ function SettingsPage() {
               <Label>اسم النشاط التجاري</Label>
               <Input value={name} onChange={(e) => setName(e.target.value)} required disabled={!canEdit} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>العملة</Label>
                 <Input value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} maxLength={5} dir="ltr" required disabled={!canEdit} />
