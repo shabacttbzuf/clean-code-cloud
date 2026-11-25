@@ -16803,6 +16803,15 @@ COMMIT;
 BEGIN;
 
 DROP POLICY IF EXISTS "Tenant admins manage products" ON public.products;
+DROP POLICY IF EXISTS "Tenant members view products" ON public.products;
+
+CREATE POLICY products_select_permission
+ON public.products AS PERMISSIVE
+FOR SELECT TO authenticated
+USING (
+  public.is_super_owner((SELECT auth.uid()))
+  OR public.is_tenant_member((SELECT auth.uid()), tenant_id)
+);
 
 CREATE POLICY products_create_permission
 ON public.products AS PERMISSIVE
