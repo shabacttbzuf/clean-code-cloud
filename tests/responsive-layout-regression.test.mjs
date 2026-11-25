@@ -6,6 +6,11 @@ const css = read("../src/styles.css");
 const route = read("../src/routes/_authenticated/route.tsx");
 const launcher = read("../src/components/app-launcher.tsx");
 const chart = read("../src/components/ui/chart.tsx");
+const root = read("../src/routes/__root.tsx");
+const pos = read("../src/routes/_authenticated/pos.tsx");
+const reports = read("../src/routes/_authenticated/reports.tsx");
+const settings = read("../src/routes/_authenticated/settings.tsx");
+const users = read("../src/routes/_authenticated/users.tsx");
 test("mobile header uses stable semantic hooks for company, brand and help controls", () => {
   assert.match(route, /topbar-help-link/);
   assert.match(css, /\.topbar-help-link\s*\{[^}]*display:\s*inline-flex\s*!important/s);
@@ -25,4 +30,16 @@ test("charts and tables can shrink inside narrow responsive containers", () => {
 });
 test("reduced-motion preference is respected", () => {
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
+});
+
+test("safe-area support is activated at the viewport and retained in page layout", () => {
+  assert.match(root, /viewport-fit=cover/);
+  assert.match(css, /safe-area-inset-top/);
+  assert.match(css, /safe-area-inset-bottom/);
+});
+test("critical sales, reports and administration forms have narrow-screen layouts", () => {
+  assert.match(pos, /pos-mobile-invoice/);
+  assert.match(reports, /responsive-report-tabs/);
+  assert.match(settings, /grid-cols-1 gap-3 sm:grid-cols-2/);
+  assert.match(users, /grid-cols-1 gap-3 sm:grid-cols-2/);
 });
