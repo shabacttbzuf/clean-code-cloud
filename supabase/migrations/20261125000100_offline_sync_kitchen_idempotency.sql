@@ -18,6 +18,8 @@ REVOKE ALL ON TABLE private.kitchen_order_sync_requests FROM PUBLIC, anon, authe
 
 CREATE OR REPLACE FUNCTION private.set_kitchen_order_status_idempotent(
   _expected_actor_id uuid,
+  _expected_tenant_id uuid,
+  _expected_branch_id uuid,
   _order_id uuid,
   _new_status text,
   _notes text,
@@ -42,7 +44,8 @@ BEGIN
   IF _expected_actor_id IS DISTINCT FROM v_actor THEN
     RAISE EXCEPTION 'Queued actor no longer matches the authenticated session' USING ERRCODE='42501';
   END IF;
-  IF _order_id IS NULL OR _idempotency_key IS NULL
+  IF _expected_tenant_id IS NULL OR _expected_branch_id IS NULL
+     OR _order_id IS NULL OR _idempotency_key IS NULL
      OR _new_status NOT IN ('preparing','ready','delivered','cancelled') THEN
     RAISE EXCEPTION 'Invalid kitchen sync request' USING ERRCODE='22023';
   END IF;
@@ -54,6 +57,11 @@ BEGIN
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Kitchen order not found' USING ERRCODE='P0002';
+  END IF;
+
+  IF v_order.tenant_id IS DISTINCT FROM _expected_tenant_id
+     OR v_order.branch_id IS DISTINCT FROM _expected_branch_id THEN
+    RAISE EXCEPTION 'Kitchen order scope no longer matches the queued tenant and branch' USING ERRCODE='42501';
   END IF;
 
   -- Authorization is re-evaluated at replay time; queued scope is never trusted.
@@ -124,7 +132,7 @@ BEGIN
 END;
 $function$;
 
-REVOKE ALL ON FUNCTION private.set_kitchen_order_status_idempotent(uuid,uuid,text,text,uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION private.set_kitchen_order_status_idempotent(uuid,uuid,text,text,uuid) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.set_kitchen_order_status_idempotent(
@@ -140,9 +148,9 @@ SECURITY INVOKER
 SET search_path TO 'pg_catalog', 'public', 'private'
 AS $function$
   SELECT private.set_kitchen_order_status_idempotent(
-    _expected_actor_id,_order_id,_new_status,_notes,_idempotency_key
+    _expected_actor_id,_expected_tenant_id,_expected_branch_id,_order_id,_new_status,_notes,_idempotency_key
   );
 $function$;
 
-REVOKE ALL ON FUNCTION public.set_kitchen_order_status_idempotent(uuid,uuid,text,text,uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.set_kitchen_order_status_idempotent(uuid,uuid,text,text,uuid) TO authenticated;
