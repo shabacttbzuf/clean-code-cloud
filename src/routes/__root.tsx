@@ -131,8 +131,14 @@ function RootComponent() {
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
+      if (event === "SIGNED_OUT") {
+        // Drop in-memory server data (including notifications) before another user signs in
+        // on a shared device. No notification content is persisted to browser storage.
+        queryClient.clear();
+      } else {
+        queryClient.invalidateQueries();
+      }
       router.invalidate();
-      if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
     });
     return () => sub.subscription.unsubscribe();
   }, [queryClient, router]);
