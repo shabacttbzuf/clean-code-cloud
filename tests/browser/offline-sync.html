@@ -39,10 +39,10 @@
       idempotentServerSide:true,
       send:async op => {
         const prior = ledger.get(op.idempotencyKey);
-        if (!prior) ledger.set(op.idempotencyKey, {payload:structuredClone(op.payload),count:1});
+        if (!prior) ledger.set(op.idempotencyKey, {payload:structuredClone(op.payload),applied:1,duplicateDeliveries:0});
         else {
           if (JSON.stringify(prior.payload)!==JSON.stringify(op.payload)) throw new Error("idempotency key payload mismatch");
-          prior.count++;
+          prior.duplicateDeliveries++;
         }
         sent.push(op.idempotencyKey);
         if (op.payload.simulateLostResponse && failAfterCommitOnce) {
@@ -103,7 +103,7 @@
           await syncOfflineOperations(scope);
           row=(await listOfflineOperations(scope)).find(x=>x.id===op.id);
           assert(row.status==="synced","لم تنجح إعادة المحاولة");
-          assert(ledger.get(op.idempotencyKey)?.count===2,"لم يُستخدم المفتاح نفسه في إعادة المحاولة");
+          assert(ledger.get(op.idempotencyKey)?.applied===1 && ledger.get(op.idempotencyKey)?.duplicateDeliveries===1,"تكرر الأثر الوهمي أو لم يُعد الخادم نتيجة المفتاح السابق");
         });
         await test("تكرار انقطاع وعودة الشبكة", async()=>{
           const op=await enqueueOfflineOperation(type,{case:"repeat-toggle"},scope);
@@ -114,8 +114,7 @@
           assert(row.status==="synced","لم تكتمل العملية بعد تبدلات الشبكة");
         });
       } finally {
-        if(onlineDescriptor) Object.defineProperty(Navigator.prototype,"onLine",onlineDescriptor);
-        else delete navigator.onLine;
+        delete navigator.onLine;
       }
       write("انتهى التشغيل. راجع كل نتيجة أعلاه.");
     });
