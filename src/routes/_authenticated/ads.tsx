@@ -29,7 +29,7 @@ type Campaign = {
 };
 
 export function AdsPage() {
-  const { tenantId, userId, role, membership } = useActiveTenant();
+  const { tenantId, userId, role, membership, hasPermission } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
   const queryClient = useQueryClient();
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -56,20 +56,13 @@ export function AdsPage() {
   }, [formTouched]);
 
   const isTenantOwner = role === "owner" && !membership?.company_id;
-  const permissions = useQuery({
-    queryKey: ["marketing-management-permissions", tenantId, userId],
-    queryFn: async () => {
-      if (!tenantId) return [] as string[];
-      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId });
-      if (error) throw error;
-      return (data ?? []) as string[];
-    },
-    enabled: !!tenantId && !isSuperOwner && !isTenantOwner,
-    staleTime: 30_000,
-  });
-  const canManage = isSuperOwner || isTenantOwner ||
-    ((role === "owner" || role === "manager") && !!membership?.company_id &&
-      permissions.data?.includes("ads.manage") === true);
+  const canViewAds = isSuperOwner || isTenantOwner || hasPermission("ads.view") || hasPermission("ads.manage");
+  const canCreateAds = isSuperOwner || isTenantOwner || hasPermission("ads.create") || hasPermission("ads.manage");
+  const canEditAds = isSuperOwner || isTenantOwner || hasPermission("ads.edit") || hasPermission("ads.manage");
+  const canApproveAds = isSuperOwner || isTenantOwner || hasPermission("ads.approve") || hasPermission("ads.manage");
+  const canDeleteAds = isSuperOwner || isTenantOwner || hasPermission("ads.delete") || hasPermission("ads.manage");
+  // Analytics RPC intentionally remains restricted to ads.manage / tenant owner.
+  const canManageAnalytics = isSuperOwner || isTenantOwner || hasPermission("ads.manage");
 
   const campaigns = useQuery({
     queryKey: ["marketing-campaigns", tenantId, membership?.company_id ?? "tenant"],
@@ -87,7 +80,7 @@ export function AdsPage() {
       if (error) throw error;
       return (data ?? []) as Campaign[];
     },
-    enabled: !!tenantId && canManage,
+    enabled: !!tenantId && canViewAds,
   });
 
   const analytics = useQuery({
@@ -97,7 +90,7 @@ export function AdsPage() {
       if (error) throw error;
       return (data ?? []) as Array<{ campaign_id: string; impressions: number; clicks: number }>;
     },
-    enabled: !!tenantId && canManage,
+    enabled: !!tenantId && canManageAnalytics,
     staleTime: 30_000,
   });
   const analyticsByCampaign = new Map(
@@ -106,6 +99,7 @@ export function AdsPage() {
 
   const saveCampaign = useMutation({
     mutationFn: async () => {
+      if (editingId ? !canEditAds : !canCreateAds) throw new Error("لا تملك صلاحية تنفيذ هذا الإجراء على الإعلانات.");
       const cleanTitle = title.trim();
       if (cleanTitle.length < 2 || cleanTitle.length > 120) throw new Error("عنوان الإعلان يجب أن يكون بين حرفين و120 حرفاً");
       if (description.length > 500) throw new Error("الوصف أطول من 500 حرف");
@@ -155,7 +149,7 @@ export function AdsPage() {
       const dbError = error as { code?: string; message?: string; details?: string; hint?: string };
       const raw = [dbError.message, dbError.details, dbError.hint].filter(Boolean).join(" — ");
       if (dbError.code === "42501" || /row-level security|permission denied/i.test(raw)) {
-        toast.error("رفضت قاعدة البيانات حفظ الحملة بسبب الصلاحيات. تحقق من صلاحية إدارة الإعلانات ونطاق الشركة، ثم أعد المحاولة.");
+        toast.error("رفضت قاعدة البيانات حفظ الحملة بسبب الصلاحيات. يلزم منح صلاحية الإجراء المطلوب ضمن نطاق الشركة.");
         console.error("Marketing campaign RLS failure", { code: dbError.code, message: raw });
         return;
       }
@@ -166,6 +160,7 @@ export function AdsPage() {
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      if (!canApproveAds) throw new Error("لا تملك صلاحية اعتماد أو تغيير حالة الإعلان.");
       let query = supabase.from("marketing_campaigns").update({ status }).eq("id", id).eq("tenant_id", tenantId!);
       if (!isSuperOwner && !isTenantOwner) {
         if (!membership?.company_id) throw new Error("لا يوجد نطاق شركة مصرح به لإدارة هذه الحملة.");
@@ -181,6 +176,7 @@ export function AdsPage() {
 
   const deleteCampaign = useMutation({
     mutationFn: async (id: string) => {
+      if (!canDeleteAds) throw new Error("لا تملك صلاحية حذف الإعلانات.");
       let query = supabase.from("marketing_campaigns").delete().eq("id", id).eq("tenant_id", tenantId!);
       if (!isSuperOwner && !isTenantOwner) {
         if (!membership?.company_id) throw new Error("لا يوجد نطاق شركة مصرح به لإدارة هذه الحملة.");
@@ -213,7 +209,7 @@ export function AdsPage() {
   }
 
   async function uploadImage(file?: File) {
-    if (!file || !tenantId || !canManage) return;
+    if (!file || !tenantId || !(editingId ? canEditAds : canCreateAds)) return;
     const extensions: Record<string, string> = {
       "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif",
     };
@@ -259,14 +255,14 @@ export function AdsPage() {
     setEndsAt(toLocalInput(campaign.ends_at));
   }
 
-  if (!canManage && !permissions.isLoading) {
+  if (!canViewAds) {
     return <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">لا تملك صلاحية إدارة الحملات الإعلانية. تتطلب إدارة حملات الشركة صلاحية إدارة الإعلانات المستقلة عن إعدادات النظام.</CardContent></Card>;
   }
 
   return (
     <div className="space-y-5">
       <PageHeader title="الإعلانات والمساحات الإعلانية" subtitle="إدارة الحملات الإعلانية وصورها وروابطها ومواقع ظهورها وجدولتها بصورة مستقلة عن إعدادات النظام والعروض الترويجية." />
-      <Card>
+      {(canCreateAds || (editingId && canEditAds)) && <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Megaphone className="h-5 w-5 text-primary" /> {editingId ? "تعديل حملة إعلانية" : "إنشاء حملة إعلانية"}</CardTitle>
           <CardDescription>تُحفظ الحملة كمسودة أولاً. راجع تفاصيلها ثم فعّلها من قائمة الحملات.</CardDescription>
@@ -286,14 +282,14 @@ export function AdsPage() {
             <div className="space-y-2"><Label>رابط الوجهة (اختياري)</Label><Input dir="ltr" value={targetUrl} onChange={(event) => { setTargetUrl(event.target.value); setFormTouched(true); }} placeholder="https://example.com" /></div>
             <div className="space-y-2"><Label>صورة الإعلان</Label><div className="flex items-center gap-3">
               <div className="grid h-14 w-20 shrink-0 place-items-center overflow-hidden rounded-md border bg-muted">{imageUrl ? <img src={imageUrl} alt="معاينة الإعلان" className="h-full w-full object-cover" /> : <Image className="h-5 w-5 text-muted-foreground" />}</div>
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-muted">{uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}{uploading ? "جارٍ الرفع..." : "اختيار صورة"}<input className="hidden" type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={uploading} onChange={(event) => { void uploadImage(event.target.files?.[0]); event.currentTarget.value = ""; }} /></label>
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-muted">{uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}{uploading ? "جارٍ الرفع..." : "اختيار صورة"}<input className="hidden" type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={uploading || !(editingId ? canEditAds : canCreateAds)} onChange={(event) => { void uploadImage(event.target.files?.[0]); event.currentTarget.value = ""; }} /></label>
             </div></div>
             <div className="space-y-2"><Label>تاريخ ووقت البداية</Label><Input type="datetime-local" value={startsAt} onChange={(event) => { setStartsAt(event.target.value); setFormTouched(true); }} /></div>
             <div className="space-y-2"><Label>تاريخ ووقت النهاية</Label><Input type="datetime-local" value={endsAt} onChange={(event) => { setEndsAt(event.target.value); setFormTouched(true); }} /></div>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={() => setShowPreview((current) => !current)}>{showPreview ? "إخفاء المعاينة" : "معاينة الإعلان"}</Button>
-            <Button type="button" onClick={() => saveCampaign.mutate()} disabled={saveCampaign.isPending || !title.trim()}>{saveCampaign.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}<Plus className="ml-1 h-4 w-4" />{editingId ? "حفظ التعديلات" : "حفظ كمسودة"}</Button>
+            <Button type="button" onClick={() => saveCampaign.mutate()} disabled={saveCampaign.isPending || !title.trim() || (editingId ? !canEditAds : !canCreateAds)}>{saveCampaign.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}<Plus className="ml-1 h-4 w-4" />{editingId ? "حفظ التعديلات" : "حفظ كمسودة"}</Button>
             {editingId && <Button type="button" variant="outline" onClick={resetForm}>إلغاء التعديل</Button>}
           </div>
           {showPreview && (
@@ -308,32 +304,35 @@ export function AdsPage() {
             </div>
           )}
         </CardContent>
-      </Card>
+      </Card>}
       <Card>
         <CardHeader><CardTitle>الحملات الإعلانية المحفوظة</CardTitle><CardDescription>تظهر الحملات وفق الشركة والفرع وسياسات الوصول المطبقة في قاعدة البيانات.</CardDescription></CardHeader>
         <CardContent className="space-y-3">
-          {campaigns.isLoading || permissions.isLoading ? <div className="flex justify-center p-6"><Loader2 className="h-5 w-5 animate-spin" /></div> :
+          {campaigns.isLoading ? <div className="flex justify-center p-6"><Loader2 className="h-5 w-5 animate-spin" /></div> :
             campaigns.isError ? <div className="text-sm text-destructive">تعذر تحميل الحملات. <Button type="button" variant="link" onClick={() => void campaigns.refetch()}>إعادة المحاولة</Button></div> :
             campaigns.data?.length ? campaigns.data.map((campaign) => {
-              const canEdit = isSuperOwner || isTenantOwner || (!!membership?.company_id && campaign.company_id === membership.company_id && canManage);
+              const inCampaignScope = isSuperOwner || isTenantOwner || (!!membership?.company_id && campaign.company_id === membership.company_id);
+              const canEditCampaign = canEditAds && inCampaignScope;
+              const canApproveCampaign = canApproveAds && inCampaignScope;
+              const canDeleteCampaign = canDeleteAds && inCampaignScope;
               return <div key={campaign.id} className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
                 {campaign.image_url && <img src={campaign.image_url} alt="" className="h-14 w-20 rounded object-cover" />}
                 <div className="min-w-0 flex-1"><div className="font-medium">{campaign.title}</div><div className="text-xs text-muted-foreground">{campaign.placement === "dashboard_banner" ? "الشريط الرئيسي" : campaign.placement === "dashboard_card" ? "بطاقة لوحة التحكم" : "نقطة البيع"} · {campaign.status === "active" ? "نشط" : campaign.status === "paused" ? "متوقف" : campaign.status === "archived" ? "مؤرشف" : "مسودة"}{campaign.starts_at ? ` · يبدأ ${new Date(campaign.starts_at).toLocaleString("ar")}` : ""}{campaign.ends_at ? ` · ينتهي ${new Date(campaign.ends_at).toLocaleString("ar")}` : ""}</div>
-                  <div className="mt-1 text-xs text-muted-foreground" aria-label="إحصاءات الحملة">
+                  {canManageAnalytics && <div className="mt-1 text-xs text-muted-foreground" aria-label="إحصاءات الحملة">
                     {analytics.isLoading ? "جارٍ تحميل الإحصاءات..." : analytics.isError ? "تعذر تحميل الإحصاءات" : (() => {
                       const stats = analyticsByCampaign.get(campaign.id);
                       return `المشاهدات الفريدة يومياً: ${stats?.impressions ?? 0} · النقرات الفريدة يومياً: ${stats?.clicks ?? 0}`;
                     })()}
-                  </div></div>
-                <Button type="button" size="sm" variant="ghost" disabled={!canEdit} onClick={() => editCampaign(campaign)}>تعديل</Button>
-                <Button type="button" size="sm" variant="outline" disabled={!canEdit || updateStatus.isPending} onClick={() => updateStatus.mutate({
+                  </div>}</div></div>
+                <Button type="button" size="sm" variant="ghost" disabled={!canEditCampaign} onClick={() => editCampaign(campaign)}>تعديل</Button>
+                <Button type="button" size="sm" variant="outline" disabled={!canApproveCampaign || updateStatus.isPending} onClick={() => updateStatus.mutate({
                   id: campaign.id,
                   status: campaign.status === "active" ? "paused" : campaign.status === "archived" ? "draft" : "active",
                 })}>
                   {campaign.status === "active" ? "إيقاف" : campaign.status === "archived" ? "استعادة كمسودة" : "تفعيل"}
                 </Button>
                 {campaign.status !== "archived" && (
-                  <Button type="button" size="sm" variant="ghost" disabled={!canEdit || updateStatus.isPending}
+                  <Button type="button" size="sm" variant="ghost" disabled={!canApproveCampaign || updateStatus.isPending}
                     onClick={() => {
                       if (window.confirm("ستُوقف هذه الحملة وتُنقل إلى الأرشيف. هل تريد المتابعة؟")) {
                         updateStatus.mutate({ id: campaign.id, status: "archived" });
@@ -342,7 +341,7 @@ export function AdsPage() {
                     أرشفة
                   </Button>
                 )}
-                <Button type="button" size="icon" variant="ghost" aria-label={"حذف " + campaign.title} disabled={!canEdit || deleteCampaign.isPending} onClick={() => { if (window.confirm("هل تريد حذف هذه الحملة نهائياً؟")) deleteCampaign.mutate(campaign.id); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                <Button type="button" size="icon" variant="ghost" aria-label={"حذف " + campaign.title} disabled={!canDeleteCampaign || deleteCampaign.isPending} onClick={() => { if (window.confirm("هل تريد حذف هذه الحملة نهائياً؟")) deleteCampaign.mutate(campaign.id); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
               </div>;
             }) : <p className="text-sm text-muted-foreground">لا توجد حملات إعلانية حتى الآن.</p>}
         </CardContent>
