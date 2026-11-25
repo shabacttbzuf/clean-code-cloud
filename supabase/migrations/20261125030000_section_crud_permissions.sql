@@ -125,6 +125,7 @@ WITH permission_map(legacy_key, new_key) AS (VALUES
   ('products.view','products.print'),('products.view','products.export'),
   ('purchases.view','purchases.print'),('purchases.view','purchases.export'),
   ('inventory.view','inventory.print'),('inventory.view','inventory.export'),
+  ('cash.open_close','cash.open'),('cash.open_close','cash.close'),
   ('cash.view','cash.print'),('cash.view','cash.export')
 )
 INSERT INTO public.role_permissions (tenant_id, role_kind, builtin_role, custom_role_id, permission_key)
