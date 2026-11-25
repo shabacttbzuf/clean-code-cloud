@@ -220,28 +220,19 @@ function BranchesPage() {
                 </div>
                 <div className="mt-4 flex gap-2 border-t pt-3">
                   <Button size="sm" variant="outline" className="flex-1" asChild><a href={"/branches/" + b.id}>تفاصيل الفرع</a></Button>
-                {(canEditBranch || canDeleteBranch) && (
-                  <div className="flex flex-1 gap-2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="flex-1"
-                      onClick={() => { setEditing(b); setOpen(true); }}
-                    >
-                      <Edit className="ml-2 h-3 w-3" />تعديل
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="flex-1 text-destructive hover:text-destructive"
-                      onClick={() => {
+                  {(canEditBranch || canDeleteBranch) && (
+                    <div className="flex flex-1 gap-2">
+                      {canEditBranch && <Button size="sm" variant="ghost" className="flex-1" onClick={() => { setEditing(b); setOpen(true); }}>
+                        <Edit className="ml-2 h-3 w-3" />تعديل
+                      </Button>}
+                      {canDeleteBranch && <Button size="sm" variant="ghost" className="flex-1 text-destructive hover:text-destructive" onClick={() => {
                         if (confirm(`حذف الفرع "${b.name}"؟`)) del.mutate(b.id);
-                      }}
-                    >
-                      <Trash2 className="ml-2 h-3 w-3" />حذف
-                    </Button>}
-                  </div>
-                )}
+                      }}>
+                        <Trash2 className="ml-2 h-3 w-3" />حذف
+                      </Button>}
+                    </div>
+                  )}
+                </div>
                 </div>
               </CardContent>
             </Card>
