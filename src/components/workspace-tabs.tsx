@@ -276,7 +276,7 @@ export function WorkspaceTabs() {
       isPathDirty(dirtyPaths, tab.path));
     if (removableDirty.length && !window.confirm("توجد تغييرات غير محفوظة في تبويبات أخرى. هل تريد إغلاق هذه التبويبات وفقدان تغييراتها؟")) return;
     const next = closeOtherWorkspaceTabs(tabs.map(tab => ({
-      ...tab, dirty: dirtyPaths.has(tab.path) || dirtyPaths.has(workspacePathname(tab.path)),
+      ...tab, dirty: isPathDirty(dirtyPaths, tab.path),
     })), activePath, { allowDirty: true });
     const retained = new Set(next.map(tab => tab.path));
     for (const tab of tabs) if (!retained.has(tab.path)) discardPath(tab.path);
