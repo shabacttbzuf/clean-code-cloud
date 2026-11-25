@@ -235,3 +235,26 @@ test("dashboard provides permission-scoped operations, notifications, and a trut
   assert.match(dashboard, /hasPermission\("kitchen.view"\)/);
   assert.match(dashboard, /hasPermission\("reports.view"\)/);
 });
+
+const workspaceFormKeeper = readFileSync(new URL("../src/components/workspace-form-state-keeper.tsx", import.meta.url), "utf8");
+
+test("workspace tabs restore per-user tenant sessions and preserve non-sensitive form fields across route changes", () => {
+  assert.match(workspaceTabs, /ras-workspace-tabs-v2/);
+  assert.match(workspaceTabs, /workspace-tabs-permissions/);
+  assert.match(workspaceTabs, /permissionQuery\.data\?\.has\(permission\) === true/);
+  assert.match(workspaceTabs, /ras-workspace-form-discard/);
+  assert.match(workspaceFormKeeper, /sessionStorage\.getItem\(storageKey\)/);
+  assert.match(workspaceFormKeeper, /sessionStorage\.setItem\(storageKey, JSON\.stringify\(fields\)\)/);
+  assert.match(workspaceFormKeeper, /MutationObserver/);
+  assert.match(workspaceFormKeeper, /useLayoutEffect/);
+  assert.match(workspaceFormKeeper, /data-sensitive/);
+  assert.match(workspaceFormKeeper, /password\|token\|secret\|otp/);
+  assert.match(workspaceFormKeeper, /ras-workspace-form-saved/);
+  assert.match(workspaceFormKeeper, /ras-workspace-form-discard/);
+  assert.doesNotMatch(workspaceFormKeeper, /type === "password".*value/);
+});
+
+test("authenticated navigation does not force-remount the entire page shell on every route change", () => {
+  assert.match(authLayout, /<WorkspaceFormStateKeeper \/>/);
+  assert.doesNotMatch(authLayout, /key=\{pathname\}/);
+});
