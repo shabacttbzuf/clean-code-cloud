@@ -6,11 +6,14 @@ const source = readFileSync(new URL("../src/routes/_authenticated/ads.tsx", impo
 const migration = readFileSync(new URL("../supabase/migrations/20261121010000_separate_ads_management_permission.sql", import.meta.url), "utf8");
 const repairMigration = readFileSync(new URL("../supabase/migrations/20261121040000_reconcile_ads_campaign_write_permissions.sql", import.meta.url), "utf8");
 
-test("company-scoped marketing controls require the dedicated ads.manage permission", () => {
-  assert.match(source, /permissions = useQuery/);
-  assert.match(source, /supabase\.rpc\("get_my_permissions", \{ _tenant_id: tenantId \}\)/);
-  assert.match(source, /permissions\.data\?\.includes\("ads\.manage"\) === true/);
-  assert.doesNotMatch(source, /permissions\.data\?\.includes\("settings\.manage"\)/);
+test("marketing UI uses distinct view, create, edit, approve and delete permissions", () => {
+  for (const action of ["view", "create", "edit", "approve", "delete"]) {
+    assert.match(source, new RegExp(`hasPermission\\("ads\\.${action}"\\)`));
+  }
+  assert.match(source, /if \(!canApproveAds\)/);
+  assert.match(source, /if \(!canDeleteAds\)/);
+  assert.match(source, /if \(editingId \? !canEditAds : !canCreateAds\)/);
+  assert.doesNotMatch(source, /settings\.manage/);
 });
 
 test("tenant-wide and Super Owner management remain explicit while campaign actions stay company-scoped", () => {
