@@ -8,6 +8,7 @@ const requiredRoutes = [
   ["/dashboard", "dashboard.view"],
   ["/reports", "reports.view"],
   ["/pos", "pos.use"],
+  ["/kitchen", "kitchen.view"],
   ["/sales", "sales.view"],
   ["/cash-sessions", "cash.view"],
   ["/customers", "customers.view"],
@@ -73,4 +74,11 @@ test("first-owner bootstrap remains reachable only while no Super Owner exists",
   assert.match(source, /isKnownRoute = !!requiredPermission \|\| ownerOnly \|\| isExplicitlyPublic \|\| isFirstOwnerBootstrap/);
   assert.match(source, /normalizedPath === "\/admin" && \(!superOwnerStatusKnown \|\| totalCount > 0 \|\| tenant\?\.owner_id !== userId\)/);
   assert.match(source, /const \{ isSuperOwner, totalCount, loading: ownerLoading, statusKnown: superOwnerStatusKnown/);
+});
+
+
+test("profile and support are explicit authenticated open routes while unknown paths fail closed", () => {
+  assert.match(source, /AUTHENTICATED_OPEN_PATHS = new Set\(\["\/profile", "\/support"\]\)/);
+  assert.match(source, /if \(!isKnownRoute\)/);
+  assert.match(source, /لم يتم ربط هذا المسار بصلاحية معتمدة/);
 });
