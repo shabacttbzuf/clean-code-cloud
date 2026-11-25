@@ -71,13 +71,16 @@ const statusColors: Record<string, string> = {
 const statusLabels: Record<string, string> = { active: "نشط", suspended: "موقوف", terminated: "منتهي" };
 
 function EmployeesPage() {
-  const { tenantId, tenant, isAdmin, membership } = useActiveTenant();
+  const { tenantId, tenant, membership, isSuperOwner, hasPermission } = useActiveTenant();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Employee | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [branchFilter, setBranchFilter] = useState("all");
+  const canCreateEmployee = isSuperOwner || hasPermission("hr.employees.create") || hasPermission("hr.employees.manage");
+  const canEditEmployee = isSuperOwner || hasPermission("hr.employees.edit") || hasPermission("hr.employees.manage");
+  const canDeleteEmployee = isSuperOwner || hasPermission("hr.employees.delete") || hasPermission("hr.employees.manage");
 
   const q = useQuery({
     queryKey: ["employees", tenantId],
@@ -117,6 +120,7 @@ function EmployeesPage() {
 
   const upsert = useMutation({
     mutationFn: async (v: z.infer<typeof schema>) => {
+      if (editing ? !canEditEmployee : !canCreateEmployee) throw new Error("لا تملك صلاحية إنشاء الموظفين أو تعديلهم.");
       const payload: any = {
         ...v,
         employee_no: v.employee_no || null,
@@ -152,6 +156,7 @@ function EmployeesPage() {
 
   const del = useMutation({
     mutationFn: async (id: string) => {
+      if (!canDeleteEmployee) throw new Error("لا تملك صلاحية حذف الموظفين.");
       const { error } = await supabase.from("employees").delete().eq("id", id);
       if (error) throw error;
     },
@@ -162,7 +167,7 @@ function EmployeesPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="الموظفون" subtitle={`${filtered.length} موظف`}
-        action={isAdmin && (
+        action={canCreateEmployee && (
           <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditing(null); }}>
             <DialogTrigger asChild><Button><Plus className="ml-2 h-4 w-4" />موظف جديد</Button></DialogTrigger>
             <EmployeeDialog initial={editing} tenantId={tenantId!} companyId={membership?.company_id ?? null} branches={branches.data ?? []} onSubmit={(v) => upsert.mutate(v)} pending={upsert.isPending} />
@@ -228,14 +233,14 @@ function EmployeesPage() {
                   <div className="flex items-center gap-2"><DollarSign className="h-3 w-3" /><span className="num text-foreground">{formatMoney(e.base_salary)}</span> {tenant?.currency}</div>
                   <div className="text-[10px]">التوظيف: {formatDate(e.hire_date)}</div>
                 </div>
-                {isAdmin && (
+                {(canEditEmployee || canDeleteEmployee) && (
                   <div className="mt-3 flex gap-1 border-t pt-3">
-                    <Button size="sm" variant="ghost" className="flex-1" onClick={() => { setEditing(e); setOpen(true); }}>
+                    {canEditEmployee && <Button size="sm" variant="ghost" className="flex-1" onClick={() => { setEditing(e); setOpen(true); }}>
                       <Edit className="ml-2 h-3 w-3" />تعديل
-                    </Button>
-                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => { if (confirm(`حذف "${e.full_name}"؟`)) del.mutate(e.id); }}>
+                    </Button>}
+                    {canDeleteEmployee && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => { if (confirm(`حذف "${e.full_name}"؟`)) del.mutate(e.id); }}>
                       <Trash2 className="h-3 w-3" />
-                    </Button>
+                    </Button>}
                   </div>
                 )}
               </CardContent>
