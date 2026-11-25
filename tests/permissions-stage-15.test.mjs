@@ -52,10 +52,10 @@ test("user permission mutations verify actor, target membership and protect supe
   assert.ok(action.includes('row.role === "owner" && row.company_id == null && row.branch_id == null'));
   assert.ok(action.includes("const scopedAdmins = actorRows.filter"));
   assert.ok(action.includes("if (!scopedAdmins.length)"));
-  assert.ok(action.includes("companyScopes"));
-  assert.ok(action.includes("branchScopes"));
+  assert.ok(action.includes("targetWithinScope"));
+  assert.ok(action.includes('_permission_key: "permissions.manage"'));
+  assert.ok(action.includes('targetRoles.some((row) => row.role === "owner")'));
   assert.ok(action.includes('scopedAdmins.some((row) => row.role === "manager")'));
-  assert.ok(!action.includes('some((row) => row.role === "owner")'));
 });
 
 test("enterprise user administration blocks self-targeting and enforces tenant/company/branch scope", () => {
