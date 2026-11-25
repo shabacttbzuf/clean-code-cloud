@@ -315,6 +315,18 @@ export function WorkspaceFormStateKeeper() {
       if (restoring || !restored) return;
       save(hasUnsavedChanges);
     };
+    const onExternalDirty = (event: Event) => {
+      const detail = (event as CustomEvent<{ path?: string; dirty?: boolean; scope?: string; source?: string }>).detail;
+      if (!detail?.path || detail.dirty !== true || detail.source === "form-state-keeper") return;
+      if (detail.scope && detail.scope !== sessionScope) return;
+      const dirtyPath = normalizeWorkspacePath(detail.path) ?? detail.path;
+      if (dirtyPath !== routeKey && dirtyPath !== pathname) return;
+      dirtyForms.add(detail.source || "legacy");
+      discardCurrent = false;
+      hasUnsavedChanges = true;
+      save(true);
+    };
+
     const onDiscard = (event: Event) => {
       const detail = (event as CustomEvent<{ path?: string; scope?: string }>).detail;
       if (!detail?.path || (detail.scope && detail.scope !== sessionScope)) return;
@@ -365,6 +377,7 @@ export function WorkspaceFormStateKeeper() {
     window.addEventListener("scroll", saveViewState, { passive: true });
     window.addEventListener("ras-workspace-form-saved", onSaved);
     window.addEventListener("ras-workspace-form-discard", onDiscard);
+    window.addEventListener("ras-workspace-dirty-change", onExternalDirty);
     return () => {
       window.clearTimeout(timer);
       window.clearTimeout(maxWait);
@@ -380,6 +393,7 @@ export function WorkspaceFormStateKeeper() {
       window.removeEventListener("scroll", saveViewState);
       window.removeEventListener("ras-workspace-form-saved", onSaved);
       window.removeEventListener("ras-workspace-form-discard", onDiscard);
+      window.removeEventListener("ras-workspace-dirty-change", onExternalDirty);
     };
   }, [pathname, routeKey, scope, sessionScope]);
 
