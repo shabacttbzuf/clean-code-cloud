@@ -189,6 +189,7 @@ SELECT set_config('test.notification.owner', owner_id::text, true),
        set_config('test.notification.manager_b', manager_b_id::text, true),
        set_config('test.notification.waiter_a', waiter_a_id::text, true),
        set_config('test.notification.outsider', outsider_id::text, true),
+       set_config('test.notification.tenant', tenant_id::text, true),
        set_config('test.notification.company_a', company_a_id::text, true),
        set_config('test.notification.company_b', company_b_id::text, true),
        set_config('test.notification.sale_a', sale_a_id::text, true),
@@ -243,17 +244,17 @@ SELECT is(private.can_read_notification(current_setting('test.notification.sale_
 -- Administrative writes must not cross the company boundary.
 SELECT set_config('request.jwt.claim.sub', current_setting('test.notification.manager_a'), true);
 SELECT is(private.can_manage_notification_scope(
-  current_setting('test.notification.company_a')::uuid,
+  current_setting('test.notification.tenant')::uuid,
   current_setting('test.notification.company_a')::uuid
 ), true, 'Company A manager can manage notifications in Company A');
 SELECT is(private.can_manage_notification_scope(
-  current_setting('test.notification.company_a')::uuid,
+  current_setting('test.notification.tenant')::uuid,
   current_setting('test.notification.company_b')::uuid
 ), false, 'Company A manager cannot create or alter notifications in Company B');
 
 SELECT set_config('request.jwt.claim.sub', current_setting('test.notification.owner'), true);
 SELECT is(private.can_manage_notification_scope(
-  current_setting('test.notification.company_a')::uuid,
+  current_setting('test.notification.tenant')::uuid,
   current_setting('test.notification.company_b')::uuid
 ), true, 'Tenant-wide owner can administer notifications across tenant companies');
 
