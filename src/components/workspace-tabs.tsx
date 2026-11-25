@@ -100,7 +100,7 @@ export function WorkspaceTabs() {
               <span>{tab.title}</span>
             </button>
             {tab.path !== "/dashboard" && (
-              <button type="button" onClick={() => togglePinned(tab.path)} className="rounded-full p-0.5 opacity-60 hover:bg-black/10 hover:opacity-100" aria-label={tab.pinned ? `إلغاء تثبيت ${tab.title}` : `تثبيت ${tab.title}`} title={tab.pinned ? "إلغاء التثبيت" : "تثبيت التبويب"}>
+              <button type="button" onClick={() => togglePinned(tab.path)} className="workspace-tab-action inline-grid min-h-9 min-w-9 shrink-0 place-items-center rounded-full p-1 opacity-70 hover:bg-black/10 hover:opacity-100" aria-label={tab.pinned ? `إلغاء تثبيت ${tab.title}` : `تثبيت ${tab.title}`} title={tab.pinned ? "إلغاء التثبيت" : "تثبيت التبويب"}>
                 {tab.pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
               </button>
             )}
