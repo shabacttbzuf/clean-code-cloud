@@ -254,7 +254,7 @@ export function AdsPage() {
                   {campaign.status === "active" ? "إيقاف" : campaign.status === "archived" ? "استعادة كمسودة" : "تفعيل"}
                 </Button>
                 {campaign.status !== "archived" && (
-                  <Button type="button" size="sm" variant="ghost" disabled={!canEdit || updateStatus.isPending}
+                  <Button type="button" size="sm" variant="ghost" disabled={!canApproveCampaign || updateStatus.isPending}
                     onClick={() => {
                       if (window.confirm("ستُوقف هذه الحملة وتُنقل إلى الأرشيف. هل تريد المتابعة؟")) {
                         updateStatus.mutate({ id: campaign.id, status: "archived" });
