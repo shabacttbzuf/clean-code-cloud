@@ -40,11 +40,18 @@ const schema = z.object({
 });
 
 function CustomersPage() {
-  const { tenantId, isAdmin } = useActiveTenant();
+  const { tenantId, userId, membership, isAdmin } = useActiveTenant();
   const qc = useQueryClient();
+  const customersViewKey = `workspace-customers-view-v1:${tenantId ?? "none"}:${userId ?? "none"}:${membership?.company_id ?? "none"}`;
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Customer | null>(null);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => {
+    try { return sessionStorage.getItem(customersViewKey + ":search") ?? ""; } catch { return ""; }
+  });
+  useEffect(() => {
+    try { sessionStorage.setItem(customersViewKey + ":search", search.slice(0, 100)); }
+    catch { /* Session storage is optional. */ }
+  }, [customersViewKey, search]);
   const [accountCustomer, setAccountCustomer] = useState<Customer | null>(null);
   const balances = useQuery({
     queryKey: ["customer-account-balances", tenantId],
