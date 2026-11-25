@@ -30,7 +30,7 @@
       out.textContent += (ok ? "\n✓ " : "\n✗ ") + message;
     };
     const scope = { userId:"browser-test-user", tenantId:"browser-test-tenant", branchId:"browser-test-branch", companyId:"browser-test-company" };
-    const type = "browser_test_" + crypto.randomUUID().replaceAll("-","");
+    const type = "browser_test_offline_sync";
     const sent = [];
     const ledger = new Map();
     let failAfterCommitOnce = true;
@@ -107,7 +107,9 @@
         });
         await test("تكرار انقطاع وعودة الشبكة", async()=>{
           const op=await enqueueOfflineOperation(type,{case:"repeat-toggle"},scope);
+          const stop=startOfflineSync(scope);
           for(let i=0;i<3;i++){setOnline(false);await syncOfflineOperations(scope);setOnline(true);await syncOfflineOperations(scope);}
+          stop();
           const row=(await listOfflineOperations(scope)).find(x=>x.id===op.id);
           assert(row.status==="synced","لم تكتمل العملية بعد تبدلات الشبكة");
         });
@@ -129,7 +131,6 @@
       const row=(await listOfflineOperations(scope)).find(x=>x.id===id);
       out.textContent=row && row.status==="pending" ? "✓ بقيت العملية في IndexedDB بعد إعادة تحميل الصفحة." : "✗ لم يتم العثور على العملية أو تغيرت حالتها.";
     });
-    startOfflineSync(scope);
   </script>
 </body>
 </html>
