@@ -594,3 +594,13 @@ button, [role="button"], a, input, select, textarea {
 @media (min-width: 641px) {
   .app-launcher-panel { max-height: min(78vh, 680px); }
 }
+
+@media (max-width: 640px) {
+  .workspace-surface main [role="tab"] { min-height: 2.75rem; }
+  .workspace-surface main [role="tablist"] {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+}
