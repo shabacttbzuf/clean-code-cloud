@@ -159,6 +159,7 @@ function PurchasesPage() {
 
       <Dialog open={creating} onOpenChange={setCreating}>
         <NewPurchaseDialog
+          canCreate={canCreate}
           onDone={() => {
             setCreating(false);
             qc.invalidateQueries({ queryKey: ["purchases"] });
@@ -189,8 +190,8 @@ function PurchasesPage() {
 }
 
 function PurchaseReturnDialog({
-  purchaseId, tenantId, onDone, onCancel,
-}: { purchaseId: string; tenantId: string; onDone: () => void; onCancel: () => void }) {
+  purchaseId, tenantId, canReturn, onDone, onCancel,
+}: { purchaseId: string; tenantId: string; canReturn: boolean; onDone: () => void; onCancel: () => void }) {
   const [reason, setReason] = useState("");
   const [quantities, setQuantities] = useState<Record<string, string>>({});
 
@@ -225,6 +226,7 @@ function PurchaseReturnDialog({
 
   const submit = useMutation({
     mutationFn: async () => {
+      if (!canReturn) throw new Error("لا تملك صلاحية إنشاء مرتجعات المشتريات.");
       const items = (purchaseLines.data ?? []).map((line) => ({
         purchase_item_id: line.id, quantity: Number(quantities[line.id] ?? 0),
       })).filter((line) => line.quantity > 0);
@@ -280,8 +282,8 @@ function PurchaseReturnDialog({
 }
 
 function NewPurchaseDialog({
-  onDone, tenantId, userId, defaultBranchId,
-}: { onDone: () => void; tenantId: string; userId: string; defaultBranchId: string | null }) {
+  onDone, tenantId, userId, defaultBranchId, canCreate,
+}: { onDone: () => void; tenantId: string; userId: string; defaultBranchId: string | null; canCreate: boolean }) {
   const [branchId, setBranchId] = useState<string>(defaultBranchId ?? "");
   const [supplierId, setSupplierId] = useState<string>("none");
   const [reference, setReference] = useState("");
@@ -337,6 +339,7 @@ function NewPurchaseDialog({
 
   const submit = useMutation({
     mutationFn: async () => {
+      if (!canCreate) throw new Error("لا تملك صلاحية إنشاء فواتير المشتريات.");
       if (!tenantId || !userId || !branchId) throw new Error("اختر الفرع وتأكد من تسجيل الدخول");
       if (lines.length === 0) throw new Error("أضف منتجات");
       const cleanLines = lines.map((l) => ({
