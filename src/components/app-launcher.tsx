@@ -108,7 +108,7 @@ export function AppLauncher() {
   }, [isSuperOwner, totalCount, permissions.data, customItems, navOverrides, search]);
 
   return (
-    <div className="relative">
+    <div className="app-launcher-root relative">
       <Button type="button" variant="outline" size="icon" title="التطبيقات" aria-label="فتح التطبيقات" className="app-launcher-trigger h-10 w-10 shrink-0 rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm transition hover:border-[#174b91] hover:bg-blue-50" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
         <LayoutGrid className="h-[18px] w-[18px]" />
       </Button>
