@@ -91,6 +91,20 @@ test("view permissions never imply HR print or marketing export capabilities", (
   assert.doesNotMatch(sectionCrud, /\\('(?:[^']+\\.view|reports\\.export)','[^']+\\.(?:print|export)'\\)/);
 });
 
+test("permission caches are scoped and invalidated after membership or role changes", () => {
+  const tenantHook = readFileSync(new URL("../src/hooks/use-active-tenant.ts", import.meta.url), "utf8");
+  assert.ok(tenantHook.includes("membership?.company_id"));
+  assert.ok(tenantHook.includes("membership?.branch_id"));
+  assert.ok(tenantHook.includes("refetchInterval: 30_000"));
+  assert.ok(tenantHook.includes('table: "user_roles"'));
+  assert.ok(tenantHook.includes('table: "user_permission_overrides"'));
+  assert.ok(tenantHook.includes('table: "role_permissions"'));
+  assert.ok(tenantHook.includes('table: "custom_roles"'));
+  assert.ok(tenantHook.includes("queryClient.removeQueries"));
+  assert.ok(routeGuard.includes("membership?.company_id"));
+  assert.ok(routeGuard.includes("refetchInterval: 30_000"));
+});
+
 test("platform branding writes remain exclusive to the unchanged Super Owner identity", () => {
   const settingsMigration = readFileSync(new URL("../supabase/migrations/20261118000006_platform_branding_and_notification_reads.sql", import.meta.url), "utf8");
   assert.ok(settingsMigration.includes("platform branding managed by super owner"));
