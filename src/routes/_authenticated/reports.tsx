@@ -121,7 +121,7 @@ function ReportsPage() {
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           else if (!isSuperOwner || companyId !== "all") {
             const allowedBranchIds = (branchesQuery.data ?? []).map((branch) => branch.id);
-            if (allowedBranchIds.length === 0) return { data: [], error: null };
+            if (allowedBranchIds.length === 0) return Promise.resolve({ data: [], error: null });
             query = query.in("branch_id", allowedBranchIds);
           }
           return query.order("created_at", { ascending: false }).range(pageFrom, pageTo);
@@ -133,7 +133,7 @@ function ReportsPage() {
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           else if (!isSuperOwner || companyId !== "all") {
             const allowedBranchIds = (branchesQuery.data ?? []).map((branch) => branch.id);
-            if (allowedBranchIds.length === 0) return { data: [], error: null };
+            if (allowedBranchIds.length === 0) return Promise.resolve({ data: [], error: null });
             query = query.in("branch_id", allowedBranchIds);
           }
           return query.order("paid_at", { ascending: false }).range(pageFrom, pageTo);
@@ -145,7 +145,7 @@ function ReportsPage() {
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           else if (!isSuperOwner || companyId !== "all") {
             const allowedBranchIds = (branchesQuery.data ?? []).map((branch) => branch.id);
-            if (allowedBranchIds.length === 0) return { data: [], error: null };
+            if (allowedBranchIds.length === 0) return Promise.resolve({ data: [], error: null });
             query = query.in("branch_id", allowedBranchIds);
           }
           return query.range(pageFrom, pageTo);
@@ -156,7 +156,7 @@ function ReportsPage() {
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           else if (!isSuperOwner || companyId !== "all") {
             const allowedBranchIds = (branchesQuery.data ?? []).map((branch) => branch.id);
-            if (allowedBranchIds.length === 0) return { data: [], error: null };
+            if (allowedBranchIds.length === 0) return Promise.resolve({ data: [], error: null });
             query = query.in("branch_id", allowedBranchIds);
           }
           return query.range(pageFrom, pageTo);
@@ -168,7 +168,7 @@ function ReportsPage() {
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           else if (!isSuperOwner || companyId !== "all") {
             const allowedBranchIds = (branchesQuery.data ?? []).map((branch) => branch.id);
-            if (allowedBranchIds.length === 0) return { data: [], error: null };
+            if (allowedBranchIds.length === 0) return Promise.resolve({ data: [], error: null });
             query = query.in("branch_id", allowedBranchIds);
           }
           return query.order("received_at", { ascending: false }).range(pageFrom, pageTo);
@@ -180,7 +180,7 @@ function ReportsPage() {
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           else if (!isSuperOwner || companyId !== "all") {
             const allowedBranchIds = (branchesQuery.data ?? []).map((branch) => branch.id);
-            if (allowedBranchIds.length === 0) return { data: [], error: null };
+            if (allowedBranchIds.length === 0) return Promise.resolve({ data: [], error: null });
             query = query.in("branch_id", allowedBranchIds);
           }
           return query.order("full_name").range(pageFrom, pageTo);
@@ -224,7 +224,7 @@ function ReportsPage() {
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           else if (!isSuperOwner || companyId !== "all") {
             const allowedBranchIds = (branchesQuery.data ?? []).map((branch) => branch.id);
-            if (allowedBranchIds.length === 0) return { data: [], error: null };
+            if (allowedBranchIds.length === 0) return Promise.resolve({ data: [], error: null });
             query = query.in("branch_id", allowedBranchIds);
           }
           return query.range(pageFrom, pageTo);
@@ -236,7 +236,7 @@ function ReportsPage() {
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           else if (!isSuperOwner || companyId !== "all") {
             const allowedBranchIds = (branchesQuery.data ?? []).map((branch) => branch.id);
-            if (allowedBranchIds.length === 0) return { data: [], error: null };
+            if (allowedBranchIds.length === 0) return Promise.resolve({ data: [], error: null });
             query = query.in("branch_id", allowedBranchIds);
           }
           return query.range(pageFrom, pageTo);
@@ -296,7 +296,7 @@ function ReportsPage() {
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           else if (!isSuperOwner || companyId !== "all") {
             const allowedBranchIds = (branchesQuery.data ?? []).map((branch) => branch.id);
-            if (allowedBranchIds.length === 0) return { data: [], error: null };
+            if (allowedBranchIds.length === 0) return Promise.resolve({ data: [], error: null });
             query = query.in("branch_id", allowedBranchIds);
           }
           return query.range(pageFrom, pageTo);
@@ -308,7 +308,7 @@ function ReportsPage() {
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           else if (!isSuperOwner || companyId !== "all") {
             const allowedBranchIds = (branchesQuery.data ?? []).map((branch) => branch.id);
-            if (allowedBranchIds.length === 0) return { data: [], error: null };
+            if (allowedBranchIds.length === 0) return Promise.resolve({ data: [], error: null });
             query = query.in("branch_id", allowedBranchIds);
           }
           return query.range(pageFrom, pageTo);
@@ -320,7 +320,7 @@ function ReportsPage() {
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           else if (!isSuperOwner || companyId !== "all") {
             const allowedBranchIds = (branchesQuery.data ?? []).map((branch) => branch.id);
-            if (allowedBranchIds.length === 0) return { data: [], error: null };
+            if (allowedBranchIds.length === 0) return Promise.resolve({ data: [], error: null });
             query = query.in("branch_id", allowedBranchIds);
           }
           return query.range(pageFrom, pageTo);
