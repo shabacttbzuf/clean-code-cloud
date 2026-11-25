@@ -408,10 +408,15 @@ function NewPurchaseDialog({
     })); };
   }, [open, defaultBranchId, branches.data, branchId, supplierId, reference, notes, lines, addProdId]);
 
-  // Auto-pick first branch when none preselected
+  // Revalidate a restored branch against the currently authorized branch list.
   useEffect(() => {
-    if (!branchId && branches.data && branches.data.length > 0) setBranchId(branches.data[0].id);
-  }, [branches.data, branchId]);
+    if (!branches.data) return;
+    if (!branchId || !branches.data.some((branch) => branch.id === branchId)) {
+      setBranchId(defaultBranchId && branches.data.some((branch) => branch.id === defaultBranchId)
+        ? defaultBranchId
+        : branches.data[0]?.id ?? "");
+    }
+  }, [branches.data, branchId, defaultBranchId]);
 
   const total = useMemo(() =>
     lines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.cost_price) || 0), 0)
