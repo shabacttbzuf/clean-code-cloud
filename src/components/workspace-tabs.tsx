@@ -20,9 +20,20 @@ import {
 } from "@/lib/workspace-tabs-logic.mjs";
 
 type WorkspaceTab = WorkspaceTabRecord;
-type DirtyState = { path: string; dirty: boolean; scope?: string };
+type DirtyState = { path: string; dirty: boolean; scope?: string; source?: string };
 const STORAGE_KEY = "ras-workspace-tabs-v3";
 const MAX_PINNED_TABS = 6;
+const DIRTY_KEY_SEPARATOR = "\\u0000";
+function isPathDirty(paths: Set<string>, path: string): boolean {
+  const normalized = normalizeWorkspacePath(path) ?? path;
+  const base = workspacePathname(normalized);
+  for (const entry of paths) {
+    const separator = entry.indexOf(DIRTY_KEY_SEPARATOR);
+    const dirtyPath = separator >= 0 ? entry.slice(0, separator) : entry;
+    if (dirtyPath === normalized || dirtyPath === base) return true;
+  }
+  return false;
+}
 const ROUTE_TITLES: Array<[string, string]> = [
   ["/dashboard", "الرئيسية"], ["/pos", "نقطة البيع"], ["/sales", "المبيعات"],
   ["/tables", "الطاولات"], ["/kitchen", "المطبخ"], ["/inventory/movements", "حركات المخزون"],
@@ -197,10 +208,12 @@ export function WorkspaceTabs() {
       if (!detail || typeof detail.path !== "string" || typeof detail.dirty !== "boolean") return;
       if (detail.scope && detail.scope !== sessionScope) return;
       const path = normalizeWorkspacePath(detail.path) ?? detail.path;
+      const source = detail.source || "legacy";
+      const dirtyKey = path + DIRTY_KEY_SEPARATOR + source;
       setDirtyState((current) => {
         const paths = current.scope === sessionScope ? new Set(current.paths) : new Set<string>();
-        if (detail.dirty) paths.add(path);
-        else paths.delete(path);
+        if (detail.dirty) paths.add(dirtyKey);
+        else paths.delete(dirtyKey);
         return { scope: sessionScope, paths };
       });
     };
@@ -208,7 +221,7 @@ export function WorkspaceTabs() {
     return () => window.removeEventListener("ras-workspace-dirty-change", onDirtyChange);
   }, [sessionScope]);
 
-  const currentDirty = dirtyPaths.has(activePath) || dirtyPaths.has(pathname);
+  const currentDirty = isPathDirty(dirtyPaths, activePath) || isPathDirty(dirtyPaths, pathname);
   useBlocker({
     shouldBlockFn: () => currentDirty && !window.confirm("توجد تغييرات غير محفوظة في هذه الصفحة. هل تريد مغادرتها دون حفظ؟"),
     enableBeforeUnload: currentDirty,
@@ -232,8 +245,11 @@ export function WorkspaceTabs() {
     }));
     setDirtyState((current) => {
       const paths = current.scope === sessionScope ? new Set(current.paths) : new Set<string>();
-      paths.delete(path);
-      paths.delete(workspacePathname(path));
+      for (const key of paths) {
+        const separator = key.indexOf(DIRTY_KEY_SEPARATOR);
+        const keyPath = separator >= 0 ? key.slice(0, separator) : key;
+        if (keyPath === path || keyPath === workspacePathname(path)) paths.delete(key);
+      }
       return { scope: sessionScope, paths };
     });
   }
@@ -241,10 +257,10 @@ export function WorkspaceTabs() {
   function closeTab(path: string) {
     const target = tabs.find((tab) => tab.path === path);
     if (!target || target.pinned) return;
-    const dirty = dirtyPaths.has(path) || dirtyPaths.has(workspacePathname(path));
+    const dirty = isPathDirty(dirtyPaths, path);
     if (dirty && !window.confirm("توجد تغييرات غير محفوظة في هذا التبويب. هل تريد إغلاقه وفقدان هذه التغييرات؟")) return;
     const next = closeWorkspaceTab(tabs.map(tab => ({
-      ...tab, dirty: dirtyPaths.has(tab.path) || dirtyPaths.has(workspacePathname(tab.path)),
+      ...tab, dirty: isPathDirty(dirtyPaths, tab.path),
     })), path, { allowDirty: true });
     if (next.length === tabs.length) return;
     discardPath(path);
@@ -257,7 +273,7 @@ export function WorkspaceTabs() {
 
   function closeOtherTabs() {
     const removableDirty = tabs.filter(tab => tab.path !== activePath && !tab.pinned &&
-      (dirtyPaths.has(tab.path) || dirtyPaths.has(workspacePathname(tab.path))));
+      isPathDirty(dirtyPaths, tab.path));
     if (removableDirty.length && !window.confirm("توجد تغييرات غير محفوظة في تبويبات أخرى. هل تريد إغلاق هذه التبويبات وفقدان تغييراتها؟")) return;
     const next = closeOtherWorkspaceTabs(tabs.map(tab => ({
       ...tab, dirty: dirtyPaths.has(tab.path) || dirtyPaths.has(workspacePathname(tab.path)),
@@ -304,7 +320,7 @@ export function WorkspaceTabs() {
       >
         {tabs.map((tab) => {
           const active = activePath === tab.path;
-          const isDirty = dirtyPaths.has(tab.path) || dirtyPaths.has(workspacePathname(tab.path));
+          const isDirty = isPathDirty(dirtyPaths, tab.path);
           return (
             <div key={tab.path} role="presentation" className={`group inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-2xl border px-2.5 py-2 text-sm font-semibold shadow-sm transition-all duration-200 sm:gap-2 sm:px-3.5 ${active ? "border-[#174b91] bg-[#174b91] text-white shadow-md shadow-blue-900/15" : "border-[#dce5f3] bg-white text-[#344b70] hover:border-[#9bb7df] hover:bg-[#f8fbff] hover:shadow-md"}`}>
               <button
