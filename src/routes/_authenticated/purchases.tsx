@@ -367,6 +367,13 @@ function NewPurchaseDialog({
       }
     } catch { /* Session storage is optional. */ }
   }, [draftKey, branchId, supplierId, reference, notes, lines, addProdId, defaultBranchId]);
+  useEffect(() => {
+    const dirty = open && (lines.length > 0 || supplierId !== "none" || !!reference.trim() ||
+      !!notes.trim() || branchId !== (defaultBranchId ?? ""));
+    window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/purchases", dirty },
+    }));
+  }, [open, lines, supplierId, reference, notes, branchId, defaultBranchId]);
 
   const branches = useQuery({
     queryKey: ["branches-active-purchase", tenantId, defaultBranchId, companyId],
