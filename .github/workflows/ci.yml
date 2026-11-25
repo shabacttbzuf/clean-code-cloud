@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: ["main", "feature/**", "feat/**"]
+    branches: ["main", "feature/**", "feat/**", "work/**", "integration/**"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "work/**", "integration/**"]
   workflow_dispatch:
 
 concurrency:
@@ -29,9 +29,8 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # The repository-wide lint baseline currently contains thousands of
-      # pre-existing Prettier violations. Lint the changed server modules while
-      # TypeScript and CI checks cover the full project.
+      # Repository-wide lint currently has a documented pre-existing baseline.
+      # Keep the existing scoped server lint gate explicit; do not report it as full-project lint.
       - name: Lint changed server modules
         run: >-
           bunx eslint
