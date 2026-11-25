@@ -625,7 +625,7 @@ export const createNotification = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertPermission(context.supabase, context.userId, data.tenant_id, "notifications.manage");
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "notifications.create", "notifications.manage");
     const { error } = await context.supabase.from("notifications").insert({
       ...data,
       audience_id: data.audience_id ?? null,
