@@ -773,6 +773,7 @@ function POSWorkspace() {
       return { sale, method, items: invoiceItems };
     },
     onSuccess: ({ sale, method, items }) => {
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/pos", formKey: "pos-cart" } }));
       setReviewOpen(false);
       toast.success(`تم إصدار فاتورة #${sale.invoice_no}`);
       const inv = buildInvoice(sale, items, method, sale.payment_method);
