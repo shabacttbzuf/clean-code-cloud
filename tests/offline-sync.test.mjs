@@ -133,5 +133,6 @@ test("permanent failures stop automatic retry and remain manually re-evaluable",
   assert.match(source, /MAX_AUTOMATIC_ATTEMPTS = 12/);
   assert.match(source, /status = isConflict \? "conflict" : isPermanent \? "blocked" : "failed"/);
   assert.match(source, /operation\.status !== "blocked"/);
+  assert.match(source, /operation\.attempts = 0/);
   assert.match(panel, /blocked/);
 });
