@@ -56,8 +56,11 @@ const schema = z.object({
 });
 
 function BranchesPage() {
-  const { tenantId, isAdmin, isSuperOwner, membership } = useActiveTenant();
-  const canManageBranches = isAdmin || isSuperOwner;
+  const { tenantId, isSuperOwner, membership, hasPermission } = useActiveTenant();
+  const canCreateBranch = isSuperOwner || hasPermission("branches.create");
+  const canEditBranch = isSuperOwner || hasPermission("branches.edit");
+  const canDeleteBranch = isSuperOwner || hasPermission("branches.delete");
+  const canManageBranches = canCreateBranch || canEditBranch || canDeleteBranch;
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Branch | null>(null);
@@ -135,6 +138,7 @@ function BranchesPage() {
 
   const del = useMutation({
     mutationFn: async (id: string) => {
+      if (!canDeleteBranch) throw new Error("لا تملك صلاحية حذف الفروع.");
       const { error } = await supabase.from("branches").delete().eq("id", id);
       if (error) throw error;
     },
@@ -151,7 +155,7 @@ function BranchesPage() {
         title="الفروع"
         subtitle="أدر فروع مطعمك — كل فرع لديه إعدادات وعملة ورقم ضريبي مستقلين."
         action={
-          canManageBranches && (
+          canCreateBranch && (
             <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditing(null); }}>
               <DialogTrigger asChild>
                 <Button><Plus className="ml-2 h-4 w-4" />إضافة فرع</Button>
@@ -173,7 +177,7 @@ function BranchesPage() {
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
       ) : !branches || branches.length === 0 ? (
-        <EmptyState onAdd={canManageBranches ? () => setOpen(true) : undefined} />
+        <EmptyState onAdd={canCreateBranch ? () => setOpen(true) : undefined} />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {branches.map((b) => (
@@ -216,7 +220,7 @@ function BranchesPage() {
                 </div>
                 <div className="mt-4 flex gap-2 border-t pt-3">
                   <Button size="sm" variant="outline" className="flex-1" asChild><a href={"/branches/" + b.id}>تفاصيل الفرع</a></Button>
-                {canManageBranches && (
+                {(canEditBranch || canDeleteBranch) && (
                   <div className="flex flex-1 gap-2">
                     <Button
                       size="sm"
@@ -235,7 +239,7 @@ function BranchesPage() {
                       }}
                     >
                       <Trash2 className="ml-2 h-3 w-3" />حذف
-                    </Button>
+                    </Button>}
                   </div>
                 )}
                 </div>
