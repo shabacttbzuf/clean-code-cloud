@@ -22,11 +22,13 @@ SELECT ok(
 );
 
 SELECT ok(
-  NOT EXISTS (
+  EXISTS (
     SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='promotion_redemptions'
-      AND cmd='SELECT' AND policyname <> 'Promotion managers read redemptions'
+      AND policyname='granular_promotions_read_redemptions' AND cmd='SELECT'
+      AND qual LIKE '%promotions.view%' AND qual LIKE '%can_access_branch%'
+      AND qual LIKE '%is_tenant_member%'
   ),
-  'No alternate broad redemption read policy bypasses the manager gate'
+  'Granular redemption analytics require promotions.view and retain tenant/branch scope'
 );
 
 
