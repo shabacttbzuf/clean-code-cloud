@@ -46,6 +46,10 @@ BEGIN
 END;
 $audit$;
 
+-- Keep the generic audit trigger safe for trigger-only execution and a pinned search path.
+ALTER FUNCTION public.log_audit_change() SET search_path = pg_catalog, public;
+REVOKE EXECUTE ON FUNCTION public.log_audit_change() FROM PUBLIC, anon, authenticated;
+
 -- Global built-in role defaults have tenant_id NULL and are platform-level.
 -- Audit only tenant-specific custom-role permission changes here.
 DROP TRIGGER IF EXISTS trg_audit_role_permissions_insert_update ON public.role_permissions;
