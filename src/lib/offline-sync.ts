@@ -184,8 +184,20 @@ export async function enqueueOfflineOperation(
       const store = tx.objectStore(STORE);
       const request = store.getAll();
       let result = operation;
+      let validationError: Error | null = null;
       request.onsuccess = () => {
-        const duplicate = (request.result as OfflineOperation[]).find((item) =>
+        const rows = request.result as OfflineOperation[];
+        const sameKey = rows.find((item) => sameScope(item.scope, scope) && item.idempotencyKey === operation.idempotencyKey);
+        if (sameKey) {
+          if (sameKey.type !== type || JSON.stringify(sameKey.payload) !== JSON.stringify(operation.payload)) {
+            validationError = new Error("مفتاح منع التكرار مستخدم مسبقاً مع بيانات مختلفة؛ أوقفنا الحفظ.");
+            tx.abort();
+            return;
+          }
+          result = sameKey;
+          return;
+        }
+        const duplicate = rows.find((item) =>
           sameScope(item.scope, scope) &&
           item.type === type &&
           item.status !== "synced" &&
@@ -202,7 +214,7 @@ export async function enqueueOfflineOperation(
       request.onerror = () => reject(request.error);
       tx.oncomplete = () => resolve(result);
       tx.onerror = () => reject(tx.error ?? new Error("تعذر حفظ العملية محلياً."));
-      tx.onabort = () => reject(tx.error ?? new Error("أُلغيت عملية الحفظ المحلية."));
+      tx.onabort = () => reject(validationError ?? tx.error ?? new Error("أُلغيت عملية الحفظ المحلية."));
     });
     notifyQueueChanged();
     return saved;
