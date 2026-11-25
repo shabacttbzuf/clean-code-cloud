@@ -177,6 +177,9 @@ function PurchasesPage() {
             open={!!returningPurchaseId}
             purchaseId={returningPurchaseId}
             tenantId={tenantId!}
+            userId={userId!}
+            companyId={membership?.company_id ?? null}
+            branchId={membership?.branch_id ?? null}
             onDone={() => {
               setReturningPurchaseId(null);
               qc.invalidateQueries({ queryKey: ["purchases"] });
@@ -192,9 +195,9 @@ function PurchasesPage() {
 }
 
 function PurchaseReturnDialog({
-  open, purchaseId, tenantId, onDone, onCancel,
-}: { open: boolean; purchaseId: string; tenantId: string; onDone: () => void; onCancel: () => void }) {
-  const returnDraftKey = `workspace-purchase-return-v1:${tenantId}:${purchaseId}`;
+  open, purchaseId, tenantId, userId, companyId, branchId, onDone, onCancel,
+}: { open: boolean; purchaseId: string; tenantId: string; userId: string; companyId: string | null; branchId: string | null; onDone: () => void; onCancel: () => void }) {
+  const returnDraftKey = `workspace-purchase-return-v2:${tenantId}:${userId}:${companyId ?? "none"}:${branchId ?? "all"}:${purchaseId}`;
   const [reason, setReason] = useState(() => {
     try {
       const value = JSON.parse(sessionStorage.getItem(returnDraftKey) || "{}") as { reason?: unknown };
