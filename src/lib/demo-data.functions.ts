@@ -188,25 +188,37 @@ export const setUserPermission = createServerFn({ method: "POST" })
     if (!targetRoles?.length) throw new Error("المستخدم المستهدف لا ينتمي إلى المؤسسة المحددة.");
 
     if (!isSuperOwner) {
-      const actorIsOwner = (actorRoles ?? []).some((row) => row.role === "owner");
-      const actorManager = (actorRoles ?? []).find((row) => row.role === "manager");
-      if (!actorIsOwner && !actorManager) {
-        throw new Error("غير مصرح: إدارة صلاحيات الفريق للمالك أو المدير المخول فقط.");
-      }
-
-      if (actorManager && !actorIsOwner) {
+      const actorRows = actorRoles ?? [];
+      const isTenantOwner = actorRows.some((row) =>
+        row.role === "owner" && row.company_id == null && row.branch_id == null,
+      );
+      if (!isTenantOwner) {
+        // A company/branch owner or manager is scoped to the exact memberships
+        // assigned to them. A bare manager role with no scope is denied.
+        const scopedAdmins = actorRows.filter((row) =>
+          (row.role === "owner" || row.role === "manager") &&
+          (row.company_id != null || row.branch_id != null),
+        );
+        if (!scopedAdmins.length) {
+          throw new Error("لا يمكن تحديد نطاق الشركة أو الفرع المخول لحسابك؛ تم رفض العملية.");
+        }
         if (targetRoles.some((row) => row.role === "owner" || row.role === "manager")) {
-          throw new Error("لا يحق لمدير الفرع تعديل صلاحيات المالك أو مدير آخر.");
+          throw new Error("لا يحق لمدير الشركة أو الفرع تعديل صلاحيات المالك أو مدير آخر.");
         }
-        if (targetRoles.some((row) => row.hired_by !== context.userId)) {
-          throw new Error("يمكن لمدير الفرع إدارة الموظفين الذين قام بتعيينهم فقط.");
-        }
-        if (actorManager.branch_id && targetRoles.some((row) => row.branch_id !== actorManager.branch_id)) {
-          throw new Error("لا يمكن إدارة صلاحيات مستخدم من فرع آخر.");
-        }
-        if (actorManager.company_id && targetRoles.some((row) => row.company_id !== actorManager.company_id)) {
+
+        const companyScopes = new Set(scopedAdmins.map((row) => row.company_id).filter(Boolean));
+        const branchScopes = new Set(scopedAdmins.map((row) => row.branch_id).filter(Boolean));
+        if (companyScopes.size && targetRoles.some((row) => !row.company_id || !companyScopes.has(row.company_id))) {
           throw new Error("لا يمكن إدارة صلاحيات مستخدم من شركة أخرى.");
         }
+        if (branchScopes.size && targetRoles.some((row) => !row.branch_id || !branchScopes.has(row.branch_id))) {
+          throw new Error("لا يمكن إدارة صلاحيات مستخدم من فرع آخر.");
+        }
+        if (scopedAdmins.some((row) => row.role === "manager") &&
+            targetRoles.some((row) => row.hired_by !== context.userId)) {
+          throw new Error("يمكن لمدير الفرع إدارة الموظفين الذين قام بتعيينهم فقط.");
+        }
+
         const { data: effectivePermissions, error: effectivePermissionsError } = await context.supabase
           .rpc("get_my_permissions", { _tenant_id: data.tenant_id });
         if (effectivePermissionsError) throw new Error(effectivePermissionsError.message);
