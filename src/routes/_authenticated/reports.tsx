@@ -939,13 +939,13 @@ function ReportsPage() {
                         <td className="p-3">{row.branchName}</td>
                         <td className="p-3 num">{formatMoney(row.quantity, 3)}</td>
                         <td className="p-3 num">{formatMoney(row.minimum, 3)}</td>
-                        <td className="p-3 num">{formatMoney(row.estimatedValue)}</td>
+                        {canViewFinancialReports && <td className="p-3 num">{formatMoney(row.estimatedValue)}</td>}
                         <td className="p-3">{row.quantity <= row.minimum
                           ? <span className="font-semibold text-destructive">يحتاج إعادة طلب</span>
                           : <span className="text-success">متوفر</span>}</td>
                       </tr>
                     ))}
-                    {inventoryRows.length === 0 && <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">لا توجد أرصدة مخزون ضمن نطاق الصلاحيات الحالي.</td></tr>}
+                    {inventoryRows.length === 0 && <tr><td colSpan={canViewFinancialReports ? 6 : 5} className="p-8 text-center text-muted-foreground">لا توجد أرصدة مخزون ضمن نطاق الصلاحيات الحالي.</td></tr>}
                   </tbody>
                 </table>
               </div>
