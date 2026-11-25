@@ -210,7 +210,7 @@ BEGIN
   FROM public.user_roles ur
   WHERE ur.tenant_id = NEW.tenant_id
     AND ur.role IN ('owner','manager')
-    AND ur.company_id = v_company_id
+    AND (ur.company_id = v_company_id OR (ur.role = 'owner' AND ur.company_id IS NULL))
   ORDER BY CASE WHEN ur.role = 'owner' THEN 0 ELSE 1 END, ur.created_at
   LIMIT 1;
   IF v_actor_id IS NULL THEN RETURN NEW; END IF;
@@ -263,8 +263,9 @@ BEGIN
 
   SELECT ur.user_id INTO v_actor_id
   FROM public.user_roles ur
-  WHERE ur.tenant_id = NEW.tenant_id AND ur.company_id = NEW.company_id
+  WHERE ur.tenant_id = NEW.tenant_id
     AND ur.role IN ('owner','manager')
+    AND (ur.company_id = NEW.company_id OR (ur.role = 'owner' AND ur.company_id IS NULL))
   ORDER BY CASE WHEN ur.role = 'owner' THEN 0 ELSE 1 END, ur.created_at
   LIMIT 1;
   IF v_actor_id IS NULL THEN RETURN NEW; END IF;
@@ -387,8 +388,9 @@ BEGIN
 
   SELECT ur.user_id INTO v_actor_id
   FROM public.user_roles ur
-  WHERE ur.tenant_id = NEW.tenant_id AND ur.company_id = NEW.company_id
+  WHERE ur.tenant_id = NEW.tenant_id
     AND ur.role IN ('owner','manager')
+    AND (ur.company_id = NEW.company_id OR (ur.role = 'owner' AND ur.company_id IS NULL))
   ORDER BY CASE WHEN ur.role = 'owner' THEN 0 ELSE 1 END, ur.created_at
   LIMIT 1;
   IF v_actor_id IS NULL THEN RETURN NEW; END IF;
