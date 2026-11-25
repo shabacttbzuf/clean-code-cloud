@@ -28,6 +28,19 @@ function localDateKey(date: Date) {
 
 function ReportsPage() {
   const { tenantId, tenant, userId, membership, isSuperOwner } = useActiveTenant();
+  const reportViewKey = `workspace-reports-view-v1:${tenantId ?? "none"}:${userId ?? "none"}:${membership?.company_id ?? "none"}`;
+  const savedReportView = useMemo(() => {
+    try {
+      const value = JSON.parse(sessionStorage.getItem(reportViewKey) || "{}") as Record<string, unknown>;
+      const validDate = (date: unknown) => typeof date === "string" && /^\\d{4}-\\d{2}-\\d{2}$/.test(date);
+      return {
+        from: validDate(value.from) ? value.from : null,
+        to: validDate(value.to) ? value.to : null,
+        groupBy: ["day", "month", "year"].includes(String(value.groupBy)) ? value.groupBy as "day" | "month" | "year" : "day",
+        branchId: typeof value.branchId === "string" ? value.branchId : "all",
+      };
+    } catch { return { from: null, to: null, groupBy: "day" as const, branchId: "all" }; }
+  }, [reportViewKey]);
   const permissionsQuery = useQuery({
     queryKey: ["reports-permissions", tenantId, userId],
     queryFn: async () => {
@@ -41,13 +54,18 @@ function ReportsPage() {
   const canExportReports = permissionsQuery.data?.has("reports.export") === true;
   const canFilterReports = permissionsQuery.data?.has("reports.filter") === true;
   const [from, setFrom] = useState(() => {
+    if (savedReportView.from) return savedReportView.from;
     const d = new Date();
     d.setMonth(d.getMonth() - 1);
     return localDateKey(d);
   });
-  const [to, setTo] = useState(() => localDateKey(new Date()));
-  const [groupBy, setGroupBy] = useState<"day" | "month" | "year">("day");
-  const [branchId, setBranchId] = useState("all");
+  const [to, setTo] = useState(() => savedReportView.to ?? localDateKey(new Date()));
+  const [groupBy, setGroupBy] = useState<"day" | "month" | "year">(savedReportView.groupBy);
+  const [branchId, setBranchId] = useState(savedReportView.branchId);
+  useEffect(() => {
+    try { sessionStorage.setItem(reportViewKey, JSON.stringify({ from, to, groupBy, branchId })); }
+    catch { /* Session storage is optional. */ }
+  }, [reportViewKey, from, to, groupBy, branchId]);
   const branchesQuery = useQuery({ queryKey: ["report-branches", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
       let query = supabase.from("branches").select("id,name").eq("tenant_id", tenantId!).order("name");
