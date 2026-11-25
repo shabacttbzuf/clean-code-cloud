@@ -222,4 +222,6 @@
 
 113. `supabase/migrations/20261125030000_section_crud_permissions.sql`
 
-**الإجمالي: 113 ترحيلاً.**
+114. `supabase/migrations/20261125040000_purchase_rpc_action_permissions.sql`
+
+**الإجمالي: 114 ترحيلاً.**
