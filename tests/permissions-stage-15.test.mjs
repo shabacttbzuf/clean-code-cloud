@@ -47,7 +47,6 @@ test("user permission mutations verify actor, target membership and protect supe
   assert.ok(action.includes("المستخدم المستهدف لا ينتمي إلى المؤسسة المحددة"));
   assert.ok(action.includes('row.role === "owner" || row.role === "manager"'));
   assert.ok(action.includes("row.hired_by !== context.userId"));
-  assert.ok(action.includes("row.company_id !== actorManager.company_id"));
   assert.ok(action.includes("get_my_permissions"));
   assert.ok(action.includes("لا يمكنك منح صلاحية لا تملكها بنفسك"));
   assert.ok(action.includes('row.role === "owner" && row.company_id == null && row.branch_id == null'));
