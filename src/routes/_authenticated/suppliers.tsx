@@ -167,7 +167,7 @@ function SuppliersPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: window.location.pathname, formKey: "supplier-payment" } }));
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/suppliers", formKey: "supplier-payment" } }));
       qc.invalidateQueries({ queryKey: ["supplier-ledger", tenantId] });
       toast.success("تم تسجيل دفعة المورد وحفظها في كشف الحساب");
       setPaymentSupplier(null); setPaymentAmount(""); setPaymentReference(""); setPaymentNotes("");
@@ -193,7 +193,7 @@ function SuppliersPage() {
       }
     },
     onSuccess: () => {
-      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: window.location.pathname, formKey: "supplier-edit" } }));
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/suppliers", formKey: "supplier-edit" } }));
       qc.invalidateQueries({ queryKey: ["suppliers"] });
       toast.success("تم الحفظ");
       setOpen(false); setEditing(null);
