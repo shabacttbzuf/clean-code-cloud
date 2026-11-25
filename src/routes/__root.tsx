@@ -136,7 +136,15 @@ function OfflineStatus() {
     window.addEventListener("online", update);
     window.addEventListener("offline", update);
     if ("serviceWorker" in navigator && window.isSecureContext) {
-      navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch((error) => {
+      navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }).then((registration) => {
+        // Check for a newer worker whenever connectivity returns; never force a page reload.
+        const checkForUpdate = () => {
+          void registration.update().catch((error) => {
+            console.warn("تعذر التحقق من تحديث التطبيق:", error);
+          });
+        };
+        window.addEventListener("online", checkForUpdate);
+      }).catch((error) => {
         console.warn("تعذر تسجيل Service Worker:", error);
       });
     }
@@ -167,6 +175,9 @@ function RootComponent() {
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
       if (event === "SIGNED_OUT") {
+        // Remove in-memory query results as well as the optional IndexedDB cache.
+        // This prevents a second user of a shared device seeing the previous user's data.
+        queryClient.clear();
         void import("@/lib/offline-reference-cache").then(({ clearOfflineReferences }) => clearOfflineReferences()).catch((error) => {
           console.warn("تعذر مسح بيانات التخزين المحلي بعد تسجيل الخروج:", error);
         });
