@@ -1,6 +1,6 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(11);
+SELECT plan(14);
 
 SELECT is(
   (SELECT count(*)::int
@@ -139,6 +139,70 @@ SELECT is(
      AND permissive='RESTRICTIVE'),
   3,
   'Profile updates retain company, permission, and Super Owner protection gates'
+);
+
+
+SELECT ok(
+  EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname='public'
+      AND tablename='promotional_offers'
+      AND policyname='Tenant members read promotional offers'
+      AND cmd='SELECT'
+      AND qual ILIKE '%has_permission%'
+      AND qual ILIKE '%private.can_access_branch%'
+  )
+  AND (
+    SELECT count(*) = 3
+    FROM pg_policies
+    WHERE schemaname='public'
+      AND tablename='promotional_offers'
+      AND policyname IN (
+        'Promotion managers insert offers',
+        'Promotion managers update offers',
+        'Promotion managers delete offers'
+      )
+      AND (
+        coalesce(qual,'') || coalesce(with_check,'')
+      ) ILIKE '%has_permission%'
+      AND (
+        coalesce(qual,'') || coalesce(with_check,'')
+      ) ILIKE '%private.can_access_branch%'
+      AND (
+        coalesce(qual,'') || coalesce(with_check,'')
+      ) ILIKE '%private.is_company_member%'
+  ),
+  'Promotional offer read and write policies retain permission, company, and branch scope checks'
+);
+
+SELECT ok(
+  EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname='public'
+      AND tablename='promotion_redemptions'
+      AND policyname='Promotion managers read redemptions'
+      AND cmd='SELECT'
+      AND qual ILIKE '%private.is_tenant_member%'
+      AND qual ILIKE '%has_permission%'
+      AND qual ILIKE '%private.can_access_branch%'
+  ),
+  'Promotion redemption reads retain tenant, permission, and branch scope checks'
+);
+
+SELECT ok(
+  EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname='public'
+      AND tablename='marketing_ad_placements'
+      AND policyname='marketing_ad_placements_company_scope'
+      AND permissive='RESTRICTIVE'
+      AND cmd='ALL'
+      AND qual ILIKE '%company_id%'
+      AND with_check ILIKE '%company_id%'
+      AND qual ILIKE '%ads.manage%'
+      AND with_check ILIKE '%ads.manage%'
+  ),
+  'Marketing ad placement writes retain restrictive company scope and ads.manage checks'
 );
 
 SELECT * FROM finish();
