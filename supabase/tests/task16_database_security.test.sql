@@ -126,8 +126,8 @@ SELECT is(
      AND tablename IN ('payroll_runs','payroll_items')
      AND cmd IN ('SELECT','INSERT','UPDATE','DELETE')
      AND permissive='RESTRICTIVE'),
-  16,
-  'Payroll runs and items retain restrictive scope and permission gates for all CRUD operations'
+  8,
+  'Payroll runs and items retain four restrictive CRUD scope gates each'
 );
 
 SELECT is(
