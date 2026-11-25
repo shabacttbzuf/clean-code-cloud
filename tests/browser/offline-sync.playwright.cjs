@@ -9,7 +9,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_PATH);
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message));
 
-    await page.goto("http://127.0.0.1:4173/tests/browser/offline-sync.html", { waitUntil: "networkidle" });
+    await page.goto("http://127.0.0.1:4173/__ci/offline-sync.html", { waitUntil: "networkidle" });
     await page.locator("#run").click();
     await page.waitForFunction(
       () => document.querySelector("#log")?.textContent.includes("انتهى التشغيل."),
