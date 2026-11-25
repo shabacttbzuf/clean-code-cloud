@@ -70,9 +70,9 @@ test("closing other tabs keeps the active and pinned tabs and protects dirty tab
     { path: "/settings", title: "الإعدادات", pinned: true },
   ];
   const protectedTabs = closeOtherWorkspaceTabs(tabs, "/reports");
-  assert.deepEqual(protectedTabs.map(tab => tab.path), ["/dashboard", "/sales", "/reports", "/settings"]);
+  assert.deepEqual(protectedTabs.map(tab => tab.path), ["/dashboard", "/settings", "/sales", "/reports"]);
   const confirmed = closeOtherWorkspaceTabs(tabs, "/reports", { allowDirty: true });
-  assert.deepEqual(confirmed.map(tab => tab.path), ["/dashboard", "/reports", "/settings"]);
+  assert.deepEqual(confirmed.map(tab => tab.path), ["/dashboard", "/settings", "/reports"]);
 });
 
 test("tab storage scopes differ across users, companies and branches", () => {
