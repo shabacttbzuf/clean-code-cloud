@@ -139,9 +139,10 @@ function PermissionRouteGuard() {
   const { tenantId, userId, loading: tenantLoading } = useActiveTenant();
   const { isSuperOwner, totalCount, loading: ownerLoading, statusKnown: superOwnerStatusKnown, statusError: superOwnerStatusError, refetch: refetchSuperOwnerStatus } = useSuperOwner();
   const requiredPermission = permissionForPath(normalizedPath);
+  const isFirstOwnerBootstrap = normalizedPath === "/admin" && superOwnerStatusKnown && totalCount === 0;
   const ownerOnly = normalizedPath === "/owner-center" || (normalizedPath === "/admin" && (!superOwnerStatusKnown || totalCount > 0));
   const isExplicitlyPublic = AUTHENTICATED_OPEN_PATHS.has(normalizedPath);
-  const isKnownRoute = !!requiredPermission || ownerOnly || isExplicitlyPublic;
+  const isKnownRoute = !!requiredPermission || ownerOnly || isExplicitlyPublic || isFirstOwnerBootstrap;
 
   const permissionsQuery = useQuery({
     queryKey: ["route-effective-permissions", tenantId, userId],
