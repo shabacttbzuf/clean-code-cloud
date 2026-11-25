@@ -231,6 +231,12 @@ function POSWorkspace() {
   const [search, setSearch] = useState(restoredWorkspace.search ?? "");
   const [catFilter, setCatFilter] = useState<string>(restoredWorkspace.catFilter ?? "all");
   const [cart, setCart] = useState<CartItem[]>(restoredWorkspace.cart ?? []);
+  useEffect(() => {
+    const dirty = cart.length > 0;
+    window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/pos", dirty },
+    }));
+  }, [cart]);
   const [discount, setDiscount] = useState(restoredWorkspace.discount ?? "0");
   const [selectedPromotionId, setSelectedPromotionId] = useState(restoredWorkspace.selectedPromotionId ?? "");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>(restoredWorkspace.selectedCustomerId ?? "none");
