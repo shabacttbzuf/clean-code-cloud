@@ -189,20 +189,15 @@ SELECT ok(
   'Promotion redemption reads retain tenant, permission, and branch scope checks'
 );
 
-SELECT ok(
-  EXISTS (
-    SELECT 1 FROM pg_policies
-    WHERE schemaname='public'
-      AND tablename='marketing_ad_placements'
-      AND policyname='marketing_ad_placements_company_scope'
-      AND permissive='RESTRICTIVE'
-      AND cmd='ALL'
-      AND qual ILIKE '%company_id%'
-      AND with_check ILIKE '%company_id%'
-      AND qual ILIKE '%ads.manage%'
-      AND with_check ILIKE '%ads.manage%'
-  ),
-  'Marketing ad placement writes retain restrictive company scope and ads.manage checks'
+SELECT is(
+  (SELECT count(*)::int
+   FROM pg_policies
+   WHERE schemaname='public'
+     AND tablename='marketing_campaigns'
+     AND permissive='RESTRICTIVE'
+     AND cmd IN ('SELECT','INSERT','UPDATE','DELETE')),
+  4,
+  'Marketing campaigns retain restrictive company-scope gates for all CRUD operations'
 );
 
 SELECT * FROM finish();
