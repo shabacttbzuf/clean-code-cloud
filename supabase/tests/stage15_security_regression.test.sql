@@ -1,6 +1,6 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(12);
+SELECT plan(13);
 
 SELECT is(
   (SELECT count(*)::int
@@ -148,6 +148,15 @@ SELECT ok(
       AND policyname='platform branding readable by authenticated'
       AND cmd='SELECT' AND qual='true'),
   'Global platform branding remains intentionally readable to authenticated users'
+);
+
+
+SELECT ok(
+  position('_items IS NULL' in pg_get_functiondef('private.create_purchase_with_items(uuid,uuid,uuid,uuid,text,text,jsonb)'::regprocedure)) > 0
+  AND position('jsonb_typeof(_items) IS DISTINCT FROM ''array''' in pg_get_functiondef('private.create_purchase_with_items(uuid,uuid,uuid,uuid,text,text,jsonb)'::regprocedure)) > 0
+  AND position('is_active = true' in pg_get_functiondef('private.create_purchase_with_items(uuid,uuid,uuid,uuid,text,text,jsonb)'::regprocedure)) > 0
+  AND position('SET search_path = pg_catalog, public, private, pg_temp' in pg_get_functiondef('private.create_purchase_with_items(uuid,uuid,uuid,uuid,text,text,jsonb)'::regprocedure)) > 0,
+  'Purchase RPC rejects NULL/non-array item payloads, validates an active tenant branch and uses a hardened search path'
 );
 
 SELECT * FROM finish();
