@@ -257,11 +257,12 @@ function TopBar() {
       const recentIds = (itemsResult.data ?? []).map((row) => row.id);
       const recentReads = recentIds.length
         ? await (supabase.from("notification_reads" as any) as any)
-            .select("notification_id").eq("user_id", user.id).in("notification_id", recentIds)
+            .select("notification_id,archived_at").eq("user_id", user.id).in("notification_id", recentIds)
         : { data: [], error: null };
       if (recentReads.error) throw recentReads.error;
+      const archivedIds = new Set<string>((recentReads.data ?? []).filter((row: { archived_at: string | null }) => !!row.archived_at).map((row: { notification_id: string }) => row.notification_id));
       return {
-        items: itemsResult.data ?? [],
+        items: (itemsResult.data ?? []).filter((row) => !archivedIds.has(row.id)),
         readIds: new Set<string>((recentReads.data ?? []).map((row: { notification_id: string }) => row.notification_id)),
         unreadCount: Math.max(0, (totalResult.count ?? 0) - (readCountResult.count ?? 0)),
       };
@@ -427,7 +428,7 @@ function TopBar() {
           <DropdownMenuTrigger asChild><Button variant="outline" size="icon" className="relative rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm" aria-label="الإشعارات"><Bell className="h-5 w-5" />{unreadCount > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full border-2 border-white bg-red-500 px-1 text-[10px] font-bold text-white">{unreadCount > 9 ? "9+" : unreadCount}</span>}</Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-[min(92vw,360px)]">
             <div className="flex items-center justify-between px-2 py-1.5"><DropdownMenuLabel className="p-0">الإشعارات {unreadCount > 0 ? "(" + unreadCount + ")" : ""}</DropdownMenuLabel><Button size="sm" variant="ghost" className="h-7 text-xs" onClick={markAllNotificationsRead}>قراءة الكل</Button></div><DropdownMenuSeparator />
-            {(notificationsQuery.data?.items ?? []).length === 0 ? <div className="px-3 py-6 text-center text-sm text-muted-foreground">لا توجد إشعارات جديدة</div> : (notificationsQuery.data?.items ?? []).map((n: any) => { const isRead = notificationsQuery.data?.readIds.has(n.id); return <DropdownMenuItem key={n.id} className="block cursor-pointer whitespace-normal py-2" onSelect={() => { void openNotification(n); }}><div className="flex items-start gap-2">{!isRead && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-500" />}<div className="min-w-0 flex-1"><div className={isRead ? "text-sm font-normal" : "text-sm font-semibold"}>{n.title}</div>{n.body && <div className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{n.body}</div>}<div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-muted-foreground"><span>{new Date(n.created_at).toLocaleString("ar-YE")}</span>{n.action_path && <span className="font-semibold text-primary">{n.action_label || "فتح"}</span>}</div></div></div></DropdownMenuItem>; })}
+            {notificationsQuery.isError ? <div role="alert" className="px-3 py-4 text-center text-sm text-destructive">تعذر تحميل الإشعارات <Button variant="link" size="sm" onClick={() => void notificationsQuery.refetch()}>إعادة المحاولة</Button></div> : (notificationsQuery.data?.items ?? []).length === 0 ? <div className="px-3 py-6 text-center text-sm text-muted-foreground">لا توجد إشعارات جديدة</div> : (notificationsQuery.data?.items ?? []).map((n: any) => { const isRead = notificationsQuery.data?.readIds.has(n.id); return <DropdownMenuItem key={n.id} className="block cursor-pointer whitespace-normal py-2" onSelect={() => { void openNotification(n); }}><div className="flex items-start gap-2">{!isRead && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-500" />}<div className="min-w-0 flex-1"><div className={isRead ? "text-sm font-normal" : "text-sm font-semibold"}>{n.title}</div>{n.body && <div className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{n.body}</div>}<div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-muted-foreground"><span>{new Date(n.created_at).toLocaleString("ar-YE")}</span>{n.action_path && <span className="font-semibold text-primary">{n.action_label || "فتح"}</span>}</div></div></div></DropdownMenuItem>; })}
             <DropdownMenuSeparator /><DropdownMenuItem onSelect={() => navigate({ to: "/notifications" })} className="justify-center text-primary">عرض كل الإشعارات</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
