@@ -249,6 +249,18 @@ test("workspace tabs restore per-user tenant sessions and preserve non-sensitive
   assert.match(workspaceFormKeeper, /MutationObserver/);
   assert.match(workspaceFormKeeper, /scrollX/);
   assert.match(workspaceFormKeeper, /scrollY/);
+  assert.match(workspaceFormKeeper, /version: 3/);
+  assert.match(workspaceFormKeeper, /scrollContainers/);
+  assert.match(workspaceFormKeeper, /scrollableElements/);
+  assert.match(workspaceFormKeeper, /restoreScrollContainers/);
+  assert.match(workspaceFormKeeper, /focusedField/);
+  assert.match(workspaceFormKeeper, /selectionStart/);
+  assert.match(workspaceFormKeeper, /openDetails/);
+  assert.match(workspaceFormKeeper, /focusin/);
+  assert.match(workspaceFormKeeper, /saveViewState/);
+  assert.match(workspaceFormKeeper, /restoreOpenDetails/);
+  assert.match(workspaceFormKeeper, /authorization/);
+  assert.match(workspaceFormKeeper, /Complex widgets with private React state/);
   assert.match(workspaceFormKeeper, /restore scroll-only pages immediately/);
   assert.match(workspaceFormKeeper, /Backward compatibility with snapshots/);
   assert.match(workspaceFormKeeper, /useLayoutEffect/);
