@@ -24,7 +24,7 @@ type RestaurantTable = {
 };
 
 function TablesPage() {
-  const { tenantId, membership, isAdmin, isSuperOwner, hasPermission } = useActiveTenant();
+  const { tenantId, membership, isSuperOwner, hasPermission } = useActiveTenant();
   const canManage = hasPermission("tables.manage") || isSuperOwner;
   const qc = useQueryClient();
   const [branchId, setBranchId] = useState(membership?.branch_id ?? "");
@@ -39,7 +39,7 @@ function TablesPage() {
     queryKey: ["restaurant-table-branches", tenantId, membership?.branch_id],
     queryFn: async (): Promise<Branch[]> => {
       let query = supabase.from("branches").select("id,name").eq("tenant_id", tenantId!).eq("is_active", true).order("name");
-      if (membership?.branch_id && !isAdmin && !isSuperOwner) query = query.eq("id", membership.branch_id);
+      if (membership?.branch_id && !isSuperOwner) query = query.eq("id", membership.branch_id);
       const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as Branch[];
@@ -117,7 +117,7 @@ function TablesPage() {
     <div className="space-y-5" dir="rtl">
       <PageHeader title="إدارة الطاولات" subtitle="إدارة طاولات كل فرع ومنع إسناد الطلب نفسه لأكثر من طاولة أو إسناد طاولة مشغولة." action={
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={branchId} onValueChange={setBranchId} disabled={!!membership?.branch_id && !isAdmin && !isSuperOwner}>
+          <Select value={branchId} onValueChange={setBranchId} disabled={!!membership?.branch_id && !isSuperOwner}>
             <SelectTrigger className="w-44"><SelectValue placeholder="اختر الفرع" /></SelectTrigger>
             <SelectContent>{(branches.data ?? []).map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
           </Select>
