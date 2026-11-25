@@ -11,11 +11,17 @@ type SavedField = {
   checked?: boolean;
 };
 
+type SavedScrollContainer = { key: string; left: number; top: number };
 type SavedPageSnapshot = {
-  version: 2;
+  version: 3;
   fields: SavedField[];
   scrollX: number;
   scrollY: number;
+  scrollContainers: SavedScrollContainer[];
+  focusedField?: string;
+  selectionStart?: number | null;
+  selectionEnd?: number | null;
+  openDetails: string[];
 };
 
 const STORAGE_PREFIX = "ras-workspace-form-state-v1";
@@ -23,9 +29,9 @@ const FIELD_SELECTOR = "input, textarea, select, [contenteditable='true']";
 
 function isSensitiveField(element: HTMLElement): boolean {
   const input = element as HTMLInputElement;
-  const identity = `${input.name ?? ""} ${element.id} ${input.autocomplete ?? ""}`.toLowerCase();
+  const identity = `${input.name ?? ""} ${element.id} ${input.getAttribute("autocomplete") ?? ""} ${element.getAttribute("aria-label") ?? ""}`.toLowerCase();
   return element.hasAttribute("data-sensitive") ||
-    /password|token|secret|otp|one-time-code|cvv|cvc|card-number|credit-card/.test(identity);
+    /password|token|secret|otp|one-time-code|cvv|cvc|card-number|credit-card|authorization/.test(identity);
 }
 
 function fieldKey(element: HTMLElement, index: number): string {
@@ -40,7 +46,7 @@ function collectFields(root: ParentNode): SavedField[] {
     if (element.closest("[data-workspace-restore='off']") || isSensitiveField(element)) return [];
     if (element instanceof HTMLInputElement) {
       const type = element.type.toLowerCase();
-      if (["password", "file", "hidden", "button", "submit", "reset"].includes(type)) return [];
+      if (["password", "file", "hidden", "button", "submit", "reset", "image"].includes(type)) return [];
       return [{
         key: fieldKey(element, index), tag: "input", type,
         value: type === "checkbox" || type === "radio" ? undefined : element.value,
@@ -64,12 +70,11 @@ function applyFields(root: ParentNode, fields: SavedField[]) {
   const used = new Set<HTMLElement>();
   for (const saved of fields) {
     const index = Number(saved.key.startsWith("field-") ? saved.key.slice(6) : NaN);
-    const candidate = elements.find((element, elementIndex) =>
-      !used.has(element) && fieldKey(element, elementIndex) === saved.key &&
-      (saved.tag !== "input" || element instanceof HTMLInputElement && element.type.toLowerCase() === saved.type)
-    );
-    const element = candidate ?? (Number.isInteger(index) ? elements[index] : undefined);
-    if (!element || used.has(element)) continue;
+    const element = elements.find((candidate, elementIndex) =>
+      !used.has(candidate) && fieldKey(candidate, elementIndex) === saved.key &&
+      (saved.tag !== "input" || candidate instanceof HTMLInputElement && candidate.type.toLowerCase() === saved.type)
+    ) ?? (Number.isInteger(index) ? elements[index] : undefined);
+    if (!element || used.has(element) || isSensitiveField(element)) continue;
     used.add(element);
     if (element instanceof HTMLInputElement) {
       if (saved.checked !== undefined) {
@@ -88,7 +93,6 @@ function applyFields(root: ParentNode, fields: SavedField[]) {
       element.dispatchEvent(new Event("input", { bubbles: true }));
       element.dispatchEvent(new Event("change", { bubbles: true }));
     } else if (element instanceof HTMLSelectElement) {
-      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
       if (element.multiple) {
         let selectedValues: string[] = [];
         try {
@@ -99,6 +103,7 @@ function applyFields(root: ParentNode, fields: SavedField[]) {
         Array.from(element.options).forEach(option => { option.selected = selected.has(option.value); });
         element.dispatchEvent(new Event("change", { bubbles: true }));
       } else {
+        const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
         setter?.call(element, saved.value ?? "");
         element.dispatchEvent(new Event("change", { bubbles: true }));
       }
@@ -109,9 +114,57 @@ function applyFields(root: ParentNode, fields: SavedField[]) {
   }
 }
 
+function scrollableElements(root: ParentNode): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>("*")).filter((element) => {
+    if (element.closest("[data-workspace-restore='off']")) return false;
+    const style = window.getComputedStyle(element);
+    const vertical = /(auto|scroll|overlay)/.test(style.overflowY) && element.scrollHeight > element.clientHeight + 8;
+    const horizontal = /(auto|scroll|overlay)/.test(style.overflowX) && element.scrollWidth > element.clientWidth + 8;
+    return vertical || horizontal;
+  });
+}
+
+function scrollKey(element: HTMLElement, index: number): string {
+  return element.id || element.dataset.workspaceScrollKey || `scroll-${index}`;
+}
+
+function collectScrollContainers(root: ParentNode): SavedScrollContainer[] {
+  return scrollableElements(root).map((element, index) => ({
+    key: scrollKey(element, index), left: element.scrollLeft, top: element.scrollTop,
+  }));
+}
+
+function restoreScrollContainers(root: ParentNode, saved: SavedScrollContainer[]) {
+  const elements = scrollableElements(root);
+  saved.forEach((item, index) => {
+    const element = elements.find((candidate, candidateIndex) => scrollKey(candidate, candidateIndex) === item.key)
+      ?? (item.key.startsWith("scroll-") ? elements[Number(item.key.slice(7))] : undefined);
+    if (element) {
+      element.scrollLeft = item.left;
+      element.scrollTop = item.top;
+    }
+  });
+}
+
+function collectOpenDetails(root: ParentNode): string[] {
+  return Array.from(root.querySelectorAll<HTMLDetailsElement>("details[open]"))
+    .map((element, index) => element.id || element.dataset.workspaceKey || `details-${index}`);
+}
+
+function restoreOpenDetails(root: ParentNode, keys: string[]) {
+  const details = Array.from(root.querySelectorAll<HTMLDetailsElement>("details"));
+  details.forEach((element, index) => {
+    const key = element.id || element.dataset.workspaceKey || `details-${index}`;
+    element.open = keys.includes(key);
+  });
+}
+
 /**
- * Session-scoped form recovery for route changes. Password and file controls are
- * deliberately excluded; the database remains the source of truth after save.
+ * Session-scoped recovery for every authenticated route. It preserves native form
+ * controls, contenteditable text, window/nested scrolling, open disclosure panels
+ * and the last focused field. Sensitive fields are intentionally never persisted.
+ * Complex widgets with private React state must expose their state through native
+ * controls or implement the workspace snapshot events themselves.
  */
 export function WorkspaceFormStateKeeper() {
   const pathname = useRouterState({ select: state => state.location.pathname });
@@ -126,11 +179,8 @@ export function WorkspaceFormStateKeeper() {
     let restored = false;
     let restoring = false;
     let discardCurrent = false;
-    const restore = () => {
-      if (restored) return;
-      let fields: SavedField[] = [];
-      let scrollX = 0;
-      let scrollY = 0;
+
+    const readSnapshot = (): SavedPageSnapshot => {
       try {
         const raw = sessionStorage.getItem(storageKey);
         const parsed: unknown = raw ? JSON.parse(raw) : [];
@@ -139,42 +189,89 @@ export function WorkspaceFormStateKeeper() {
           typeof (field as SavedField).tag === "string" && typeof (field as SavedField).type === "string"
         );
         if (Array.isArray(parsed)) {
-          // Backward compatibility with snapshots saved before scroll restoration.
-          fields = validFields(parsed);
-        } else if (parsed && typeof parsed === "object" && "fields" in parsed) {
-          const snapshot = parsed as Partial<SavedPageSnapshot>;
-          fields = Array.isArray(snapshot.fields) ? validFields(snapshot.fields) : [];
-          scrollX = Number.isFinite(snapshot.scrollX) ? Number(snapshot.scrollX) : 0;
-          scrollY = Number.isFinite(snapshot.scrollY) ? Number(snapshot.scrollY) : 0;
+          return { version: 3, fields: validFields(parsed), scrollX: 0, scrollY: 0, scrollContainers: [], openDetails: [] };
         }
-      } catch { fields = []; }
-      // Wait for delayed form controls, but restore scroll-only pages immediately.
-      if (fields.length > 0 && root.querySelectorAll(FIELD_SELECTOR).length === 0) return;
-      if (fields.length || scrollX || scrollY) {
+        if (parsed && typeof parsed === "object" && "fields" in parsed) {
+          const snapshot = parsed as Partial<SavedPageSnapshot>;
+          return {
+            version: 3,
+            fields: Array.isArray(snapshot.fields) ? validFields(snapshot.fields) : [],
+            scrollX: Number.isFinite(snapshot.scrollX) ? Number(snapshot.scrollX) : 0,
+            scrollY: Number.isFinite(snapshot.scrollY) ? Number(snapshot.scrollY) : 0,
+            scrollContainers: Array.isArray(snapshot.scrollContainers) ? snapshot.scrollContainers.filter(item =>
+              !!item && typeof item.key === "string" && Number.isFinite(item.left) && Number.isFinite(item.top)
+            ) : [],
+            focusedField: typeof snapshot.focusedField === "string" ? snapshot.focusedField : undefined,
+            selectionStart: snapshot.selectionStart,
+            selectionEnd: snapshot.selectionEnd,
+            openDetails: Array.isArray(snapshot.openDetails) ? snapshot.openDetails.filter((key): key is string => typeof key === "string") : [],
+          };
+        }
+      } catch { /* Corrupt or unavailable session storage is ignored safely. */ }
+      return { version: 3, fields: [], scrollX: 0, scrollY: 0, scrollContainers: [], openDetails: [] };
+    };
+
+    const restore = () => {
+      if (restored) return;
+      const snapshot = readSnapshot();
+      if (snapshot.fields.length > 0 && root.querySelectorAll(FIELD_SELECTOR).length === 0) return;
+      const hasState = snapshot.fields.length || snapshot.scrollX || snapshot.scrollY ||
+        snapshot.scrollContainers.length || snapshot.openDetails.length;
+      if (hasState) {
         restoring = true;
-        try { applyFields(root, fields); }
-        finally { restoring = false; }
-        requestAnimationFrame(() => window.scrollTo({ left: scrollX, top: scrollY, behavior: "instant" }));
-        window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: pathname, dirty: fields.length > 0 } }));
+        try {
+          applyFields(root, snapshot.fields);
+          restoreOpenDetails(root, snapshot.openDetails);
+          restoreScrollContainers(root, snapshot.scrollContainers);
+        } finally { restoring = false; }
+        requestAnimationFrame(() => {
+          window.scrollTo({ left: snapshot.scrollX, top: snapshot.scrollY, behavior: "instant" });
+          restoreScrollContainers(root, snapshot.scrollContainers);
+          if (snapshot.focusedField) {
+            const target = Array.from(root.querySelectorAll<HTMLElement>(FIELD_SELECTOR))
+              .find((element, index) => fieldKey(element, index) === snapshot.focusedField);
+            if (target && !isSensitiveField(target)) {
+              target.focus({ preventScroll: true });
+              if ((target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) &&
+                typeof snapshot.selectionStart === "number" && typeof snapshot.selectionEnd === "number") {
+                try { target.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd); } catch { /* Unsupported input type. */ }
+              }
+            }
+          }
+        });
+        window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+          detail: { path: pathname, dirty: snapshot.fields.length > 0 },
+        }));
       }
       restored = true;
     };
+
     const save = () => {
       try {
+        const active = document.activeElement instanceof HTMLElement && root.contains(document.activeElement)
+          ? document.activeElement : null;
+        const textControl = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? active : null;
         const fields = collectFields(root);
         const snapshot: SavedPageSnapshot = {
-          version: 2,
+          version: 3,
           fields,
           scrollX: window.scrollX,
           scrollY: window.scrollY,
+          scrollContainers: collectScrollContainers(root),
+          focusedField: active && !isSensitiveField(active) && FIELD_SELECTOR.split(", ").some(selector => active.matches(selector))
+            ? fieldKey(active, Array.from(root.querySelectorAll<HTMLElement>(FIELD_SELECTOR)).indexOf(active)) : undefined,
+          selectionStart: textControl?.selectionStart,
+          selectionEnd: textControl?.selectionEnd,
+          openDetails: collectOpenDetails(root),
         };
-        if (fields.length || snapshot.scrollX || snapshot.scrollY) {
+        if (fields.length || snapshot.scrollX || snapshot.scrollY || snapshot.scrollContainers.length || snapshot.openDetails.length) {
           sessionStorage.setItem(storageKey, JSON.stringify(snapshot));
         } else {
           sessionStorage.removeItem(storageKey);
         }
-      } catch { /* session storage is optional */ }
+      } catch { /* Session storage is optional; never block navigation. */ }
     };
+
     const markDirty = () => {
       if (restoring || !restored) return;
       discardCurrent = false;
@@ -202,6 +299,8 @@ export function WorkspaceFormStateKeeper() {
     const maxWait = window.setTimeout(() => { observer.disconnect(); }, 15_000);
     root.addEventListener("input", markDirty, true);
     root.addEventListener("change", markDirty, true);
+    root.addEventListener("scroll", markDirty, true);
+    window.addEventListener("scroll", markDirty, { passive: true });
     window.addEventListener("ras-workspace-form-saved", onSaved);
     window.addEventListener("ras-workspace-form-discard", onDiscard);
     return () => {
@@ -211,6 +310,8 @@ export function WorkspaceFormStateKeeper() {
       if (!discardCurrent) save();
       root.removeEventListener("input", markDirty, true);
       root.removeEventListener("change", markDirty, true);
+      root.removeEventListener("scroll", markDirty, true);
+      window.removeEventListener("scroll", markDirty);
       window.removeEventListener("ras-workspace-form-saved", onSaved);
       window.removeEventListener("ras-workspace-form-discard", onDiscard);
     };
