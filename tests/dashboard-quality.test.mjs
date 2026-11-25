@@ -253,3 +253,11 @@ test("kitchen offline mode is read-only and uses branch-scoped cached queue data
   assert.match(kitchen, /statusMutation\.isPending \|\| !isOnline/);
   assert.match(kitchen, /set_kitchen_order_status/);
 });
+
+test("kitchen cache is visibly marked stale and can never be used to mutate while offline", () => {
+  assert.match(kitchen, /source: "cache"/);
+  assert.match(kitchen, /قد لا تعكس الحالة الحالية/);
+  assert.match(kitchen, /آخر تحديث محفوظ/);
+  assert.match(kitchen, /navigator\.onLine/);
+  assert.match(kitchen, /لا يمكن تحديث حالة المطبخ دون اتصال بالخادم/);
+});
