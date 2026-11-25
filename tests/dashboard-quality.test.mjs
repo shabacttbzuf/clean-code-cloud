@@ -285,3 +285,21 @@ test("font bundles include only Arabic Cairo and Latin Inter subsets", () => {
   assert.match(fontImports, /@fontsource\/inter\/latin-600\.css/);
   assert.doesNotMatch(fontImports, /@fontsource\/(?:cairo|inter)\/(?:400|500|600|700)\.css/);
 });
+
+const purchasesPage = readFileSync(new URL("../src/routes/_authenticated/purchases.tsx", import.meta.url), "utf8");
+const movementsPage = readFileSync(new URL("../src/routes/_authenticated/inventory.movements.tsx", import.meta.url), "utf8");
+const cashSessionsPage = readFileSync(new URL("../src/routes/_authenticated/cash-sessions.tsx", import.meta.url), "utf8");
+const expensesPage = readFileSync(new URL("../src/routes/_authenticated/expenses.tsx", import.meta.url), "utf8");
+const customersPage = readFileSync(new URL("../src/routes/_authenticated/customers.tsx", import.meta.url), "utf8");
+const reportsPage = readFileSync(new URL("../src/routes/_authenticated/reports.tsx", import.meta.url), "utf8");
+
+test("tenant data caches are partitioned by authenticated user and active branch where applicable", () => {
+  assert.match(sales, /queryKey: \["sales", tenantId, userId, membership\?\.branch_id\]/);
+  assert.match(purchasesPage, /queryKey: \["purchases", tenantId, userId, membership\?\.branch_id\]/);
+  assert.match(movementsPage, /queryKey: \["inventory-movements", tenantId, userId, membership\?\.branch_id\]/);
+  assert.match(cashSessionsPage, /queryKey: \["cash-sessions", tenantId, userId, membership\?\.branch_id\]/);
+  assert.match(cashSessionsPage, /queryKey: \["session-expected-cash", tenantId, userId, closingId\?\.id\]/);
+  assert.match(expensesPage, /queryKey: \["expenses", tenantId, userId, membership\?\.branch_id\]/);
+  assert.match(customersPage, /queryKey: \["customers", tenantId, userId, membership\?\.branch_id\]/);
+  assert.match(reportsPage, /queryKey: \["reports", tenantId, userId, membership\?\.branch_id, from, to, branchId\]/);
+});
