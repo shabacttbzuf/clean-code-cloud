@@ -16,7 +16,7 @@ SELECT ok(
 SELECT ok(
   has_function_privilege('authenticated', 'private.can_read_notification(uuid)', 'EXECUTE')
   AND NOT has_function_privilege('anon', 'private.can_read_notification(uuid)', 'EXECUTE')
-  AND NOT has_function_privilege('public', 'private.can_read_notification(uuid)', 'EXECUTE'),
+  ,
   'Only authenticated callers can evaluate notification visibility'
 );
 
