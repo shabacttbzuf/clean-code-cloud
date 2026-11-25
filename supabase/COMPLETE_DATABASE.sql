@@ -15268,6 +15268,8 @@ USING (
         WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=promotional_offers.tenant_id
           AND ur.company_id IS NULL
       ))
+      OR (company_id IS NULL AND branch_id IS NOT NULL
+        AND private.can_access_branch((select auth.uid()), tenant_id, branch_id))
       OR (
         company_id IS NOT NULL
         AND (private.is_company_member(tenant_id, company_id)
@@ -15291,6 +15293,8 @@ WITH CHECK (
         WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=promotional_offers.tenant_id
           AND ur.company_id IS NULL
       ))
+      OR (company_id IS NULL AND branch_id IS NOT NULL
+        AND private.can_access_branch((select auth.uid()), tenant_id, branch_id))
       OR (
         company_id IS NOT NULL
         AND (private.is_company_member(tenant_id, company_id)
@@ -15314,6 +15318,8 @@ USING (
         WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=promotional_offers.tenant_id
           AND ur.company_id IS NULL
       ))
+      OR (company_id IS NULL AND branch_id IS NOT NULL
+        AND private.can_access_branch((select auth.uid()), tenant_id, branch_id))
       OR (
         company_id IS NOT NULL
         AND (private.is_company_member(tenant_id, company_id)
@@ -15333,6 +15339,8 @@ WITH CHECK (
         WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=promotional_offers.tenant_id
           AND ur.company_id IS NULL
       ))
+      OR (company_id IS NULL AND branch_id IS NOT NULL
+        AND private.can_access_branch((select auth.uid()), tenant_id, branch_id))
       OR (
         company_id IS NOT NULL
         AND (private.is_company_member(tenant_id, company_id)
@@ -15356,6 +15364,8 @@ USING (
         WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=promotional_offers.tenant_id
           AND ur.company_id IS NULL
       ))
+      OR (company_id IS NULL AND branch_id IS NOT NULL
+        AND private.can_access_branch((select auth.uid()), tenant_id, branch_id))
       OR (
         company_id IS NOT NULL
         AND (private.is_company_member(tenant_id, company_id)
