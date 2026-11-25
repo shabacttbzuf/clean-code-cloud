@@ -15387,6 +15387,11 @@ BEGIN;
 
 INSERT INTO public.permissions (key, label_ar, label_en, category)
 VALUES
+  ('reports.print','طباعة التقارير','Print reports','reports'),
+  ('ads.print','طباعة الإعلانات','Print advertising campaigns','marketing'),
+  ('ads.export','تصدير الإعلانات','Export advertising campaigns','marketing'),
+  ('promotions.print','طباعة العروض','Print promotional offers','marketing'),
+  ('promotions.export','تصدير العروض','Export promotional offers','marketing'),
   ('categories.create','إضافة التصنيفات','Create categories','catalog'),
   ('categories.edit','تعديل التصنيفات','Edit categories','catalog'),
   ('categories.delete','حذف التصنيفات','Delete categories','catalog'),
@@ -15496,6 +15501,9 @@ WITH permission_map(legacy_key, new_key) AS (VALUES
   ('hr.manage','hr.leaves.create'),('hr.manage','hr.leaves.edit'),('hr.manage','hr.leaves.delete'),
   ('hr.leaves.view','hr.leaves.export'),('hr.payroll.view','hr.payroll.export'),
   ('notifications.manage','notifications.create'),('notifications.manage','notifications.edit'),('notifications.manage','notifications.delete'),
+  ('reports.export','reports.print'),
+  ('ads.view','ads.print'),('ads.view','ads.export'),
+  ('promotions.view','promotions.print'),('promotions.view','promotions.export'),
   ('branches.view','branches.print'),('branches.view','branches.export'),
   ('products.view','products.print'),('products.view','products.export'),
   ('purchases.view','purchases.print'),('purchases.view','purchases.export'),
@@ -15506,7 +15514,7 @@ INSERT INTO public.role_permissions (tenant_id, role_kind, builtin_role, custom_
 SELECT rp.tenant_id, rp.role_kind, rp.builtin_role, rp.custom_role_id, pm.new_key
 FROM public.role_permissions rp
 JOIN permission_map pm ON pm.legacy_key=rp.permission_key
-WHERE (rp.role_kind='builtin' AND rp.tenant_id IS NULL)
+WHERE rp.role_kind='builtin'
    OR (rp.role_kind='custom' AND rp.tenant_id IS NOT NULL AND rp.custom_role_id IS NOT NULL)
 ON CONFLICT DO NOTHING;
 
@@ -15557,6 +15565,24 @@ BEGIN
   END LOOP;
 END
 $section_crud_gates$;
+
+-- Leave requests retain employee self-service INSERT and approval UPDATE rules.
+-- Only administrative deletion is action-gated and branch-scoped here.
+DROP POLICY IF EXISTS permission_gate_leave_requests_delete_action ON public.leave_requests;
+CREATE POLICY permission_gate_leave_requests_delete_action
+ON public.leave_requests AS RESTRICTIVE FOR DELETE TO authenticated
+USING (
+  (
+    public.has_permission((select auth.uid()), tenant_id, 'hr.leaves.delete')
+    OR public.has_permission((select auth.uid()), tenant_id, 'hr.manage')
+  )
+  AND EXISTS (
+    SELECT 1 FROM public.employees e
+    WHERE e.id=leave_requests.employee_id
+      AND e.tenant_id=leave_requests.tenant_id
+      AND (e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id))
+  )
+);
 
 COMMIT;
 -- END MIGRATION: 20261125030000_section_crud_permissions.sql
