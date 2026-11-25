@@ -57,7 +57,7 @@ test("direct URL access is guarded and denied when permission lookup fails", () 
 });
 
 test("route normalization safely strips trailing slashes", () => {
-  assert.match(source, /pathname\.replace\(\/\\\/+\$\/, ""\)/);
+  assert.ok(source.includes(String.raw`pathname.replace(/\\/+$/, "")`));
 });
 
 test("nested routes use the most specific permission mapping", () => {
