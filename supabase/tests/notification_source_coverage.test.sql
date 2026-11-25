@@ -1,6 +1,6 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(15);
+SELECT plan(16);
 
 SELECT ok(
   to_regprocedure('private.can_read_notification(uuid)') IS NOT NULL
@@ -135,6 +135,12 @@ SELECT ok(
   AND pg_get_functiondef('private.notify_on_customer_credit_invoice()'::regprocedure) LIKE '%''owner''%'
   AND pg_get_functiondef('private.notify_on_customer_invoice_collection()'::regprocedure) LIKE '%''manager''%',
   'Administrative, HR, kitchen, stock, invoice and collection sources define scoped recipients'
+);
+
+
+SELECT ok(
+  pg_get_functiondef('private.can_read_notification(uuid)'::regprocedure) LIKE '%ur.company_id IS NULL%',
+  'Tenant-wide owners retain visibility across company-scoped owner and manager notifications'
 );
 
 SELECT * FROM finish();
