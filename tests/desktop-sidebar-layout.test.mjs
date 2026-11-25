@@ -11,10 +11,10 @@ test("authenticated workspace renders without a side navigation drawer", () => {
 });
 
 test("the applications launcher replaces the former sidebar control in the top bar", () => {
-  assert.match(route, /<AppLauncher \/>\s*<div className="grid h-10 w-10/);
+  assert.match(route, /<AppLauncher \/>\s*<div className="topbar-brand grid h-10 w-10/);
   assert.equal((route.match(/<AppLauncher \/>/g) ?? []).length, 1);
   assert.match(launcher, /size="icon".*aria-label="فتح التطبيقات"/);
-  assert.match(launcher, /max-h-\[min\(78vh,680px\)\]/);
+  assert.match(launcher, /max-h-\[min\(78dvh,680px\)\]/);
 });
 
 

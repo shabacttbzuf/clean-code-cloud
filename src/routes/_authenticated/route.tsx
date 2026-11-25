@@ -373,18 +373,18 @@ function TopBar() {
   const initial = displayName.charAt(0) || "?";
 
   return (
-    <header className="sticky top-0 z-30 flex min-h-[68px] items-center justify-between gap-3 border-b border-[#dbe5f4] bg-[rgba(248,250,255,.96)] px-3 py-2 shadow-[0_3px_14px_rgba(16,47,92,.06)] backdrop-blur-xl sm:px-5" dir="rtl">
-      <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-        <Link to="/support" aria-label="مركز المساعدة والدعم" title="مركز المساعدة والدعم">
+    <header className="responsive-topbar sticky top-0 z-30 flex min-h-[68px] items-center justify-between gap-3 border-b border-[#dbe5f4] bg-[rgba(248,250,255,.96)] px-3 py-2 shadow-[0_3px_14px_rgba(16,47,92,.06)] backdrop-blur-xl sm:px-5" dir="rtl">
+      <div className="topbar-primary flex min-w-0 items-center gap-2 sm:gap-3">
+        <Link to="/support" className="topbar-help-link" aria-label="مركز المساعدة والدعم" title="مركز المساعدة والدعم">
           <Button variant="outline" size="icon" className="rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm">
             <CircleHelp className="h-5 w-5" />
           </Button>
         </Link>
         <AppLauncher />
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#174b91] to-[#102f5c] text-[#f5c65b] shadow-sm"><Building2 className="h-5 w-5" /></div>
+        <div className="topbar-brand grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#174b91] to-[#102f5c] text-[#f5c65b] shadow-sm"><Building2 className="h-5 w-5" /></div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button type="button" className="min-w-0 rounded-lg px-1 text-right outline-none transition hover:bg-blue-50 focus-visible:ring-2 focus-visible:ring-[#174b91]" aria-label="اختيار الشركة">
+            <button type="button" className="topbar-tenant-trigger min-w-0 rounded-lg px-1 text-right outline-none transition hover:bg-blue-50 focus-visible:ring-2 focus-visible:ring-[#174b91]" aria-label="اختيار الشركة">
               <span className="block truncate text-sm font-extrabold text-[#102f5c] sm:text-base">{tenant?.name || "نظام إدارة المطاعم"}</span>
               <span className="block text-[10px] text-slate-500">{memberships.length > 1 ? "تبديل الشركة" : "نظام إدارة المطاعم المتكامل"}</span>
             </button>
@@ -408,9 +408,9 @@ function TopBar() {
         </DropdownMenu>
         <div className="hidden items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 text-xs font-bold text-[#174b91] shadow-sm lg:flex"><Building2 className="h-4 w-4" />{branchQuery.data?.name || (membership?.branch_id ? "الفرع المحدد" : "جميع الفروع")}</div>
       </div>
-      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+      <div className="topbar-actions flex shrink-0 items-center gap-1.5 sm:gap-2">
         <div className="hidden items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 text-[11px] font-semibold text-[#425b7d] shadow-sm md:flex"><CalendarDays className="h-4 w-4 text-[#174b91]" />{clock.toLocaleDateString("ar-YE",{weekday:"long",day:"numeric",month:"long"})}</div>
-        <div className="relative hidden w-[min(28vw,300px)] lg:block">
+        <div className="topbar-global-search relative hidden w-[min(28vw,300px)] lg:block">
           <div className="flex items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 shadow-sm focus-within:border-primary/50">
             <Search className="h-4 w-4 shrink-0 text-[#174b91]" />
             <input value={globalSearch} onChange={(event) => setGlobalSearch(event.target.value)} onFocus={() => setSearchOpen(true)} onBlur={() => window.setTimeout(() => setSearchOpen(false), 150)} onKeyDown={(event) => { if (event.key === "Escape") { setGlobalSearch(""); setSearchOpen(false); } if (event.key === "Enter" && searchItems[0]) { navigate({ to: searchItems[0].url as any }); setGlobalSearch(""); setSearchOpen(false); } }} placeholder="البحث في النظام..." aria-label="البحث الشامل داخل النظام" className="min-w-0 flex-1 bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400" />
@@ -419,8 +419,8 @@ function TopBar() {
             {searchPermissions.isError ? <p role="alert" className="p-3 text-xs text-destructive">تعذر التحقق من صلاحيات البحث.</p> : searchPermissions.isLoading && !isSuperOwner ? <p className="p-3 text-xs text-slate-500">جارٍ التحقق من الصلاحيات...</p> : searchItems.length ? searchItems.map((item) => <button key={item.url} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { navigate({ to: item.url as any }); setGlobalSearch(""); setSearchOpen(false); }} className="flex w-full items-center rounded-lg px-3 py-2 text-right text-sm hover:bg-blue-50">{item.title}</button>) : <p className="p-3 text-xs text-slate-500">لا توجد نتائج متاحة.</p>}
           </div>}
         </div>
-        <Button type="button" variant="outline" size="icon" onClick={toggleFullscreen} aria-label={fullscreen ? "الخروج من ملء الشاشة" : "ملء الشاشة"} className="hidden rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm sm:inline-flex">{fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</Button>
-        <Button variant="outline" size="icon" onClick={toggle} aria-label="تبديل الوضع" className="hidden rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm sm:inline-flex">{theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</Button>
+        <Button type="button" variant="outline" size="icon" onClick={toggleFullscreen} aria-label={fullscreen ? "الخروج من ملء الشاشة" : "ملء الشاشة"} className="topbar-fullscreen-toggle hidden rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm sm:inline-flex">{fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</Button>
+        <Button variant="outline" size="icon" onClick={toggle} aria-label="تبديل الوضع" className="topbar-theme-toggle hidden rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm sm:inline-flex">{theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild><Button variant="outline" size="icon" className="relative rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm" aria-label="الإشعارات"><Bell className="h-5 w-5" />{unreadCount > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full border-2 border-white bg-red-500 px-1 text-[10px] font-bold text-white">{unreadCount > 9 ? "9+" : unreadCount}</span>}</Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-[min(92vw,360px)]">

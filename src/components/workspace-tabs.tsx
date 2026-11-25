@@ -95,12 +95,12 @@ export function WorkspaceTabs() {
         const active = activePath === tab.path;
         return (
           <div key={tab.path} className={`group inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-colors ${active ? "border-primary/30 bg-primary text-primary-foreground shadow-sm" : "border-border bg-card text-foreground hover:border-primary/30 hover:bg-primary/5"}`}>
-            <button type="button" onClick={() => navigate({ to: tab.path as any })} className="inline-flex items-center gap-2 whitespace-nowrap" aria-current={active ? "page" : undefined}>
+            <button type="button" onClick={() => navigate({ to: tab.path as any })} className="inline-flex min-h-9 items-center gap-2 whitespace-nowrap" aria-current={active ? "page" : undefined}>
               {tab.path === "/dashboard" ? <Home className="h-4 w-4" /> : null}
               <span>{tab.title}</span>
             </button>
             {tab.path !== "/dashboard" && (
-              <button type="button" onClick={() => togglePinned(tab.path)} className="rounded-full p-0.5 opacity-60 hover:bg-black/10 hover:opacity-100" aria-label={tab.pinned ? `إلغاء تثبيت ${tab.title}` : `تثبيت ${tab.title}`} title={tab.pinned ? "إلغاء التثبيت" : "تثبيت التبويب"}>
+              <button type="button" onClick={() => togglePinned(tab.path)} className="workspace-tab-action inline-grid min-h-9 min-w-9 shrink-0 place-items-center rounded-full p-1 opacity-70 hover:bg-black/10 hover:opacity-100" aria-label={tab.pinned ? `إلغاء تثبيت ${tab.title}` : `تثبيت ${tab.title}`} title={tab.pinned ? "إلغاء التثبيت" : "تثبيت التبويب"}>
                 {tab.pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
               </button>
             )}

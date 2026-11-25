@@ -417,7 +417,7 @@ function ReportsPage() {
       )}
 
       <Tabs defaultValue="sales">
-        <TabsList className="grid w-full grid-cols-4 sm:w-auto sm:inline-grid">
+        <TabsList className="responsive-report-tabs flex w-full max-w-full justify-start overflow-x-auto sm:w-auto">
           <TabsTrigger value="sales">المبيعات</TabsTrigger>
           <TabsTrigger value="products">المنتجات</TabsTrigger>
           <TabsTrigger value="staff">الموظفون</TabsTrigger>

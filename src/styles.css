@@ -259,3 +259,400 @@
     -webkit-tap-highlight-color: transparent;
   }
 }
+
+
+/* UI/UX 1.9 — responsive layouts for desktop, tablet and touch phones. */
+html, body, #root {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+html { overflow-x: clip; }
+body { overflow-x: clip; }
+.workspace-surface,
+.workspace-surface > *,
+.workspace-surface main,
+.workspace-surface main > *,
+.workspace-surface main section,
+.workspace-surface main article {
+  min-width: 0;
+  max-width: 100%;
+}
+.workspace-surface main {
+  width: 100%;
+  overflow-wrap: anywhere;
+}
+.workspace-surface :where(img, video, canvas, svg) { max-width: 100%; }
+.workspace-surface :where(input, select, textarea) { min-width: 0; max-width: 100%; }
+.workspace-surface :where(pre, code) { max-width: 100%; overflow-x: auto; }
+.workspace-surface :where(.grid) { min-width: 0; }
+.responsive-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+.responsive-table-wrap table { min-width: max-content; }
+.responsive-table-wrap th,
+.responsive-table-wrap td { white-space: nowrap; }
+.workspace-tabs {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+}
+.workspace-tabs > div { scroll-snap-align: start; }
+.workspace-tabs button,
+.workspace-tabs [role="tab"] { touch-action: manipulation; }
+[data-radix-popper-content-wrapper] { max-width: calc(100vw - 1rem) !important; }
+[role="dialog"],
+[data-radix-dialog-content] {
+  max-width: calc(100vw - 1rem);
+  max-height: calc(100dvh - 1rem);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+button, [role="button"], a, input, select, textarea {
+  touch-action: manipulation;
+}
+@media (min-width: 641px) and (max-width: 1024px) {
+  .workspace-surface main { padding: 1rem; }
+  .workspace-surface main .grid { min-width: 0; }
+  .responsive-topbar { gap: .5rem; padding-inline: 1rem; }
+  .responsive-table-wrap table { font-size: .8125rem; }
+}
+@media (max-width: 640px) {
+  html { -webkit-text-size-adjust: 100%; }
+  .workspace-surface { background-attachment: scroll; }
+  .workspace-surface main {
+    padding: .75rem;
+    padding-bottom: max(.875rem, env(safe-area-inset-bottom));
+  }
+  .responsive-topbar {
+    min-height: 56px;
+    gap: .35rem;
+    padding-inline: .625rem;
+    padding-block: .45rem;
+  }
+  .responsive-topbar > div:first-child {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: .35rem;
+  }
+  .responsive-topbar > div:last-child {
+    flex: 0 0 auto;
+    gap: .3rem;
+  }
+  .responsive-topbar > div:last-child > button,
+  .responsive-topbar > div:last-child > [data-radix-dropdown-menu-trigger] {
+    min-width: 2.5rem;
+    min-height: 2.5rem;
+  }
+  .responsive-topbar [data-avatar],
+  .responsive-topbar [class*="avatar"] { flex-shrink: 0; }
+  .workspace-tabs {
+    min-height: 3rem;
+    padding-block: .45rem;
+    padding-inline: .625rem;
+    gap: .4rem;
+  }
+  .workspace-tabs > div {
+    min-height: 2.4rem;
+    padding: .4rem .65rem;
+    gap: .4rem;
+    font-size: .75rem;
+  }
+  .workspace-tabs > div > button { min-height: 1.7rem; }
+  .workspace-surface main :where(h1) { font-size: clamp(1.15rem, 5vw, 1.5rem); line-height: 1.35; }
+  .workspace-surface main :where(h2) { font-size: clamp(1rem, 4.2vw, 1.25rem); }
+  .workspace-surface main :where(.grid) {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
+  }
+  .workspace-surface main :where([data-slot="card"]) { min-width: 0; }
+  .workspace-surface main :where(button, [role="button"]) { min-height: 2.65rem; }
+  .workspace-surface main :where(input, select, textarea) { min-height: 2.65rem; font-size: 16px; }
+  .responsive-table-wrap { border-radius: .75rem; }
+  .responsive-table-wrap table { font-size: .75rem; }
+  .responsive-table-wrap th { padding: .6rem .55rem; }
+  .responsive-table-wrap td { padding: .55rem; }
+  [role="dialog"],
+  [data-radix-dialog-content] {
+    width: calc(100vw - 1rem) !important;
+    max-width: calc(100vw - 1rem) !important;
+    max-height: calc(100dvh - 1rem);
+    padding: 1rem;
+    border-radius: 1rem;
+  }
+  [data-radix-dialog-content] form,
+  [data-radix-dialog-content] [data-slot="dialog-footer"] {
+    min-width: 0;
+  }
+  [data-radix-dialog-content] :where(input, select, textarea) { font-size: 16px; }
+  [data-radix-popper-content-wrapper] { max-width: calc(100vw - 1rem) !important; }
+  [data-sonner-toaster][data-x-position="center"] {
+    width: calc(100vw - 1rem) !important;
+    left: 50% !important;
+  }
+}
+@media (max-width: 360px) {
+  .responsive-topbar { padding-inline: .4rem; }
+  .responsive-topbar > div:last-child { gap: .15rem; }
+  .workspace-surface main { padding-inline: .55rem; }
+  .workspace-tabs > div { padding-inline: .5rem; }
+}
+@media (hover: none) and (pointer: coarse) {
+  .workspace-surface button,
+  .workspace-surface a,
+  .workspace-surface [role="button"] { -webkit-tap-highlight-color: transparent; }
+}
+
+
+/* UI/UX 1.9 follow-up: page-specific responsive corrections. */
+.workspace-surface main { overflow-wrap: normal; }
+.workspace-surface :where(.grid, [class*="grid-cols-"]) { min-width: 0; }
+.workspace-surface :where(.flex) > * { min-width: 0; }
+.workspace-surface :where(.recharts-responsive-container, [data-chart], .recharts-wrapper) {
+  width: 100% !important;
+  max-width: 100%;
+  min-width: 0;
+}
+.workspace-surface :where(canvas, svg.recharts-surface) { max-width: 100%; }
+.responsive-table-wrap table { width: max-content; min-width: 100%; }
+.responsive-table-wrap th { white-space: nowrap; }
+.responsive-table-wrap td { white-space: normal; overflow-wrap: anywhere; }
+.responsive-table-wrap :where(button, [role="button"]) { white-space: nowrap; }
+.workspace-tabs { direction: rtl; }
+.workspace-tabs > div { flex: 0 0 auto; }
+.workspace-tabs .workspace-tab-action { min-height: 2.25rem; min-width: 2.25rem; }
+.app-launcher-root { flex: 0 0 auto; }
+.app-launcher-trigger { min-width: 2.5rem; min-height: 2.5rem; }
+.app-launcher-panel {
+  width: min(92vw, 28.75rem);
+  max-width: calc(100vw - 1rem);
+  max-height: min(78dvh, 42.5rem);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: max(.75rem, env(safe-area-inset-bottom));
+}
+.topbar-primary, .topbar-actions { min-width: 0; }
+.topbar-tenant-trigger { max-width: min(34vw, 15rem); }
+[role="dialog"], [data-radix-dialog-content] {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  scroll-padding-block: 1rem;
+}
+[data-radix-popper-content-wrapper] {
+  max-width: calc(100vw - 1rem) !important;
+}
+@media (max-width: 640px) {
+  .responsive-topbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    row-gap: .35rem;
+    padding-top: max(.45rem, env(safe-area-inset-top));
+    padding-bottom: .45rem;
+    padding-inline: max(.55rem, env(safe-area-inset-left)) max(.55rem, env(safe-area-inset-right));
+  }
+  .responsive-topbar .topbar-primary {
+    flex: 1 1 100%;
+    width: 100%;
+    gap: .45rem;
+  }
+  .responsive-topbar .topbar-help-link { display: inline-flex; flex: 0 0 auto; }
+  .responsive-topbar .topbar-help-link button,
+  .responsive-topbar .app-launcher-trigger { width: 2.5rem; height: 2.5rem; }
+  .responsive-topbar .topbar-brand { width: 2.5rem; height: 2.5rem; }
+  .responsive-topbar .topbar-tenant-trigger {
+    flex: 1 1 auto;
+    max-width: none;
+    overflow: hidden;
+  }
+  .responsive-topbar .topbar-tenant-trigger > span:first-child { font-size: .8rem; }
+  .responsive-topbar .topbar-tenant-trigger > span:last-child { font-size: .625rem; }
+  .responsive-topbar .topbar-actions {
+    flex: 1 1 100%;
+    width: 100%;
+    justify-content: flex-end;
+    gap: .35rem;
+  }
+  .responsive-topbar .topbar-actions > button,
+  .responsive-topbar .topbar-actions > [data-radix-dropdown-menu-trigger] {
+    min-width: 2.65rem;
+    min-height: 2.65rem;
+  }
+  .app-launcher-panel {
+    position: fixed;
+    inset-inline: max(.5rem, env(safe-area-inset-left)) max(.5rem, env(safe-area-inset-right));
+    top: calc(env(safe-area-inset-top) + 6.25rem);
+    width: auto;
+    max-width: none;
+    max-height: min(70dvh, 34rem);
+    margin: 0;
+    border-radius: 1rem;
+  }
+  .app-launcher-panel a { min-height: 3rem; overflow-wrap: anywhere; }
+  .workspace-surface main {
+    padding-inline: max(.7rem, env(safe-area-inset-left)) max(.7rem, env(safe-area-inset-right));
+    padding-top: .75rem;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  .workspace-surface main :where(button, [role="button"]) { min-height: 2.75rem; }
+  .workspace-tabs > div > button { min-height: 2.25rem; }
+  .workspace-tabs .workspace-tab-action { min-height: 2.25rem; min-width: 2.25rem; }
+  [role="dialog"], [data-radix-dialog-content] {
+    width: calc(100vw - 1rem) !important;
+    max-width: calc(100vw - 1rem) !important;
+    max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1rem);
+    margin-block: 0;
+  }
+  [data-radix-dialog-content] [data-slot="dialog-footer"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+  [data-radix-dialog-content] [data-slot="dialog-footer"] > * { flex: 1 1 auto; }
+  .workspace-surface :where(input, select, textarea) { font-size: 16px; }
+  .workspace-surface :where(.recharts-responsive-container, [data-chart]) { min-height: 13rem; }
+  .workspace-surface :where(.recharts-legend-wrapper) { position: relative !important; }
+}
+@media (max-width: 380px) {
+  .responsive-topbar .topbar-primary { gap: .3rem; }
+  .responsive-topbar .topbar-brand { width: 2.25rem; height: 2.25rem; }
+  .responsive-topbar .topbar-tenant-trigger > span:last-child { display: none; }
+  .app-launcher-panel { inset-inline: .4rem; }
+  .app-launcher-panel .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  .responsive-topbar { position: relative; }
+  .app-launcher-panel { max-height: 65dvh; }
+  [role="dialog"], [data-radix-dialog-content] { max-height: calc(100dvh - 1rem); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace-tabs { scroll-behavior: auto; scroll-snap-type: none; }
+}
+
+
+/* POS viewport sizing follows the visual viewport when the mobile keyboard opens. */
+@media (max-width: 640px) {
+  .pos-page {
+    height: max(0px, calc(100dvh - 10.5rem));
+    min-height: min(22rem, calc(100dvh - 10.5rem));
+    overflow: visible;
+  }
+  .pos-page > .grid { min-height: 0; }
+  .pos-page :where(input, textarea, select) { scroll-margin-block: 1rem; }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .pos-page {
+    height: max(0px, calc(100dvh - 8.5rem));
+    min-height: min(12rem, calc(100dvh - 8.5rem));
+  }
+}
+
+
+/* UI/UX 1.9 follow-up: use stable semantic hooks and safe mobile overlays. */
+@media (max-width: 640px) {
+  .responsive-topbar { padding-top: max(.45rem, env(safe-area-inset-top)); }
+  .topbar-help-link { display: none; }
+  .topbar-brand { width: 2.25rem; height: 2.25rem; border-radius: .7rem; }
+  .topbar-brand svg { width: 1.1rem; height: 1.1rem; }
+  .topbar-tenant-trigger { max-width: min(42vw, 10rem); }
+  .topbar-tenant-trigger > span:first-child {
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .75rem;
+  }
+  .topbar-tenant-trigger > span:nth-child(2) { display: none; }
+  .app-launcher-panel {
+    position: fixed; inset-inline: .5rem; top: calc(env(safe-area-inset-top) + 3.75rem); z-index: 60;
+    width: auto; max-width: none;
+    max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 4.5rem);
+    margin: 0; padding: .75rem;
+  }
+  .app-launcher-panel a { min-height: 3.25rem; }
+  .workspace-surface main { padding-bottom: max(.875rem, env(safe-area-inset-bottom)); }
+  .workspace-tabs { scroll-padding-inline: .75rem; }
+  .responsive-table-wrap { max-width: 100%; }
+  [role="dialog"], [data-radix-dialog-content] {
+    margin-block: max(.5rem, env(safe-area-inset-top)) max(.5rem, env(safe-area-inset-bottom));
+  }
+}
+@media (max-width: 640px) and (orientation: landscape) {
+  .responsive-topbar { min-height: 48px; }
+  .app-launcher-panel {
+    top: calc(env(safe-area-inset-top) + 3.25rem);
+    max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 3.75rem);
+  }
+  [role="dialog"], [data-radix-dialog-content] {
+    max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1rem);
+  }
+}
+@media (min-width: 641px) {
+  .app-launcher-panel { max-height: min(78vh, 680px); }
+}
+
+@media (max-width: 640px) {
+  .workspace-surface main [role="tab"] { min-height: 2.75rem; }
+  .workspace-surface main [role="tablist"] {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+
+/* Final responsive audit correction: help remains reachable on mobile. */
+@media (max-width: 640px) {
+  .responsive-topbar .topbar-help-link {
+    display: inline-flex !important;
+    flex: 0 0 auto;
+    visibility: visible;
+  }
+}
+@media (max-width: 380px) {
+  .responsive-topbar .topbar-help-link,
+  .responsive-topbar .app-launcher-trigger {
+    min-width: 2.25rem;
+    min-height: 2.25rem;
+  }
+}
+.pos-mobile-invoice { min-width: 0; }
+.pos-mobile-invoice > div:first-child { flex: 1 1 100%; min-width: 0; }
+.pos-mobile-invoice > button { flex: 0 0 auto; }
+@media (max-width: 380px) {
+  .pos-mobile-invoice { gap: .35rem; }
+  .pos-mobile-invoice > button { flex: 1 1 auto; min-width: 2.5rem; }
+}
+
+@media (max-width: 640px) {
+  .responsive-topbar .topbar-fullscreen-toggle,
+  .responsive-topbar .topbar-theme-toggle {
+    display: inline-flex;
+    min-width: 2.65rem;
+    min-height: 2.65rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .responsive-topbar .topbar-actions { flex-wrap: wrap; }
+  .responsive-topbar .topbar-global-search {
+    display: block !important;
+    order: 2;
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: none;
+  }
+  .responsive-topbar .topbar-global-search input {
+    min-height: 2.75rem;
+    font-size: 16px;
+  }
+  .responsive-topbar .topbar-global-search > div[dir="rtl"] {
+    max-height: min(45dvh, 20rem);
+    overflow-y: auto;
+  }
+}
