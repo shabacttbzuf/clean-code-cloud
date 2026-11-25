@@ -50,6 +50,13 @@ test("user permission mutations verify actor, target membership and protect supe
   assert.ok(action.includes("row.company_id !== actorManager.company_id"));
   assert.ok(action.includes("get_my_permissions"));
   assert.ok(action.includes("لا يمكنك منح صلاحية لا تملكها بنفسك"));
+  assert.ok(action.includes('row.role === "owner" && row.company_id == null && row.branch_id == null'));
+  assert.ok(action.includes("const scopedAdmins = actorRows.filter"));
+  assert.ok(action.includes("if (!scopedAdmins.length)"));
+  assert.ok(action.includes("companyScopes"));
+  assert.ok(action.includes("branchScopes"));
+  assert.ok(action.includes('scopedAdmins.some((row) => row.role === "manager")'));
+  assert.ok(!action.includes('some((row) => row.role === "owner")'));
 });
 
 test("enterprise user administration blocks self-targeting and enforces tenant/company/branch scope", () => {
