@@ -77,7 +77,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 function UsersAdminPage() {
-  const { tenantId, loading, isSuperOwner, hasPermission } = useActiveTenant();
+  const { tenantId, loading, hasPermission } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
   const qc = useQueryClient();
 
