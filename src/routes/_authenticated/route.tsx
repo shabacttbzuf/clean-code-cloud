@@ -110,7 +110,7 @@ const ROUTE_PERMISSION_RULES: Array<{ prefix: string; permission: string }> = [
   { prefix: "/suppliers", permission: "suppliers.view" },
   { prefix: "/purchases", permission: "purchases.view" },
   { prefix: "/expenses", permission: "expenses.view" },
-  { prefix: "/expense-categories", permission: "expense_categories.manage" },
+  { prefix: "/expense-categories", permission: "expense_categories.view" },
   { prefix: "/hr/employees", permission: "hr.employees.view" },
   { prefix: "/hr/attendance", permission: "hr.attendance.view" },
   { prefix: "/hr/leaves", permission: "hr.leaves.view" },
@@ -120,7 +120,7 @@ const ROUTE_PERMISSION_RULES: Array<{ prefix: string; permission: string }> = [
   { prefix: "/products", permission: "products.view" },
   { prefix: "/categories", permission: "categories.view" },
   { prefix: "/users", permission: "users.view" },
-  { prefix: "/users-admin", permission: "users.manage" },
+  { prefix: "/users-admin", permission: "users.view" },
   { prefix: "/team-permissions", permission: "permissions.view" },
   { prefix: "/roles", permission: "roles.view" },
   { prefix: "/companies", permission: "companies.view" },
@@ -130,10 +130,16 @@ const ROUTE_PERMISSION_RULES: Array<{ prefix: string; permission: string }> = [
   { prefix: "/notifications", permission: "notifications.view" },
   { prefix: "/login-history", permission: "login_history.view" },
   { prefix: "/audit-logs", permission: "audit.view" },
-  { prefix: "/ads", permission: "ads.manage" },
-  { prefix: "/promotions", permission: "promotions.manage" },
+  { prefix: "/ads", permission: "ads.view" },
+  { prefix: "/promotions", permission: "promotions.view" },
   { prefix: "/settings", permission: "settings.view" },
 ];
+
+const AUTHENTICATED_OPEN_PATHS = new Set(["/profile", "/support"]);
+
+function normalizeRoutePath(pathname: string) {
+  return pathname.length > 1 ? pathname.replace(/\\/+$/, "") : pathname;
+}
 
 function permissionForPath(pathname: string): string | null {
   const match = ROUTE_PERMISSION_RULES
@@ -144,32 +150,49 @@ function permissionForPath(pathname: string): string | null {
 
 function PermissionRouteGuard() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const { tenantId, userId, loading: tenantLoading } = useActiveTenant();
-  const { isSuperOwner, totalCount, loading: ownerLoading } = useSuperOwner();
-  const requiredPermission = permissionForPath(pathname);
-  const ownerOnly = pathname === "/owner-center" || (pathname === "/admin" && totalCount > 0);
+  const normalizedPath = normalizeRoutePath(pathname);
+  const { tenantId, userId, membership, loading: tenantLoading } = useActiveTenant();
+  const {
+    isSuperOwner, totalCount, loading: ownerLoading, statusKnown: superOwnerStatusKnown,
+    statusError: superOwnerStatusError, refetch: refetchSuperOwnerStatus,
+  } = useSuperOwner();
+  const requiredPermission = permissionForPath(normalizedPath);
+  const isFirstOwnerBootstrap = normalizedPath === "/admin" && superOwnerStatusKnown && totalCount === 0;
+  const ownerOnly = normalizedPath === "/owner-center" ||
+    (normalizedPath === "/admin" && (!superOwnerStatusKnown || totalCount > 0));
+  const isExplicitlyPublic = AUTHENTICATED_OPEN_PATHS.has(normalizedPath);
+  const isKnownRoute = !!requiredPermission || ownerOnly || isExplicitlyPublic || isFirstOwnerBootstrap;
 
   const permissionsQuery = useQuery({
-    queryKey: ["route-effective-permissions", tenantId, userId],
+    queryKey: ["route-effective-permissions", tenantId, userId, membership?.role, membership?.company_id, membership?.branch_id, membership?.custom_role_id],
     queryFn: async () => {
       if (!tenantId || !userId) return new Set<string>();
-      const permissions = await withOfflineFallback(
-        `auth-route-permissions:v1:${userId}:${tenantId}`,
-        async () => {
-          const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId });
-          if (error) throw error;
-          return (data ?? []) as string[];
-        },
-        OFFLINE_AUTH_CACHE_MAX_AGE_MS,
-      );
-      return new Set<string>(permissions);
+      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId });
+      if (error) throw error;
+      return new Set<string>((data ?? []) as string[]);
     },
     enabled: !!tenantId && !!userId && !isSuperOwner && !!requiredPermission && !ownerOnly,
     staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   });
 
   if (tenantLoading || ownerLoading || (!!requiredPermission && !isSuperOwner && permissionsQuery.isLoading)) {
     return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
+  }
+
+  if (!isKnownRoute) {
+    return <div role="alert" className="mx-auto max-w-xl rounded-lg border border-destructive/30 p-6 text-center text-sm">
+      لم يتم ربط هذا المسار بصلاحية معتمدة؛ تم منع الوصول احتياطياً حتى تتم مراجعته.
+    </div>;
+  }
+
+  if (normalizedPath === "/admin" && !superOwnerStatusKnown) {
+    return <div role="alert" className="mx-auto max-w-xl rounded-lg border border-destructive/30 p-6 text-center text-sm">
+      <p>تعذر التحقق من حالة المالك الرئيسي. تم إيقاف الوصول إلى شاشة الإدارة احتياطياً.</p>
+      {superOwnerStatusError instanceof Error && <p className="mt-2 text-xs text-muted-foreground">{superOwnerStatusError.message}</p>}
+      <Button type="button" variant="outline" className="mt-3" onClick={() => void refetchSuperOwnerStatus()}>إعادة التحقق</Button>
+    </div>;
   }
 
   if (ownerOnly && !isSuperOwner) {
@@ -177,9 +200,12 @@ function PermissionRouteGuard() {
   }
 
   if (requiredPermission && !isSuperOwner) {
-    const granted = !!permissionsQuery.data?.has(requiredPermission);
+    const granted = !permissionsQuery.isError && !!permissionsQuery.data?.has(requiredPermission);
     if (!granted) {
-      return <div role="alert" className="mx-auto max-w-xl rounded-lg border border-destructive/30 p-6 text-center text-sm">{permissionsQuery.isError ? "تعذر التحقق من الصلاحيات. أعد المحاولة لاحقاً." : "ليس لديك صلاحية الوصول إلى هذه الصفحة."}</div>;
+      return <div role="alert" className="mx-auto max-w-xl rounded-lg border border-destructive/30 p-6 text-center text-sm">
+        <p>{permissionsQuery.isError ? "تعذر التحقق من الصلاحيات؛ تم منع الوصول احتياطياً." : "ليس لديك صلاحية الوصول إلى هذه الصفحة."}</p>
+        {permissionsQuery.isError && <Button type="button" variant="outline" className="mt-3" onClick={() => void permissionsQuery.refetch()}>إعادة التحقق من الصلاحيات</Button>}
+      </div>;
     }
   }
 
