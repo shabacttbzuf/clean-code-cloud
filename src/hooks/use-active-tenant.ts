@@ -150,7 +150,7 @@ export function useActiveTenant() {
 
   const activeCompanyId = companySelection.scope === companyScopeStorageKey && companySelection.ready
     ? companySelection.companyId
-    : tenantMemberships.find((item) => item.company_id === null)?.company_id ?? tenantMemberships[0]?.company_id ?? null;
+    : hasTenantWideMembership ? null : tenantMemberships[0]?.company_id ?? null;
   const membership = useMemo(
     () => tenantMemberships.find((item) => item.company_id === activeCompanyId) ??
       tenantMemberships.find((item) => item.company_id === null) ??
