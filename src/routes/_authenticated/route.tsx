@@ -136,7 +136,7 @@ function permissionForPath(pathname: string): string | null {
 function PermissionRouteGuard() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const normalizedPath = normalizeRoutePath(pathname);
-  const { tenantId, userId, loading: tenantLoading } = useActiveTenant();
+  const { tenantId, userId, membership, loading: tenantLoading } = useActiveTenant();
   const { isSuperOwner, totalCount, loading: ownerLoading, statusKnown: superOwnerStatusKnown, statusError: superOwnerStatusError, refetch: refetchSuperOwnerStatus } = useSuperOwner();
   const requiredPermission = permissionForPath(normalizedPath);
   const isFirstOwnerBootstrap = normalizedPath === "/admin" && superOwnerStatusKnown && totalCount === 0;
@@ -145,7 +145,7 @@ function PermissionRouteGuard() {
   const isKnownRoute = !!requiredPermission || ownerOnly || isExplicitlyPublic || isFirstOwnerBootstrap;
 
   const permissionsQuery = useQuery({
-    queryKey: ["route-effective-permissions", tenantId, userId],
+    queryKey: ["route-effective-permissions", tenantId, userId, membership?.role, membership?.company_id, membership?.branch_id, membership?.custom_role_id],
     queryFn: async () => {
       if (!tenantId) return new Set<string>();
       const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId });
@@ -154,6 +154,8 @@ function PermissionRouteGuard() {
     },
     enabled: !!tenantId && !!userId && !isSuperOwner && !!requiredPermission && !ownerOnly,
     staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   });
 
   if (tenantLoading || ownerLoading || (!!requiredPermission && !isSuperOwner && permissionsQuery.isLoading)) {
