@@ -43,6 +43,19 @@ test("user permission mutations verify actor, target membership and protect supe
   assert.ok(action.includes("لا يمكنك منح صلاحية لا تملكها بنفسك"));
 });
 
+test("enterprise user administration blocks self-targeting and enforces tenant/company/branch scope", () => {
+  const enterprise = readFileSync(new URL("../src/lib/enterprise.functions.ts", import.meta.url), "utf8");
+  const helper = enterprise.slice(enterprise.indexOf("async function assertTargetUserManageable"), enterprise.indexOf("/* -------------------- Login history"));
+  assert.ok(helper.includes("actorId === targetUserId"));
+  assert.ok(helper.includes('from("super_owners")'));
+  assert.ok(helper.includes('row.role === "owner" && row.company_id == null'));
+  assert.ok(helper.includes('row.role === "manager"'));
+  assert.ok(helper.includes("targetRoles.some((row: any) => row.hired_by !== actorId)"));
+  assert.ok(helper.includes("targetBranchIds.some((id) => !actorBranchIds.includes(id))"));
+  assert.ok(helper.includes("targetCompanyIds.has(actorCompanyId)"));
+  assert.ok(enterprise.includes('.is("company_id", null).limit(1)'));
+});
+
 test("marketing CRUD and approval permissions are separate and database enforced", () => {
   for (const key of ["ads.view", "ads.create", "ads.edit", "ads.delete", "ads.approve", "promotions.view", "promotions.create", "promotions.edit", "promotions.delete", "promotions.approve"]) {
     assert.ok(granularMigration.includes("'" + key + "'"), "missing " + key);
