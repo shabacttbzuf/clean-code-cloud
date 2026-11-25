@@ -186,7 +186,7 @@ function PermissionRouteGuard() {
 
 function TopBar() {
   const { theme, toggle } = useTheme();
-  const { tenantId, tenant, membership, memberships, switchTenant, permissions, permissionsLoading, permissionsError, branchOptions, activeBranchId, switchBranch, branchLoading } = useActiveTenant();
+  const { tenantId, tenant, membership, memberships, switchTenant, companyOptions, activeCompanyId, switchCompany, companyLoading, companyError, permissions, permissionsLoading, permissionsError, branchOptions, activeBranchId, switchBranch, branchLoading } = useActiveTenant();
   const { user } = useAuthSession();
   const { isSuperOwner } = useSuperOwner();
   const [globalSearch, setGlobalSearch] = useState("");
@@ -439,24 +439,49 @@ function TopBar() {
           <DropdownMenuTrigger asChild>
             <button type="button" className="min-w-0 rounded-lg px-1 text-right outline-none transition hover:bg-blue-50 focus-visible:ring-2 focus-visible:ring-[#174b91]" aria-label="اختيار الشركة">
               <span className="block truncate text-sm font-extrabold text-[#102f5c] sm:text-base">{tenant?.name || "نظام إدارة المطاعم"}</span>
-              <span className="block max-w-44 truncate text-[10px] text-slate-500">{memberships.length > 1 ? `تبديل الشركة · ${activeBranchLabel}` : activeBranchLabel}</span>
+              <span className="block max-w-44 truncate text-[10px] text-slate-500">{(companyOptions.length > 0 ? companyOptions.find((item) => item.id === activeCompanyId)?.name || "كل الشركات" : tenant?.name) ? `${companyOptions.find((item) => item.id === activeCompanyId)?.name || (companyOptions.length > 1 ? "كل الشركات" : "")}${companyOptions.length > 0 ? " · " : ""}${activeBranchLabel}` : activeBranchLabel}</span>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-64">
-            <DropdownMenuLabel>الشركات المتاحة لحسابك</DropdownMenuLabel>
+            <DropdownMenuLabel>نطاق الشركة</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {memberships.map((item) => (
-              <DropdownMenuItem key={item.tenant_id} onSelect={() => {
-                if (item.tenant_id !== tenantId) {
-                  switchTenant(item.tenant_id);
-                  toast.success("تم تبديل الشركة بنجاح");
+            {companyError ? <DropdownMenuItem disabled>تعذر تحميل الشركات المتاحة</DropdownMenuItem> : companyLoading ? <DropdownMenuItem disabled>جارٍ تحميل الشركات...</DropdownMenuItem> : null}
+            {companyOptions.length > 1 && memberships.some((item) => item.tenant_id === tenantId && item.company_id === null) && (
+              <DropdownMenuItem onSelect={() => { switchCompany(null); toast.success("تم اختيار جميع الشركات"); }}>
+                <Building2 className="ml-2 h-4 w-4" />جميع الشركات
+                {!activeCompanyId && <span className="mr-auto text-xs text-emerald-600">الحالي</span>}
+              </DropdownMenuItem>
+            )}
+            {companyOptions.map((item) => (
+              <DropdownMenuItem key={item.id} onSelect={() => {
+                if (item.id !== activeCompanyId) {
+                  switchCompany(item.id);
+                  toast.success(`تم التبديل إلى ${item.name}`);
                 }
               }} className="cursor-pointer">
                 <Building2 className="ml-2 h-4 w-4" />
-                <span className="min-w-0 flex-1 truncate">{tenantOptionsQuery.data?.find((option) => option.id === item.tenant_id)?.name || (item.tenant_id === tenantId ? tenant?.name : "شركة") || "شركة"}</span>
-                {item.tenant_id === tenantId ? <span className="text-xs text-emerald-600">الحالية</span> : null}
+                <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                {item.id === activeCompanyId ? <span className="text-xs text-emerald-600">الحالية</span> : null}
               </DropdownMenuItem>
             ))}
+            {memberships.length > 1 && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>المؤسسات المرتبطة بحسابك</DropdownMenuLabel>
+                {[...new Set(memberships.map((item) => item.tenant_id))].map((id) => (
+                  <DropdownMenuItem key={id} onSelect={() => {
+                    if (id !== tenantId) {
+                      switchTenant(id);
+                      toast.success("تم تبديل المؤسسة بنجاح");
+                    }
+                  }} className="cursor-pointer">
+                    <Building2 className="ml-2 h-4 w-4" />
+                    <span className="min-w-0 flex-1 truncate">{tenantOptionsQuery.data?.find((option) => option.id === id)?.name || (id === tenantId ? tenant?.name : "مؤسسة") || "مؤسسة"}</span>
+                    {id === tenantId ? <span className="text-xs text-emerald-600">الحالية</span> : null}
+                  </DropdownMenuItem>
+                ))}
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
         {branchOptions.length > 0 && (branchOptions.length > 1 || canSelectAllBranches) ? (
