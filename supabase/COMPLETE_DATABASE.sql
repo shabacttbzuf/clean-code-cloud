@@ -16871,3 +16871,13 @@ ALTER TABLE public.inventory_transactions
 
 COMMIT;
 -- END MIGRATION: 20261125110000_prevent_product_history_deletion.sql
+
+-- SOURCE MIGRATION: 20261125120000_inventory_balance_rpc_only.sql
+-- All stock balance changes must pass through an atomic RPC that records an inventory transaction.
+BEGIN;
+
+DROP POLICY IF EXISTS "Warehouse and admins manage inventory" ON public.inventory;
+REVOKE INSERT, UPDATE, DELETE ON TABLE public.inventory FROM PUBLIC, anon, authenticated;
+
+COMMIT;
+-- END MIGRATION: 20261125120000_inventory_balance_rpc_only.sql
