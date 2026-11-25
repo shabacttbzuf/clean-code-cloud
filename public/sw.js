@@ -101,7 +101,7 @@ self.addEventListener("fetch", (event) => {
       try {
         const response = await fetch(request);
         // Only "/" is a public client-rendered shell. Never cache other route HTML.
-        if (url.pathname === "/" && isCacheablePublicHtml(response)) {
+        if (url.pathname === "/" && isCacheablePublicResponse(response) && response.headers.get("content-type")?.includes("text/html")) {
           const cache = await caches.open(SHELL_CACHE);
           try { await cache.put("/", response.clone()); } catch { /* Storage quota: keep network response. */ }
         }
