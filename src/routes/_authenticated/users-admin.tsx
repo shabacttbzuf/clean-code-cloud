@@ -83,6 +83,9 @@ function UsersAdminPage() {
 
   const canAccess = isSuperOwner || hasPermission("users.view");
   const canEditUsers = isSuperOwner || hasPermission("users.edit");
+  const canChangeRole = isSuperOwner || hasPermission("users.change_role");
+  const canChangeBranch = isSuperOwner || hasPermission("users.change_branch");
+  const canChangePassword = isSuperOwner || hasPermission("users.change_password");
   const canApproveUsers = isSuperOwner || hasPermission("users.approve");
   const canSuspendUsers = isSuperOwner || hasPermission("users.suspend");
   const canFreezeUsers = isSuperOwner || hasPermission("users.freeze");
@@ -413,6 +416,9 @@ function UsersAdminPage() {
           changeRoleFn={changeRoleFn}
           transferBranchFn={transferBranchFn}
           setPwdFn={setPwdFn}
+          canChangeRole={canChangeRole}
+          canChangeBranch={canChangeBranch}
+          canChangePassword={canChangePassword}
         />
       )}
     </div>
@@ -432,8 +438,11 @@ function EditUserDialog(props: {
   changeRoleFn: ReturnType<typeof useServerFn<typeof changeUserRole>>;
   transferBranchFn: ReturnType<typeof useServerFn<typeof transferUserToBranch>>;
   setPwdFn: ReturnType<typeof useServerFn<typeof updateUserPassword>>;
+  canChangeRole: boolean;
+  canChangeBranch: boolean;
+  canChangePassword: boolean;
 }) {
-  const { user, tenantId, branches, departments, companies, customRoles } = props;
+  const { user, tenantId, branches, departments, companies, customRoles, canChangeRole, canChangeBranch, canChangePassword } = props;
   const [form, setForm] = useState({
     full_name: user.full_name ?? "",
     phone: user.phone ?? "",
@@ -561,6 +570,7 @@ function EditUserDialog(props: {
             value={form.new_password}
             onChange={(v) => setForm({ ...form, new_password: v })}
             type="password"
+            disabled={!canChangePassword}
           />
         </div>
         <DialogFooter>
@@ -575,7 +585,7 @@ function EditUserDialog(props: {
   );
 }
 
-function Field(props: { label: string; value: string; onChange: (v: string) => void; type?: string; dir?: string }) {
+function Field(props: { label: string; value: string; onChange: (v: string) => void; type?: string; dir?: string; disabled?: boolean }) {
   return (
     <div>
       <Label>{props.label}</Label>
@@ -583,6 +593,7 @@ function Field(props: { label: string; value: string; onChange: (v: string) => v
         dir={props.dir}
         type={props.type ?? "text"}
         value={props.value}
+        disabled={props.disabled}
         onChange={(e) => props.onChange(e.target.value)}
       />
     </div>
@@ -594,11 +605,12 @@ function SelectField(props: {
   value: string;
   onChange: (v: string) => void;
   options: { id: string; name: string }[];
+  disabled?: boolean;
 }) {
   return (
     <div>
       <Label>{props.label}</Label>
-      <Select value={props.value || "__none__"} onValueChange={(v) => props.onChange(v === "__none__" ? "" : v)}>
+      <Select disabled={props.disabled} value={props.value || "__none__"} onValueChange={(v) => props.onChange(v === "__none__" ? "" : v)}>
         <SelectTrigger>
           <SelectValue />
         </SelectTrigger>
