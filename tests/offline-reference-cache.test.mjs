@@ -33,3 +33,12 @@ test("offline cache is explicitly limited to reference snapshots, not writes", a
   assert.ok(!source.includes("queueMutation"));
   assert.ok(!source.includes("flushQueue"));
 });
+
+test("offline reference cache enforces snapshot and browser storage limits", async () => {
+  const source = await read("../src/lib/offline-reference-cache.ts");
+  assert.ok(source.includes("MAX_SNAPSHOT_BYTES = 512 * 1024"));
+  assert.ok(source.includes("MAX_STORAGE_USAGE_RATIO = 0.9"));
+  assert.ok(source.includes("navigator.storage.estimate()"));
+  assert.ok(source.includes("QuotaExceededError"));
+  assert.ok(source.includes("JSON-serializable"));
+});
