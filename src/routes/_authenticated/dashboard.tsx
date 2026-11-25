@@ -181,11 +181,9 @@ function Dashboard() {
       const last30 = new Date(now.getTime() - 29 * 86400000);
       const last30ISO = new Date(last30.getFullYear(), last30.getMonth(), last30.getDate()).toISOString();
 
-      const [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expenses, lowStock, sessions, customersCount, categories] = await Promise.all([
-        supabase.from("sales").select("total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfDay),
+      const [salesMonth, salesTrend, refundsMonth, refundsTrend, expenses, lowStock, sessions, customersCount, categories] = await Promise.all([
         supabase.from("sales").select("id, total, subtotal, discount").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfMonth),
         supabase.from("sales").select("total, created_at").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", last30ISO),
-        supabase.from("sale_refunds").select("total").eq("tenant_id", tenantId).gte("created_at", startOfDay),
         supabase.from("sale_refunds").select("id, total, subtotal, discount").eq("tenant_id", tenantId).gte("created_at", startOfMonth),
         supabase.from("sale_refunds").select("total, created_at").eq("tenant_id", tenantId).gte("created_at", last30ISO),
         supabase.from("expenses").select("amount, category_id").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10)),
@@ -194,7 +192,7 @@ function Dashboard() {
         supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
         supabase.from("expense_categories").select("id, name, color").eq("tenant_id", tenantId),
       ]);
-      for (const result of [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expenses, lowStock, sessions, customersCount, categories]) {
+      for (const result of [salesMonth, salesTrend, refundsMonth, refundsTrend, expenses, lowStock, sessions, customersCount, categories]) {
         if (result.error) throw result.error;
       }
 
@@ -212,8 +210,11 @@ function Dashboard() {
       if (refundCostRows.error) throw refundCostRows.error;
       const catMap = new Map((categories.data ?? []).map((c) => [(c as { id: string }).id, c as { name: string; color: string | null }]));
 
-      const totalToday = (salesToday.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0)
-        - (refundsToday.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
+      const todayStartTime = new Date(startOfDay).getTime();
+      const salesTodayRows = (salesTrend.data ?? []).filter((row) => new Date(row.created_at).getTime() >= todayStartTime);
+      const refundsTodayRows = (refundsTrend.data ?? []).filter((row) => new Date(row.created_at).getTime() >= todayStartTime);
+      const totalToday = salesTodayRows.reduce((sum, row) => sum + Number(row.total), 0)
+        - refundsTodayRows.reduce((sum, row) => sum + Number(row.total), 0);
       const totalMonth = (salesMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0)
         - (refundsMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
       const totalExpMonth = (expenses.data ?? []).reduce((s, r) => s + Number((r as { amount: number }).amount), 0);
@@ -269,7 +270,7 @@ function Dashboard() {
       return {
         totalToday, totalMonth, totalExpMonth,
         profit, unknownCostItems,
-        salesTodayCount: (salesToday.data ?? []).length,
+        salesTodayCount: salesTodayRows.length,
         customersCount: customersCount.count ?? 0,
         openSessions: sessions.count ?? 0,
         lowStockCount,
