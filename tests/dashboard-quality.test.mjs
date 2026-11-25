@@ -245,6 +245,7 @@ test("workspace tabs restore per-user tenant sessions and preserve non-sensitive
   assert.match(workspaceTabs, /ras-workspace-form-discard/);
   assert.match(workspaceFormKeeper, /sessionStorage\.getItem\(storageKey\)/);
   assert.match(workspaceFormKeeper, /sessionStorage\.setItem\(storageKey, JSON\.stringify\(snapshot\)\)/);
+  assert.match(workspaceFormKeeper, /sessionStorage\.removeItem\(storageKey\)/);
   assert.match(workspaceFormKeeper, /MutationObserver/);
   assert.match(workspaceFormKeeper, /scrollX/);
   assert.match(workspaceFormKeeper, /scrollY/);
