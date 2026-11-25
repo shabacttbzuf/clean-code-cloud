@@ -53,9 +53,9 @@ const STORE = "operations";
 const META = "metadata";
 const FINANCIAL_TYPES = new Set([
   "invoice", "sale", "payment", "refund", "return", "inventory_deduction",
-  "stock_adjustment", "purchase_receipt", "cash_movement", "payroll",
+  "stock_adjustment", "purchase_receipt", "cash_movement", "payroll", "expense", "salary", "bank_transfer", "customer_payment", "supplier_payment",
 ]);
-const BLOCKED_OPERATION_PATTERN = /(^|[._-])(pos|checkout|sale|sales|invoice|payment|payments|refund|refunds|return|returns|inventory|stock|purchase|purchases|cash|payroll|accounting|journal|tax|ledger)([._-]|$)/i;
+const BLOCKED_OPERATION_PATTERN = /(^|[._-])(pos|checkout|sale|sales|invoice|payment|payments|refund|refunds|return|returns|inventory|stock|purchase|purchases|cash|bank|payroll|salary|expense|expenses|accounting|journal|tax|ledger|deposit|withdrawal|balance|reconciliation|receivable|payable|advance|discount|commission)([._-]|$)/i;
 
 function isFinancialOrInventoryOperation(type: string) {
   return FINANCIAL_TYPES.has(type) || BLOCKED_OPERATION_PATTERN.test(type);
@@ -75,7 +75,7 @@ function isPermanentFailure(error: unknown) {
   const message = candidate?.message ?? "";
   return status === 401 || status === 403 ||
     ["42501", "22023", "P0002"].includes(code) ||
-    /permission denied|not authorized|authentication required|session missing|invalid .*request|not found|بيانات .*غير صالحة|صلاحية|غير مصرح/i.test(message);
+    /permission denied|not authorized|authentication required|session missing|invalid .*request|not found|تغير المستخدم المسجل|بيانات .*غير صالحة|صلاحية|غير مصرح/i.test(message);
 }
 
 const MAX_AUTOMATIC_ATTEMPTS = 12;
@@ -187,7 +187,7 @@ export async function enqueueOfflineOperation(
       let validationError: Error | null = null;
       request.onsuccess = () => {
         const rows = request.result as OfflineOperation[];
-        const sameKey = rows.find((item) => sameScope(item.scope, scope) && item.idempotencyKey === operation.idempotencyKey);
+        const sameKey = rows.find((item) => item.scope.userId === scope.userId && item.scope.tenantId === scope.tenantId && item.idempotencyKey === operation.idempotencyKey);
         if (sameKey) {
           if (sameKey.type !== type || JSON.stringify(sameKey.payload) !== JSON.stringify(operation.payload)) {
             validationError = new Error("مفتاح منع التكرار مستخدم مسبقاً مع بيانات مختلفة؛ أوقفنا الحفظ.");
