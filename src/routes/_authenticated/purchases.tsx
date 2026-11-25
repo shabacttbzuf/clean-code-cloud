@@ -167,6 +167,7 @@ function PurchasesPage() {
           tenantId={tenantId!}
           userId={userId!}
           defaultBranchId={membership?.branch_id ?? null}
+          companyId={membership?.company_id ?? null}
         />
       </Dialog>
       <Dialog open={!!returningPurchaseId} onOpenChange={(open) => { if (!open) setReturningPurchaseId(null); }}>
@@ -280,8 +281,8 @@ function PurchaseReturnDialog({
 }
 
 function NewPurchaseDialog({
-  onDone, tenantId, userId, defaultBranchId,
-}: { onDone: () => void; tenantId: string; userId: string; defaultBranchId: string | null }) {
+  onDone, tenantId, userId, defaultBranchId, companyId,
+}: { onDone: () => void; tenantId: string; userId: string; defaultBranchId: string | null; companyId: string | null }) {
   const [branchId, setBranchId] = useState<string>(defaultBranchId ?? "");
   const [supplierId, setSupplierId] = useState<string>("none");
   const [reference, setReference] = useState("");
@@ -290,7 +291,7 @@ function NewPurchaseDialog({
   const [addProdId, setAddProdId] = useState<string>("");
 
   const branches = useQuery({
-    queryKey: ["branches-active-purchase", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
+    queryKey: ["branches-active-purchase", tenantId, userId, companyId ?? "tenant", defaultBranchId ?? "all"],
     queryFn: async () => {
       const { data } = await supabase.from("branches").select("id, name").eq("tenant_id", tenantId).eq("is_active", true);
       return (data ?? []) as Array<{ id: string; name: string }>;
