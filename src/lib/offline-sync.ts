@@ -297,6 +297,26 @@ async function claimOperation(id: string, scope: OfflineScope): Promise<OfflineO
   }
 }
 
+function hasDependencyCycle(startId: string, rows: OfflineOperation[]) {
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const visit = (id: string): boolean => {
+    if (visiting.has(id)) return true;
+    if (visited.has(id)) return false;
+    const current = byId.get(id);
+    if (!current) return false;
+    visiting.add(id);
+    for (const dependencyId of current.dependencies) {
+      if (byId.has(dependencyId) && visit(dependencyId)) return true;
+    }
+    visiting.delete(id);
+    visited.add(id);
+    return false;
+  };
+  return visit(startId);
+}
+
 function releaseLease(operation: OfflineOperation) {
   operation.leaseOwner = null;
   operation.leaseExpiresAt = null;
@@ -354,6 +374,32 @@ export async function syncOfflineOperations(scope: OfflineScope): Promise<void> 
           await saveOperation(operation);
         }
       }
+    }
+
+    const rowsById = new Map(rows.map((row) => [row.id, row]));
+    for (const candidate of rows) {
+      if (candidate.status === "synced" || candidate.status === "conflict" || candidate.status === "blocked") continue;
+      const unresolved = candidate.dependencies.filter((id) => !syncedIds.has(id));
+      if (unresolved.length === 0) continue;
+      const hasMissingDependency = unresolved.some((id) => !rowsById.has(id));
+      const hasTerminalDependency = unresolved.some((id) => {
+        const dependency = rowsById.get(id);
+        return dependency?.status === "conflict" || dependency?.status === "blocked";
+      });
+      const cyclic = hasDependencyCycle(candidate.id, rows);
+      if (!hasMissingDependency && !hasTerminalDependency && !cyclic) continue;
+      const operation = await claimOperation(candidate.id, scope);
+      if (!operation) continue;
+      operation.attempts = Math.max(0, operation.attempts - 1);
+      operation.status = "blocked";
+      operation.lastError = hasMissingDependency
+        ? "تعذر العثور على عملية تابعة ضمن النطاق الحالي؛ أوقفنا المزامنة."
+        : hasTerminalDependency
+          ? "توقفت عملية تابعة بسبب فشل دائم أو تعارض؛ راجع العملية الأصلية."
+          : "اكتُشفت حلقة اعتماد بين العمليات؛ أوقفنا المزامنة لمنع التنفيذ بترتيب غير صحيح.";
+      operation.nextRetryAt = null;
+      releaseLease(operation);
+      await saveOperation(operation);
     }
   })().finally(() => { syncPromises.delete(lockKey); });
   syncPromises.set(lockKey, task);
