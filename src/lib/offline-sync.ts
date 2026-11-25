@@ -343,7 +343,8 @@ export async function syncOfflineOperations(scope: OfflineScope): Promise<void> 
           await transaction([META], "readwrite", (tx) => tx.objectStore(META).put(operation.syncedAt, metaKey));
         } catch (error) {
           const message = error instanceof Error ? error.message : "فشل غير معروف أثناء المزامنة.";
-          const isConflict = /conflict|version|stale|تعارض/i.test(message);
+          const errorCode = (error as { code?: string } | null)?.code;
+          const isConflict = errorCode === "40001" || /conflict|version|stale|تعارض|changed or transition is invalid/i.test(message);
           const isPermanent = isPermanentFailure(error) || operation.attempts >= MAX_AUTOMATIC_ATTEMPTS;
           operation.status = isConflict ? "conflict" : isPermanent ? "blocked" : "failed";
           operation.lastError = message.slice(0, 1000);
