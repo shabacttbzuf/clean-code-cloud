@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 const migration = readFileSync(new URL("../supabase/migrations/20261125030000_section_crud_permissions.sql", import.meta.url), "utf8");
 const purchaseRpc = readFileSync(new URL("../supabase/migrations/20261125040000_purchase_rpc_action_permissions.sql", import.meta.url), "utf8");
 const purchaseReturnRpc = readFileSync(new URL("../supabase/migrations/20261125050000_purchase_return_rpc_action_permission.sql", import.meta.url), "utf8");
+const historyReadMigration = readFileSync(new URL("../supabase/migrations/20261125060000_audit_history_permission_reads.sql", import.meta.url), "utf8");
 const snapshot = readFileSync(new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url), "utf8");
 
 const source = (path) => readFileSync(new URL("../src/routes/_authenticated/" + path, import.meta.url), "utf8");
@@ -84,6 +85,7 @@ test("operational pages use action-level controls rather than administrator-role
     ["branches.$branchId.tsx",["branches.print"]],
     ["users.tsx",["users.create","users.change_role","users.change_branch","users.change_password","users.suspend","users.approve"]],
     ["audit-logs.tsx",["audit.view"]],
+    ["login-history.tsx",["login_history.view"]],
     ["cash-sessions.tsx",["cash.close"]],
     ["reports.tsx",["reports.print"]]
   ];
@@ -94,7 +96,11 @@ test("operational pages use action-level controls rather than administrator-role
 });
 
 test("complete database snapshot includes the section CRUD migration exactly once", () => {
-  for (const name of ["20261125030000_section_crud_permissions.sql", "20261125040000_purchase_rpc_action_permissions.sql", "20261125050000_purchase_return_rpc_action_permission.sql"]) {
+  assert.ok(historyReadMigration.includes("'audit.view'"));
+  assert.ok(historyReadMigration.includes("'login_history.view'"));
+  assert.ok(historyReadMigration.includes("audit_logs_permission_read"));
+  assert.ok(historyReadMigration.includes("login_history_permission_read"));
+  for (const name of ["20261125030000_section_crud_permissions.sql", "20261125040000_purchase_rpc_action_permissions.sql", "20261125050000_purchase_return_rpc_action_permission.sql", "20261125060000_audit_history_permission_reads.sql"]) {
     assert.equal(snapshot.split("SOURCE MIGRATION: " + name).length - 1, 1);
     assert.ok(snapshot.includes("END MIGRATION: " + name));
   }
