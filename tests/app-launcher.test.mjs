@@ -76,3 +76,14 @@ test("launcher provides per-application descriptions and a profile entry", () =>
   assert.match(launcher, /بيانات حسابك وتفضيلاته/);
   assert.match(launcher, /url: "\/profile", icon: UserRound/);
 });
+
+test("every launcher permission key is enforced by the authenticated route guard", async () => {
+  const routeGuard = readFileSync(new URL("../src/routes/_authenticated/route.tsx", import.meta.url), "utf8");
+  const permissionKeys = new Set([
+    ...[...sidebar.matchAll(/permission:\s*"([^"]+)"/g)].map((match) => match[1]),
+    ...[...launcher.matchAll(/permission:\s*"([^"]+)"/g)].map((match) => match[1]),
+  ]);
+  for (const permission of permissionKeys) {
+    assert.ok(routeGuard.includes(`permission: "${permission}"`), `route guard has no matching rule for ${permission}`);
+  }
+});
