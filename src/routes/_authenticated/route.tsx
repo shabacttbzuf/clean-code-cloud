@@ -123,7 +123,7 @@ const ROUTE_PERMISSION_RULES: Array<{ prefix: string; permission: string }> = [
 const AUTHENTICATED_OPEN_PATHS = new Set(["/profile", "/support"]);
 
 function normalizeRoutePath(pathname: string) {
-  return pathname.length > 1 ? pathname.replace(/\\/+$/, "") : pathname;
+  return pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
 }
 
 function permissionForPath(pathname: string): string | null {
