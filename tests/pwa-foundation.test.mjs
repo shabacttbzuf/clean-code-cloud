@@ -29,7 +29,8 @@ test("root registers service worker and exposes connection status", async () => 
   assert.ok(root.includes('register("/sw.js"'));
   assert.ok(root.includes('addEventListener("online"'));
   assert.ok(root.includes('addEventListener("offline"'));
-  assert.ok(root.includes("وضع عدم الاتصال"));
+  assert.ok(root.includes("غير متصل — الواجهة المحمّلة فقط"));
+  assert.ok(root.includes("بيانات الخادم والعمليات فتحتاج إلى اتصال"));
 });
 
 test("CI runs for the isolated work branch family", async () => {
