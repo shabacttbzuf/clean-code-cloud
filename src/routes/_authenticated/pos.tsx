@@ -159,7 +159,7 @@ function saveDrafts(list: Draft[], storageKey: string) {
 }
 
 function POSWorkspace() {
-  const { tenantId, tenant, userId, membership, role, isAdmin, isSuperOwner } = useActiveTenant();
+  const { tenantId, tenant, userId, membership, role, isSuperOwner } = useActiveTenant();
   const qc = useQueryClient();
   const [isOnline, setIsOnline] = useState(true);
   useEffect(() => {
@@ -303,7 +303,7 @@ function POSWorkspace() {
     if (membership?.branch_id && !isSuperOwner && branchId !== membership.branch_id) {
       setBranchId(membership.branch_id);
     }
-  }, [membership?.branch_id, isAdmin, isSuperOwner, branchId]);
+  }, [membership?.branch_id, isSuperOwner, branchId]);
 
   useEffect(() => {
     if (branchId) return;
@@ -920,7 +920,7 @@ function POSWorkspace() {
           <CardContent className="space-y-4 pt-6">
             <div className="space-y-2">
               <Label>الفرع</Label>
-              <Select value={branchId ?? ""} onValueChange={setBranchId} disabled={!isAdmin && !isSuperOwner}>
+              <Select value={branchId ?? ""} onValueChange={setBranchId} disabled={!!membership?.branch_id && !isSuperOwner}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {branches.data.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
