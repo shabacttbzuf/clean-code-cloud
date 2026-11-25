@@ -1,11 +1,61 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { summarizeDashboardFinancialRows } from "../src/lib/dashboard-metrics.mjs";
 
 const dashboard = readFileSync(new URL("../src/routes/_authenticated/dashboard.tsx", import.meta.url), "utf8");
 const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
 const layout = readFileSync(new URL("../src/routes/_authenticated/route.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+
+
+test("dashboard financial aggregation matches a known fixture of source rows", () => {
+  const result = summarizeDashboardFinancialRows({
+    salesToday: [{ total: 120 }, { total: 80 }],
+    refundsToday: [{ total: 25 }],
+    salesMonth: [
+      { total: 500, subtotal: 450, discount: 20 },
+      { total: 250, subtotal: 230, discount: 0 },
+    ],
+    refundsMonth: [{ total: 100, subtotal: 90, discount: 0 }],
+    expensesMonth: [{ amount: 60 }, { amount: 40 }],
+    saleCostRows: [
+      { quantity: 2, cost_price_snapshot: 40 },
+      { quantity: 1, cost_price_snapshot: 75 },
+    ],
+    refundCostRows: [
+      { quantity: 1, cost_price_snapshot: 40, restocked: true },
+      { quantity: 1, cost_price_snapshot: 75, restocked: false },
+    ],
+  });
+
+  assert.deepEqual(result, {
+    totalToday: 175,
+    totalMonth: 650,
+    totalExpMonth: 100,
+    unknownCostItems: 0,
+    profit: 355,
+  });
+});
+
+test("dashboard profit stays unavailable when any sold or restocked item has no cost snapshot", () => {
+  const result = summarizeDashboardFinancialRows({
+    salesToday: [],
+    refundsToday: [],
+    salesMonth: [{ total: 50, subtotal: 50, discount: 0 }],
+    refundsMonth: [],
+    expensesMonth: [],
+    saleCostRows: [{ quantity: 1, cost_price_snapshot: null }],
+    refundCostRows: [
+      { quantity: 1, cost_price_snapshot: null, restocked: true },
+      { quantity: 1, cost_price_snapshot: null, restocked: false },
+    ],
+  });
+
+  assert.equal(result.totalMonth, 50);
+  assert.equal(result.unknownCostItems, 2);
+  assert.equal(result.profit, null);
+});
 
 test("dashboard rejects partial query failures instead of presenting misleading totals", () => {
   assert.match(dashboard, /for \(const result of \[salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount\]\)/);
@@ -17,6 +67,57 @@ test("dashboard rejects partial query failures instead of presenting misleading 
 test("CI runs on the active feature branch and supports a manual verification run", () => {
   assert.match(workflow, /branches: \["main", "feature\/\*\*", "feat\/\*\*", "work\/\*\*"\]/);
   assert.match(workflow, /workflow_dispatch:/);
+});
+
+
+test("dashboard metrics are permission-gated and do not query or display financial summaries without reports.view", () => {
+  assert.match(dashboard, /enabled: !!tenantId && hasPermission\("reports\.view"\) && hasPermission\("sales\.view"\) && hasPermission\("expenses\.view"\)/);
+  assert.match(dashboard, /!hasPermission\("reports\.view"\)[\s\S]{0,240}لا تملك الصلاحية اللازمة لعرض المؤشرات المالية/);
+  assert.match(dashboard, /hasPermission\("inventory\.view"\) \? fetchAllRowsResult<any>\(lowStockQuery\)/);
+  assert.match(dashboard, /hasPermission\("cash\.view"\) \? fetchAllRowsResult<any>\(sessionsQuery\)/);
+  assert.match(dashboard, /hasPermission\("customers\.view"\)[\s\S]{0,120}from\("customers"\)/);
+  assert.match(dashboard, /stats\.data\.openSessions !== null/);
+  assert.match(dashboard, /stats\.data\.lowStockCount !== null/);
+});
+
+test("dashboard query caches are isolated by active user, company, and branch", () => {
+  assert.match(dashboard, /dashboard-stats", tenantId, user\?\.id, membership\?\.company_id, membership\?\.branch_id/);
+  assert.match(dashboard, /dashboard-notifications", tenantId, user\?\.id, membership\?\.company_id, membership\?\.branch_id/);
+  assert.match(dashboard, /dashboard-latest-orders", tenantId, user\?\.id, membership\?\.company_id, membership\?\.branch_id/);
+  assert.match(dashboard, /dashboard-kitchen-counts", tenantId, user\?\.id, membership\?\.company_id, membership\?\.branch_id/);
+});
+
+test("dashboard branch scopes fail closed when membership scope is incomplete", () => {
+  assert.match(dashboard, /Fail closed: an incomplete or missing membership must never become tenant-wide access/);
+  assert.match(dashboard, /scopedBranchIds = \[\]/);
+  assert.match(dashboard, /assignedBranchError/);
+});
+
+test("welcome context is tenant-bound and POS shortcut respects sales creation permission", () => {
+  assert.match(dashboard, /dashboard-active-company-name/);
+  assert.match(dashboard, /from\("companies"\)[\s\S]{0,150}eq\("tenant_id", tenantId\)/);
+  assert.match(dashboard, /dashboard-active-branch-name/);
+  assert.match(dashboard, /hasPermission\("sales\.create"\) && <Link to="\/pos"/);
+});
+
+test("dashboard KPI summaries refresh automatically without keeping prior-scope data", () => {
+  assert.match(dashboard, /refetchInterval: 30_000/);
+  assert.match(dashboard, /refetchOnWindowFocus: true/);
+  assert.match(dashboard, /queryKey: \["dashboard-stats", tenantId, user\?\.id/);
+});
+
+
+test("dashboard aggregate queries paginate past the Supabase row cap with deterministic ordering", () => {
+  assert.match(dashboard, /async function fetchAllRows<T>/);
+  assert.match(dashboard, /query\.range\(from, from \+ pageSize - 1\)/);
+  assert.match(dashboard, /pageSize = 500/);
+  assert.match(dashboard, /fetchAllRowsResult<any>\(salesMonthQuery\)/);
+  assert.match(dashboard, /fetchAllRowsResult<any>\(expensesMonthQuery\)/);
+  assert.match(dashboard, /fetchAllRowsResult<any>\(lowStockQuery\)/);
+  assert.match(dashboard, /fetchRowsByIdBatchesResult<any>\(saleIdsMonth/);
+  assert.match(dashboard, /fetchRowsByIdBatchesResult<any>\(refundIdsMonth/);
+  assert.match(dashboard, /batchSize = 200/);
+  assert.match(dashboard, /order\("created_at"\)\.order\("id"\)/);
 });
 
 test("authenticated workspace prevents horizontal overflow and motion respects accessibility preferences", () => {

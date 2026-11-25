@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
 import { Loader2, TrendingUp, TrendingDown, Receipt, Wallet, Package, Crown, Building2, Users as UsersIcon, Bell, Wifi, WifiOff, CircleHelp, ClipboardList, ChefHat } from "lucide-react";
 import { formatMoney } from "@/lib/format";
+import { summarizeDashboardFinancialRows } from "@/lib/dashboard-metrics.mjs";
 import { Link } from "@tanstack/react-router";
 import { Sparkles, ShoppingBag, ArrowLeft, ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 
@@ -44,10 +45,71 @@ function safeCampaignTarget(value: string | null): string | null {
   }
 }
 
+async function fetchAllRows<T>(query: any, pageSize = 500): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await query.range(from, from + pageSize - 1);
+    if (error) throw error;
+    const page = (data ?? []) as T[];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+}
+
+async function fetchAllRowsResult<T>(query: any): Promise<{ data: T[]; error: null }> {
+  return { data: await fetchAllRows<T>(query), error: null };
+}
+
+async function fetchRowsByIdBatchesResult<T>(
+  ids: string[],
+  buildQuery: (batch: string[]) => any,
+  batchSize = 200,
+): Promise<{ data: T[]; error: null }> {
+  const rows: T[] = [];
+  for (let index = 0; index < ids.length; index += batchSize) {
+    rows.push(...await fetchAllRows<T>(buildQuery(ids.slice(index, index + batchSize))));
+  }
+  return { data: rows, error: null };
+}
+
+const DEFAULT_DASHBOARD_HERO_IMAGE_URL = "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=75";
+
 function Dashboard() {
   const [activeCampaignIndex, setActiveCampaignIndex] = useState(0);
   const [campaignRotationPaused, setCampaignRotationPaused] = useState(false);
+  const [heroImageUrl, setHeroImageUrl] = useState(DEFAULT_DASHBOARD_HERO_IMAGE_URL);
+  const [heroBackgroundColor, setHeroBackgroundColor] = useState("#102f5c");
+  const [heroImageDraft, setHeroImageDraft] = useState(DEFAULT_DASHBOARD_HERO_IMAGE_URL);
+  const [heroBackgroundDraft, setHeroBackgroundDraft] = useState("#102f5c");
+  const [heroSettingsOpen, setHeroSettingsOpen] = useState(false);
+  const [heroImageUploading, setHeroImageUploading] = useState(false);
   const { tenantId, tenant, user, membership, role, hasPermission } = useActiveTenant();
+  const heroCustomizationKey = `restaurant-dashboard-hero:${tenantId ?? "global"}:${membership?.company_id ?? "tenant"}:${membership?.branch_id ?? "all-branches"}:${user?.id ?? "anonymous"}`;
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(heroCustomizationKey);
+      if (!saved) {
+        setHeroImageUrl(DEFAULT_DASHBOARD_HERO_IMAGE_URL);
+        setHeroImageDraft(DEFAULT_DASHBOARD_HERO_IMAGE_URL);
+        setHeroBackgroundColor("#102f5c");
+        setHeroBackgroundDraft("#102f5c");
+        return;
+      }
+      const preferences = JSON.parse(saved) as { imageUrl?: unknown; backgroundColor?: unknown };
+      const savedImage = typeof preferences.imageUrl === "string" ? preferences.imageUrl : "";
+      const safeImage = savedImage ? safeCampaignTarget(savedImage) : null;
+      const savedColor = typeof preferences.backgroundColor === "string" && /^#[0-9a-fA-F]{6}$/.test(preferences.backgroundColor)
+        ? preferences.backgroundColor
+        : "#102f5c";
+      setHeroImageUrl(safeImage ?? "");
+      setHeroImageDraft(safeImage ?? "");
+      setHeroBackgroundColor(savedColor);
+      setHeroBackgroundDraft(savedColor);
+    } catch (error) {
+      console.warn("Dashboard hero preferences could not be loaded", error);
+    }
+  }, [heroCustomizationKey]);
   const { isSuperOwner } = useSuperOwner();
   const profileQuery = useQuery({
     queryKey: ["dashboard-profile-name", user?.id],
@@ -64,6 +126,30 @@ function Dashboard() {
     enabled: !!user?.id,
     staleTime: 60_000,
   });
+  const branchQuery = useQuery({
+    queryKey: ["dashboard-active-branch-name", tenantId, user?.id, membership?.branch_id],
+    queryFn: async () => {
+      if (!tenantId || !membership?.branch_id) return null;
+      const { data, error } = await supabase.from("branches").select("name")
+        .eq("tenant_id", tenantId).eq("id", membership.branch_id).maybeSingle();
+      if (error) throw error;
+      return data?.name ?? null;
+    },
+    enabled: !!tenantId && !!membership?.branch_id,
+    staleTime: 60_000,
+  });
+  const companyQuery = useQuery({
+    queryKey: ["dashboard-active-company-name", tenantId, user?.id, membership?.company_id],
+    queryFn: async () => {
+      if (!tenantId || !membership?.company_id) return null;
+      const { data, error } = await supabase.from("companies").select("name")
+        .eq("tenant_id", tenantId).eq("id", membership.company_id).maybeSingle();
+      if (error) throw error;
+      return data?.name ?? null;
+    },
+    enabled: !!tenantId && !!membership?.company_id,
+    staleTime: 60_000,
+  });
   const displayName =
     profileQuery.data?.full_name?.trim() ||
     user?.user_metadata?.full_name?.trim() ||
@@ -72,7 +158,7 @@ function Dashboard() {
     "مستخدم";
 
   const campaignsQuery = useQuery({
-    queryKey: ["dashboard-marketing-campaigns", tenantId, membership?.company_id ?? "tenant"],
+    queryKey: ["dashboard-marketing-campaigns", tenantId, user?.id, membership?.company_id ?? "tenant", membership?.branch_id ?? "all-branches", role, isSuperOwner],
     queryFn: async () => {
       const now = new Date().toISOString();
       let query = supabase.from("marketing_campaigns")
@@ -100,11 +186,17 @@ function Dashboard() {
     },
     enabled: !!tenantId,
     staleTime: 60_000,
+    refetchInterval: 60_000,
   });
 
   useEffect(() => {
     setActiveCampaignIndex(0);
-  }, [tenantId, membership?.company_id]);
+  }, [tenantId, membership?.company_id, membership?.branch_id]);
+
+  useEffect(() => {
+    const count = campaignsQuery.data?.length ?? 0;
+    setActiveCampaignIndex((current) => count === 0 ? 0 : current % count);
+  }, [campaignsQuery.data?.length]);
 
   useEffect(() => {
     const campaignCount = campaignsQuery.data?.length ?? 0;
@@ -136,14 +228,20 @@ function Dashboard() {
   }, [activeCampaign?.id]);
 
   const systemStatusQuery = useQuery({
-    queryKey: ["dashboard-system-status", tenantId, user?.id],
+    queryKey: ["dashboard-system-status", tenantId, user?.id, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
       if (!tenantId || !user?.id) throw new Error("لا يوجد نطاق شركة أو مستخدم نشط.");
       const checkedAt = new Date().toISOString();
       const [authResult, tenantResult, branchesResult, profileResult, permissionsResult] = await Promise.all([
         supabase.auth.getUser(),
         supabase.from("tenants").select("id").eq("id", tenantId).maybeSingle(),
-        supabase.from("branches").select("id").eq("tenant_id", tenantId).limit(1),
+        (() => {
+          let query = supabase.from("branches").select("id").eq("tenant_id", tenantId).limit(1);
+          if (!isSuperOwner && membership?.branch_id) query = query.eq("id", membership.branch_id);
+          else if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
+          else if (!isSuperOwner && role !== "owner") query = query.in("id", []);
+          return query;
+        })(),
         supabase.from("profiles").select("id").eq("id", user.id).maybeSingle(),
         supabase.rpc("get_my_permissions", { _tenant_id: tenantId }),
       ]);
@@ -192,7 +290,7 @@ function Dashboard() {
   });
 
   const dashboardNotifications = useQuery({
-    queryKey: ["dashboard-notifications", tenantId, user?.id],
+    queryKey: ["dashboard-notifications", tenantId, user?.id, membership?.company_id, membership?.branch_id],
     queryFn: async () => {
       if (!tenantId || !user?.id) return [];
       const [items, reads] = await Promise.all([
@@ -211,16 +309,16 @@ function Dashboard() {
   });
 
   const superStats = useQuery({
-    queryKey: ["super-owner-stats"],
+    queryKey: ["super-owner-stats", user?.id],
     queryFn: async () => {
       const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
       const [tenants, branches, users, sales, refunds, expenses] = await Promise.all([
         supabase.from("tenants").select("id", { count: "exact", head: true }),
         supabase.from("branches").select("id", { count: "exact", head: true }),
         supabase.from("profiles").select("id", { count: "exact", head: true }),
-        supabase.from("sales").select("total").neq("status", "void").gte("created_at", startOfMonth),
-        supabase.from("sale_refunds").select("total").gte("created_at", startOfMonth),
-        supabase.from("expenses").select("amount").gte("paid_at", startOfMonth.slice(0, 10)),
+        fetchAllRowsResult<any>(supabase.from("sales").select("total").neq("status", "void").gte("created_at", startOfMonth).order("id")),
+        fetchAllRowsResult<any>(supabase.from("sale_refunds").select("total").gte("created_at", startOfMonth).order("id")),
+        fetchAllRowsResult<any>(supabase.from("expenses").select("amount").gte("paid_at", startOfMonth.slice(0, 10)).order("id")),
       ]);
       for (const result of [tenants, branches, users, sales, refunds, expenses]) {
         if (result.error) throw result.error;
@@ -241,7 +339,7 @@ function Dashboard() {
   });
 
   const stats = useQuery({
-    queryKey: ["dashboard-stats", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryKey: ["dashboard-stats", tenantId, user?.id, membership?.company_id, membership?.branch_id, role, isSuperOwner, hasPermission("reports.view"), hasPermission("sales.view"), hasPermission("expenses.view"), hasPermission("inventory.view"), hasPermission("cash.view"), hasPermission("customers.view")],
     queryFn: async () => {
       if (!tenantId) return null;
       const now = new Date();
@@ -254,24 +352,29 @@ function Dashboard() {
       // null means tenant-wide access; an empty list deliberately returns no branch-owned rows.
       let scopedBranchIds: string[] | null = null;
       if (!isSuperOwner && membership?.branch_id) {
-        scopedBranchIds = [membership.branch_id];
+        const { data: assignedBranch, error: assignedBranchError } = await supabase.from("branches")
+          .select("id").eq("tenant_id", tenantId).eq("id", membership.branch_id).maybeSingle();
+        if (assignedBranchError) throw assignedBranchError;
+        scopedBranchIds = assignedBranch ? [assignedBranch.id] : [];
       } else if (!isSuperOwner && membership?.company_id) {
-        const { data: companyBranches, error: branchScopeError } = await supabase.from("branches")
-          .select("id").eq("tenant_id", tenantId).eq("company_id", membership.company_id);
-        if (branchScopeError) throw branchScopeError;
-        scopedBranchIds = (companyBranches ?? []).map((row) => row.id);
+        const companyBranches = await fetchAllRows<any>(supabase.from("branches")
+          .select("id").eq("tenant_id", tenantId).eq("company_id", membership.company_id).order("id"));
+        scopedBranchIds = companyBranches.map((row) => row.id);
+      } else if (!isSuperOwner && role !== "owner") {
+        // Fail closed: an incomplete or missing membership must never become tenant-wide access.
+        scopedBranchIds = [];
       }
 
-      let salesTodayQuery = supabase.from("sales").select("total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfDay);
-      let salesMonthQuery = supabase.from("sales").select("id, total, subtotal, discount").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfMonth);
-      let salesTrendQuery = supabase.from("sales").select("total, created_at").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", last30ISO);
-      let refundsTodayQuery = supabase.from("sale_refunds").select("total").eq("tenant_id", tenantId).gte("created_at", startOfDay);
-      let refundsMonthQuery = supabase.from("sale_refunds").select("id, total, subtotal, discount").eq("tenant_id", tenantId).gte("created_at", startOfMonth);
-      let refundsTrendQuery = supabase.from("sale_refunds").select("total, created_at").eq("tenant_id", tenantId).gte("created_at", last30ISO);
-      let expensesMonthQuery = supabase.from("expenses").select("amount").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10));
-      let expensesByCategoryQuery = supabase.from("expenses").select("amount, category_id").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10));
-      let lowStockQuery = supabase.from("inventory").select("quantity, product_id").eq("tenant_id", tenantId);
-      let sessionsQuery = supabase.from("cash_sessions").select("id").eq("tenant_id", tenantId).eq("status", "open");
+      let salesTodayQuery = supabase.from("sales").select("total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfDay).order("id");
+      let salesMonthQuery = supabase.from("sales").select("id, total, subtotal, discount").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfMonth).order("id");
+      let salesTrendQuery = supabase.from("sales").select("total, created_at").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", last30ISO).order("created_at").order("id");
+      let refundsTodayQuery = supabase.from("sale_refunds").select("total").eq("tenant_id", tenantId).gte("created_at", startOfDay).order("id");
+      let refundsMonthQuery = supabase.from("sale_refunds").select("id, total, subtotal, discount").eq("tenant_id", tenantId).gte("created_at", startOfMonth).order("id");
+      let refundsTrendQuery = supabase.from("sale_refunds").select("total, created_at").eq("tenant_id", tenantId).gte("created_at", last30ISO).order("created_at").order("id");
+      let expensesMonthQuery = supabase.from("expenses").select("amount").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10)).order("id");
+      let expensesByCategoryQuery = supabase.from("expenses").select("amount, category_id").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10)).order("id");
+      let lowStockQuery = supabase.from("inventory").select("quantity, product_id").eq("tenant_id", tenantId).order("product_id").order("branch_id");
+      let sessionsQuery = supabase.from("cash_sessions").select("id").eq("tenant_id", tenantId).eq("status", "open").order("id");
       if (scopedBranchIds !== null) {
         salesTodayQuery = salesTodayQuery.in("branch_id", scopedBranchIds);
         salesMonthQuery = salesMonthQuery.in("branch_id", scopedBranchIds);
@@ -286,9 +389,14 @@ function Dashboard() {
       }
 
       const [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount] = await Promise.all([
-        salesTodayQuery, salesMonthQuery, salesTrendQuery, refundsTodayQuery, refundsMonthQuery,
-        refundsTrendQuery, expensesMonthQuery, expensesByCategoryQuery, lowStockQuery, sessionsQuery,
-        supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
+        fetchAllRowsResult<any>(salesTodayQuery), fetchAllRowsResult<any>(salesMonthQuery), fetchAllRowsResult<any>(salesTrendQuery),
+        fetchAllRowsResult<any>(refundsTodayQuery), fetchAllRowsResult<any>(refundsMonthQuery),
+        fetchAllRowsResult<any>(refundsTrendQuery), fetchAllRowsResult<any>(expensesMonthQuery), fetchAllRowsResult<any>(expensesByCategoryQuery),
+        hasPermission("inventory.view") ? fetchAllRowsResult<any>(lowStockQuery) : Promise.resolve({ data: [], error: null }),
+        hasPermission("cash.view") ? fetchAllRowsResult<any>(sessionsQuery) : Promise.resolve({ data: [], error: null }),
+        hasPermission("customers.view")
+          ? supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId)
+          : Promise.resolve({ count: null, error: null }),
       ]);
       for (const result of [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount]) {
         if (result.error) throw result.error;
@@ -298,39 +406,33 @@ function Dashboard() {
       const refundIdsMonth = (refundsMonth.data ?? []).map((refund) => refund.id);
       const [saleCostRows, refundCostRows] = await Promise.all([
         saleIdsMonth.length
-          ? supabase.from("sale_items").select("quantity, cost_price_snapshot").in("sale_id", saleIdsMonth)
+          ? fetchRowsByIdBatchesResult<any>(saleIdsMonth, (batch) => supabase.from("sale_items").select("quantity, cost_price_snapshot").in("sale_id", batch).order("id"))
           : Promise.resolve({ data: [], error: null }),
         refundIdsMonth.length
-          ? supabase.from("sale_refund_items").select("quantity, cost_price_snapshot, restocked").in("refund_id", refundIdsMonth)
+          ? fetchRowsByIdBatchesResult<any>(refundIdsMonth, (batch) => supabase.from("sale_refund_items").select("quantity, cost_price_snapshot, restocked").in("refund_id", batch).order("id"))
           : Promise.resolve({ data: [], error: null }),
       ]);
       if (saleCostRows.error) throw saleCostRows.error;
       if (refundCostRows.error) throw refundCostRows.error;
-      const catsRes = await supabase.from("expense_categories").select("id, name, color").eq("tenant_id", tenantId);
+      const catsRes = await fetchAllRowsResult<any>(supabase.from("expense_categories").select("id, name, color").eq("tenant_id", tenantId).order("id"));
       if (catsRes.error) throw catsRes.error;
       const catMap = new Map((catsRes.data ?? []).map((c) => [(c as { id: string }).id, c as { name: string; color: string | null }]));
 
-      const totalToday = (salesToday.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0)
-        - (refundsToday.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
-      const totalMonth = (salesMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0)
-        - (refundsMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
-      const totalExpMonth = (expensesMonth.data ?? []).reduce((s, r) => s + Number((r as { amount: number }).amount), 0);
-      const unknownSaleCosts = (saleCostRows.data ?? []).filter((row) => row.cost_price_snapshot == null).length;
-      const unknownReturnedCosts = (refundCostRows.data ?? []).filter((row) => row.restocked && row.cost_price_snapshot == null).length;
-      const unknownCostItems = unknownSaleCosts + unknownReturnedCosts;
-      const cogsSales = (saleCostRows.data ?? []).reduce(
-        (sum, row) => sum + Number(row.cost_price_snapshot ?? 0) * Number(row.quantity), 0,
-      );
-      const cogsRestockedReturns = (refundCostRows.data ?? []).reduce(
-        (sum, row) => sum + (row.restocked ? Number(row.cost_price_snapshot ?? 0) * Number(row.quantity) : 0), 0,
-      );
-      const revenueBeforeTax = (salesMonth.data ?? []).reduce(
-        (sum, row) => sum + Number(row.subtotal) - Number(row.discount), 0,
-      ) - (refundsMonth.data ?? []).reduce(
-        (sum, row) => sum + Number(row.subtotal) - Number(row.discount), 0,
-      );
-      const grossProfit = unknownCostItems > 0 ? null : revenueBeforeTax - cogsSales + cogsRestockedReturns;
-      const profit = grossProfit === null ? null : grossProfit - totalExpMonth;
+      const {
+        totalToday,
+        totalMonth,
+        totalExpMonth,
+        unknownCostItems,
+        profit,
+      } = summarizeDashboardFinancialRows({
+        salesToday: salesToday.data ?? [],
+        refundsToday: refundsToday.data ?? [],
+        salesMonth: salesMonth.data ?? [],
+        refundsMonth: refundsMonth.data ?? [],
+        expensesMonth: expensesMonth.data ?? [],
+        saleCostRows: saleCostRows.data ?? [],
+        refundCostRows: refundCostRows.data ?? [],
+      });
 
       // Trend: group by day
       const dayMap = new Map<string, number>();
@@ -363,8 +465,8 @@ function Dashboard() {
       }));
 
       const inventoryProductIds = [...new Set((lowStock.data ?? []).map((row) => row.product_id))];
-      const lowStockProducts = inventoryProductIds.length
-        ? await supabase.from("products").select("id, min_stock").eq("tenant_id", tenantId).in("id", inventoryProductIds)
+      const lowStockProducts = hasPermission("inventory.view") && inventoryProductIds.length
+        ? await fetchRowsByIdBatchesResult<any>(inventoryProductIds, (batch) => supabase.from("products").select("id, min_stock").eq("tenant_id", tenantId).in("id", batch).order("id"))
         : { data: [], error: null };
       if (lowStockProducts.error) throw lowStockProducts.error;
       const minimumStockByProduct = new Map((lowStockProducts.data ?? []).map((product) => [product.id, Number(product.min_stock)]));
@@ -379,18 +481,20 @@ function Dashboard() {
         totalToday, totalMonth, totalExpMonth,
         profit, unknownCostItems,
         salesTodayCount: (salesToday.data ?? []).length,
-        customersCount: customersCount.count ?? 0,
-        openSessions: (sessions.data ?? []).length,
-        lowStockCount,
+        customersCount: hasPermission("customers.view") ? customersCount.count ?? 0 : null,
+        openSessions: hasPermission("cash.view") ? (sessions.data ?? []).length : null,
+        lowStockCount: hasPermission("inventory.view") ? lowStockCount : null,
         trend, byCat,
       };
     },
-    enabled: !!tenantId,
+    enabled: !!tenantId && hasPermission("reports.view") && hasPermission("sales.view") && hasPermission("expenses.view"),
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
 
 
   const latestOrders = useQuery({
-    queryKey: ["dashboard-latest-orders", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryKey: ["dashboard-latest-orders", tenantId, user?.id, membership?.company_id, membership?.branch_id, role, isSuperOwner],
     queryFn: async () => {
       if (!tenantId) return [];
       let query = supabase.from("sales").select("id,invoice_no,total,status,created_at,order_type,customer_id")
@@ -402,6 +506,8 @@ function Dashboard() {
           .eq("tenant_id", tenantId).eq("company_id", membership.company_id);
         if (branchError) throw branchError;
         query = query.in("branch_id", (branches ?? []).map((branch) => branch.id));
+      } else if (!isSuperOwner && role !== "owner") {
+        query = query.in("branch_id", []);
       }
       const { data, error } = await query;
       if (error) throw error;
@@ -412,7 +518,7 @@ function Dashboard() {
     staleTime: 5_000,
   });
   const kitchenOverview = useQuery({
-    queryKey: ["dashboard-kitchen-overview", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryKey: ["dashboard-kitchen-overview", tenantId, user?.id, membership?.company_id, membership?.branch_id, role, isSuperOwner],
     queryFn: async () => {
       if (!tenantId) return [];
       let query = (supabase.from("kitchen_orders" as any) as any).select("id,branch_id,sale_id,status,created_at")
@@ -425,6 +531,8 @@ function Dashboard() {
           .eq("tenant_id", tenantId).eq("company_id", membership.company_id);
         if (branchError) throw branchError;
         query = query.in("branch_id", (branches ?? []).map((branch) => branch.id));
+      } else if (!isSuperOwner && role !== "owner") {
+        query = query.in("branch_id", []);
       }
       const { data, error } = await query;
       if (error) throw error;
@@ -446,7 +554,7 @@ function Dashboard() {
   });
 
   const kitchenStatusCounts = useQuery({
-    queryKey: ["dashboard-kitchen-counts", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryKey: ["dashboard-kitchen-counts", tenantId, user?.id, membership?.company_id, membership?.branch_id, role, isSuperOwner],
     queryFn: async () => {
       if (!tenantId) return { new: 0, preparing: 0, ready: 0 };
       let scopedBranchIds: string[] | null = null;
@@ -457,6 +565,8 @@ function Dashboard() {
           .eq("tenant_id", tenantId).eq("company_id", membership.company_id);
         if (error) throw error;
         scopedBranchIds = (branches ?? []).map((branch) => branch.id);
+      } else if (!isSuperOwner && role !== "owner") {
+        scopedBranchIds = [];
       }
       const statuses = ["new", "preparing", "ready"] as const;
       const entries = await Promise.all(statuses.map(async (status) => {
@@ -477,22 +587,111 @@ function Dashboard() {
 
   const currency = tenant?.currency ?? "";
 
+  async function uploadHeroImage(file?: File) {
+    if (!file || !tenantId || !user?.id) return;
+    const extensions: Record<string, string> = {
+      "image/jpeg": "jpg",
+      "image/png": "png",
+      "image/webp": "webp",
+      "image/avif": "avif",
+    };
+    const extension = extensions[file.type];
+    if (!extension) {
+      window.alert("صيغة الصورة غير مدعومة. استخدم JPG أو PNG أو WebP أو AVIF.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      window.alert("حجم الصورة يتجاوز الحد المسموح (5MB).");
+      return;
+    }
+    setHeroImageUploading(true);
+    try {
+      const path = membership?.company_id
+        ? `${tenantId}/companies/${membership.company_id}/dashboard/${user.id}/${crypto.randomUUID()}.${extension}`
+        : `${tenantId}/dashboard/${user.id}/${crypto.randomUUID()}.${extension}`;
+      const { error } = await supabase.storage.from("restaurant-assets").upload(path, file, {
+        upsert: false,
+        contentType: file.type,
+        cacheControl: "31536000",
+      });
+      if (error) throw error;
+      setHeroImageDraft(supabase.storage.from("restaurant-assets").getPublicUrl(path).data.publicUrl);
+    } catch (error) {
+      console.error("Dashboard hero image upload failed", error);
+      window.alert("تعذر رفع الصورة. تحقق من صلاحيات التخزين ثم حاول مجدداً.");
+    } finally {
+      setHeroImageUploading(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <section className="relative isolate min-h-[205px] overflow-hidden rounded-2xl border border-[#d7e2f6] bg-[#102f5c] text-white shadow-[0_8px_24px_rgba(16,47,92,.16)] sm:min-h-[220px]" aria-labelledby="dashboard-welcome-title">
-        <img src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1800&q=85" alt="" className="absolute inset-0 h-full w-full object-cover opacity-75" />
+      <section className="relative isolate min-h-[205px] overflow-hidden rounded-2xl border border-[#d7e2f6] text-white shadow-[0_8px_24px_rgba(16,47,92,.16)] sm:min-h-[220px]" style={{ backgroundColor: heroBackgroundColor }} aria-labelledby="dashboard-welcome-title">
+        {heroImageUrl && <img src={heroImageUrl} alt="" width="1200" height="420" loading="eager" fetchPriority="high" decoding="async" onError={(event) => { event.currentTarget.style.display = "none"; }} className="absolute inset-0 h-full w-full object-cover opacity-75" />}
+        <button type="button" onClick={() => { setHeroImageDraft(heroImageUrl); setHeroBackgroundDraft(heroBackgroundColor); setHeroSettingsOpen((open) => !open); }} aria-expanded={heroSettingsOpen} aria-controls="dashboard-hero-settings" className="absolute left-4 top-4 z-10 rounded-full border border-white/30 bg-[#102f5c]/75 px-3 py-2 text-xs font-semibold text-white backdrop-blur hover:bg-[#102f5c]">تخصيص الخلفية</button>
         <div className="absolute inset-0 bg-gradient-to-l from-[#061c3d]/95 via-[#0c2d59]/80 to-[#102f5c]/5" />
         <div className="absolute inset-x-0 bottom-0 h-2 bg-gradient-to-l from-[#f0b52f] via-[#d9a441] to-transparent" />
         <div className="relative z-[1] flex min-h-[205px] flex-col justify-center px-6 py-7 sm:min-h-[220px] sm:px-10">
           <div className="max-w-2xl">
-            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white/90"><Sparkles className="h-4 w-4 text-[#f4c24f]" /> {tenant?.name ?? "مساحة إدارة المطعم"}</div>
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white/90"><Sparkles className="h-4 w-4 text-[#f4c24f]" /> {tenant?.name ?? "مساحة إدارة المطعم"}{companyQuery.data ? <span className="text-white/70"> · {companyQuery.data}</span> : companyQuery.isError ? <span className="text-amber-200"> · تعذر التحقق من الشركة</span> : null}{branchQuery.data ? <span className="text-white/70"> · {branchQuery.data}</span> : branchQuery.isError ? <span className="text-amber-200"> · تعذر التحقق من الفرع</span> : null}</div>
             <h1 id="dashboard-welcome-title" className="text-2xl font-extrabold tracking-tight sm:text-4xl">أهلاً بك في نظام إدارة <span className="text-[#f5bd36]">المطاعم</span></h1>
             <p className="mt-3 text-base font-medium text-white/90 sm:text-xl">إدارة أسهل.. عمل أكثر كفاءة</p>
             <p className="mt-1 text-xs text-white/70">مرحباً {displayName}</p>
           </div>
-          <Link to="/pos" className="mt-4 inline-flex min-h-10 w-fit items-center gap-2 rounded-full bg-[#f2b632] px-5 py-2 text-sm font-extrabold text-[#102f5c] shadow-md transition hover:bg-[#ffd16b]"><ShoppingBag className="h-4 w-4" /> فتح نقطة البيع <ArrowLeft className="h-4 w-4" /></Link>
+          {hasPermission("sales.create") && <Link to="/pos" className="mt-4 inline-flex min-h-10 w-fit items-center gap-2 rounded-full bg-[#f2b632] px-5 py-2 text-sm font-extrabold text-[#102f5c] shadow-md transition hover:bg-[#ffd16b]"><ShoppingBag className="h-4 w-4" /> فتح نقطة البيع <ArrowLeft className="h-4 w-4" /></Link>}
         </div>
       </section>
+
+      {heroSettingsOpen && (
+        <section id="dashboard-hero-settings" className="rounded-xl border bg-card p-4 shadow-sm" aria-label="إعدادات مساحة الترحيب">
+          <div className="mb-3">
+            <h2 className="font-bold">تخصيص مساحة الترحيب</h2>
+            <p className="mt-1 text-xs text-muted-foreground">غيّر صورة الخلفية أو لونها. تُحفظ هذه التفضيلات على هذا المتصفح لهذا المستخدم والشركة فقط.</p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+            <label className="space-y-2 text-sm font-medium">
+              رابط صورة الخلفية
+              <input type="url" dir="ltr" value={heroImageDraft} onChange={(event) => setHeroImageDraft(event.target.value)} placeholder="https://example.com/restaurant.webp" className="h-10 w-full rounded-md border bg-background px-3 text-left text-sm font-normal" />
+              <span className="block text-xs font-normal text-muted-foreground">استخدم رابط صورة مباشر بصيغة HTTPS أو HTTP، أو اتركه فارغاً لإظهار لون الخلفية فقط.</span>
+              <span className="flex flex-wrap items-center gap-2 pt-1">
+                <label className="inline-flex cursor-pointer items-center rounded-md border px-3 py-2 text-xs hover:bg-muted">
+                  {heroImageUploading ? "جارٍ رفع الصورة..." : "رفع صورة من الجهاز"}
+                  <input type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={heroImageUploading} className="sr-only" onChange={(event) => { void uploadHeroImage(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+                </label>
+                {heroImageDraft && <button type="button" className="text-xs text-destructive underline" onClick={() => setHeroImageDraft("")}>إزالة الصورة</button>}
+              </span>
+            </label>
+            <label className="flex items-center gap-3 text-sm font-medium">
+              لون الخلفية
+              <input type="color" aria-label="اختيار لون الخلفية" value={heroBackgroundDraft} onChange={(event) => setHeroBackgroundDraft(event.target.value)} className="h-10 w-14 cursor-pointer rounded-md border bg-background p-1" />
+            </label>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button type="button" onClick={() => {
+              const imageValue = heroImageDraft.trim();
+              if (imageValue && !safeCampaignTarget(imageValue)) {
+                window.alert("أدخل رابط صورة صحيحاً يبدأ بـ https:// أو http://، أو اترك الحقل فارغاً.");
+                return;
+              }
+              const colorValue = /^#[0-9a-fA-F]{6}$/.test(heroBackgroundDraft) ? heroBackgroundDraft : "#102f5c";
+              try {
+                window.localStorage.setItem(heroCustomizationKey, JSON.stringify({ imageUrl: imageValue, backgroundColor: colorValue }));
+                setHeroImageUrl(imageValue);
+                setHeroBackgroundColor(colorValue);
+                setHeroSettingsOpen(false);
+              } catch (error) {
+                console.error("Dashboard hero preferences could not be saved", error);
+                window.alert("تعذر حفظ التخصيص في هذا المتصفح.");
+              }
+            }}>حفظ التخصيص</Button>
+            <Button type="button" variant="outline" onClick={() => {
+              setHeroImageDraft(DEFAULT_DASHBOARD_HERO_IMAGE_URL);
+              setHeroBackgroundDraft("#102f5c");
+            }}>استعادة الافتراضي</Button>
+            <Button type="button" variant="ghost" onClick={() => setHeroSettingsOpen(false)}>إغلاق</Button>
+          </div>
+        </section>
+      )}
 
       {campaignsQuery.isError && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive" role="alert">
@@ -502,13 +701,13 @@ function Dashboard() {
       {activeCampaign && (
         <section aria-label="الإعلانات والعروض المنشورة" aria-roledescription="عرض شرائح" className="space-y-2">
           <div className="relative overflow-hidden rounded-2xl border bg-card shadow-sm">
-            {activeCampaign.image_url && <img src={activeCampaign.image_url} alt="" className="absolute inset-0 h-full w-full object-cover opacity-25" />}
+            {activeCampaign.image_url && <img src={activeCampaign.image_url} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover opacity-25" />}
             <div className="relative flex min-h-36 items-center bg-gradient-to-l from-background/95 via-background/85 to-background/45 p-4 sm:min-h-44 sm:p-6">
               <div className="max-w-3xl space-y-2">
                 <div className="text-xs font-semibold text-primary">إعلان / مساحة ترويجية</div>
                 <h2 className="text-lg font-extrabold sm:text-2xl">{activeCampaign.title}</h2>
                 {activeCampaign.description && <p className="text-sm text-muted-foreground sm:text-base">{activeCampaign.description}</p>}
-                {safeCampaignTarget(activeCampaign.target_url) && <a href={safeCampaignTarget(activeCampaign.target_url)!} target="_blank" rel="noopener noreferrer" onClick={() => void (supabase.rpc as any)("record_marketing_campaign_event", { _campaign_id: activeCampaign.id, _event_type: "click" }).catch((error: unknown) => console.warn("Campaign click tracking failed", error))} className="inline-flex min-h-9 items-center rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90">عرض التفاصيل ←</a>}
+                {safeCampaignTarget(activeCampaign.target_url) && <a href={safeCampaignTarget(activeCampaign.target_url)!} target="_blank" rel="noopener noreferrer" onClick={() => { void (async () => { try { const { error } = await (supabase.rpc as any)("record_marketing_campaign_event", { _campaign_id: activeCampaign.id, _event_type: "click" }); if (error) console.warn("Campaign click tracking failed", error); } catch (error) { console.warn("Campaign click tracking failed", error); } })(); }} className="inline-flex min-h-9 items-center rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90">عرض التفاصيل ←</a>}
               </div>
             </div>
           </div>
@@ -527,6 +726,8 @@ function Dashboard() {
         </section>
       )}
 
+      {isSuperOwner && superStats.isError && <Card role="alert" className="border-destructive/40"><CardContent className="p-4 text-sm text-destructive">تعذر تحميل مؤشرات المنظومة. <button className="underline" onClick={() => void superStats.refetch()}>إعادة المحاولة</button></CardContent></Card>}
+      {isSuperOwner && superStats.isLoading && <div className="py-4 text-center text-sm text-muted-foreground" role="status">جارٍ تحميل مؤشرات المنظومة...</div>}
       {isSuperOwner && superStats.data && (
         <Card className="border-primary/40 bg-primary/5">
           <CardContent className="p-4">
@@ -544,7 +745,9 @@ function Dashboard() {
         </Card>
       )}
 
-      {stats.isLoading ? (
+      {(!hasPermission("reports.view") || !hasPermission("sales.view") || !hasPermission("expenses.view")) ? (
+        <Card><CardContent className="p-6 text-center text-sm text-muted-foreground">لا تملك الصلاحية اللازمة لعرض المؤشرات المالية والتشغيلية.</CardContent></Card>
+      ) : stats.isLoading ? (
         <div className="flex justify-center py-12" role="status" aria-live="polite"><Loader2 className="h-6 w-6 animate-spin text-primary" /><span className="sr-only">جارٍ تحميل مؤشرات لوحة التحكم</span></div>
       ) : stats.error ? (
         <Card role="alert" className="border-destructive/40">
@@ -610,10 +813,10 @@ function Dashboard() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <MiniStat label="ورديات مفتوحة" value={stats.data.openSessions} icon={<Wallet className="h-4 w-4" />} />
-            <MiniStat label="نفاد مخزون" value={stats.data.lowStockCount} icon={<Package className="h-4 w-4" />} />
+            {stats.data.openSessions !== null && <MiniStat label="ورديات مفتوحة" value={stats.data.openSessions} icon={<Wallet className="h-4 w-4" />} />}
+            {stats.data.lowStockCount !== null && <MiniStat label="نفاد مخزون" value={stats.data.lowStockCount} icon={<Package className="h-4 w-4" />} />}
             <MiniStat label="فواتير اليوم" value={stats.data.salesTodayCount} icon={<Receipt className="h-4 w-4" />} />
-            <MiniStat label="إجمالي العملاء" value={stats.data.customersCount} icon={<UsersIcon className="h-4 w-4" />} />
+            {stats.data.customersCount !== null && <MiniStat label="إجمالي العملاء" value={stats.data.customersCount} icon={<UsersIcon className="h-4 w-4" />} />}
           </div>
         </>
       )}
