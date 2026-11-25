@@ -183,7 +183,7 @@ function PermissionRouteGuard() {
   }
 
   if (requiredPermission && !isSuperOwner) {
-    const granted = !!permissionsQuery.data?.has(requiredPermission);
+    const granted = !permissionsQuery.isError && !!permissionsQuery.data?.has(requiredPermission);
     if (!granted) {
       return (
         <div role="alert" className="mx-auto max-w-xl rounded-lg border border-destructive/30 p-6 text-center text-sm">
