@@ -234,7 +234,7 @@ function POSWorkspace() {
   useEffect(() => {
     const dirty = cart.length > 0;
     window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
-      detail: { path: "/pos", dirty },
+      detail: { path: "/pos", dirty, source: "pos-cart" },
     }));
   }, [cart]);
   const [discount, setDiscount] = useState(restoredWorkspace.discount ?? "0");
