@@ -41,10 +41,13 @@ const schema = z.object({
 });
 
 function CategoriesPage() {
-  const { tenantId, isAdmin, membership } = useActiveTenant();
+  const { tenantId, membership, isSuperOwner, hasPermission } = useActiveTenant();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Category | null>(null);
+  const canCreateCategory = isSuperOwner || hasPermission("categories.create") || hasPermission("categories.manage");
+  const canEditCategory = isSuperOwner || hasPermission("categories.edit") || hasPermission("categories.manage");
+  const canDeleteCategory = isSuperOwner || hasPermission("categories.delete") || hasPermission("categories.manage");
 
   const { data, isLoading } = useQuery({
     queryKey: ["categories", tenantId],
@@ -62,6 +65,7 @@ function CategoriesPage() {
 
   const upsert = useMutation({
     mutationFn: async (v: z.infer<typeof schema>) => {
+      if (editing ? !canEditCategory : !canCreateCategory) throw new Error("لا تملك صلاحية إنشاء التصنيفات أو تعديلها.");
       const payload = {
         ...v,
         icon: v.icon || null,
@@ -87,6 +91,7 @@ function CategoriesPage() {
 
   const del = useMutation({
     mutationFn: async (id: string) => {
+      if (!canDeleteCategory) throw new Error("لا تملك صلاحية حذف التصنيفات.");
       const { error } = await supabase.from("categories").delete().eq("id", id);
       if (error) throw error;
     },
@@ -103,7 +108,7 @@ function CategoriesPage() {
         title="الأقسام"
         subtitle="نظّم منتجاتك في أقسام (مشروبات، وجبات، حلويات، إضافات)."
         action={
-          isAdmin && (
+          canCreateCategory && (
             <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditing(null); }}>
               <DialogTrigger asChild>
                 <Button><Plus className="ml-2 h-4 w-4" />قسم جديد</Button>
@@ -144,16 +149,16 @@ function CategoriesPage() {
                     {c.description && <div className="text-xs text-muted-foreground line-clamp-1">{c.description}</div>}
                   </div>
                 </div>
-                {isAdmin && (
+                {(canEditCategory || canDeleteCategory) && (
                   <div className="flex gap-1">
-                    <Button size="icon" variant="ghost" onClick={() => { setEditing(c); setOpen(true); }}>
+                    {canEditCategory && <Button size="icon" variant="ghost" onClick={() => { setEditing(c); setOpen(true); }}>
                       <Edit className="h-4 w-4" />
                     </Button>
-                    <Button size="icon" variant="ghost" className="text-destructive" onClick={() => {
+                    {canDeleteCategory && <Button size="icon" variant="ghost" className="text-destructive" onClick={() => {
                       if (confirm(`حذف "${c.name}"؟`)) del.mutate(c.id);
                     }}>
                       <Trash2 className="h-4 w-4" />
-                    </Button>
+                    </Button>}
                   </div>
                 )}
               </CardContent>
