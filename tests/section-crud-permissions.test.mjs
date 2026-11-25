@@ -98,9 +98,11 @@ test("operational pages use action-level controls rather than administrator-role
 test("expense deletion is deferred until an auditable void/reversal workflow exists", () => {
   const expensePage = source("expenses.tsx");
   const deletionMigration = readFileSync(new URL("../supabase/migrations/20261125100000_prevent_direct_expense_deletion.sql", import.meta.url), "utf8");
-  assert.doesNotMatch(expensePage, /from\\("expenses"\\)\\.delete\\(/);
-  assert.match(deletionMigration, /REVOKE DELETE ON TABLE public\\.expenses/);
-});\n\ntest("complete database snapshot includes the section CRUD migration exactly once", () => {
+  assert.doesNotMatch(expensePage, /from\("expenses"\)\.delete\(/);
+  assert.match(deletionMigration, /REVOKE DELETE ON TABLE public\.expenses/);
+});
+
+test("complete database snapshot includes the section CRUD migration exactly once", () => {
   assert.ok(historyReadMigration.includes("'audit.view'"));
   assert.ok(historyReadMigration.includes("'login_history.view'"));
   assert.ok(historyReadMigration.includes("audit_logs_permission_read"));
