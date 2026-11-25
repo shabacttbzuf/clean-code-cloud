@@ -106,6 +106,7 @@ function AttendancePage() {
       if (error) throw error;
     },
     onSuccess: () => {
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: window.location.pathname } }));
       qc.invalidateQueries({ queryKey: ["attendance", tenantId, date] });
       toast.success("تم تسجيل الحركة بنجاح");
     },
