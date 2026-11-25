@@ -194,8 +194,32 @@ function PurchasesPage() {
 function PurchaseReturnDialog({
   open, purchaseId, tenantId, onDone, onCancel,
 }: { open: boolean; purchaseId: string; tenantId: string; onDone: () => void; onCancel: () => void }) {
-  const [reason, setReason] = useState("");
-  const [quantities, setQuantities] = useState<Record<string, string>>({});
+  const returnDraftKey = `workspace-purchase-return-v1:${tenantId}:${purchaseId}`;
+  const [reason, setReason] = useState(() => {
+    try {
+      const value = JSON.parse(sessionStorage.getItem(returnDraftKey) || "{}") as { reason?: unknown };
+      return typeof value.reason === "string" ? value.reason.slice(0, 500) : "";
+    } catch { return ""; }
+  });
+  const [quantities, setQuantities] = useState<Record<string, string>>(() => {
+    try {
+      const value = JSON.parse(sessionStorage.getItem(returnDraftKey) || "{}") as { quantities?: unknown };
+      if (!value.quantities || typeof value.quantities !== "object" || Array.isArray(value.quantities)) return {};
+      return Object.fromEntries(Object.entries(value.quantities).filter(([key, quantity]) =>
+        typeof key === "string" && typeof quantity === "string" &&
+        Number.isFinite(Number(quantity)) && Number(quantity) >= 0
+      ).slice(0, 300));
+    } catch { return {}; }
+  });
+  useEffect(() => {
+    try {
+      if (reason.trim() || Object.values(quantities).some(value => Number(value) > 0)) {
+        sessionStorage.setItem(returnDraftKey, JSON.stringify({ reason, quantities }));
+      } else {
+        sessionStorage.removeItem(returnDraftKey);
+      }
+    } catch { /* Session storage is optional. */ }
+  }, [returnDraftKey, reason, quantities]);
 
   useEffect(() => {
     const dirty = open && (reason.trim().length > 0 || Object.values(quantities).some((value) => Number(value) > 0));
@@ -248,7 +272,12 @@ function PurchaseReturnDialog({
       });
       if (error) throw error;
     },
-    onSuccess: () => { toast.success("تم تسجيل إرجاع المورد وتحديث المخزون"); onDone(); },
+    onSuccess: () => {
+      try { sessionStorage.removeItem(returnDraftKey); } catch { /* optional */ }
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/purchases" } }));
+      toast.success("تم تسجيل إرجاع المورد وتحديث المخزون");
+      onDone();
+    },
     onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر تسجيل الإرجاع"),
   });
 
@@ -295,12 +324,49 @@ function PurchaseReturnDialog({
 function NewPurchaseDialog({
   open, onDone, tenantId, userId, defaultBranchId, companyId,
 }: { open: boolean; onDone: () => void; tenantId: string; userId: string; defaultBranchId: string | null; companyId: string | null }) {
-  const [branchId, setBranchId] = useState<string>(defaultBranchId ?? "");
-  const [supplierId, setSupplierId] = useState<string>("none");
-  const [reference, setReference] = useState("");
-  const [notes, setNotes] = useState("");
-  const [lines, setLines] = useState<CartLine[]>([]);
-  const [addProdId, setAddProdId] = useState<string>("");
+  const draftKey = `workspace-purchase-draft-v1:${tenantId}:${userId}:${companyId ?? "none"}:${defaultBranchId ?? "all"}`;
+  const restoredDraft = useMemo(() => {
+    try {
+      const value = JSON.parse(sessionStorage.getItem(draftKey) || "{}") as Record<string, unknown>;
+      const lines = Array.isArray(value.lines) ? value.lines.filter((line): line is CartLine =>
+        !!line && typeof line === "object" &&
+        typeof (line as CartLine).product_id === "string" &&
+        typeof (line as CartLine).name === "string" &&
+        typeof (line as CartLine).unit === "string" &&
+        typeof (line as CartLine).quantity === "string" &&
+        typeof (line as CartLine).cost_price === "string" &&
+        Number.isFinite(Number((line as CartLine).quantity)) &&
+        Number.isFinite(Number((line as CartLine).cost_price)) &&
+        Number((line as CartLine).quantity) >= 0 && Number((line as CartLine).cost_price) >= 0
+      ).slice(0, 300) : [];
+      return {
+        branchId: typeof value.branchId === "string" ? value.branchId : defaultBranchId ?? "",
+        supplierId: typeof value.supplierId === "string" ? value.supplierId : "none",
+        reference: typeof value.reference === "string" ? value.reference.slice(0, 120) : "",
+        notes: typeof value.notes === "string" ? value.notes.slice(0, 1000) : "",
+        lines,
+        addProdId: typeof value.addProdId === "string" ? value.addProdId : "",
+      };
+    } catch {
+      return { branchId: defaultBranchId ?? "", supplierId: "none", reference: "", notes: "", lines: [] as CartLine[], addProdId: "" };
+    }
+  }, [draftKey, defaultBranchId]);
+  const [branchId, setBranchId] = useState<string>(restoredDraft.branchId);
+  const [supplierId, setSupplierId] = useState<string>(restoredDraft.supplierId);
+  const [reference, setReference] = useState(restoredDraft.reference);
+  const [notes, setNotes] = useState(restoredDraft.notes);
+  const [lines, setLines] = useState<CartLine[]>(restoredDraft.lines);
+  const [addProdId, setAddProdId] = useState<string>(restoredDraft.addProdId);
+
+  useEffect(() => {
+    try {
+      if (lines.length || supplierId !== "none" || reference.trim() || notes.trim() || branchId !== (defaultBranchId ?? "")) {
+        sessionStorage.setItem(draftKey, JSON.stringify({ branchId, supplierId, reference, notes, lines, addProdId }));
+      } else {
+        sessionStorage.removeItem(draftKey);
+      }
+    } catch { /* Session storage is optional. */ }
+  }, [draftKey, branchId, supplierId, reference, notes, lines, addProdId, defaultBranchId]);
 
   const branches = useQuery({
     queryKey: ["branches-active-purchase", tenantId, defaultBranchId, companyId],
@@ -396,6 +462,8 @@ function NewPurchaseDialog({
       if (error) throw error;
     },
     onSuccess: () => {
+      try { sessionStorage.removeItem(draftKey); } catch { /* optional */ }
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/purchases" } }));
       toast.success("تم تسجيل الفاتورة");
       onDone();
     },
