@@ -78,7 +78,7 @@ function CategoriesPage() {
       }
     },
     onSuccess: () => {
-      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: window.location.pathname } }));
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/categories" } }));
       qc.invalidateQueries({ queryKey: ["categories", tenantId] });
       toast.success("تم الحفظ");
       setOpen(false); setEditing(null);
