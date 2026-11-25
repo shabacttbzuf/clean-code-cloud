@@ -94,7 +94,14 @@ type Row = {
 };
 
 function UsersPage() {
-  const { tenantId, isAdmin, userId, isSuperOwner } = useActiveTenant();
+  const { tenantId, userId, isSuperOwner, hasPermission } = useActiveTenant();
+  const canCreateUsers = isSuperOwner || hasPermission("users.create");
+  const canChangeRole = isSuperOwner || hasPermission("users.change_role");
+  const canChangeBranch = isSuperOwner || hasPermission("users.change_branch");
+  const canChangePassword = isSuperOwner || hasPermission("users.change_password");
+  const canSuspendUsers = isSuperOwner || hasPermission("users.suspend");
+  const canApproveUsers = isSuperOwner || hasPermission("users.approve");
+  const canManageUsers = canCreateUsers || canChangeRole || canChangeBranch || canChangePassword || canSuspendUsers || canApproveUsers;
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [pwdUser, setPwdUser] = useState<Row | null>(null);
@@ -194,21 +201,19 @@ function UsersPage() {
       <PageHeader
         title="الموظفون"
         subtitle="إدارة كاملة لفريق مطعمك: إضافة، صلاحيات، تفعيل، ونقل بين الفروع."
-        action={
-          isAdmin ? (
-            <Button onClick={() => setCreateOpen(true)}>
-              <Plus className="ml-2 h-4 w-4" />
-              إضافة موظف
-            </Button>
-          ) : null
-        }
+        action={canCreateUsers ? (
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="ml-2 h-4 w-4" />
+            إضافة موظف
+          </Button>
+        ) : null}
       />
 
-      {!isAdmin && (
+      {!canManageUsers && (
         <Card className="border-warning/40 bg-warning/5">
           <CardContent className="flex items-center gap-3 py-3 text-sm">
             <Shield className="h-4 w-4 text-warning" />
-            <span>عرض للقراءة فقط. لإضافة/تعديل الموظفين تحتاج صلاحية مالك أو مدير.</span>
+            <span>عرض للقراءة فقط. تحتاج صلاحية الإجراء المطلوب لإدارة حسابات المستخدمين.</span>
           </CardContent>
         </Card>
       )}
@@ -222,7 +227,7 @@ function UsersPage() {
           <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
             <UsersIcon className="h-10 w-10 text-muted-foreground/50" />
             <p className="text-muted-foreground">لا يوجد موظفون بعد</p>
-            {isAdmin && (
+            {canCreateUsers && (
               <Button variant="outline" onClick={() => setCreateOpen(true)}>
                 <Plus className="ml-2 h-4 w-4" />
                 إضافة أول موظف
@@ -257,7 +262,7 @@ function UsersPage() {
                           </div>
                         )}
                       </div>
-                      {isAdmin && (
+                      {(canChangeRole || canChangeBranch || canChangePassword || canSuspendUsers || canApproveUsers) && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
@@ -265,20 +270,20 @@ function UsersPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setRoleUser(r)}>
+                            {canChangeRole && <DropdownMenuItem onClick={() => setRoleUser(r)}>
                               <Shield className="ml-2 h-4 w-4" />
                               تغيير الدور
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setTransferUser(r)}>
+                            </DropdownMenuItem>}
+                            {canChangeBranch && <DropdownMenuItem onClick={() => setTransferUser(r)}>
                               <ArrowLeftRight className="ml-2 h-4 w-4" />
                               نقل إلى فرع
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setPwdUser(r)}>
+                            </DropdownMenuItem>}
+                            {canChangePassword && <DropdownMenuItem onClick={() => setPwdUser(r)}>
                               <Key className="ml-2 h-4 w-4" />
                               تغيير كلمة المرور
-                            </DropdownMenuItem>
+                            </DropdownMenuItem>}
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem
+                            {(r.is_active ? canSuspendUsers : canApproveUsers) && <DropdownMenuItem
                               disabled={isSelf}
                               onClick={() => toggleStatus(r, !r.is_active, tenantId!, qc)}
                             >
@@ -293,7 +298,7 @@ function UsersPage() {
                                   تفعيل الحساب
                                 </>
                               )}
-                            </DropdownMenuItem>
+                            </DropdownMenuItem>}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       )}
