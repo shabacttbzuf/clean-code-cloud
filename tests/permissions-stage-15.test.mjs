@@ -7,7 +7,7 @@ const superOwnerHook = readFileSync(new URL("../src/hooks/use-super-owner.ts", i
 const permissionActions = readFileSync(new URL("../src/lib/demo-data.functions.ts", import.meta.url), "utf8");
 
 test("authenticated routes fail closed when no permission mapping exists", () => {
-  assert.match(routeGuard, /const isKnownRoute = !!requiredPermission \|\| ownerOnly \|\| isExplicitlyPublic/);
+  assert.match(routeGuard, /const isKnownRoute = !!requiredPermission \|\| ownerOnly \|\| isExplicitlyPublic \\|\\| isFirstOwnerBootstrap/);
   assert.match(routeGuard, /if \(!isKnownRoute\)/);
   assert.match(routeGuard, /تم منع الوصول احتياطياً/);
 });
@@ -44,6 +44,7 @@ test("user permission mutations verify actor, target membership and protect supe
 const adsMigration = readFileSync(new URL("../supabase/migrations/20261121010000_separate_ads_management_permission.sql", import.meta.url), "utf8");
 const promotionsMigration = readFileSync(new URL("../supabase/migrations/20261121020000_promotional_offers_and_pos_redemptions.sql", import.meta.url), "utf8");
 const settingsMigration = readFileSync(new URL("../supabase/migrations/20261118000006_platform_branding_and_notification_reads.sql", import.meta.url), "utf8");
+const granularMigration = readFileSync(new URL("../supabase/migrations/20261125010000_granular_section_action_permissions.sql", import.meta.url), "utf8");
 
 test("advertising management has its own permission and company-scoped database write guards", () => {
   assert.match(adsMigration, /VALUES \('ads\.manage'/);
@@ -60,6 +61,17 @@ test("promotional offers have a separate permission and company/branch-scoped da
   assert.match(promotionsMigration, /Promotion managers delete offers/);
   assert.match(promotionsMigration, /private\.can_access_branch/);
   assert.match(promotionsMigration, /private\.is_company_member/);
+});
+
+test("marketing action permissions are granular and database enforced", () => {
+  for (const key of ["ads.view", "ads.create", "ads.edit", "ads.delete", "ads.approve", "promotions.view", "promotions.create", "promotions.edit", "promotions.delete", "promotions.approve"]) {
+    assert.ok(granularMigration.includes("'" + key + "'"), "missing " + key);
+  }
+  assert.match(granularMigration, /AS RESTRICTIVE FOR INSERT TO authenticated/);
+  assert.match(granularMigration, /AS RESTRICTIVE FOR UPDATE TO authenticated/);
+  assert.match(granularMigration, /SECURITY INVOKER/);
+  assert.match(granularMigration, /Permission denied: ads\\.approve/);
+  assert.match(granularMigration, /Permission denied: promotions\\.approve/);
 });
 
 test("platform branding writes remain exclusive to the unchanged Super Owner identity", () => {
