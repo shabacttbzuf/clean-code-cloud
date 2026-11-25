@@ -16,6 +16,7 @@ type SavedScrollContainer = { key: string; left: number; top: number };
 type SavedPageSnapshot = {
   version: 4;
   dirty: boolean;
+  dirtyForms: string[];
   fields: SavedField[];
   scrollX: number;
   scrollY: number;
@@ -185,6 +186,7 @@ export function WorkspaceFormStateKeeper() {
     let restored = false;
     let restoring = false;
     let discardCurrent = false;
+    let dirtyForms = new Set<string>();
     let hasUnsavedChanges = false;
 
     const readSnapshot = (): SavedPageSnapshot => {
@@ -197,7 +199,7 @@ export function WorkspaceFormStateKeeper() {
         );
         if (Array.isArray(parsed)) {
           const fields = validFields(parsed);
-          return { version: 4, dirty: fields.length > 0, fields, scrollX: 0, scrollY: 0, scrollContainers: [], openDetails: [] };
+          return { version: 4, dirty: fields.length > 0, dirtyForms: fields.length > 0 ? ["legacy"] : [], fields, scrollX: 0, scrollY: 0, scrollContainers: [], openDetails: [] };
         }
         if (parsed && typeof parsed === "object" && "fields" in parsed) {
           const snapshot = parsed as Partial<SavedPageSnapshot>;
@@ -205,6 +207,9 @@ export function WorkspaceFormStateKeeper() {
           return {
             version: 4,
             dirty: typeof snapshot.dirty === "boolean" ? snapshot.dirty : fields.length > 0,
+            dirtyForms: Array.isArray(snapshot.dirtyForms)
+              ? snapshot.dirtyForms.filter((key): key is string => typeof key === "string")
+              : (typeof snapshot.dirty === "boolean" ? snapshot.dirty : fields.length > 0) ? ["legacy"] : [],
             fields,
             scrollX: Number.isFinite(snapshot.scrollX) ? Number(snapshot.scrollX) : 0,
             scrollY: Number.isFinite(snapshot.scrollY) ? Number(snapshot.scrollY) : 0,
@@ -218,7 +223,7 @@ export function WorkspaceFormStateKeeper() {
           };
         }
       } catch { /* Corrupt or unavailable session storage is ignored safely. */ }
-      return { version: 4, dirty: false, fields: [], scrollX: 0, scrollY: 0, scrollContainers: [], openDetails: [] };
+      return { version: 4, dirty: false, dirtyForms: [], fields: [], scrollX: 0, scrollY: 0, scrollContainers: [], openDetails: [] };
     };
 
     const restore = () => {
@@ -233,6 +238,7 @@ export function WorkspaceFormStateKeeper() {
           applyFields(root, snapshot.fields);
           restoreOpenDetails(root, snapshot.openDetails);
           restoreScrollContainers(root, snapshot.scrollContainers);
+          dirtyForms = new Set(snapshot.dirtyForms);
           hasUnsavedChanges = snapshot.dirty;
         } finally { restoring = false; }
         requestAnimationFrame(() => {
@@ -266,6 +272,7 @@ export function WorkspaceFormStateKeeper() {
         const snapshot: SavedPageSnapshot = {
           version: 4,
           dirty,
+          dirtyForms: Array.from(dirtyForms),
           fields,
           scrollX: window.scrollX,
           scrollY: window.scrollY,
@@ -289,9 +296,14 @@ export function WorkspaceFormStateKeeper() {
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (target?.closest("[data-workspace-dirty='off']")) return;
       if (event.type !== "submit" && !target?.closest("form, [data-workspace-dirty='on']")) return;
+      const form = target?.closest("form");
+      const formKey = form
+        ? (form.id || form.dataset.workspaceFormKey || `form-${Array.from(root.querySelectorAll("form")).indexOf(form)}`)
+        : "custom";
       discardCurrent = false;
-      hasUnsavedChanges = true;
-      save(true);
+      dirtyForms.add(formKey);
+      hasUnsavedChanges = dirtyForms.size > 0;
+      save(hasUnsavedChanges);
       window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
         detail: { path: routeKey, dirty: true, scope: sessionScope },
       }));
@@ -307,21 +319,32 @@ export function WorkspaceFormStateKeeper() {
       if (discardedPath !== routeKey && discardedPath !== pathname) return;
       try { sessionStorage.removeItem(storageKey); } catch { /* optional */ }
       discardCurrent = true;
+      dirtyForms.clear();
       hasUnsavedChanges = false;
       window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
         detail: { path: routeKey, dirty: false, scope: sessionScope },
       }));
     };
     const onSaved = (event: Event) => {
-      const detail = (event as CustomEvent<{ path?: string; scope?: string }>).detail;
+      const detail = (event as CustomEvent<{ path?: string; scope?: string; formKey?: string }>).detail;
       if (!detail?.path || (detail.scope && detail.scope !== sessionScope)) return;
       const savedPath = normalizeWorkspacePath(detail.path) ?? detail.path;
       if (savedPath !== routeKey && savedPath !== pathname) return;
-      try { sessionStorage.removeItem(storageKey); } catch { /* optional */ }
-      discardCurrent = true;
-      hasUnsavedChanges = false;
+      if (detail.formKey) {
+        dirtyForms.delete(detail.formKey);
+      } else if (dirtyForms.size <= 1) {
+        dirtyForms.clear();
+      } else {
+        return;
+      }
+      discardCurrent = dirtyForms.size === 0;
+      hasUnsavedChanges = dirtyForms.size > 0;
+      if (hasUnsavedChanges) save(true);
+      else {
+        try { sessionStorage.removeItem(storageKey); } catch { /* optional */ }
+      }
       window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
-        detail: { path: routeKey, dirty: false, scope: sessionScope },
+        detail: { path: routeKey, dirty: hasUnsavedChanges, scope: sessionScope },
       }));
     };
 
