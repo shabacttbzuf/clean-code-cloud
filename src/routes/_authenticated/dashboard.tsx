@@ -99,7 +99,7 @@ function Dashboard() {
     staleTime: 60_000,
   });
   const branchQuery = useQuery({
-    queryKey: ["dashboard-active-branch-name", tenantId, membership?.branch_id],
+    queryKey: ["dashboard-active-branch-name", tenantId, user?.id, membership?.branch_id],
     queryFn: async () => {
       if (!tenantId || !membership?.branch_id) return null;
       const { data, error } = await supabase.from("branches").select("name")
@@ -111,7 +111,7 @@ function Dashboard() {
     staleTime: 60_000,
   });
   const companyQuery = useQuery({
-    queryKey: ["dashboard-active-company-name", tenantId, membership?.company_id],
+    queryKey: ["dashboard-active-company-name", tenantId, user?.id, membership?.company_id],
     queryFn: async () => {
       if (!tenantId || !membership?.company_id) return null;
       const { data, error } = await supabase.from("companies").select("name")
@@ -130,7 +130,7 @@ function Dashboard() {
     "مستخدم";
 
   const campaignsQuery = useQuery({
-    queryKey: ["dashboard-marketing-campaigns", tenantId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all-branches"],
+    queryKey: ["dashboard-marketing-campaigns", tenantId, user?.id, membership?.company_id ?? "tenant", membership?.branch_id ?? "all-branches", role, isSuperOwner],
     queryFn: async () => {
       const now = new Date().toISOString();
       let query = supabase.from("marketing_campaigns")
@@ -318,7 +318,10 @@ function Dashboard() {
       // null means tenant-wide access; an empty list deliberately returns no branch-owned rows.
       let scopedBranchIds: string[] | null = null;
       if (!isSuperOwner && membership?.branch_id) {
-        scopedBranchIds = [membership.branch_id];
+        const { data: assignedBranch, error: assignedBranchError } = await supabase.from("branches")
+          .select("id").eq("tenant_id", tenantId).eq("id", membership.branch_id).maybeSingle();
+        if (assignedBranchError) throw assignedBranchError;
+        scopedBranchIds = assignedBranch ? [assignedBranch.id] : [];
       } else if (!isSuperOwner && membership?.company_id) {
         const { data: companyBranches, error: branchScopeError } = await supabase.from("branches")
           .select("id").eq("tenant_id", tenantId).eq("company_id", membership.company_id);
@@ -459,7 +462,7 @@ function Dashboard() {
 
 
   const latestOrders = useQuery({
-    queryKey: ["dashboard-latest-orders", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryKey: ["dashboard-latest-orders", tenantId, user?.id, membership?.company_id, membership?.branch_id, role, isSuperOwner],
     queryFn: async () => {
       if (!tenantId) return [];
       let query = supabase.from("sales").select("id,invoice_no,total,status,created_at,order_type,customer_id")
@@ -483,7 +486,7 @@ function Dashboard() {
     staleTime: 5_000,
   });
   const kitchenOverview = useQuery({
-    queryKey: ["dashboard-kitchen-overview", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryKey: ["dashboard-kitchen-overview", tenantId, user?.id, membership?.company_id, membership?.branch_id, role, isSuperOwner],
     queryFn: async () => {
       if (!tenantId) return [];
       let query = (supabase.from("kitchen_orders" as any) as any).select("id,branch_id,sale_id,status,created_at")
@@ -519,7 +522,7 @@ function Dashboard() {
   });
 
   const kitchenStatusCounts = useQuery({
-    queryKey: ["dashboard-kitchen-counts", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryKey: ["dashboard-kitchen-counts", tenantId, user?.id, membership?.company_id, membership?.branch_id, role, isSuperOwner],
     queryFn: async () => {
       if (!tenantId) return { new: 0, preparing: 0, ready: 0 };
       let scopedBranchIds: string[] | null = null;
