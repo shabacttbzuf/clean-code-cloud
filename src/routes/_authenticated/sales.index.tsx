@@ -55,12 +55,12 @@ const methodColors: Record<string, string> = {
 };
 
 function SalesListPage() {
-  const { tenantId, tenant } = useActiveTenant();
+  const { tenantId, tenant, userId, membership } = useActiveTenant();
   const [search, setSearch] = useState("");
   const [methodFilter, setMethodFilter] = useState<string>("all");
 
   const sales = useQuery({
-    queryKey: ["sales", tenantId],
+    queryKey: ["sales", tenantId, userId, membership?.branch_id],
     queryFn: async (): Promise<SaleRow[]> => {
       let list: Omit<SaleRow, "refund_total">[];
       try {
