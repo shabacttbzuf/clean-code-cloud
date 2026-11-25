@@ -72,9 +72,11 @@ test("workspace panel shows queued, failed, conflict and last-sync state", () =>
   assert.match(panel, /تعارض — يتطلب مراجعة/);
 });
 
-test("identical pending requests are deduplicated before a second operation id is created", () => {
-  assert.match(source, /const duplicate = existing\.find/);
-  assert.match(source, /JSON\.stringify\(item\.payload\) === payloadKey/);
+test("identical pending requests are deduplicated atomically and key collisions are rejected", () => {
+  assert.match(source, /const duplicate = rows\\.find/);
+  assert.match(source, /const sameKey = rows\\.find/);
+  assert.match(source, /validationError = new Error/);
+  assert.match(source, /db\\.transaction\\(\\[STORE\\], "readwrite"\\)/);
 });
 
 test("cross-tab workers claim operations through an IndexedDB lease", () => {
