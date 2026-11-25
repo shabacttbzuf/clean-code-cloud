@@ -101,7 +101,23 @@ async function assertTargetUserManageable(
   if (actorCompanyIds.length !== 1) {
     throw new Error("لا يمكن تحديد نطاق الشركة المخول لحسابك؛ تم رفض العملية احتياطياً.");
   }
-  const actorCompanyId = actorCompanyIds[0];
+  let actorCompanyId = actorCompanyIds[0] ?? null;
+  if (!actorCompanyId && actorBranchIds.length) {
+    const { data: actorBranches, error: actorBranchesError } = await supabaseAdmin
+      .from("branches").select("id, company_id")
+      .eq("tenant_id", tenantId).in("id", actorBranchIds);
+    if (actorBranchesError) throw new Error(actorBranchesError.message);
+    if ((actorBranches ?? []).length !== actorBranchIds.length) {
+      throw new Error("يوجد فرع غير صالح ضمن إسناد حسابك؛ تم رفض العملية.");
+    }
+    const inferredCompanyIds = Array.from(new Set(
+      (actorBranches ?? []).map((row: any) => row.company_id).filter(Boolean),
+    )) as string[];
+    if (inferredCompanyIds.length === 1) actorCompanyId = inferredCompanyIds[0];
+  }
+  if (!actorCompanyId) {
+    throw new Error("حسابك غير مرتبط بشركة أو فرع محدد؛ لا يمكنه إدارة حسابات الموظفين.");
+  }
 
   const { data: targetProfile, error: profileError } = await supabaseAdmin
     .from("profiles").select("company_id, branch_id")
