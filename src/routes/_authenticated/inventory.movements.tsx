@@ -39,7 +39,7 @@ function MovementsPage() {
   const [typeFilter, setTypeFilter] = useState<string>("all");
 
   const q = useQuery({
-    queryKey: ["inventory-movements", tenantId, userId, membership?.branch_id],
+    queryKey: ["inventory-movements", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("inventory_transactions")

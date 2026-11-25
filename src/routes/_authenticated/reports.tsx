@@ -40,10 +40,10 @@ function ReportsPage() {
   const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [groupBy, setGroupBy] = useState<"day" | "month" | "year">("day");
   const [branchId, setBranchId] = useState("all");
-  const branchesQuery = useQuery({ queryKey: ["report-branches", tenantId, userId, membership?.branch_id], queryFn: async () => { const { data, error } = await supabase.from("branches").select("id,name").eq("tenant_id", tenantId!).order("name"); if (error) throw error; return data ?? []; }, enabled: !!tenantId });
+  const branchesQuery = useQuery({ queryKey: ["report-branches", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"], queryFn: async () => { const { data, error } = await supabase.from("branches").select("id,name").eq("tenant_id", tenantId!).order("name"); if (error) throw error; return data ?? []; }, enabled: !!tenantId });
 
   const report = useQuery({
-    queryKey: ["reports", tenantId, userId, membership?.branch_id, from, to, branchId],
+    queryKey: ["reports", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all", from, to, branchId],
     queryFn: async () => {
       if (!tenantId) return null;
       if (from > to) throw new Error("تاريخ البداية يجب أن يسبق تاريخ النهاية أو يساويه.");

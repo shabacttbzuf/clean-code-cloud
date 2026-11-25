@@ -60,7 +60,7 @@ function SalesListPage() {
   const [methodFilter, setMethodFilter] = useState<string>("all");
 
   const sales = useQuery({
-    queryKey: ["sales", tenantId, userId, membership?.branch_id],
+    queryKey: ["sales", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async (): Promise<SaleRow[]> => {
       let list: Omit<SaleRow, "refund_total">[];
       try {

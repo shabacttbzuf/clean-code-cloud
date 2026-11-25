@@ -296,14 +296,20 @@ const reportsPage = readFileSync(new URL("../src/routes/_authenticated/reports.t
 test("tenant data caches are partitioned by authenticated user and active branch where applicable", () => {
   assert.match(sales, /queryKey: \["sales", tenantId, userId, membership\?\.branch_id\]/);
   assert.match(purchasesPage, /queryKey: \["purchases", tenantId, userId, membership\?\.branch_id\]/);
-  assert.match(movementsPage, /queryKey: \["inventory-movements", tenantId, userId, membership\?\.branch_id\]/);
-  assert.match(cashSessionsPage, /queryKey: \["cash-sessions", tenantId, userId, membership\?\.branch_id\]/);
+  assert.match(movementsPage, /queryKey: \["inventory-movements", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(cashSessionsPage, /queryKey: \["cash-sessions", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
   assert.match(cashSessionsPage, /queryKey: \["session-expected-cash", tenantId, userId, closingId\?\.id\]/);
-  assert.match(expensesPage, /queryKey: \["expenses", tenantId, userId, membership\?\.branch_id\]/);
-  assert.match(customersPage, /queryKey: \["customers", tenantId, userId, membership\?\.branch_id\]/);
-  assert.match(reportsPage, /queryKey: \["reports", tenantId, userId, membership\?\.branch_id, from, to, branchId\]/);
+  assert.match(expensesPage, /queryKey: \["expenses", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(customersPage, /queryKey: \["customers", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(reportsPage, /queryKey: \["reports", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all", from, to, branchId\]/);
 });
 
 test("dashboard aggregate cache is partitioned by active user, company, and branch", () => {
   assert.match(dashboard, /queryKey: \["dashboard-stats", tenantId, user\?\.id, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+});
+
+test("branch selector caches are partitioned by authenticated company, branch, and access scope", () => {
+  assert.match(pos, /queryKey: \["branches-active", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all", isAdmin, isSuperOwner\]/);
+  assert.match(inventory, /queryKey: \["branches-all", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(purchases, /queryKey: \["branches-active-purchase", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
 });

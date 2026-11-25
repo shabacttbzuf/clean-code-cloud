@@ -47,7 +47,7 @@ function CustomersPage() {
   const [search, setSearch] = useState("");
   const [accountCustomer, setAccountCustomer] = useState<Customer | null>(null);
   const balances = useQuery({
-    queryKey: ["customer-account-balances", tenantId, userId, membership?.branch_id],
+    queryKey: ["customer-account-balances", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       const { data, error } = await (supabase.from("customer_account_balances" as any) as any).select("*").eq("tenant_id", tenantId!);
       if (error) throw error;
@@ -58,7 +58,7 @@ function CustomersPage() {
   const balanceByCustomer = useMemo(() => new Map((balances.data ?? []).map((row) => [row.customer_id, row])), [balances.data]);
 
   const q = useQuery({
-    queryKey: ["customers", tenantId, userId, membership?.branch_id],
+    queryKey: ["customers", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async (): Promise<Customer[]> => {
       const { data, error } = await (supabase.from("customers" as any) as any).select("*").eq("tenant_id", tenantId!).order("created_at", { ascending: false });
       if (error) throw error;
@@ -197,7 +197,7 @@ function CustomersPage() {
 function CustomerAccount({ customer, tenantId }: { customer: Customer; tenantId: string }) {
   const { userId, membership } = useActiveTenant();
   const accountSummary = useQuery({
-    queryKey: ["customer-account-summary", tenantId, userId, membership?.branch_id, customer.id],
+    queryKey: ["customer-account-summary", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all", customer.id],
     queryFn: async () => {
       const { data, error } = await (supabase.from("customer_account_balances" as any) as any).select("*").eq("tenant_id", tenantId).eq("customer_id", customer.id).maybeSingle();
       if (error) throw error;
@@ -205,7 +205,7 @@ function CustomerAccount({ customer, tenantId }: { customer: Customer; tenantId:
     },
   });
   const invoices = useQuery({
-    queryKey: ["customer-invoices", tenantId, userId, membership?.branch_id, customer.id],
+    queryKey: ["customer-invoices", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all", customer.id],
     queryFn: async () => {
       const { data, error } = await (supabase.from("sales" as any) as any).select("id,invoice_no,created_at,total,status,branch_id").eq("tenant_id", tenantId).eq("customer_id", customer.id).order("created_at", { ascending: false });
       if (error) throw error;

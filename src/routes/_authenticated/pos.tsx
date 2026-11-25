@@ -242,7 +242,7 @@ function POSWorkspace() {
   };
 
   const branches = useQuery({
-    queryKey: ["branches-active", tenantId],
+    queryKey: ["branches-active", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all", isAdmin, isSuperOwner],
     queryFn: async (): Promise<Branch[]> => {
       let query = supabase
         .from("branches")

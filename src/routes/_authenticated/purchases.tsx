@@ -48,7 +48,7 @@ function PurchasesPage() {
   const canReturn = isAdmin || role === "warehouse";
 
   const purchases = useQuery({
-    queryKey: ["purchases", tenantId, userId, membership?.branch_id],
+    queryKey: ["purchases", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       const baseList = await fetchAllRows<Omit<PurchaseRow, "returned_total">>(
         supabase.from("purchases")
@@ -290,7 +290,7 @@ function NewPurchaseDialog({
   const [addProdId, setAddProdId] = useState<string>("");
 
   const branches = useQuery({
-    queryKey: ["branches-active-purchase", tenantId],
+    queryKey: ["branches-active-purchase", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       const { data } = await supabase.from("branches").select("id, name").eq("tenant_id", tenantId).eq("is_active", true);
       return (data ?? []) as Array<{ id: string; name: string }>;

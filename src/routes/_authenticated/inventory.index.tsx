@@ -44,7 +44,7 @@ type InvRow = {
 };
 
 function InventoryPage() {
-  const { tenantId, isAdmin, isSuperOwner, role, membership } = useActiveTenant();
+  const { tenantId, userId, isAdmin, isSuperOwner, role, membership } = useActiveTenant();
   const qc = useQueryClient();
   const [branchId, setBranchId] = useState<string>(membership?.branch_id ?? "all");
   const [search, setSearch] = useState("");
@@ -54,7 +54,7 @@ function InventoryPage() {
   const [adjustReason, setAdjustReason] = useState("");
 
   const branches = useQuery({
-    queryKey: ["branches-all", tenantId],
+    queryKey: ["branches-all", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       const { data, error } = await supabase.from("branches").select("id, name").eq("tenant_id", tenantId!);
       if (error) throw error;
@@ -64,7 +64,7 @@ function InventoryPage() {
   });
 
   const inventory = useQuery({
-    queryKey: ["inventory", tenantId, branchId],
+    queryKey: ["inventory", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all", branchId],
     queryFn: async (): Promise<InvRow[]> => {
       // Base query: all products for tenant + optional filter by branch
       const products = await fetchAllRows<{ id: string; name: string; unit: string; min_stock: number }>(

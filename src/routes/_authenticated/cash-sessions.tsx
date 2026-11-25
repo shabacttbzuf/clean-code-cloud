@@ -39,7 +39,7 @@ function CashSessionsPage() {
   const [closingCash, setClosingCash] = useState("0");
 
   const sessions = useQuery({
-    queryKey: ["cash-sessions", tenantId, userId, membership?.branch_id],
+    queryKey: ["cash-sessions", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("cash_sessions")

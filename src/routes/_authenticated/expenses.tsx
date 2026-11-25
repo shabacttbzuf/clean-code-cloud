@@ -35,7 +35,7 @@ function Page() {
     enabled: !!tenantId,
   });
   const q = useQuery({
-    queryKey: ["expenses", tenantId, userId, membership?.branch_id],
+    queryKey: ["expenses", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       const { data, error } = await supabase.from("expenses").select("id, amount, description, paid_at, category_id, branch_id").eq("tenant_id", tenantId!).order("paid_at", { ascending: false }).limit(200);
       if (error) throw error;
