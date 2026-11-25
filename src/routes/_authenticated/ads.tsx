@@ -109,7 +109,7 @@ export function AdsPage() {
       const dbError = error as { code?: string; message?: string; details?: string; hint?: string };
       const raw = [dbError.message, dbError.details, dbError.hint].filter(Boolean).join(" — ");
       if (dbError.code === "42501" || /row-level security|permission denied/i.test(raw)) {
-        toast.error("رفضت قاعدة البيانات حفظ الحملة بسبب الصلاحيات. يلزم تطبيق ترحيل صلاحية ads.manage على قاعدة البيانات، مع التأكد من أن حسابك يملكها ضمن شركته.");
+        toast.error("رفضت قاعدة البيانات حفظ الحملة بسبب الصلاحيات. يلزم تطبيق ترحيلات صلاحيات الإعلانات التفصيلية، مع التأكد من منح الإجراء المطلوب ضمن نطاق الشركة.");
         console.error("Marketing campaign RLS failure", { code: dbError.code, message: raw });
         return;
       }
