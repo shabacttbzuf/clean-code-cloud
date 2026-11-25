@@ -1,11 +1,61 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { summarizeDashboardFinancialRows } from "../src/lib/dashboard-metrics.mjs";
 
 const dashboard = readFileSync(new URL("../src/routes/_authenticated/dashboard.tsx", import.meta.url), "utf8");
 const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
 const layout = readFileSync(new URL("../src/routes/_authenticated/route.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+
+
+test("dashboard financial aggregation matches a known fixture of source rows", () => {
+  const result = summarizeDashboardFinancialRows({
+    salesToday: [{ total: 120 }, { total: 80 }],
+    refundsToday: [{ total: 25 }],
+    salesMonth: [
+      { total: 500, subtotal: 450, discount: 20 },
+      { total: 250, subtotal: 230, discount: 0 },
+    ],
+    refundsMonth: [{ total: 100, subtotal: 90, discount: 0 }],
+    expensesMonth: [{ amount: 60 }, { amount: 40 }],
+    saleCostRows: [
+      { quantity: 2, cost_price_snapshot: 40 },
+      { quantity: 1, cost_price_snapshot: 75 },
+    ],
+    refundCostRows: [
+      { quantity: 1, cost_price_snapshot: 40, restocked: true },
+      { quantity: 1, cost_price_snapshot: 75, restocked: false },
+    ],
+  });
+
+  assert.deepEqual(result, {
+    totalToday: 175,
+    totalMonth: 650,
+    totalExpMonth: 100,
+    unknownCostItems: 0,
+    profit: 355,
+  });
+});
+
+test("dashboard profit stays unavailable when any sold or restocked item has no cost snapshot", () => {
+  const result = summarizeDashboardFinancialRows({
+    salesToday: [],
+    refundsToday: [],
+    salesMonth: [{ total: 50, subtotal: 50, discount: 0 }],
+    refundsMonth: [],
+    expensesMonth: [],
+    saleCostRows: [{ quantity: 1, cost_price_snapshot: null }],
+    refundCostRows: [
+      { quantity: 1, cost_price_snapshot: null, restocked: true },
+      { quantity: 1, cost_price_snapshot: null, restocked: false },
+    ],
+  });
+
+  assert.equal(result.totalMonth, 50);
+  assert.equal(result.unknownCostItems, 2);
+  assert.equal(result.profit, null);
+});
 
 test("dashboard rejects partial query failures instead of presenting misleading totals", () => {
   assert.match(dashboard, /for \(const result of \[salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount\]\)/);
