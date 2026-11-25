@@ -1,6 +1,6 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(10);
+SELECT plan(11);
 
 SELECT is(
   (SELECT count(*)::int
@@ -20,9 +20,40 @@ SELECT is(
    WHERE n.nspname = 'public'
      AND p.prosecdef
      AND (has_function_privilege('anon', p.oid, 'EXECUTE')
-       OR has_function_privilege('authenticated', p.oid, 'EXECUTE'))),
+       OR (has_function_privilege('authenticated', p.oid, 'EXECUTE')
+         AND NOT (
+           (p.proname = 'get_marketing_campaign_analytics'
+             AND pg_get_function_identity_arguments(p.oid) = 'uuid')
+           OR
+           (p.proname = 'record_marketing_campaign_event'
+             AND pg_get_function_identity_arguments(p.oid) = 'uuid, text')
+         )))),
   0,
-  'No public SECURITY DEFINER function is executable by API roles'
+  'Only the two reviewed marketing RPCs may be executable by authenticated; anon gets none'
+);
+
+SELECT is(
+  (SELECT count(*)::int
+   FROM pg_proc p
+   JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = 'public'
+     AND p.prosecdef
+     AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
+     AND (
+       (p.proname = 'get_marketing_campaign_analytics'
+         AND pg_get_function_identity_arguments(p.oid) = 'uuid')
+       OR
+       (p.proname = 'record_marketing_campaign_event'
+         AND pg_get_function_identity_arguments(p.oid) = 'uuid, text')
+     )
+     AND (
+       p.prosrc NOT ILIKE '%auth.uid%'
+       OR NOT EXISTS (
+         SELECT 1 FROM unnest(coalesce(p.proconfig, ARRAY[]::text[])) cfg
+         WHERE cfg LIKE 'search_path=%'
+       ))),
+  0,
+  'Every executable marketing SECURITY DEFINER RPC verifies auth.uid and pins search_path'
 );
 
 SELECT is(
