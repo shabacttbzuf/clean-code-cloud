@@ -14,6 +14,7 @@ test("products are archived and reactivated without deleting records", () => {
 
 test("database protects inventory rows and transaction history from product deletion", () => {
   assert.match(migration, /REVOKE DELETE ON TABLE public\.products/);
+  assert.match(migration, /products_select_permission/);
   assert.match(migration, /inventory_product_id_fkey[\s\S]*?ON DELETE RESTRICT/);
   assert.match(migration, /inventory_transactions_product_id_fkey[\s\S]*?ON DELETE RESTRICT/);
 });
