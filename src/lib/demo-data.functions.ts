@@ -157,6 +157,98 @@ export const setUserPermission = createServerFn({ method: "POST" })
     }).parse(data),
   )
   .handler(async ({ data, context }) => {
+    if (data.user_id === context.userId) {
+      throw new Error("لا يمكنك تغيير صلاحيات حسابك بنفسك.");
+    }
+
+    const { data: isSuperOwner, error: superOwnerError } = await context.supabase
+      .rpc("is_super_owner", { _user_id: context.userId });
+    if (superOwnerError) throw new Error(superOwnerError.message);
+
+    const { data: targetIsSuperOwner, error: targetSuperOwnerError } = await context.supabase
+      .rpc("is_super_owner", { _user_id: data.user_id });
+    if (targetSuperOwnerError) throw new Error(targetSuperOwnerError.message);
+    if (targetIsSuperOwner) {
+      throw new Error("لا يمكن تعديل صلاحيات حساب المالك الرئيسي من إدارة مستخدمي المؤسسة.");
+    }
+
+    const { data: actorRoles, error: actorRolesError } = await context.supabase
+      .from("user_roles")
+      .select("role, branch_id, company_id")
+      .eq("tenant_id", data.tenant_id)
+      .eq("user_id", context.userId);
+    if (actorRolesError) throw new Error(actorRolesError.message);
+
+    const { data: targetRoles, error: targetRolesError } = await context.supabase
+      .from("user_roles")
+      .select("role, branch_id, company_id, hired_by")
+      .eq("tenant_id", data.tenant_id)
+      .eq("user_id", data.user_id);
+    if (targetRolesError) throw new Error(targetRolesError.message);
+    if (!targetRoles?.length) throw new Error("المستخدم المستهدف لا ينتمي إلى المؤسسة المحددة.");
+
+    if (!isSuperOwner) {
+      const { data: canManagePermissions, error: managePermissionError } = await context.supabase.rpc("has_permission", {
+        _user_id: context.userId,
+        _tenant_id: data.tenant_id,
+        _permission_key: "permissions.manage",
+      });
+      if (managePermissionError) throw new Error(managePermissionError.message);
+      if (canManagePermissions !== true) {
+        throw new Error("لا تملك صلاحية إدارة صلاحيات الفريق.");
+      }
+
+      const actorRows = actorRoles ?? [];
+      if (targetRoles.some((row) => row.role === "owner")) {
+        throw new Error("لا يمكن تعديل صلاحيات مالك المؤسسة إلا بواسطة المالك الأعلى.");
+      }
+      const isTenantOwner = actorRows.some((row) =>
+        row.role === "owner" && row.company_id == null && row.branch_id == null,
+      );
+      if (!isTenantOwner) {
+        // A company/branch owner or manager must match one complete actor
+        // membership tuple; independent company/branch sets can cross-combine.
+        const scopedAdmins = actorRows.filter((row) =>
+          (row.role === "owner" || row.role === "manager") &&
+          (row.company_id != null || row.branch_id != null),
+        );
+        if (!scopedAdmins.length) {
+          throw new Error("لا يمكن تحديد نطاق الشركة أو الفرع المخول لحسابك؛ تم رفض العملية.");
+        }
+        if (targetRoles.some((row) => row.role === "manager")) {
+          throw new Error("لا يحق لمدير الشركة أو الفرع تعديل صلاحيات مدير آخر.");
+        }
+        const targetWithinScope = targetRoles.every((target) =>
+          scopedAdmins.some((actor) =>
+            (actor.company_id == null || actor.company_id === target.company_id) &&
+            (actor.branch_id == null || actor.branch_id === target.branch_id),
+          ),
+        );
+        if (!targetWithinScope) {
+          throw new Error("المستخدم المستهدف خارج نطاق الشركة أو الفروع المسندة إلى حسابك.");
+        }
+        if (scopedAdmins.some((row) => row.role === "manager") &&
+            targetRoles.some((row) => row.hired_by !== context.userId)) {
+          throw new Error("يمكن لمدير الفرع إدارة الموظفين الذين قام بتعيينهم فقط.");
+        }
+      }
+
+      const { data: effectivePermissions, error: effectivePermissionsError } = await context.supabase
+        .rpc("get_my_permissions", { _tenant_id: data.tenant_id });
+      if (effectivePermissionsError) throw new Error(effectivePermissionsError.message);
+      if (!(effectivePermissions ?? []).includes(data.permission_key)) {
+        throw new Error("لا يمكنك منح صلاحية لا تملكها بنفسك.");
+      }
+    }
+
+    const { data: permission, error: permissionError } = await context.supabase
+      .from("permissions")
+      .select("key")
+      .eq("key", data.permission_key)
+      .maybeSingle();
+    if (permissionError) throw new Error(permissionError.message);
+    if (!permission) throw new Error("الصلاحية المطلوبة غير موجودة.");
+
     if (data.granted === null) {
       const { error } = await context.supabase
         .from("user_permission_overrides").delete()
@@ -166,6 +258,7 @@ export const setUserPermission = createServerFn({ method: "POST" })
       if (error) throw new Error(error.message);
       return { ok: true };
     }
+
     const { error } = await context.supabase
       .from("user_permission_overrides")
       .upsert(
