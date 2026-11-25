@@ -41,11 +41,11 @@ type Product = { id: string; name: string; unit: string; cost_price: number };
 type CartLine = { product_id: string; name: string; unit: string; quantity: string; cost_price: string };
 
 function PurchasesPage() {
-  const { tenantId, userId, isAdmin, role, membership } = useActiveTenant();
+  const { tenantId, userId, isSuperOwner, membership, hasPermission } = useActiveTenant();
   const qc = useQueryClient();
   const [creating, setCreating] = useState(false);
   const [returningPurchaseId, setReturningPurchaseId] = useState<string | null>(null);
-  const canReturn = isAdmin || role === "warehouse";
+  const canReturn = isSuperOwner || hasPermission("purchases.returns.create") || hasPermission("purchases.manage");
 
   const purchases = useQuery({
     queryKey: ["purchases", tenantId],
@@ -89,7 +89,7 @@ function PurchasesPage() {
     enabled: !!tenantId,
   });
 
-  const canCreate = isAdmin || role === "warehouse";
+  const canCreate = isSuperOwner || hasPermission("purchases.create") || hasPermission("purchases.manage");
 
   return (
     <div className="space-y-6">
