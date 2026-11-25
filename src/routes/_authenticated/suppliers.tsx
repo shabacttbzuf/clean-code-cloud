@@ -167,6 +167,7 @@ function SuppliersPage() {
       if (error) throw error;
     },
     onSuccess: () => {
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: window.location.pathname, formKey: "supplier-payment" } }));
       qc.invalidateQueries({ queryKey: ["supplier-ledger", tenantId] });
       toast.success("تم تسجيل دفعة المورد وحفظها في كشف الحساب");
       setPaymentSupplier(null); setPaymentAmount(""); setPaymentReference(""); setPaymentNotes("");
@@ -192,6 +193,7 @@ function SuppliersPage() {
       }
     },
     onSuccess: () => {
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: window.location.pathname, formKey: "supplier-edit" } }));
       qc.invalidateQueries({ queryKey: ["suppliers"] });
       toast.success("تم الحفظ");
       setOpen(false); setEditing(null);
@@ -296,7 +298,7 @@ function SuppliersPage() {
       <Dialog open={!!paymentSupplier} onOpenChange={(value) => { if (!value) setPaymentSupplier(null); }}>
         <DialogContent className="max-h-[90dvh] overflow-y-auto overscroll-contain">
           <DialogHeader><DialogTitle>تسجيل دفعة للمورد {paymentSupplier?.name}</DialogTitle></DialogHeader>
-          <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); addPayment.mutate(); }}>
+          <form id="workspace-supplier-payment" data-workspace-form-key="supplier-payment" className="space-y-3" onSubmit={(event) => { event.preventDefault(); addPayment.mutate(); }}>
             <div className="space-y-2"><Label>الفرع</Label><select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={paymentBranchId} onChange={(e) => { setPaymentBranchId(e.target.value); setCashSessionId(cashSessions.data?.find((session) => session.branch_id === e.target.value)?.id ?? ""); }} required>
               <option value="">اختر الفرع</option>{(branches.data ?? []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select></div>
