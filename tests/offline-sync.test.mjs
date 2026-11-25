@@ -49,7 +49,7 @@ test("queued operations cannot replay under a different signed-in user", () => {
   assert.match(handlers, /supabase\.auth\.getUser\(\)/);
   assert.match(handlers, /authData\.user\.id !== operation\.scope\.userId/);
   assert.match(handlers, /_expected_actor_id: operation\.scope\.userId/);
-  assert.match(migration, /_expected_actor_id IS DISTINCT FROM v_actor/);
+  assert.match(migration, /_expected_actor_id IS DISTINCT FROM v_actor/);\n  assert.match(migration, /v_order\\.tenant_id IS DISTINCT FROM _expected_tenant_id/);\n  assert.match(migration, /v_order\\.branch_id IS DISTINCT FROM _expected_branch_id/);
   assert.match(handlers, /تغير المستخدم المسجل/);
 });
 
