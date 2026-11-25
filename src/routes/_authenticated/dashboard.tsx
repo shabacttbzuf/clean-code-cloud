@@ -172,7 +172,7 @@ function Dashboard() {
   });
 
   const stats = useQuery({
-    queryKey: ["dashboard-stats", tenantId],
+    queryKey: ["dashboard-stats", tenantId, user?.id, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       if (!tenantId) return null;
       const now = new Date();
