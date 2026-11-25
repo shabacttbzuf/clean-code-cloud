@@ -116,6 +116,7 @@ function ProfilePage() {
       return setPosPasscodeFn({ data: { tenant_id: tenantId, passcode: posPasscode } });
     },
     onSuccess: () => {
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/profile", formKey: "profile-editor" } }));
       setPosPasscode("");
       setPosPasscodeConfirm("");
       if (user?.id && tenantId) {
@@ -177,11 +178,11 @@ function ProfilePage() {
       form.avatar_url !== (profile.avatar_url ?? "") ||
       !!pwd.next || !!pwd.confirm || !!posPasscode || !!posPasscodeConfirm;
     window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
-      detail: { path: "/profile", dirty },
+      detail: { path: "/profile", dirty, source: "profile-editor" },
     }));
     return () => {
       window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
-        detail: { path: "/profile", dirty: false },
+        detail: { path: "/profile", dirty: false, source: "profile-editor" },
       }));
     };
   }, [form, profile, isLoading, pwd.next, pwd.confirm, posPasscode, posPasscodeConfirm]);
@@ -197,6 +198,7 @@ function ProfilePage() {
         },
       }),
     onSuccess: () => {
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/profile", formKey: "profile-editor" } }));
       toast.success("تم حفظ الملف الشخصي");
       qc.invalidateQueries({ queryKey: ["my-profile", user?.id] });
     },
@@ -211,6 +213,7 @@ function ProfilePage() {
       return pwdFn({ data: { user_id: user.id, new_password: pwd.next } });
     },
     onSuccess: () => {
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/profile", formKey: "profile-editor" } }));
       toast.success("تم تغيير كلمة المرور");
       setPwd({ next: "", confirm: "" });
     },
