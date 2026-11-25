@@ -193,6 +193,7 @@ function SettingsPage() {
       if (!data) throw new Error("لم يتم حفظ الإعدادات؛ تحقق من صلاحية إدارة الشركة.");
     },
     onSuccess: () => {
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: window.location.pathname, formKey: "tenant-settings" } }));
       qc.invalidateQueries({ queryKey: ["tenant", tenantId] });
       toast.success("تم حفظ الإعدادات");
     },
@@ -338,7 +339,7 @@ function SettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); save.mutate(); }}>
+          <form id="workspace-tenant-settings" data-workspace-form-key="tenant-settings" className="space-y-4" onSubmit={(e) => { e.preventDefault(); save.mutate(); }}>
             <div className="space-y-2">
               <Label>شعار النشاط التجاري</Label>
               <div className="flex flex-wrap items-center gap-3">
