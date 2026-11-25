@@ -903,7 +903,7 @@ function POSWorkspace() {
   const currency = tenant?.currency ?? "";
 
   return (
-    <div className="flex h-[calc(100dvh-7rem)] min-h-[420px] flex-col gap-2 overflow-hidden p-1">
+    <div className="pos-page flex h-[calc(100dvh-7rem)] min-h-[420px] flex-col gap-2 overflow-hidden p-1">
       <PageHeader
         title="نقطة البيع"
         subtitle={currentBranch?.name}
