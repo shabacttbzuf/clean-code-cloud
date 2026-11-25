@@ -266,7 +266,7 @@ export function WorkspaceTabs() {
       }
     } catch { /* Session storage is optional. */ }
     try {
-      if (basePath === "/pos") localStorage.removeItem(`pos-workspace-v1:${pageScope}`);
+      if (basePath === "/pos") sessionStorage.removeItem(`pos-workspace-v1:${pageScope}`);
     } catch { /* Local storage is optional. */ }
     window.dispatchEvent(new CustomEvent("ras-workspace-form-discard", {
       detail: { path, scope: sessionScope },
