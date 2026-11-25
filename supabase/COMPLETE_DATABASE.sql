@@ -14860,9 +14860,9 @@ VALUES
   ('hr.payroll.print', 'طباعة كشف الرواتب', 'Print payroll reports', 'operations')
 ON CONFLICT (key) DO NOTHING;
 
--- Preserve existing access for built-in and custom roles by deriving the new
--- capabilities from the old umbrella/view permissions. New roles can then be
--- assigned only the individual action keys.
+-- Preserve existing marketing management grants. HR print permissions are deliberately
+-- not derived from view permissions because viewing sensitive HR data must not imply
+-- permission to produce printable copies.
 WITH permission_map(new_key, legacy_key) AS (
   VALUES
     ('ads.view', 'ads.manage'),
@@ -14875,9 +14875,6 @@ WITH permission_map(new_key, legacy_key) AS (
     ('promotions.edit', 'promotions.manage'),
     ('promotions.delete', 'promotions.manage'),
     ('promotions.approve', 'promotions.manage'),
-    ('hr.attendance.print', 'hr.attendance.view'),
-    ('hr.leaves.print', 'hr.leaves.view'),
-    ('hr.payroll.print', 'hr.payroll.view')
 )
 INSERT INTO public.role_permissions
   (tenant_id, role_kind, builtin_role, custom_role_id, permission_key)
