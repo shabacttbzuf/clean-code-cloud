@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   Search, LayoutGrid, Crown, Building, Briefcase, BadgeCheck,
-  KeyRound, History, UsersRound, ShieldCheck, ScrollText, Palette, Bookmark, Star, X, Clock,
+  KeyRound, History, UsersRound, ShieldCheck, ScrollText, Palette, Bookmark, Star, X, Clock, UserRound,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,6 +15,62 @@ import { Input } from "@/components/ui/input";
 
 type CustomShortcut = { title: string; url: string };
 type NavOverride = { title?: string; hidden?: boolean };
+
+// Base routes verified against src/routeTree.gen.ts. Parameterized detail routes
+// intentionally remain reachable from their parent application, not as launcher tiles.
+const APP_LAUNCHER_ROUTE_PATHS = new Set([
+  "/admin", "/audit-logs", "/branches", "/cash-sessions", "/categories",
+  "/companies", "/customers", "/dashboard", "/departments", "/employment-types",
+  "/expense-categories", "/expenses", "/job-titles", "/tables", "/kitchen",
+  "/login-history", "/notifications", "/support", "/owner-center", "/pos",
+  "/products", "/profile", "/purchases", "/reports", "/roles", "/settings",
+  "/ads", "/promotions", "/suppliers", "/team-permissions", "/users",
+  "/users-admin", "/hr/attendance", "/hr/compensation", "/hr/employees",
+  "/hr/leaves", "/hr/payroll", "/inventory", "/inventory/movements", "/sales",
+]);
+
+const APP_DESCRIPTIONS: Record<string, string> = {
+  "/dashboard": "ملخص الأداء ومؤشرات العمل",
+  "/reports": "التقارير والتحليلات التشغيلية",
+  "/pos": "إنشاء المبيعات وإدارة نقطة البيع",
+  "/tables": "حالة الطاولات والطلبات",
+  "/sales": "الفواتير وسجل المبيعات",
+  "/cash-sessions": "فتح وإغلاق الورديات النقدية",
+  "/customers": "ملفات العملاء وحركتهم",
+  "/notifications": "التنبيهات ومتابعة المستجدات",
+  "/kitchen": "متابعة وتجهيز طلبات المطبخ",
+  "/inventory": "الأرصدة ومتابعة المخزون",
+  "/inventory/movements": "حركة الأصناف وسجل التغييرات",
+  "/suppliers": "بيانات الموردين",
+  "/purchases": "طلبات وفواتير المشتريات",
+  "/expenses": "تسجيل ومراجعة المصروفات",
+  "/expense-categories": "تنظيم تصنيفات المصروفات",
+  "/hr/employees": "ملفات الموظفين",
+  "/hr/attendance": "الحضور والانصراف",
+  "/hr/leaves": "طلبات الإجازات",
+  "/hr/compensation": "المكافآت والحسميات",
+  "/hr/payroll": "إدارة الرواتب",
+  "/support": "المساعدة والإبلاغ عن المشكلات",
+  "/branches": "إدارة الفروع",
+  "/products": "كتالوج المنتجات",
+  "/categories": "تصنيفات المنتجات",
+  "/users": "حسابات الموظفين",
+  "/team-permissions": "صلاحيات أعضاء الفريق",
+  "/settings": "إعدادات الشركة والنظام",
+  "/ads": "إدارة الإعلانات",
+  "/promotions": "العروض والخصومات",
+  "/users-admin": "إدارة المستخدمين المؤسسية",
+  "/companies": "الشركات التابعة",
+  "/departments": "الهيكل الإداري",
+  "/job-titles": "المسميات الوظيفية",
+  "/employment-types": "أنواع التوظيف",
+  "/roles": "الأدوار الوظيفية",
+  "/login-history": "سجل جلسات الدخول",
+  "/owner-center": "إدارة المالك الرئيسي",
+  "/admin": "إدارة وتهيئة النظام",
+  "/audit-logs": "سجل العمليات والتدقيق",
+  "/profile": "بيانات حسابك وتفضيلاته",
+};
 
 export function AppLauncher() {
   const [open, setOpen] = useState(false);
@@ -131,6 +187,7 @@ export function AppLauncher() {
       ...appNavigationGroups,
       enterpriseGroup,
       { label: "النظام", items: systemItems },
+      { label: "الحساب", items: [{ title: "ملفي الشخصي", url: "/profile", icon: UserRound }] },
       ...(isSuperOwner && customItems.length ? [{
         label: "اختصارات مخصصة",
         items: customItems.map((item) => ({ title: item.title, url: item.url, icon: Bookmark })),
@@ -144,8 +201,10 @@ export function AppLauncher() {
         .filter((item) => {
           const basePath = item.url.split("#")[0];
           const effectiveTitle = navOverrides[basePath]?.title?.trim() || item.title;
-          return !navOverrides[basePath]?.hidden && allowed(item) &&
-            (effectiveTitle.toLocaleLowerCase("ar").includes(needle) || group.label.toLocaleLowerCase("ar").includes(needle));
+          const searchableNames = [item.title, effectiveTitle].map((title) => title.toLocaleLowerCase("ar"));
+          return APP_LAUNCHER_ROUTE_PATHS.has(basePath) &&
+            !navOverrides[basePath]?.hidden && allowed(item) &&
+            (searchableNames.some((title) => title.includes(needle)) || group.label.toLocaleLowerCase("ar").includes(needle));
         })
         .map((item) => ({
           ...item,
@@ -227,7 +286,10 @@ export function AppLauncher() {
                     <div key={item.url} className="group relative">
                       <Link to={item.url as any} onClick={() => { recordUsage(item.url); setOpen(false); setSearch(""); }} className="flex min-h-[76px] items-center gap-3 rounded-2xl border border-slate-200/80 bg-white p-3 pe-9 text-sm font-semibold shadow-sm transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                         <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ring-1 ${navigationIconTone(item.url)}`}><item.icon className="h-5 w-5" /></span>
-                        <span>{item.title}</span>
+                        <span className="min-w-0 text-right">
+                          <span className="block truncate">{item.title}</span>
+                          <span className="mt-0.5 block truncate text-[10px] font-normal text-slate-500">{APP_DESCRIPTIONS[item.url.split("#")[0]] || "فتح هذه الوحدة من النظام"}</span>
+                        </span>
                       </Link>
                       <button type="button" aria-label={favoriteUrls.includes(item.url) ? `إزالة ${item.title} من المفضلة` : `إضافة ${item.title} إلى المفضلة`} aria-pressed={favoriteUrls.includes(item.url)} onClick={() => toggleFavorite(item.url)} className="absolute right-2 top-1/2 z-10 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-lg text-amber-500 transition hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
                         <Star className={`h-4 w-4 ${favoriteUrls.includes(item.url) ? "fill-current" : ""}`} />
@@ -236,7 +298,7 @@ export function AppLauncher() {
                   ))}
                 </div>
               </section>
-            )) : <p className="p-4 text-center text-sm text-muted-foreground">لا توجد تطبيقات مطابقة أو متاحة.</p>}
+            )) : <p className="p-4 text-center text-sm text-muted-foreground">{search.trim() ? "لا توجد نتائج مطابقة لبحثك." : "لا توجد تطبيقات متاحة لحسابك حالياً."}</p>}
         </div>
       )}
     </div>
