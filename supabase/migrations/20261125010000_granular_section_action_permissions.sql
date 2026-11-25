@@ -34,7 +34,7 @@ WITH permission_map(new_key, legacy_key) AS (
     ('promotions.create', 'promotions.manage'),
     ('promotions.edit', 'promotions.manage'),
     ('promotions.delete', 'promotions.manage'),
-    ('promotions.approve', 'promotions.manage'),
+    ('promotions.approve', 'promotions.manage')
 )
 INSERT INTO public.role_permissions
   (tenant_id, role_kind, builtin_role, custom_role_id, permission_key)
