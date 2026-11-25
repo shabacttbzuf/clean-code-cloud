@@ -48,7 +48,7 @@ function PurchasesPage() {
   const canReturn = isAdmin || role === "warehouse";
 
   const purchases = useQuery({
-    queryKey: ["purchases", tenantId],
+    queryKey: ["purchases", tenantId, userId, membership?.branch_id],
     queryFn: async () => {
       const baseList = await fetchAllRows<Omit<PurchaseRow, "returned_total">>(
         supabase.from("purchases")
