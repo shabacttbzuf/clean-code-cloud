@@ -31,7 +31,11 @@ export function useNotificationSync(tenantId?: string | null, userId?: string | 
         { event: "*", schema: "public", table: "notification_reads", filter: `user_id=eq.${userId}` },
         refresh,
       )
-      .subscribe();
+      .subscribe((status) => {
+        // Realtime is an accelerator, not the delivery source of truth. A failed
+        // channel immediately refetches; the 30s query poll remains the safety net.
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") refresh();
+      });
 
     const onOnline = () => refresh();
     const onVisibility = () => {
