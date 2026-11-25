@@ -258,5 +258,6 @@ test("dashboard and product imagery use browser-native loading and decoding hint
 test("sidebar, route guard, and global search share one permission cache entry", () => {
   assert.match(appSidebar, /queryKey: \["route-effective-permissions", tenantId, userId\]/);
   assert.match(authLayout, /queryKey: \["route-effective-permissions", tenantId, userId\]/);
-  assert.match(authLayout, /queryKey: \["route-effective-permissions", tenantId, user\?\.id\]/);\n  assert.match(appLauncher, /queryKey: \["route-effective-permissions", tenantId, userId\]/);
+  assert.match(authLayout, /queryKey: \["route-effective-permissions", tenantId, user\?\.id\]/);
+  assert.match(appLauncher, /queryKey: \["route-effective-permissions", tenantId, userId\]/);
 });
