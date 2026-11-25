@@ -103,7 +103,7 @@ function Page() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="المصروفات" subtitle={`إجمالي ${formatMoney(total)} ${tenant?.currency ?? ""}`} action={canCreateExpense && (
+      <PageHeader title="المصروفات" subtitle={`إجمالي ${formatMoney(total)} ${tenant?.currency ?? ""} · لا تُحذف السجلات المالية مباشرة؛ يلزم إلغاء محاسبي موثق`} action={canCreateExpense && (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild><Button><Plus className="ml-2 h-4 w-4" />مصروف جديد</Button></DialogTrigger>
           <DialogContent>
