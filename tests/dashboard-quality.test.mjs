@@ -276,3 +276,25 @@ test("authenticated navigation does not force-remount the entire page shell on e
   assert.match(authLayout, /<WorkspaceFormStateKeeper \/>/);
   assert.doesNotMatch(authLayout, /key=\{pathname\}/);
 });
+
+
+const salesView = readFileSync(new URL("../src/routes/_authenticated/sales.index.tsx", import.meta.url), "utf8");
+const kitchenView = readFileSync(new URL("../src/routes/_authenticated/kitchen.tsx", import.meta.url), "utf8");
+const purchasesView = readFileSync(new URL("../src/routes/_authenticated/purchases.tsx", import.meta.url), "utf8");
+const posWorkspace = readFileSync(new URL("../src/routes/_authenticated/pos.tsx", import.meta.url), "utf8");
+
+test("complex authenticated pages restore their React-owned workspace state within the user and company scope", () => {
+  assert.match(salesView, /workspace-sales-view-v1:/);
+  assert.match(salesView, /sessionStorage\.getItem\(salesViewKey \+ ":search"\)/);
+  assert.match(salesView, /sessionStorage\.setItem\(salesViewKey \+ ":method", methodFilter\)/);
+  assert.match(kitchenView, /workspace-kitchen-view-v1:/);
+  assert.match(kitchenView, /sessionStorage\.getItem\(kitchenViewKey \+ ":branch"\)/);
+  assert.match(kitchenView, /sessionStorage\.setItem\(kitchenViewKey \+ ":branch", branchId\)/);
+  assert.match(purchasesView, /workspace-purchase-draft-v1:/);
+  assert.match(purchasesView, /restoredDraft\.lines/);
+  assert.match(purchasesView, /Revalidate a restored branch/);
+  assert.match(purchasesView, /workspace-purchase-return-v1:/);
+  assert.match(purchasesView, /sessionStorage\.setItem\(returnDraftKey/);
+  assert.match(purchasesView, /ras-workspace-form-saved/);
+  assert.match(posWorkspace, /pos-workspace-v1:.*membership\?\.company_id/);
+});
