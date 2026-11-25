@@ -15243,10 +15243,12 @@ END;
 $function$;
 
 REVOKE ALL ON FUNCTION private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION private.set_kitchen_order_status_idempotent(uuid,uuid,text,text,uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.set_kitchen_order_status_idempotent(
   _expected_actor_id uuid,
+  _expected_tenant_id uuid,
+  _expected_branch_id uuid,
   _order_id uuid,
   _new_status text,
   _notes text,
@@ -15263,4 +15265,4 @@ AS $function$
 $function$;
 
 REVOKE ALL ON FUNCTION public.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.set_kitchen_order_status_idempotent(uuid,uuid,text,text,uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid) TO authenticated;
