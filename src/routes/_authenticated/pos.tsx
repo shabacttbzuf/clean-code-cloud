@@ -1077,7 +1077,7 @@ function POSWorkspace() {
         </Card>
 
         <Card className="lg:hidden">
-          <CardContent className="flex items-center gap-2 p-2">
+          <CardContent className="pos-mobile-invoice flex flex-wrap items-center gap-2 p-2">
             <div className="min-w-0 flex-1">
               <div className="text-[11px] text-muted-foreground">الفاتورة • {cart.length} أصناف / {totalQty} قطع</div>
               <div className="text-lg font-black text-primary num">{formatMoney(total)} <span className="text-xs font-normal text-muted-foreground">{currency}</span></div>
