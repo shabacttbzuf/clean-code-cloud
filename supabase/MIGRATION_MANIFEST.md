@@ -220,4 +220,6 @@
 111. `supabase/migrations/20261125010000_granular_section_action_permissions.sql`
 112. `supabase/migrations/20261125020000_granular_marketing_rls_alignment.sql`
 
-**الإجمالي: 112 ترحيلاً.**
+113. `supabase/migrations/20261125030000_section_crud_permissions.sql`
+
+**الإجمالي: 113 ترحيلاً.**
