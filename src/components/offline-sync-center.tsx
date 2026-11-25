@@ -69,6 +69,7 @@ export function OfflineSyncCenter() {
 
   const pending = operations.filter((item) => item.status === "pending" || item.status === "processing").length;
   const failed = operations.filter((item) => item.status === "failed").length;
+  const blocked = operations.filter((item) => item.status === "blocked").length;
   const conflicts = operations.filter((item) => item.status === "conflict").length;
   const completed = operations.filter((item) => item.status === "synced").length;
 
@@ -76,7 +77,7 @@ export function OfflineSyncCenter() {
     if (!scope || !online || busy) return;
     setBusy(true);
     try {
-      if (failed > 0) await retryFailedOfflineOperations(scope);
+      if (failed > 0 || blocked > 0) await retryFailedOfflineOperations(scope);
       await syncOfflineOperations(scope);
       await refresh();
     } finally {
@@ -99,7 +100,7 @@ export function OfflineSyncCenter() {
         <div className="min-w-0">
           <p className="font-semibold">{online ? "متصل بالإنترنت" : "وضع عدم الاتصال"}</p>
           <p className="text-xs text-muted-foreground">
-            {pending} معلّق · {failed} فاشل · {conflicts} تعارض · {completed} مكتمل
+            {pending} معلّق · {failed} فاشل · {blocked} متوقف نهائياً · {conflicts} تعارض · {completed} مكتمل
             {lastSync ? ` · آخر مزامنة: ${new Date(lastSync).toLocaleString("ar")}` : " · لم تكتمل مزامنة بعد"}
           </p>
         </div>
@@ -110,11 +111,11 @@ export function OfflineSyncCenter() {
         <button
           type="button"
           onClick={() => void synchronize()}
-          disabled={!online || busy || pending + failed === 0}
+          disabled={!online || busy || pending + failed + blocked === 0}
           className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-primary px-3 py-2 font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-          {failed > 0 ? "إعادة محاولة ومزامنة" : "مزامنة الآن"}
+          {failed > 0 || blocked > 0 ? "إعادة تقييم وإعادة محاولة" : "مزامنة الآن"}
         </button>
       </div>
       <details className="basis-full border-t pt-2">
@@ -126,7 +127,7 @@ export function OfflineSyncCenter() {
             <li key={operation.id} className="rounded-lg bg-muted/50 p-2 text-xs">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-semibold">{operation.type} · {operation.id.slice(0, 8)}</span>
-                <span>{operation.status === "synced" ? "مكتملة" : operation.status === "conflict" ? "تعارض — يتطلب مراجعة" : operation.status === "failed" ? "فشلت — قابلة لإعادة المحاولة" : operation.status === "processing" ? "قيد الإرسال" : "بانتظار المزامنة"}</span>
+                <span>{operation.status === "synced" ? "مكتملة" : operation.status === "conflict" ? "تعارض — يتطلب مراجعة" : operation.status === "blocked" ? "متوقفة — تتطلب معالجة السبب" : operation.status === "failed" ? "فشلت — ستعاد وفق التأخير" : operation.status === "processing" ? "قيد الإرسال" : "بانتظار المزامنة"}</span>
               </div>
               <p className="mt-1 text-muted-foreground">أُنشئت: {new Date(operation.createdAt).toLocaleString("ar")} · المحاولات: {operation.attempts}</p>
               {operation.lastError && <p role="alert" className="mt-1 break-words text-destructive">{operation.lastError}</p>}
@@ -134,6 +135,7 @@ export function OfflineSyncCenter() {
           ))}
           {operations.length === 0 && <li className="text-muted-foreground">لا توجد عمليات محفوظة.</li>}
         </ul>
+        {blocked > 0 && <p className="mt-2 text-xs text-destructive">توجد عمليات أوقفت تلقائياً بسبب صلاحية مرفوضة أو خطأ دائم أو بلوغ حد المحاولات. لا تُرسل مجدداً تلقائياً؛ استخدم إعادة التقييم بعد معالجة السبب.</p>}
         {conflicts > 0 && <p className="mt-2 text-xs text-amber-700">لم نعد إرسال العمليات المتعارضة تلقائياً منعاً لاستبدال بيانات أحدث. افتح السجل الأصلي وراجع حالته على الخادم قبل إنشاء تحديث جديد.</p>}
       </details>
     </section>
