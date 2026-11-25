@@ -16781,3 +16781,13 @@ EXECUTE FUNCTION public.log_audit_change();
 COMMIT;
 -- END MIGRATION: 20261125090000_sensitive_action_audit_triggers.sql
 
+-- SOURCE MIGRATION: 20261125100000_prevent_direct_expense_deletion.sql
+-- Financial expense records must not be physically deleted by authenticated clients.
+-- A future void/reversal workflow must preserve the source record and audit trail.
+BEGIN;
+
+DROP POLICY IF EXISTS "Admins delete expenses" ON public.expenses;
+REVOKE DELETE ON TABLE public.expenses FROM PUBLIC, anon, authenticated;
+
+COMMIT;
+-- END MIGRATION: 20261125100000_prevent_direct_expense_deletion.sql
