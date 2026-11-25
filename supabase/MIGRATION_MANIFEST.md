@@ -298,3 +298,7 @@
 126. `supabase/migrations/20261125110000_prevent_product_history_deletion.sql`
 
 **الإجمالي: 126 ترحيلاً.**
+
+127. `supabase/migrations/20261125120000_inventory_balance_rpc_only.sql`
+
+**الإجمالي: 127 ترحيلاً.**
