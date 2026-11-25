@@ -1,6 +1,6 @@
 -- SECURITY DEFINER implementations must not remain callable from exposed public schema.
 BEGIN;
-SELECT plan(15);
+SELECT plan(16);
 
 SELECT ok(
   NOT EXISTS (
@@ -86,6 +86,20 @@ SELECT ok(
 SELECT ok(
   (SELECT prosecdef FROM pg_proc WHERE oid='private.create_purchase_return(uuid,uuid,text,jsonb)'::regprocedure),
   'Purchase return implementation is private SECURITY DEFINER'
+);
+
+
+SELECT ok(
+  (SELECT prosecdef FROM pg_proc WHERE oid='public.log_audit_change()'::regprocedure)
+  AND NOT has_function_privilege('authenticated', 'public.log_audit_change()'::regprocedure, 'EXECUTE')
+  AND NOT has_function_privilege('anon', 'public.log_audit_change()'::regprocedure, 'EXECUTE')
+  AND EXISTS (
+    SELECT 1 FROM pg_proc p,
+      LATERAL unnest(coalesce(p.proconfig, ARRAY[]::text[])) cfg
+    WHERE p.oid='public.log_audit_change()'::regprocedure
+      AND cfg LIKE 'search_path=pg_catalog, public'
+  ),
+  'Audit trigger remains SECURITY DEFINER, trigger-only, and uses a pinned safe search_path'
 );
 
 SELECT * FROM finish();
