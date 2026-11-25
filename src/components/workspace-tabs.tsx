@@ -100,8 +100,9 @@ function iconToneFor(path: string) {
 }
 
 function titleFor(path: string) {
-  const match = ROUTE_TITLES.find(([route]) => path === route || path.startsWith(route + "/"));
-  if (path.startsWith("/sales/")) return "تفاصيل الفاتورة";
+  const routePath = workspacePathname(path);
+  const match = ROUTE_TITLES.find(([route]) => routePath === route || routePath.startsWith(route + "/"));
+  if (routePath.startsWith("/sales/")) return "تفاصيل الفاتورة";
   return match?.[1] ?? "صفحة النظام";
 }
 
