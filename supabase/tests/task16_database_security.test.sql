@@ -119,15 +119,30 @@ SELECT is(
 );
 
 
-SELECT is(
-  (SELECT count(*)::int
-   FROM pg_policies
-   WHERE schemaname='public'
-     AND tablename IN ('payroll_runs','payroll_items')
-     AND cmd IN ('SELECT','INSERT','UPDATE','DELETE')
-     AND permissive='RESTRICTIVE'),
-  8,
-  'Payroll runs and items retain four restrictive CRUD scope gates each'
+SELECT ok(
+  NOT EXISTS (
+    SELECT 1
+    FROM (VALUES
+      ('payroll_runs','SELECT'),
+      ('payroll_runs','INSERT'),
+      ('payroll_runs','UPDATE'),
+      ('payroll_runs','DELETE'),
+      ('payroll_items','SELECT'),
+      ('payroll_items','INSERT'),
+      ('payroll_items','UPDATE'),
+      ('payroll_items','DELETE')
+    ) AS required(tablename, cmd)
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM pg_policies p
+      WHERE p.schemaname='public'
+        AND p.tablename=required.tablename
+        AND p.cmd=required.cmd
+        AND p.permissive='RESTRICTIVE'
+        AND (coalesce(p.qual,'') || coalesce(p.with_check,'')) ILIKE '%can_access%'
+    )
+  ),
+  'Payroll run and item SELECT/INSERT/UPDATE/DELETE each retain a restrictive tenant/company/branch scope gate'
 );
 
 SELECT is(
