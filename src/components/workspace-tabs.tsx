@@ -237,9 +237,37 @@ export function WorkspaceTabs() {
   }
 
   function discardPath(path: string) {
+    const normalizedPath = normalizeWorkspacePath(path) ?? path;
+    const basePath = workspacePathname(normalizedPath);
+    const pageScope = `${tenantId ?? "none"}:${user?.id ?? "none"}:${membership?.company_id ?? "none"}:${membership?.branch_id ?? "none"}`;
     try {
-      if (sessionScope) sessionStorage.removeItem(`ras-workspace-form-state-v1:${sessionScope}:${normalizeWorkspacePath(path) ?? path}`);
+      if (sessionScope) sessionStorage.removeItem(`ras-workspace-form-state-v1:${sessionScope}:${normalizedPath}`);
+      if (basePath === "/sales") {
+        sessionStorage.removeItem(`workspace-sales-view-v1:${pageScope}:search`);
+        sessionStorage.removeItem(`workspace-sales-view-v1:${pageScope}:method`);
+      } else if (basePath === "/kitchen") {
+        sessionStorage.removeItem(`workspace-kitchen-view-v1:${pageScope}:branch`);
+      } else if (basePath === "/reports") {
+        sessionStorage.removeItem(`workspace-reports-view-v1:${pageScope}`);
+      } else if (basePath === "/customers") {
+        sessionStorage.removeItem(`workspace-customers-view-v1:${pageScope}:search`);
+      } else if (basePath === "/users-admin") {
+        sessionStorage.removeItem(`workspace-users-admin-v1:${pageScope}:search`);
+        sessionStorage.removeItem(`workspace-users-admin-v1:${pageScope}:status`);
+      } else if (basePath === "/purchases") {
+        const prefixes = [
+          `workspace-purchase-draft-v1:${tenantId ?? "none"}:${user?.id ?? "none"}:${membership?.company_id ?? "none"}:`,
+          `workspace-purchase-return-v2:${tenantId ?? "none"}:${user?.id ?? "none"}:${membership?.company_id ?? "none"}:${membership?.branch_id ?? "all"}:`,
+        ];
+        for (let index = sessionStorage.length - 1; index >= 0; index--) {
+          const key = sessionStorage.key(index);
+          if (key && prefixes.some(prefix => key.startsWith(prefix))) sessionStorage.removeItem(key);
+        }
+      }
     } catch { /* Session storage is optional. */ }
+    try {
+      if (basePath === "/pos") localStorage.removeItem(`pos-workspace-v1:${pageScope}`);
+    } catch { /* Local storage is optional. */ }
     window.dispatchEvent(new CustomEvent("ras-workspace-form-discard", {
       detail: { path, scope: sessionScope },
     }));
