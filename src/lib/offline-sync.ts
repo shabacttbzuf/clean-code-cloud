@@ -9,6 +9,7 @@ export type OfflineOperationStatus =
   | "pending"
   | "processing"
   | "failed"
+  | "blocked"
   | "conflict"
   | "synced";
 
@@ -59,6 +60,25 @@ const BLOCKED_OPERATION_PATTERN = /(^|[._-])(pos|checkout|sale|sales|invoice|pay
 function isFinancialOrInventoryOperation(type: string) {
   return FINANCIAL_TYPES.has(type) || BLOCKED_OPERATION_PATTERN.test(type);
 }
+
+function sameScope(a: OfflineScope, b: OfflineScope) {
+  return a.userId === b.userId &&
+    a.tenantId === b.tenantId &&
+    a.companyId === b.companyId &&
+    a.branchId === b.branchId;
+}
+
+function isPermanentFailure(error: unknown) {
+  const candidate = error as { code?: string; status?: number; message?: string };
+  const code = candidate?.code ?? "";
+  const status = candidate?.status;
+  const message = candidate?.message ?? "";
+  return status === 401 || status === 403 ||
+    ["42501", "22023", "P0002"].includes(code) ||
+    /permission denied|not authorized|authentication required|session missing|invalid .*request|not found|بيانات .*غير صالحة|صلاحية|غير مصرح/i.test(message);
+}
+
+const MAX_AUTOMATIC_ATTEMPTS = 12;
 const handlers = new Map<string, OfflineHandler>();
 const syncPromises = new Map<string, Promise<void>>();
 const workerId = typeof crypto !== "undefined" ? crypto.randomUUID() : "server-render";
@@ -133,15 +153,9 @@ export async function enqueueOfflineOperation(
     throw new Error("هذه العملية تتطلب اتصالاً بالخادم ولا يمكن حفظها كعملية قابلة للإرسال.");
   }
   if (!scope.userId || !scope.tenantId) throw new Error("تعذر تحديد المستخدم والمؤسسة للعملية.");
-  const existing = await listOfflineOperations(scope);
-  const payloadKey = JSON.stringify(payload);
-  const duplicate = existing.find((item) =>
-    item.type === type &&
-    item.status !== "synced" &&
-    item.status !== "conflict" &&
-    JSON.stringify(item.payload) === payloadKey
-  );
-  if (duplicate) return duplicate;
+  if (!scope.companyId || !scope.branchId) {
+    throw new Error("يجب تحديد الشركة والفرع صراحةً قبل حفظ عملية قابلة للمزامنة.");
+  }
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const operation: OfflineOperation = {
@@ -161,9 +175,45 @@ export async function enqueueOfflineOperation(
     leaseOwner: null,
     leaseExpiresAt: null,
   };
-  await transaction([STORE], "readwrite", (tx) => tx.objectStore(STORE).add(operation));
-  notifyQueueChanged();
-  return operation;
+
+  // Read, deduplicate and insert in one readwrite transaction to close the cross-tab race.
+  const db = await openDb();
+  try {
+    const saved = await new Promise<OfflineOperation>((resolve, reject) => {
+      const tx = db.transaction([STORE], "readwrite");
+      const store = tx.objectStore(STORE);
+      const request = store.getAll();
+      let result = operation;
+      request.onsuccess = () => {
+        const duplicate = (request.result as OfflineOperation[]).find((item) =>
+          sameScope(item.scope, scope) &&
+          item.type === type &&
+          item.status !== "synced" &&
+          item.status !== "conflict" &&
+          item.status !== "blocked" &&
+          JSON.stringify(item.payload) === JSON.stringify(operation.payload)
+        );
+        if (duplicate) {
+          result = duplicate;
+          return;
+        }
+        store.add(operation);
+      };
+      request.onerror = () => reject(request.error);
+      tx.oncomplete = () => resolve(result);
+      tx.onerror = () => reject(tx.error ?? new Error("تعذر حفظ العملية محلياً."));
+      tx.onabort = () => reject(tx.error ?? new Error("أُلغيت عملية الحفظ المحلية."));
+    });
+    notifyQueueChanged();
+    return saved;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "QuotaExceededError") {
+      throw new Error("مساحة التخزين المحلي ممتلئة؛ لم تُحفظ العملية. حرّر مساحة ثم أعد المحاولة.");
+    }
+    throw error;
+  } finally {
+    db.close();
+  }
 }
 
 export async function listOfflineOperations(scope?: OfflineScope): Promise<OfflineOperation[]> {
@@ -174,8 +224,8 @@ export async function listOfflineOperations(scope?: OfflineScope): Promise<Offli
     .filter((row) => !scope || (
       row.scope.userId === scope.userId &&
       row.scope.tenantId === scope.tenantId &&
-      (scope.branchId === null || row.scope.branchId === scope.branchId) &&
-      (scope.companyId === null || row.scope.companyId === scope.companyId)
+      row.scope.branchId === scope.branchId &&
+      row.scope.companyId === scope.companyId
     ))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
@@ -189,7 +239,7 @@ async function saveOperation(operation: OfflineOperation) {
 export async function retryFailedOfflineOperations(scope: OfflineScope): Promise<void> {
   const rows = await listOfflineOperations(scope);
   for (const operation of rows) {
-    if (operation.status !== "failed") continue;
+    if (operation.status !== "failed" && operation.status !== "blocked") continue;
     operation.status = "pending";
     operation.nextRetryAt = null;
     await saveOperation(operation);
@@ -203,7 +253,7 @@ export async function getLastOfflineSyncAt(scope: OfflineScope): Promise<string 
   )) ?? null;
 }
 
-async function claimOperation(id: string): Promise<OfflineOperation | null> {
+async function claimOperation(id: string, scope: OfflineScope): Promise<OfflineOperation | null> {
   const db = await openDb();
   try {
     return await new Promise<OfflineOperation | null>((resolve, reject) => {
@@ -213,7 +263,7 @@ async function claimOperation(id: string): Promise<OfflineOperation | null> {
       let claimed: OfflineOperation | null = null;
       request.onsuccess = () => {
         const current = request.result as OfflineOperation | undefined;
-        if (!current || current.status === "synced" || current.status === "conflict") return;
+        if (!current || !sameScope(current.scope, scope) || current.status === "synced" || current.status === "conflict" || current.status === "blocked") return;
         const now = Date.now();
         if (current.leaseExpiresAt && new Date(current.leaseExpiresAt).getTime() > now) return;
         if (current.nextRetryAt && new Date(current.nextRetryAt).getTime() > now) return;
@@ -253,15 +303,15 @@ export async function syncOfflineOperations(scope: OfflineScope): Promise<void> 
     while (madeProgress) {
       madeProgress = false;
       for (const candidate of rows) {
-        if (attemptedIds.has(candidate.id) || candidate.status === "synced" || candidate.status === "conflict") continue;
+        if (attemptedIds.has(candidate.id) || candidate.status === "synced" || candidate.status === "conflict" || candidate.status === "blocked") continue;
         if (!candidate.dependencies.every((id) => syncedIds.has(id))) continue;
         attemptedIds.add(candidate.id);
-        const operation = await claimOperation(candidate.id);
+        const operation = await claimOperation(candidate.id, scope);
         if (!operation) continue;
         const handler = handlers.get(operation.type);
         if (!handler || handler.offlineSafe !== true || handler.idempotentServerSide !== true) {
-          operation.status = "failed";
-          operation.lastError = "لا يوجد معالج آمن ومعتمد لهذا النوع من العمليات.";
+          operation.status = "blocked";
+          operation.lastError = "لا يوجد معالج آمن ومعتمد لهذا النوع من العمليات؛ أوقفنا الإرسال نهائياً.";
           operation.nextRetryAt = null;
           releaseLease(operation);
           await saveOperation(operation);
@@ -281,10 +331,12 @@ export async function syncOfflineOperations(scope: OfflineScope): Promise<void> 
           await transaction([META], "readwrite", (tx) => tx.objectStore(META).put(operation.syncedAt, metaKey));
         } catch (error) {
           const message = error instanceof Error ? error.message : "فشل غير معروف أثناء المزامنة.";
-          operation.status = /conflict|version|stale|تعارض/i.test(message) ? "conflict" : "failed";
+          const isConflict = /conflict|version|stale|تعارض/i.test(message);
+          const isPermanent = isPermanentFailure(error) || operation.attempts >= MAX_AUTOMATIC_ATTEMPTS;
+          operation.status = isConflict ? "conflict" : isPermanent ? "blocked" : "failed";
           operation.lastError = message.slice(0, 1000);
-          const retryDelay = Math.min(30 * 60_000, 5_000 * 2 ** Math.min(operation.attempts - 1, 8));
-          operation.nextRetryAt = operation.status === "conflict" ? null : new Date(Date.now() + retryDelay).toISOString();
+          const retryDelay = Math.min(30 * 60_000, 5_000 * 2 ** Math.min(operation.attempts - 1, 12));
+          operation.nextRetryAt = operation.status === "failed" ? new Date(Date.now() + retryDelay).toISOString();
           releaseLease(operation);
           await saveOperation(operation);
         }
