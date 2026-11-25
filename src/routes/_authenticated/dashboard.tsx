@@ -110,6 +110,18 @@ function Dashboard() {
     enabled: !!tenantId && !!membership?.branch_id,
     staleTime: 60_000,
   });
+  const companyQuery = useQuery({
+    queryKey: ["dashboard-active-company-name", tenantId, membership?.company_id],
+    queryFn: async () => {
+      if (!tenantId || !membership?.company_id) return null;
+      const { data, error } = await supabase.from("companies").select("name")
+        .eq("tenant_id", tenantId).eq("id", membership.company_id).maybeSingle();
+      if (error) throw error;
+      return data?.name ?? null;
+    },
+    enabled: !!tenantId && !!membership?.company_id,
+    staleTime: 60_000,
+  });
   const displayName =
     profileQuery.data?.full_name?.trim() ||
     user?.user_metadata?.full_name?.trim() ||
@@ -118,7 +130,7 @@ function Dashboard() {
     "مستخدم";
 
   const campaignsQuery = useQuery({
-    queryKey: ["dashboard-marketing-campaigns", tenantId, membership?.company_id ?? "tenant"],
+    queryKey: ["dashboard-marketing-campaigns", tenantId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all-branches"],
     queryFn: async () => {
       const now = new Date().toISOString();
       let query = supabase.from("marketing_campaigns")
@@ -150,7 +162,7 @@ function Dashboard() {
 
   useEffect(() => {
     setActiveCampaignIndex(0);
-  }, [tenantId, membership?.company_id]);
+  }, [tenantId, membership?.company_id, membership?.branch_id]);
 
   useEffect(() => {
     const campaignCount = campaignsQuery.data?.length ?? 0;
@@ -182,14 +194,20 @@ function Dashboard() {
   }, [activeCampaign?.id]);
 
   const systemStatusQuery = useQuery({
-    queryKey: ["dashboard-system-status", tenantId, user?.id],
+    queryKey: ["dashboard-system-status", tenantId, user?.id, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
       if (!tenantId || !user?.id) throw new Error("لا يوجد نطاق شركة أو مستخدم نشط.");
       const checkedAt = new Date().toISOString();
       const [authResult, tenantResult, branchesResult, profileResult, permissionsResult] = await Promise.all([
         supabase.auth.getUser(),
         supabase.from("tenants").select("id").eq("id", tenantId).maybeSingle(),
-        supabase.from("branches").select("id").eq("tenant_id", tenantId).limit(1),
+        (() => {
+          let query = supabase.from("branches").select("id").eq("tenant_id", tenantId).limit(1);
+          if (!isSuperOwner && membership?.branch_id) query = query.eq("id", membership.branch_id);
+          else if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
+          else if (!isSuperOwner && role !== "owner") query = query.in("id", []);
+          return query;
+        })(),
         supabase.from("profiles").select("id").eq("id", user.id).maybeSingle(),
         supabase.rpc("get_my_permissions", { _tenant_id: tenantId }),
       ]);
@@ -238,7 +256,7 @@ function Dashboard() {
   });
 
   const dashboardNotifications = useQuery({
-    queryKey: ["dashboard-notifications", tenantId, user?.id],
+    queryKey: ["dashboard-notifications", tenantId, user?.id, membership?.company_id, membership?.branch_id],
     queryFn: async () => {
       if (!tenantId || !user?.id) return [];
       const [items, reads] = await Promise.all([
@@ -257,7 +275,7 @@ function Dashboard() {
   });
 
   const superStats = useQuery({
-    queryKey: ["super-owner-stats"],
+    queryKey: ["super-owner-stats", user?.id],
     queryFn: async () => {
       const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
       const [tenants, branches, users, sales, refunds, expenses] = await Promise.all([
@@ -287,7 +305,7 @@ function Dashboard() {
   });
 
   const stats = useQuery({
-    queryKey: ["dashboard-stats", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryKey: ["dashboard-stats", tenantId, user?.id, membership?.company_id, membership?.branch_id, role, isSuperOwner, hasPermission("reports.view")],
     queryFn: async () => {
       if (!tenantId) return null;
       const now = new Date();
@@ -306,6 +324,9 @@ function Dashboard() {
           .select("id").eq("tenant_id", tenantId).eq("company_id", membership.company_id);
         if (branchScopeError) throw branchScopeError;
         scopedBranchIds = (companyBranches ?? []).map((row) => row.id);
+      } else if (!isSuperOwner && role !== "owner") {
+        // Fail closed: an incomplete or missing membership must never become tenant-wide access.
+        scopedBranchIds = [];
       }
 
       let salesTodayQuery = supabase.from("sales").select("total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfDay);
@@ -431,7 +452,9 @@ function Dashboard() {
         trend, byCat,
       };
     },
-    enabled: !!tenantId,
+    enabled: !!tenantId && hasPermission("reports.view"),
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
 
 
@@ -448,6 +471,8 @@ function Dashboard() {
           .eq("tenant_id", tenantId).eq("company_id", membership.company_id);
         if (branchError) throw branchError;
         query = query.in("branch_id", (branches ?? []).map((branch) => branch.id));
+      } else if (!isSuperOwner && role !== "owner") {
+        query = query.in("branch_id", []);
       }
       const { data, error } = await query;
       if (error) throw error;
@@ -471,6 +496,8 @@ function Dashboard() {
           .eq("tenant_id", tenantId).eq("company_id", membership.company_id);
         if (branchError) throw branchError;
         query = query.in("branch_id", (branches ?? []).map((branch) => branch.id));
+      } else if (!isSuperOwner && role !== "owner") {
+        query = query.in("branch_id", []);
       }
       const { data, error } = await query;
       if (error) throw error;
@@ -503,6 +530,8 @@ function Dashboard() {
           .eq("tenant_id", tenantId).eq("company_id", membership.company_id);
         if (error) throw error;
         scopedBranchIds = (branches ?? []).map((branch) => branch.id);
+      } else if (!isSuperOwner && role !== "owner") {
+        scopedBranchIds = [];
       }
       const statuses = ["new", "preparing", "ready"] as const;
       const entries = await Promise.all(statuses.map(async (status) => {
@@ -569,12 +598,12 @@ function Dashboard() {
         <div className="absolute inset-x-0 bottom-0 h-2 bg-gradient-to-l from-[#f0b52f] via-[#d9a441] to-transparent" />
         <div className="relative z-[1] flex min-h-[205px] flex-col justify-center px-6 py-7 sm:min-h-[220px] sm:px-10">
           <div className="max-w-2xl">
-            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white/90"><Sparkles className="h-4 w-4 text-[#f4c24f]" /> {tenant?.name ?? "مساحة إدارة المطعم"}{branchQuery.data ? <span className="text-white/70"> · {branchQuery.data}</span> : null}</div>
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white/90"><Sparkles className="h-4 w-4 text-[#f4c24f]" /> {tenant?.name ?? "مساحة إدارة المطعم"}{companyQuery.data ? <span className="text-white/70"> · {companyQuery.data}</span> : companyQuery.isError ? <span className="text-amber-200"> · تعذر التحقق من الشركة</span> : null}{branchQuery.data ? <span className="text-white/70"> · {branchQuery.data}</span> : branchQuery.isError ? <span className="text-amber-200"> · تعذر التحقق من الفرع</span> : null}</div>
             <h1 id="dashboard-welcome-title" className="text-2xl font-extrabold tracking-tight sm:text-4xl">أهلاً بك في نظام إدارة <span className="text-[#f5bd36]">المطاعم</span></h1>
             <p className="mt-3 text-base font-medium text-white/90 sm:text-xl">إدارة أسهل.. عمل أكثر كفاءة</p>
             <p className="mt-1 text-xs text-white/70">مرحباً {displayName}</p>
           </div>
-          <Link to="/pos" className="mt-4 inline-flex min-h-10 w-fit items-center gap-2 rounded-full bg-[#f2b632] px-5 py-2 text-sm font-extrabold text-[#102f5c] shadow-md transition hover:bg-[#ffd16b]"><ShoppingBag className="h-4 w-4" /> فتح نقطة البيع <ArrowLeft className="h-4 w-4" /></Link>
+          {hasPermission("sales.create") && <Link to="/pos" className="mt-4 inline-flex min-h-10 w-fit items-center gap-2 rounded-full bg-[#f2b632] px-5 py-2 text-sm font-extrabold text-[#102f5c] shadow-md transition hover:bg-[#ffd16b]"><ShoppingBag className="h-4 w-4" /> فتح نقطة البيع <ArrowLeft className="h-4 w-4" /></Link>}
         </div>
       </section>
 
@@ -662,6 +691,8 @@ function Dashboard() {
         </section>
       )}
 
+      {isSuperOwner && superStats.isError && <Card role="alert" className="border-destructive/40"><CardContent className="p-4 text-sm text-destructive">تعذر تحميل مؤشرات المنظومة. <button className="underline" onClick={() => void superStats.refetch()}>إعادة المحاولة</button></CardContent></Card>}
+      {isSuperOwner && superStats.isLoading && <div className="py-4 text-center text-sm text-muted-foreground" role="status">جارٍ تحميل مؤشرات المنظومة...</div>}
       {isSuperOwner && superStats.data && (
         <Card className="border-primary/40 bg-primary/5">
           <CardContent className="p-4">
@@ -679,7 +710,9 @@ function Dashboard() {
         </Card>
       )}
 
-      {stats.isLoading ? (
+      {!hasPermission("reports.view") ? (
+        <Card><CardContent className="p-6 text-center text-sm text-muted-foreground">لا تملك الصلاحية اللازمة لعرض المؤشرات المالية والتشغيلية.</CardContent></Card>
+      ) : stats.isLoading ? (
         <div className="flex justify-center py-12" role="status" aria-live="polite"><Loader2 className="h-6 w-6 animate-spin text-primary" /><span className="sr-only">جارٍ تحميل مؤشرات لوحة التحكم</span></div>
       ) : stats.error ? (
         <Card role="alert" className="border-destructive/40">
