@@ -78,6 +78,13 @@
           const companyRows=await listOfflineOperations({...scope,companyId:"another-company"});
           assert(userRows.length===0 && tenantRows.length===0 && branchRows.length===0 && companyRows.length===0,"تسربت عملية خارج نطاق المستخدم أو المؤسسة أو الفرع أو الشركة");
         });
+        await test("رفض مفتاح منع التكرار عند اختلاف الحمولة", async()=>{
+          const key=crypto.randomUUID();
+          await enqueueOfflineOperation(type,{case:"same-key-original"},scope,[],key);
+          let rejected=false;
+          try { await enqueueOfflineOperation(type,{case:"same-key-changed"},scope,[],key); } catch { rejected=true; }
+          assert(rejected,"قُبل المفتاح نفسه مع حمولة مختلفة");
+        });
         await test("منع إدخال عملية مالية إلى الطابور", async()=>{
           let rejected=false;
           try { await enqueueOfflineOperation("payment",{amount:1},scope); } catch { rejected=true; }
