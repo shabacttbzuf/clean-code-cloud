@@ -28,7 +28,7 @@ function localDateKey(date: Date) {
 
 function ReportsPage() {
   const { tenantId, tenant, userId, membership, isSuperOwner } = useActiveTenant();
-  const reportViewKey = `workspace-reports-view-v1:${tenantId ?? "none"}:${userId ?? "none"}:${membership?.company_id ?? "none"}`;
+  const reportViewKey = `workspace-reports-view-v1:${tenantId ?? "none"}:${userId ?? "none"}:${membership?.company_id ?? "none"}:${membership?.branch_id ?? "none"}`;
   const savedReportView = useMemo(() => {
     try {
       const value = JSON.parse(sessionStorage.getItem(reportViewKey) || "{}") as Record<string, unknown>;
