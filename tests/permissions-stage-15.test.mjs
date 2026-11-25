@@ -54,6 +54,12 @@ test("enterprise user administration blocks self-targeting and enforces tenant/c
   assert.ok(helper.includes("targetBranchIds.some((id) => !actorBranchIds.includes(id))"));
   assert.ok(helper.includes("targetCompanyIds.has(actorCompanyId)"));
   assert.ok(enterprise.includes('.is("company_id", null).limit(1)'));
+  const patchGuard = enterprise.slice(enterprise.indexOf("async function assertEnterpriseProfilePatchScope"), enterprise.indexOf("/* -------------------- Enterprise user actions"));
+  assert.ok(patchGuard.includes('from("companies")'));
+  assert.ok(patchGuard.includes('from("departments")'));
+  assert.ok(patchGuard.includes("resultingCompanyId !== actorCompanyId"));
+  assert.ok(patchGuard.includes("department.company_id !== resultingCompanyId"));
+  assert.ok(enterprise.includes("await assertEnterpriseProfilePatchScope("));
 });
 
 test("marketing CRUD and approval permissions are separate and database enforced", () => {
