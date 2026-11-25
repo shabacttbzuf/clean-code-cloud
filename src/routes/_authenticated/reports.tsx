@@ -19,7 +19,7 @@ export const Route = createFileRoute("/_authenticated/reports")({
 });
 
 function ReportsPage() {
-  const { tenantId, tenant, userId } = useActiveTenant();
+  const { tenantId, tenant, userId, membership } = useActiveTenant();
   const permissionsQuery = useQuery({
     queryKey: ["reports-permissions", tenantId, userId],
     queryFn: async () => {
@@ -40,10 +40,10 @@ function ReportsPage() {
   const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [groupBy, setGroupBy] = useState<"day" | "month" | "year">("day");
   const [branchId, setBranchId] = useState("all");
-  const branchesQuery = useQuery({ queryKey: ["report-branches", tenantId], queryFn: async () => { const { data, error } = await supabase.from("branches").select("id,name").eq("tenant_id", tenantId!).order("name"); if (error) throw error; return data ?? []; }, enabled: !!tenantId });
+  const branchesQuery = useQuery({ queryKey: ["report-branches", tenantId, userId, membership?.branch_id], queryFn: async () => { const { data, error } = await supabase.from("branches").select("id,name").eq("tenant_id", tenantId!).order("name"); if (error) throw error; return data ?? []; }, enabled: !!tenantId });
 
   const report = useQuery({
-    queryKey: ["reports", tenantId, from, to, branchId],
+    queryKey: ["reports", tenantId, userId, membership?.branch_id, from, to, branchId],
     queryFn: async () => {
       if (!tenantId) return null;
       if (from > to) throw new Error("تاريخ البداية يجب أن يسبق تاريخ النهاية أو يساويه.");
