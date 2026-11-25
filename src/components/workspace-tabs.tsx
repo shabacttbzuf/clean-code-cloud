@@ -129,7 +129,7 @@ export function WorkspaceTabs() {
   const { user } = useAuthSession();
   const { isSuperOwner } = useSuperOwner();
   const sessionScope = createWorkspaceTabScope(user?.id, tenantId, membership?.company_id, membership?.branch_id);
-  const storageKey = sessionScope ? \`\${STORAGE_KEY}:\${sessionScope}\` : null;
+  const storageKey = sessionScope ? `${STORAGE_KEY}:${sessionScope}` : null;
   const permissionQuery = useQuery({
     queryKey: ["workspace-tabs-permissions", tenantId, user?.id],
     queryFn: async () => {
@@ -298,7 +298,7 @@ export function WorkspaceTabs() {
           const active = activePath === tab.path;
           const isDirty = dirtyPaths.has(tab.path) || dirtyPaths.has(workspacePathname(tab.path));
           return (
-            <div key={tab.path} className={\`group inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-2xl border px-2.5 py-2 text-sm font-semibold shadow-sm transition-all duration-200 sm:gap-2 sm:px-3.5 \${active ? "border-[#174b91] bg-[#174b91] text-white shadow-md shadow-blue-900/15" : "border-[#dce5f3] bg-white text-[#344b70] hover:border-[#9bb7df] hover:bg-[#f8fbff] hover:shadow-md"}\`}>
+            <div key={tab.path} className={`group inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-2xl border px-2.5 py-2 text-sm font-semibold shadow-sm transition-all duration-200 sm:gap-2 sm:px-3.5 ${active ? "border-[#174b91] bg-[#174b91] text-white shadow-md shadow-blue-900/15" : "border-[#dce5f3] bg-white text-[#344b70] hover:border-[#9bb7df] hover:bg-[#f8fbff] hover:shadow-md"}`}>
               <button
                 type="button"
                 onClick={() => navigate({ to: tab.path as any })}
@@ -307,20 +307,20 @@ export function WorkspaceTabs() {
                 tabIndex={active ? 0 : -1}
                 aria-selected={active}
                 aria-current={active ? "page" : undefined}
-                aria-label={\`\${tab.title}\${isDirty ? " — تغييرات غير محفوظة" : ""}\`}
+                aria-label={`${tab.title}${isDirty ? " — تغييرات غير محفوظة" : ""}`}
                 data-workspace-tab-active={active ? "true" : undefined}
               >
-                {(() => { const TabIcon = iconFor(tab.path); return <span className={\`grid h-7 w-7 shrink-0 place-items-center rounded-lg \${active ? "bg-white/15 text-white" : iconToneFor(tab.path)}\`}><TabIcon className="h-4 w-4" aria-hidden="true" /></span>; })()}
+                {(() => { const TabIcon = iconFor(tab.path); return <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${active ? "bg-white/15 text-white" : iconToneFor(tab.path)}`}><TabIcon className="h-4 w-4" aria-hidden="true" /></span>; })()}
                 <span className="max-w-[9rem] truncate sm:max-w-[13rem]">{tab.title}</span>
                 {isDirty && <span className="h-2 w-2 shrink-0 rounded-full bg-amber-400" title="تغييرات غير محفوظة" aria-label="تغييرات غير محفوظة" />}
               </button>
               {tab.path !== "/dashboard" && (
-                <button type="button" onClick={() => togglePinned(tab.path)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full opacity-70 outline-none hover:bg-black/10 hover:opacity-100 focus-visible:ring-2 focus-visible:ring-[#e0ad36]" aria-label={tab.pinned ? \`إلغاء تثبيت \${tab.title}\` : \`تثبيت \${tab.title}\`} title={tab.pinned ? "إلغاء التثبيت" : "تثبيت التبويب"}>
+                <button type="button" onClick={() => togglePinned(tab.path)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full opacity-70 outline-none hover:bg-black/10 hover:opacity-100 focus-visible:ring-2 focus-visible:ring-[#e0ad36]" aria-label={tab.pinned ? `إلغاء تثبيت ${tab.title}` : `تثبيت ${tab.title}`} title={tab.pinned ? "إلغاء التثبيت" : "تثبيت التبويب"}>
                   {tab.pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
                 </button>
               )}
               {!tab.pinned && (
-                <button type="button" onClick={() => closeTab(tab.path)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full opacity-70 outline-none hover:bg-black/10 hover:opacity-100 focus-visible:ring-2 focus-visible:ring-[#e0ad36]" aria-label={\`إغلاق تبويب \${tab.title}\`} title="إغلاق التبويب">
+                <button type="button" onClick={() => closeTab(tab.path)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full opacity-70 outline-none hover:bg-black/10 hover:opacity-100 focus-visible:ring-2 focus-visible:ring-[#e0ad36]" aria-label={`إغلاق تبويب ${tab.title}`} title="إغلاق التبويب">
                   <X className="h-4 w-4" />
                 </button>
               )}
