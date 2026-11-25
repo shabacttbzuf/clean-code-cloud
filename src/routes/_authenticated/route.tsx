@@ -218,7 +218,7 @@ function TopBar() {
       if (error) throw error;
       return data ?? [];
     },
-    enabled: memberships.length > 1,
+    enabled: new Set(memberships.map((item) => item.tenant_id)).size > 1,
     staleTime: 60_000,
   });
   const [clock, setClock] = useState(() => new Date());
