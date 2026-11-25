@@ -36,7 +36,8 @@ async function assertTenantOwnerOrSuperOwner(supabase: any, userId: string, tena
   if (superOwnerError) throw new Error(superOwnerError.message);
   if (isSuperOwner) return;
   const { data, error } = await supabase.from("user_roles").select("id")
-    .eq("user_id", userId).eq("tenant_id", tenantId).eq("role", "owner").limit(1);
+    .eq("user_id", userId).eq("tenant_id", tenantId).eq("role", "owner")
+    .is("company_id", null).limit(1);
   if (error) throw new Error(error.message);
   if (!data?.length) throw new Error("إدارة الأدوار المخصصة متاحة لمالك المؤسسة فقط.");
 }
@@ -48,33 +49,102 @@ async function assertTargetUserManageable(
   targetUserId: string,
   tenantId: string,
 ) {
-  const { data: targetRoles, error: targetError } = await supabaseAdmin
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", targetUserId)
-    .eq("tenant_id", tenantId);
-  if (targetError) throw new Error(targetError.message);
-  if (!targetRoles?.length) {
-    throw new Error("المستخدم المستهدف لا ينتمي إلى المؤسسة المحددة.");
+  if (actorId === targetUserId) {
+    throw new Error("لا يمكنك إدارة صلاحيات أو حالة حسابك من إدارة المستخدمين.");
   }
 
+  const { data: targetSuperOwner, error: targetSuperError } = await supabaseAdmin
+    .from("super_owners").select("user_id").eq("user_id", targetUserId).maybeSingle();
+  if (targetSuperError) throw new Error(targetSuperError.message);
+  if (targetSuperOwner) throw new Error("لا يمكن تعديل حساب المالك الأعلى من إدارة المستخدمين.");
+
   const { data: isSuperOwner, error: superOwnerError } = await supabase.rpc(
-    "is_super_owner",
-    { _user_id: actorId },
+    "is_super_owner", { _user_id: actorId },
   );
   if (superOwnerError) throw new Error(superOwnerError.message);
   if (isSuperOwner) return;
 
   const { data: actorRoles, error: actorError } = await supabase
     .from("user_roles")
-    .select("role")
-    .eq("user_id", actorId)
-    .eq("tenant_id", tenantId);
+    .select("role, branch_id, company_id")
+    .eq("user_id", actorId).eq("tenant_id", tenantId);
   if (actorError) throw new Error(actorError.message);
-  if ((actorRoles ?? []).some((r: any) => r.role === "owner")) return;
+  const actorRows = actorRoles ?? [];
+  if (!actorRows.length) throw new Error("لا تملك عضوية في المؤسسة المحددة.");
 
-  if ((targetRoles ?? []).some((r: any) => ["owner", "manager"].includes(r.role))) {
-    throw new Error("لا يحق للمدير إدارة حساب مالك المؤسسة أو مدير آخر.");
+  const { data: targetRoles, error: targetError } = await supabaseAdmin
+    .from("user_roles")
+    .select("role, branch_id, company_id, hired_by")
+    .eq("user_id", targetUserId).eq("tenant_id", tenantId);
+  if (targetError) throw new Error(targetError.message);
+  if (!targetRoles?.length) throw new Error("المستخدم المستهدف لا ينتمي إلى المؤسسة المحددة.");
+  if (targetRoles.some((row: any) => row.role === "owner")) {
+    throw new Error("لا يمكن تعديل حساب مالك المؤسسة إلا بواسطة المالك الأعلى.");
+  }
+  if (!actorRows.some((row: any) => ["owner", "manager"].includes(row.role))) {
+    throw new Error("غير مصرح: إدارة حسابات الموظفين للمالك أو المدير المخول فقط.");
+  }
+
+  const isTenantOwner = actorRows.some((row: any) => row.role === "owner" && row.company_id == null);
+  if (isTenantOwner) return;
+
+  if (targetRoles.some((row: any) => row.role === "manager")) {
+    throw new Error("لا يحق لمدير الشركة إدارة حساب مدير آخر.");
+  }
+
+  const actorCompanyIds = Array.from(new Set(
+    actorRows.map((row: any) => row.company_id).filter(Boolean),
+  )) as string[];
+  const actorBranchIds = Array.from(new Set(
+    actorRows.map((row: any) => row.branch_id).filter(Boolean),
+  )) as string[];
+  if (actorCompanyIds.length !== 1) {
+    throw new Error("لا يمكن تحديد نطاق الشركة المخول لحسابك؛ تم رفض العملية احتياطياً.");
+  }
+  const actorCompanyId = actorCompanyIds[0];
+
+  const { data: targetProfile, error: profileError } = await supabaseAdmin
+    .from("profiles").select("company_id, branch_id")
+    .eq("id", targetUserId).eq("tenant_id", tenantId).maybeSingle();
+  if (profileError) throw new Error(profileError.message);
+  if (!targetProfile) throw new Error("ملف المستخدم غير موجود داخل المؤسسة المحددة.");
+
+  const targetBranchIds = Array.from(new Set([
+    targetProfile.branch_id,
+    ...targetRoles.map((row: any) => row.branch_id),
+  ].filter(Boolean))) as string[];
+  const targetCompanyIds = new Set<string>([
+    targetProfile.company_id,
+    ...targetRoles.map((row: any) => row.company_id),
+  ].filter(Boolean) as string[]);
+
+  if (targetBranchIds.length) {
+    const { data: targetBranches, error: branchesError } = await supabaseAdmin
+      .from("branches").select("id, company_id")
+      .eq("tenant_id", tenantId).in("id", targetBranchIds);
+    if (branchesError) throw new Error(branchesError.message);
+    if ((targetBranches ?? []).length !== targetBranchIds.length) {
+      throw new Error("يوجد فرع غير صالح ضمن إسناد الموظف؛ تم رفض العملية.");
+    }
+    for (const row of targetBranches ?? []) if (row.company_id) targetCompanyIds.add(row.company_id);
+  }
+
+  if (targetCompanyIds.size !== 1 || !targetCompanyIds.has(actorCompanyId)) {
+    throw new Error("لا يمكنك إدارة حساب موظف لا يتبع شركتك.");
+  }
+
+  const hasCompanyWideScope = actorRows.some((row: any) =>
+    ["owner", "manager"].includes(row.role) &&
+    row.company_id === actorCompanyId && row.branch_id == null,
+  );
+  if (!hasCompanyWideScope &&
+      (!targetBranchIds.length || targetBranchIds.some((id) => !actorBranchIds.includes(id)))) {
+    throw new Error("لا يمكنك إدارة موظف خارج الفروع المسندة إلى حسابك.");
+  }
+
+  if (actorRows.some((row: any) => row.role === "manager") &&
+      targetRoles.some((row: any) => row.hired_by !== actorId)) {
+    throw new Error("يمكن لمدير الفرع إدارة الموظفين المخولين له فقط.");
   }
 }
 
