@@ -34,10 +34,19 @@ const statusLabel: Record<KitchenOrder["status"], string> = {
 };
 
 function KitchenPage() {
-  const { tenantId, membership, isSuperOwner, hasPermission } = useActiveTenant();
+  const { tenantId, userId, membership, isSuperOwner, hasPermission } = useActiveTenant();
   const canManage = hasPermission("kitchen.manage");
   const qc = useQueryClient();
-  const [branchId, setBranchId] = useState<string>(membership?.branch_id ?? "");
+  const kitchenViewKey = `workspace-kitchen-view-v1:${tenantId ?? "none"}:${userId ?? "none"}:${membership?.company_id ?? "none"}`;
+  const [branchId, setBranchId] = useState<string>(() => {
+    try { return membership?.branch_id ?? sessionStorage.getItem(kitchenViewKey + ":branch") ?? ""; }
+    catch { return membership?.branch_id ?? ""; }
+  });
+  useEffect(() => {
+    if (!membership?.branch_id && branchId) {
+      try { sessionStorage.setItem(kitchenViewKey + ":branch", branchId); } catch { /* optional */ }
+    }
+  }, [kitchenViewKey, branchId, membership?.branch_id]);
 
   const branches = useQuery({
     queryKey: ["kitchen-branches", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
