@@ -170,6 +170,8 @@ export function WorkspaceFormStateKeeper() {
         };
         if (fields.length || snapshot.scrollX || snapshot.scrollY) {
           sessionStorage.setItem(storageKey, JSON.stringify(snapshot));
+        } else {
+          sessionStorage.removeItem(storageKey);
         }
       } catch { /* session storage is optional */ }
     };
