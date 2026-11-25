@@ -109,7 +109,7 @@ function Page() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="المصروفات" subtitle={`إجمالي ${formatMoney(total)} ${tenant?.currency ?? ""}`} action={
+      <PageHeader title="المصروفات" subtitle={`إجمالي ${formatMoney(total)} ${tenant?.currency ?? ""}`} action={canCreateExpense && (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild><Button><Plus className="ml-2 h-4 w-4" />مصروف جديد</Button></DialogTrigger>
           <DialogContent>
@@ -140,7 +140,7 @@ function Page() {
                 </div>
               </div>
               <div className="space-y-2"><Label>الوصف</Label><Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} /></div>
-              <DialogFooter><Button type="submit" disabled={create.isPending}>{create.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}حفظ</Button></DialogFooter>
+              <DialogFooter><Button type="submit" disabled={!canCreateExpense || create.isPending}>{create.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}حفظ</Button></DialogFooter>
             </form>
           </DialogContent>
         </Dialog>
