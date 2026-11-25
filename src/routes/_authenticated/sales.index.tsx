@@ -56,7 +56,7 @@ const methodColors: Record<string, string> = {
 
 function SalesListPage() {
   const { tenantId, tenant, userId, membership } = useActiveTenant();
-  const salesViewKey = `workspace-sales-view-v1:${tenantId ?? "none"}:${userId ?? "none"}:${membership?.company_id ?? "none"}`;
+  const salesViewKey = `workspace-sales-view-v1:${tenantId ?? "none"}:${userId ?? "none"}:${membership?.company_id ?? "none"}:${membership?.branch_id ?? "none"}`;
   const [search, setSearch] = useState(() => {
     try { return sessionStorage.getItem(salesViewKey + ":search") ?? ""; } catch { return ""; }
   });
