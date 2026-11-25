@@ -42,7 +42,7 @@ const schema = z.object({
 function CustomersPage() {
   const { tenantId, userId, membership, isAdmin } = useActiveTenant();
   const qc = useQueryClient();
-  const customersViewKey = `workspace-customers-view-v1:${tenantId ?? "none"}:${userId ?? "none"}:${membership?.company_id ?? "none"}`;
+  const customersViewKey = `workspace-customers-view-v1:${tenantId ?? "none"}:${userId ?? "none"}:${membership?.company_id ?? "none"}:${membership?.branch_id ?? "none"}`;
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Customer | null>(null);
   const [search, setSearch] = useState(() => {
