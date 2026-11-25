@@ -12,5 +12,7 @@ test("financial expense records are not physically deleted from the UI", () => {
 
 test("database revokes authenticated direct deletion and removes delete RLS policy", () => {
   assert.match(migration, /DROP POLICY IF EXISTS "Admins delete expenses"/);
+  assert.match(migration, /DROP POLICY IF EXISTS permission_gate_expenses_delete/);
+  assert.match(migration, /DROP POLICY IF EXISTS company_boundary_expenses_delete/);
   assert.match(migration, /REVOKE DELETE ON TABLE public\.expenses FROM PUBLIC, anon, authenticated/);
 });
