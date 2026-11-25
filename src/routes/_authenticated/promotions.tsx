@@ -69,7 +69,7 @@ function PromotionsPage() {
       if (error) throw error;
       return (data ?? []) as Branch[];
     },
-    enabled: !!tenantId && canViewOffers,
+    enabled: !!tenantId && (canCreateOffers || canEditOffers),
   });
   const offers = useQuery({
     queryKey: ["promotional-offers", tenantId, membership?.company_id, membership?.branch_id],
@@ -82,7 +82,7 @@ function PromotionsPage() {
       if (error) throw error;
       return (data ?? []) as Offer[];
     },
-    enabled: !!tenantId && canManage,
+    enabled: !!tenantId && canViewOffers,
   });
   const redemptions = useQuery({
     queryKey: ["promotion-redemptions", tenantId, membership?.company_id, membership?.branch_id],
