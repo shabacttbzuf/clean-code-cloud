@@ -604,3 +604,27 @@ button, [role="button"], a, input, select, textarea {
     -webkit-overflow-scrolling: touch;
   }
 }
+
+
+/* Final responsive audit correction: help remains reachable on mobile. */
+@media (max-width: 640px) {
+  .responsive-topbar .topbar-help-link {
+    display: inline-flex !important;
+    flex: 0 0 auto;
+    visibility: visible;
+  }
+}
+@media (max-width: 380px) {
+  .responsive-topbar .topbar-help-link,
+  .responsive-topbar .app-launcher-trigger {
+    min-width: 2.25rem;
+    min-height: 2.25rem;
+  }
+}
+.pos-mobile-invoice { min-width: 0; }
+.pos-mobile-invoice > div:first-child { flex: 1 1 100%; min-width: 0; }
+.pos-mobile-invoice > button { flex: 0 0 auto; }
+@media (max-width: 380px) {
+  .pos-mobile-invoice { gap: .35rem; }
+  .pos-mobile-invoice > button { flex: 1 1 auto; min-width: 2.5rem; }
+}
