@@ -16797,3 +16797,64 @@ REVOKE DELETE ON TABLE public.expenses FROM PUBLIC, anon, authenticated;
 
 COMMIT;
 -- END MIGRATION: 20261125100000_prevent_direct_expense_deletion.sql
+
+-- SOURCE MIGRATION: 20261125110000_prevent_product_history_deletion.sql
+-- Products are archived, not physically deleted: inventory history must survive.
+BEGIN;
+
+DROP POLICY IF EXISTS "Tenant admins manage products" ON public.products;
+
+CREATE POLICY products_create_permission
+ON public.products AS PERMISSIVE
+FOR INSERT TO authenticated
+WITH CHECK (
+  public.is_super_owner((SELECT auth.uid()))
+  OR (
+    public.is_tenant_member((SELECT auth.uid()), tenant_id)
+    AND (
+      public.has_permission((SELECT auth.uid()), tenant_id, 'products.create')
+      OR public.has_permission((SELECT auth.uid()), tenant_id, 'products.manage')
+    )
+  )
+);
+
+CREATE POLICY products_update_permission
+ON public.products AS PERMISSIVE
+FOR UPDATE TO authenticated
+USING (
+  public.is_super_owner((SELECT auth.uid()))
+  OR (
+    public.is_tenant_member((SELECT auth.uid()), tenant_id)
+    AND (
+      public.has_permission((SELECT auth.uid()), tenant_id, 'products.edit')
+      OR public.has_permission((SELECT auth.uid()), tenant_id, 'products.manage')
+    )
+  )
+)
+WITH CHECK (
+  public.is_super_owner((SELECT auth.uid()))
+  OR (
+    public.is_tenant_member((SELECT auth.uid()), tenant_id)
+    AND (
+      public.has_permission((SELECT auth.uid()), tenant_id, 'products.edit')
+      OR public.has_permission((SELECT auth.uid()), tenant_id, 'products.manage')
+    )
+  )
+);
+
+REVOKE DELETE ON TABLE public.products FROM PUBLIC, anon, authenticated;
+
+ALTER TABLE public.inventory
+  DROP CONSTRAINT IF EXISTS inventory_product_id_fkey;
+ALTER TABLE public.inventory
+  ADD CONSTRAINT inventory_product_id_fkey
+  FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE RESTRICT;
+
+ALTER TABLE public.inventory_transactions
+  DROP CONSTRAINT IF EXISTS inventory_transactions_product_id_fkey;
+ALTER TABLE public.inventory_transactions
+  ADD CONSTRAINT inventory_transactions_product_id_fkey
+  FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE RESTRICT;
+
+COMMIT;
+-- END MIGRATION: 20261125110000_prevent_product_history_deletion.sql
