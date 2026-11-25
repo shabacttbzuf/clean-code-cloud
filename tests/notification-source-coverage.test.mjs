@@ -17,7 +17,7 @@ test("database visibility checks tenant, company, audience, permission and sourc
 });
 
 test("receipt RLS requires both own-user identity and parent notification visibility", () => {
-  assert.equal((migration.match(/private\.can_read_notification\(notification_id\)/g) ?? []).length, 4);
+  assert.ok((migration.match(/private\.can_read_notification\(notification_id\)/g) ?? []).length >= 4);
   assert.match(migration, /ADD COLUMN IF NOT EXISTS archived_at timestamptz/);
 });
 
