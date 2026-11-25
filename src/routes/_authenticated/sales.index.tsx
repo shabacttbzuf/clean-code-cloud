@@ -55,9 +55,24 @@ const methodColors: Record<string, string> = {
 };
 
 function SalesListPage() {
-  const { tenantId, tenant } = useActiveTenant();
-  const [search, setSearch] = useState("");
-  const [methodFilter, setMethodFilter] = useState<string>("all");
+  const { tenantId, tenant, userId, membership } = useActiveTenant();
+  const salesViewKey = `workspace-sales-view-v1:${tenantId ?? "none"}:${userId ?? "none"}:${membership?.company_id ?? "none"}`;
+  const [search, setSearch] = useState(() => {
+    try { return sessionStorage.getItem(salesViewKey + ":search") ?? ""; } catch { return ""; }
+  });
+  const [methodFilter, setMethodFilter] = useState<string>(() => {
+    try {
+      const value = sessionStorage.getItem(salesViewKey + ":method");
+      return ["all", "cash", "card", "transfer", "credit", "mixed"].includes(value ?? "") ? value! : "all";
+    } catch { return "all"; }
+  });
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(salesViewKey + ":search", search.slice(0, 100));
+      sessionStorage.setItem(salesViewKey + ":method", methodFilter);
+    } catch { /* Session storage is optional. */ }
+  }, [salesViewKey, search, methodFilter]);
 
   const sales = useQuery({
     queryKey: ["sales", tenantId],
