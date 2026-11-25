@@ -16,7 +16,7 @@ const requiredRoutes = [
   ["/suppliers", "suppliers.view"],
   ["/purchases", "purchases.view"],
   ["/expenses", "expenses.view"],
-  ["/expense-categories", "expense_categories.manage"],
+  ["/expense-categories", "expense_categories.view"],
   ["/hr/employees", "hr.employees.view"],
   ["/hr/attendance", "hr.attendance.view"],
   ["/hr/leaves", "hr.leaves.view"],
@@ -55,7 +55,8 @@ test("direct URL access is guarded and denied when permission lookup fails", () 
   assert.match(source, /return <Outlet \/>/);
   assert.match(source, /permissionsQuery\.isError/);
   assert.match(source, /ليس لديك صلاحية الوصول إلى هذه الصفحة/);
-  assert.match(source, /normalizedPath === "\/owner-center" \|\| \(normalizedPath === "\/admin" && \(!superOwnerStatusKnown \|\| totalCount > 0\)\)/);
+  assert.match(source, /normalizedPath === "\/owner-center"/);
+  assert.match(source, /tenant\?\.owner_id !== userId/);
 });
 
 test("route normalization safely strips trailing slashes", () => {
@@ -68,8 +69,8 @@ test("nested routes use the most specific permission mapping", () => {
 });
 
 test("first-owner bootstrap remains reachable only while no Super Owner exists", () => {
-  assert.match(source, /const isFirstOwnerBootstrap = normalizedPath === "\/admin" && superOwnerStatusKnown && totalCount === 0/);
+  assert.match(source, /const isFirstOwnerBootstrap = normalizedPath === "\/admin" && superOwnerStatusKnown && totalCount === 0 && tenant\?\.owner_id === userId/);
   assert.match(source, /isKnownRoute = !!requiredPermission \|\| ownerOnly \|\| isExplicitlyPublic \|\| isFirstOwnerBootstrap/);
-  assert.match(source, /normalizedPath === "\/admin" && \(!superOwnerStatusKnown \|\| totalCount > 0\)/);
+  assert.match(source, /normalizedPath === "\/admin" && \(!superOwnerStatusKnown \|\| totalCount > 0 \|\| tenant\?\.owner_id !== userId\)/);
   assert.match(source, /const \{ isSuperOwner, totalCount, loading: ownerLoading, statusKnown: superOwnerStatusKnown/);
 });
