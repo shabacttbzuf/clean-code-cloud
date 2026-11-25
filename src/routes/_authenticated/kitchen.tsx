@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, ChefHat, RefreshCw, Clock3, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
+import { enqueueOfflineOperation } from "@/lib/offline-sync";
+import "@/lib/offline-handlers";
 
 export const Route = createFileRoute("/_authenticated/kitchen")({ component: KitchenPage });
 
@@ -34,7 +36,7 @@ const statusLabel: Record<KitchenOrder["status"], string> = {
 };
 
 function KitchenPage() {
-  const { tenantId, membership, isSuperOwner, hasPermission } = useActiveTenant();
+  const { tenantId, userId, membership, isSuperOwner, hasPermission } = useActiveTenant();
   const canManage = hasPermission("kitchen.manage");
   const qc = useQueryClient();
   const [branchId, setBranchId] = useState<string>(membership?.branch_id ?? "");
@@ -113,18 +115,52 @@ function KitchenPage() {
     return () => { void supabase.removeChannel(channel); };
   }, [tenantId, qc]);
 
+  useEffect(() => {
+    const refreshAfterSync = () => {
+      void qc.invalidateQueries({ queryKey: ["kitchen-queue", tenantId, branchId] });
+    };
+    window.addEventListener("offline-sync:changed", refreshAfterSync);
+    return () => window.removeEventListener("offline-sync:changed", refreshAfterSync);
+  }, [qc, tenantId, branchId]);
+
   const statusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: "preparing" | "ready" | "delivered" }) => {
-      const { error } = await (supabase.rpc as any)("set_kitchen_order_status", {
-        _order_id: id,
-        _new_status: status,
-        _notes: null,
-      });
-      if (error) throw error;
+      if (!tenantId || !userId || !branchId) throw new Error("تعذر تحديد المستخدم أو المؤسسة أو الفرع.");
+      if (!canManage) throw new Error("لا تملك صلاحية إدارة طلبات المطبخ.");
+      const idempotencyKey = crypto.randomUUID();
+      if (!navigator.onLine) {
+        await enqueueOfflineOperation("kitchen_status",
+          { orderId: id, status, notes: null, tenantId, branchId },
+          { userId, tenantId, branchId, companyId: membership?.company_id ?? null },
+          [], idempotencyKey);
+        return { queued: true };
+      }
+      try {
+        const { error } = await (supabase.rpc as any)("set_kitchen_order_status_idempotent", {
+          _expected_actor_id: userId, _expected_tenant_id: tenantId, _expected_branch_id: branchId, _order_id: id, _new_status: status, _notes: null, _idempotency_key: idempotencyKey,
+        });
+        if (error) throw error;
+        return { queued: false };
+      } catch (error) {
+        const networkFailure = error instanceof TypeError ||
+          /failed to fetch|network|connection|offline|fetcherror/i.test(
+            error instanceof Error ? error.message : String(error),
+          );
+        if (!navigator.onLine || networkFailure) {
+          await enqueueOfflineOperation("kitchen_status",
+            { orderId: id, status, notes: null, tenantId, branchId },
+            { userId, tenantId, branchId, companyId: membership?.company_id ?? null },
+            [], idempotencyKey);
+          return { queued: true };
+        }
+        throw error;
+      }
     },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["kitchen-queue", tenantId] });
-      toast.success("تم تحديث حالة الطلب");
+    onSuccess: (result) => {
+      void qc.invalidateQueries({ queryKey: ["kitchen-queue", tenantId, branchId] });
+      toast.success(result.queued
+        ? "حُفظ تحديث الطلب محلياً وسيُزامن تلقائياً عند عودة الإنترنت"
+        : "تم تحديث حالة الطلب");
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر تحديث الطلب"),
   });
