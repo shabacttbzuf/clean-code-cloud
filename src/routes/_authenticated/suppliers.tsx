@@ -36,8 +36,8 @@ const schema = z.object({
 });
 
 function SuppliersPage() {
-  const { tenantId, userId, isAdmin, role, isSuperOwner, membership, tenant, hasPermission } = useActiveTenant();
-  const canManagePayments = isAdmin || role === "warehouse" || isSuperOwner;
+  const { tenantId, userId, isSuperOwner, membership, tenant, hasPermission } = useActiveTenant();
+  const canManagePayments = isSuperOwner || hasPermission("purchases.manage");
   const canCreateSupplier = isSuperOwner || hasPermission("suppliers.create") || hasPermission("suppliers.manage");
   const canEditSupplier = isSuperOwner || hasPermission("suppliers.edit") || hasPermission("suppliers.manage");
   const canDeleteSupplier = isSuperOwner || hasPermission("suppliers.delete") || hasPermission("suppliers.manage");
