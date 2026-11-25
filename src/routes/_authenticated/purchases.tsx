@@ -224,7 +224,7 @@ function PurchaseReturnDialog({
   useEffect(() => {
     const dirty = open && (reason.trim().length > 0 || Object.values(quantities).some((value) => Number(value) > 0));
     window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
-      detail: { path: "/purchases", dirty },
+      detail: { path: "/purchases", dirty, source: "purchase-new" },
     }));
     return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
       detail: { path: "/purchases", dirty: false },
@@ -371,7 +371,7 @@ function NewPurchaseDialog({
     const dirty = open && (lines.length > 0 || supplierId !== "none" || !!reference.trim() ||
       !!notes.trim() || branchId !== (defaultBranchId ?? ""));
     window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
-      detail: { path: "/purchases", dirty },
+      detail: { path: "/purchases", dirty, source: "purchase-return" },
     }));
   }, [open, lines, supplierId, reference, notes, branchId, defaultBranchId]);
 
