@@ -39,6 +39,7 @@ function ReportsPage() {
     staleTime: 15_000,
   });
   const canExportReports = permissionsQuery.data?.has("reports.export") === true;
+  const canPrintReports = permissionsQuery.data?.has("reports.print") === true;
   const canFilterReports = permissionsQuery.data?.has("reports.filter") === true;
   const [from, setFrom] = useState(() => {
     const d = new Date();
@@ -394,7 +395,7 @@ function ReportsPage() {
       <PageHeader
         title="التقارير"
         subtitle="تقارير مبيعات، مصروفات، مخزون وموظفين"
-        action={canExportReports ? <Button variant="outline" className="print:hidden" onClick={() => window.print()}><Printer className="ml-2 h-4 w-4" />طباعة التقرير</Button> : undefined}
+        action={canPrintReports ? <Button variant="outline" className="print:hidden" onClick={() => window.print()}><Printer className="ml-2 h-4 w-4" />طباعة التقرير</Button> : undefined}
       />
 
       <Card>
