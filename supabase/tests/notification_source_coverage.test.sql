@@ -1,6 +1,6 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(12);
+SELECT plan(15);
 
 SELECT ok(
   to_regprocedure('private.can_read_notification(uuid)') IS NOT NULL
@@ -107,6 +107,34 @@ SELECT ok(
   AND pg_get_functiondef('private.notify_admin_account_status_events()'::regprocedure) NOT LIKE '%national_id%'
   AND pg_get_functiondef('private.notify_admin_account_status_events()'::regprocedure) NOT LIKE '%last_ip%',
   'Operational and administrative notifications omit financial totals and personal identifiers'
+);
+
+
+SELECT ok(
+  pg_get_functiondef('private.notify_sale_operational_events()'::regprocedure) LIKE '%v_audience := ''branch''%'
+  AND pg_get_functiondef('private.notify_sale_operational_events()'::regprocedure) LIKE '%v_audience := ''manager''%'
+  AND pg_get_functiondef('private.can_read_notification(uuid)'::regprocedure) LIKE '%sales.view%',
+  'Sales and refund events target branch staff or company managers with sales permission'
+);
+
+SELECT ok(
+  pg_get_functiondef('private.notify_campaign_activation()'::regprocedure) LIKE '%''manager''%'
+  AND pg_get_functiondef('private.notify_promotion_activation()'::regprocedure) LIKE '%''branch''%'
+  AND pg_get_functiondef('private.notify_promotion_activation()'::regprocedure) LIKE '%''manager''%'
+  AND pg_get_functiondef('private.can_read_notification(uuid)'::regprocedure) LIKE '%ads.manage%'
+  AND pg_get_functiondef('private.can_read_notification(uuid)'::regprocedure) LIKE '%promotions.manage%',
+  'Campaign and promotion events target the company or branch manager audience with feature permissions'
+);
+
+SELECT ok(
+  pg_get_functiondef('private.notify_admin_account_status_events()'::regprocedure) LIKE '%''manager''%'
+  AND pg_get_functiondef('private.notify_leave_request_events()'::regprocedure) LIKE '%''owner''%'
+  AND pg_get_functiondef('private.notify_leave_request_events()'::regprocedure) LIKE '%''user''%'
+  AND pg_get_functiondef('private.notify_branch_when_kitchen_ready()'::regprocedure) LIKE '%''branch''%'
+  AND pg_get_functiondef('private.notify_on_low_stock()'::regprocedure) LIKE '%''branch''%'
+  AND pg_get_functiondef('private.notify_on_customer_credit_invoice()'::regprocedure) LIKE '%''owner''%'
+  AND pg_get_functiondef('private.notify_on_customer_invoice_collection()'::regprocedure) LIKE '%''manager''%',
+  'Administrative, HR, kitchen, stock, invoice and collection sources define scoped recipients'
 );
 
 SELECT * FROM finish();
