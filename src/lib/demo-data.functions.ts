@@ -188,13 +188,26 @@ export const setUserPermission = createServerFn({ method: "POST" })
     if (!targetRoles?.length) throw new Error("المستخدم المستهدف لا ينتمي إلى المؤسسة المحددة.");
 
     if (!isSuperOwner) {
+      const { data: canManagePermissions, error: managePermissionError } = await context.supabase.rpc("has_permission", {
+        _user_id: context.userId,
+        _tenant_id: data.tenant_id,
+        _permission_key: "permissions.manage",
+      });
+      if (managePermissionError) throw new Error(managePermissionError.message);
+      if (canManagePermissions !== true) {
+        throw new Error("لا تملك صلاحية إدارة صلاحيات الفريق.");
+      }
+
       const actorRows = actorRoles ?? [];
+      if (targetRoles.some((row) => row.role === "owner")) {
+        throw new Error("لا يمكن تعديل صلاحيات مالك المؤسسة إلا بواسطة المالك الأعلى.");
+      }
       const isTenantOwner = actorRows.some((row) =>
         row.role === "owner" && row.company_id == null && row.branch_id == null,
       );
       if (!isTenantOwner) {
-        // A company/branch owner or manager is scoped to the exact memberships
-        // assigned to them. A bare manager role with no scope is denied.
+        // A company/branch owner or manager must match one complete actor
+        // membership tuple; independent company/branch sets can cross-combine.
         const scopedAdmins = actorRows.filter((row) =>
           (row.role === "owner" || row.role === "manager") &&
           (row.company_id != null || row.branch_id != null),
@@ -202,29 +215,29 @@ export const setUserPermission = createServerFn({ method: "POST" })
         if (!scopedAdmins.length) {
           throw new Error("لا يمكن تحديد نطاق الشركة أو الفرع المخول لحسابك؛ تم رفض العملية.");
         }
-        if (targetRoles.some((row) => row.role === "owner" || row.role === "manager")) {
-          throw new Error("لا يحق لمدير الشركة أو الفرع تعديل صلاحيات المالك أو مدير آخر.");
+        if (targetRoles.some((row) => row.role === "manager")) {
+          throw new Error("لا يحق لمدير الشركة أو الفرع تعديل صلاحيات مدير آخر.");
         }
-
-        const companyScopes = new Set(scopedAdmins.map((row) => row.company_id).filter(Boolean));
-        const branchScopes = new Set(scopedAdmins.map((row) => row.branch_id).filter(Boolean));
-        if (companyScopes.size && targetRoles.some((row) => !row.company_id || !companyScopes.has(row.company_id))) {
-          throw new Error("لا يمكن إدارة صلاحيات مستخدم من شركة أخرى.");
-        }
-        if (branchScopes.size && targetRoles.some((row) => !row.branch_id || !branchScopes.has(row.branch_id))) {
-          throw new Error("لا يمكن إدارة صلاحيات مستخدم من فرع آخر.");
+        const targetWithinScope = targetRoles.every((target) =>
+          scopedAdmins.some((actor) =>
+            (actor.company_id == null || actor.company_id === target.company_id) &&
+            (actor.branch_id == null || actor.branch_id === target.branch_id),
+          ),
+        );
+        if (!targetWithinScope) {
+          throw new Error("المستخدم المستهدف خارج نطاق الشركة أو الفروع المسندة إلى حسابك.");
         }
         if (scopedAdmins.some((row) => row.role === "manager") &&
             targetRoles.some((row) => row.hired_by !== context.userId)) {
           throw new Error("يمكن لمدير الفرع إدارة الموظفين الذين قام بتعيينهم فقط.");
         }
+      }
 
-        const { data: effectivePermissions, error: effectivePermissionsError } = await context.supabase
-          .rpc("get_my_permissions", { _tenant_id: data.tenant_id });
-        if (effectivePermissionsError) throw new Error(effectivePermissionsError.message);
-        if (!(effectivePermissions ?? []).includes(data.permission_key)) {
-          throw new Error("لا يمكنك منح صلاحية لا تملكها بنفسك.");
-        }
+      const { data: effectivePermissions, error: effectivePermissionsError } = await context.supabase
+        .rpc("get_my_permissions", { _tenant_id: data.tenant_id });
+      if (effectivePermissionsError) throw new Error(effectivePermissionsError.message);
+      if (!(effectivePermissions ?? []).includes(data.permission_key)) {
+        throw new Error("لا يمكنك منح صلاحية لا تملكها بنفسك.");
       }
     }
 
