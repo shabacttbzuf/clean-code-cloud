@@ -43,7 +43,7 @@ function Page() {
       else { const { error } = await supabase.from("expense_categories").insert(payload); if (error) throw error; }
     },
     onSuccess: () => {
-      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: window.location.pathname } })); qc.invalidateQueries({ queryKey: ["expense-categories"] }); toast.success("تم"); setOpen(false); setEditing(null); },
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/expense-categories" } })); qc.invalidateQueries({ queryKey: ["expense-categories"] }); toast.success("تم"); setOpen(false); setEditing(null); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشل"),
   });
 
