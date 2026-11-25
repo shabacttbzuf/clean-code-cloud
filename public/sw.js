@@ -82,8 +82,8 @@ function isSensitiveOrApiPath(pathname) {
     || /\/api(\/|$)/i.test(pathname);
 }
 
-function isCacheablePublicHtml(response) {
-  if (!response.ok || !response.headers.get("content-type")?.includes("text/html")) return false;
+function isCacheablePublicResponse(response) {
+  if (!response.ok || response.type !== "basic") return false;
   const cacheControl = response.headers.get("cache-control") || "";
   if (/private|no-store|no-cache/i.test(cacheControl)) return false;
   if (response.headers.get("vary") === "*") return false;
@@ -123,7 +123,7 @@ self.addEventListener("fetch", (event) => {
     if (cached) return cached;
     try {
       const response = await fetch(request);
-      if (response.ok && response.type === "basic") await putStaticAsset(cache, request, response);
+      if (isCacheablePublicResponse(response)) await putStaticAsset(cache, request, response);
       return response;
     } catch {
       return cached || Response.error();
