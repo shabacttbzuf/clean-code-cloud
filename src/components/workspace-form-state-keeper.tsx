@@ -295,7 +295,7 @@ export function WorkspaceFormStateKeeper() {
       if (restoring || !restored) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (target?.closest("[data-workspace-dirty='off']")) return;
-      if (event.type !== "submit" && !target?.closest("form, [data-workspace-dirty='on']")) return;
+      if (event.type !== "submit" && !target?.closest("form, [role='dialog'], [data-workspace-dirty='on']")) return;
       const form = target?.closest("form");
       const formKey = form
         ? (form.id || form.dataset.workspaceFormKey || `form-${Array.from(root.querySelectorAll("form")).indexOf(form)}`)
@@ -355,6 +355,7 @@ export function WorkspaceFormStateKeeper() {
     root.addEventListener("input", markDirty, true);
     root.addEventListener("change", markDirty, true);
     root.addEventListener("submit", markDirty, true);
+    root.addEventListener("click", markDirty, true);
     root.addEventListener("focusin", saveViewState, true);
     root.addEventListener("toggle", saveViewState, true);
     root.addEventListener("scroll", saveViewState, true);
@@ -369,6 +370,7 @@ export function WorkspaceFormStateKeeper() {
       root.removeEventListener("input", markDirty, true);
       root.removeEventListener("change", markDirty, true);
       root.removeEventListener("submit", markDirty, true);
+      root.removeEventListener("click", markDirty, true);
       root.removeEventListener("focusin", saveViewState, true);
       root.removeEventListener("toggle", saveViewState, true);
       root.removeEventListener("scroll", saveViewState, true);
