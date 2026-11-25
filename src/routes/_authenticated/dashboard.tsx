@@ -392,7 +392,7 @@ function Dashboard() {
         fetchAllRowsResult<any>(refundsTodayQuery), fetchAllRowsResult<any>(refundsMonthQuery),
         fetchAllRowsResult<any>(refundsTrendQuery), fetchAllRowsResult<any>(expensesMonthQuery), fetchAllRowsResult<any>(expensesByCategoryQuery),
         hasPermission("inventory.view") ? fetchAllRowsResult<any>(lowStockQuery) : Promise.resolve({ data: [], error: null }),
-        hasPermission("cash.view") ? sessionsQuery : Promise.resolve({ data: [], error: null }),
+        hasPermission("cash.view") ? fetchAllRowsResult<any>(sessionsQuery) : Promise.resolve({ data: [], error: null }),
         hasPermission("customers.view")
           ? supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId)
           : Promise.resolve({ count: null, error: null }),
