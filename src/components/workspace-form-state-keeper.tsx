@@ -217,7 +217,7 @@ export function WorkspaceFormStateKeeper() {
       if (restored) return;
       const snapshot = readSnapshot();
       if (snapshot.fields.length > 0 && root.querySelectorAll(FIELD_SELECTOR).length === 0) return;
-      // Restore scroll-only pages immediately, even when they contain no form controls.
+      // restore scroll-only pages immediately, even when they contain no form controls.
       const hasState = snapshot.fields.length || snapshot.scrollX || snapshot.scrollY ||
         snapshot.scrollContainers.length || snapshot.openDetails.length;
       if (hasState) {
