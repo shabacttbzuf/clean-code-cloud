@@ -429,3 +429,130 @@ button, [role="button"], a, input, select, textarea {
   .workspace-surface a,
   .workspace-surface [role="button"] { -webkit-tap-highlight-color: transparent; }
 }
+
+
+/* UI/UX 1.9 follow-up: page-specific responsive corrections. */
+.workspace-surface main { overflow-wrap: normal; }
+.workspace-surface :where(.grid, [class*="grid-cols-"]) { min-width: 0; }
+.workspace-surface :where(.flex) > * { min-width: 0; }
+.workspace-surface :where(.recharts-responsive-container, [data-chart], .recharts-wrapper) {
+  width: 100% !important;
+  max-width: 100%;
+  min-width: 0;
+}
+.workspace-surface :where(canvas, svg.recharts-surface) { max-width: 100%; }
+.responsive-table-wrap table { width: max-content; min-width: 100%; }
+.responsive-table-wrap th { white-space: nowrap; }
+.responsive-table-wrap td { white-space: normal; overflow-wrap: anywhere; }
+.responsive-table-wrap :where(button, [role="button"]) { white-space: nowrap; }
+.workspace-tabs { direction: rtl; }
+.workspace-tabs > div { flex: 0 0 auto; }
+.workspace-tabs .workspace-tab-action { min-height: 2.25rem; min-width: 2.25rem; }
+.app-launcher-root { flex: 0 0 auto; }
+.app-launcher-trigger { min-width: 2.5rem; min-height: 2.5rem; }
+.app-launcher-panel {
+  width: min(92vw, 28.75rem);
+  max-width: calc(100vw - 1rem);
+  max-height: min(78dvh, 42.5rem);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: max(.75rem, env(safe-area-inset-bottom));
+}
+.topbar-primary, .topbar-actions { min-width: 0; }
+.topbar-tenant-trigger { max-width: min(34vw, 15rem); }
+[role="dialog"], [data-radix-dialog-content] {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  scroll-padding-block: 1rem;
+}
+[data-radix-popper-content-wrapper] {
+  max-width: calc(100vw - 1rem) !important;
+}
+@media (max-width: 640px) {
+  .responsive-topbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    row-gap: .35rem;
+    padding-top: max(.45rem, env(safe-area-inset-top));
+    padding-bottom: .45rem;
+    padding-inline: max(.55rem, env(safe-area-inset-left)) max(.55rem, env(safe-area-inset-right));
+  }
+  .responsive-topbar .topbar-primary {
+    flex: 1 1 100%;
+    width: 100%;
+    gap: .45rem;
+  }
+  .responsive-topbar .topbar-help-link { display: inline-flex; flex: 0 0 auto; }
+  .responsive-topbar .topbar-help-link button,
+  .responsive-topbar .app-launcher-trigger { width: 2.5rem; height: 2.5rem; }
+  .responsive-topbar .topbar-brand { width: 2.5rem; height: 2.5rem; }
+  .responsive-topbar .topbar-tenant-trigger {
+    flex: 1 1 auto;
+    max-width: none;
+    overflow: hidden;
+  }
+  .responsive-topbar .topbar-tenant-trigger > span:first-child { font-size: .8rem; }
+  .responsive-topbar .topbar-tenant-trigger > span:last-child { font-size: .625rem; }
+  .responsive-topbar .topbar-actions {
+    flex: 1 1 100%;
+    width: 100%;
+    justify-content: flex-end;
+    gap: .35rem;
+  }
+  .responsive-topbar .topbar-actions > button,
+  .responsive-topbar .topbar-actions > [data-radix-dropdown-menu-trigger] {
+    min-width: 2.65rem;
+    min-height: 2.65rem;
+  }
+  .app-launcher-panel {
+    position: fixed;
+    inset-inline: max(.5rem, env(safe-area-inset-left)) max(.5rem, env(safe-area-inset-right));
+    top: calc(env(safe-area-inset-top) + 6.25rem);
+    width: auto;
+    max-width: none;
+    max-height: min(70dvh, 34rem);
+    margin: 0;
+    border-radius: 1rem;
+  }
+  .app-launcher-panel a { min-height: 3rem; overflow-wrap: anywhere; }
+  .workspace-surface main {
+    padding-inline: max(.7rem, env(safe-area-inset-left)) max(.7rem, env(safe-area-inset-right));
+    padding-top: .75rem;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  .workspace-surface main :where(button, [role="button"]) { min-height: 2.75rem; }
+  .workspace-tabs > div > button { min-height: 2.25rem; }
+  .workspace-tabs .workspace-tab-action { min-height: 2.25rem; min-width: 2.25rem; }
+  [role="dialog"], [data-radix-dialog-content] {
+    width: calc(100vw - 1rem) !important;
+    max-width: calc(100vw - 1rem) !important;
+    max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1rem);
+    margin-block: 0;
+  }
+  [data-radix-dialog-content] [data-slot="dialog-footer"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+  [data-radix-dialog-content] [data-slot="dialog-footer"] > * { flex: 1 1 auto; }
+  .workspace-surface :where(input, select, textarea) { font-size: 16px; }
+  .workspace-surface :where(.recharts-responsive-container, [data-chart]) { min-height: 13rem; }
+  .workspace-surface :where(.recharts-legend-wrapper) { position: relative !important; }
+}
+@media (max-width: 380px) {
+  .responsive-topbar .topbar-primary { gap: .3rem; }
+  .responsive-topbar .topbar-brand { width: 2.25rem; height: 2.25rem; }
+  .responsive-topbar .topbar-tenant-trigger > span:last-child { display: none; }
+  .app-launcher-panel { inset-inline: .4rem; }
+  .app-launcher-panel .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  .responsive-topbar { position: relative; }
+  .app-launcher-panel { max-height: 65dvh; }
+  [role="dialog"], [data-radix-dialog-content] { max-height: calc(100dvh - 1rem); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace-tabs { scroll-behavior: auto; scroll-snap-type: none; }
+}
