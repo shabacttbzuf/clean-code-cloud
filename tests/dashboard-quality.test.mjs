@@ -15,7 +15,8 @@ test("dashboard rejects partial query failures instead of presenting misleading 
 });
 
 test("CI runs on the active feature branch and supports a manual verification run", () => {
-  assert.match(workflow, /branches: \["main", "feature\/\*\*", "feat\/\*\*"\]/);
+  assert.match(workflow, /branches: \["main", "feature\/\*\*", "feat\/\*\*", "work\/uiux-\*\*"\]/);
+  assert.match(workflow, /branches: \["main", "work\/ui-ux-1\.0-complete"\]/);
   assert.match(workflow, /workflow_dispatch:/);
 });
 
@@ -234,4 +235,27 @@ test("dashboard provides permission-scoped operations, notifications, and a trut
   assert.match(dashboard, /hasPermission\("sales.create"\)/);
   assert.match(dashboard, /hasPermission\("kitchen.view"\)/);
   assert.match(dashboard, /hasPermission\("reports.view"\)/);
+});
+
+
+const activeTenant = readFileSync(new URL("../src/hooks/use-active-tenant.ts", import.meta.url), "utf8");
+
+test("header company and branch switching use authorized scope and clear cached records", () => {
+  assert.match(activeTenant, /authorized-companies/);
+  assert.match(activeTenant, /companyMembershipIds/);
+  assert.match(activeTenant, /query\.eq\("company_id", activeCompanyId\)/);
+  assert.match(activeTenant, /function switchCompany\(companyId: string \| null\)/);
+  assert.match(activeTenant, /function switchBranch\(id: string \| null\)/);
+  assert.match(activeTenant, /queryClient\.clear\(\)/);
+  assert.match(activeTenant, /memQuery\.data\?\.some\(\(item\) => item\.tenant_id === id\)/);
+});
+
+test("header mobile search closes on Escape/outside and notifications expose loading/error states", () => {
+  assert.match(layout, /document\.addEventListener\("pointerdown", onPointerDown\)/);
+  assert.match(layout, /event\.key === "Escape"/);
+  assert.match(layout, /notificationsQuery\.isLoading/);
+  assert.match(layout, /notificationsQuery\.isError/);
+  assert.match(layout, /safeInternalNotificationPath/);
+  assert.match(layout, /permissions\.has\(requiredPermission\)/);
+  assert.match(layout, /h-9 w-9 shrink-0/);
 });
