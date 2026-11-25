@@ -8,7 +8,7 @@ import { useBlocker, useNavigate, useRouterState } from "@tanstack/react-router"
 import {
   X, Home, Pin, PinOff, ShoppingCart, Receipt, Armchair, ChefHat, Package,
   ArrowLeftRight, ShoppingBag, Truck, Users, Wallet, BarChart3, Megaphone,
-  Gift, Bell, Settings, UserRound, Building2, ShieldCheck, ClipboardList,
+  Gift, Bell, Settings, UserRound, Building2, ShieldCheck, ClipboardList, Crown,
   BriefcaseBusiness, Tags, FileText, CircleHelp, LayoutGrid, PanelTopClose,
 } from "lucide-react";
 
@@ -51,7 +51,7 @@ function iconFor(path: string) {
   if (path.startsWith("/purchases")) return ShoppingBag;
   if (path.startsWith("/suppliers")) return Truck;
   if (path.startsWith("/customers") || path.startsWith("/users")) return Users;
-  if (path.startsWith("/cash-sessions") || path.startsWith("/expenses")) return Wallet;
+  if (path.startsWith("/cash-sessions") || path.startsWith("/expenses") || path.startsWith("/expense-categories")) return Wallet;
   if (path.startsWith("/reports")) return BarChart3;
   if (path.startsWith("/ads")) return Megaphone;
   if (path.startsWith("/promotions")) return Gift;
@@ -59,12 +59,14 @@ function iconFor(path: string) {
   if (path.startsWith("/settings")) return Settings;
   if (path.startsWith("/profile")) return UserRound;
   if (path.startsWith("/branches") || path.startsWith("/companies")) return Building2;
+  if (path.startsWith("/owner-center")) return Crown;
+  if (path.startsWith("/admin")) return ShieldCheck;
   if (path.startsWith("/roles") || path.startsWith("/team-permissions")) return ShieldCheck;
   if (path.startsWith("/audit-logs") || path.startsWith("/login-history")) return ClipboardList;
   if (path.startsWith("/hr/")) return BriefcaseBusiness;
   if (path.startsWith("/categories")) return Tags;
   if (path.startsWith("/support")) return CircleHelp;
-  if (path.startsWith("/departments") || path.startsWith("/job-titles")) return FileText;
+  if (path.startsWith("/departments") || path.startsWith("/job-titles") || path.startsWith("/employment-types")) return FileText;
   return LayoutGrid;
 }
 
@@ -162,6 +164,8 @@ export function WorkspaceTabs() {
     }
     const restored = restoreWorkspaceTabs(readTabs(storageKey), (path) => {
       if (path === "/owner-center" || path === "/admin") return isSuperOwner;
+      const knownRoute = ROUTE_TITLES.some(([prefix]) => path === prefix || path.startsWith(prefix + "/"));
+      if (!knownRoute) return false;
       const permission = requiredPermission(path);
       return isSuperOwner || !permission || permissionQuery.data?.has(permission) === true;
     });
@@ -243,7 +247,7 @@ export function WorkspaceTabs() {
       ...tab, dirty: dirtyPaths.has(tab.path) || dirtyPaths.has(workspacePathname(tab.path)),
     })), path, { allowDirty: true });
     if (next.length === tabs.length) return;
-    if (dirty) discardPath(path);
+    discardPath(path);
     persist(next);
     if (activePath === path) {
       const fallback = next[next.length - 1]?.path ?? "/dashboard";
@@ -255,10 +259,11 @@ export function WorkspaceTabs() {
     const removableDirty = tabs.filter(tab => tab.path !== activePath && !tab.pinned &&
       (dirtyPaths.has(tab.path) || dirtyPaths.has(workspacePathname(tab.path))));
     if (removableDirty.length && !window.confirm("توجد تغييرات غير محفوظة في تبويبات أخرى. هل تريد إغلاق هذه التبويبات وفقدان تغييراتها؟")) return;
-    for (const tab of removableDirty) discardPath(tab.path);
     const next = closeOtherWorkspaceTabs(tabs.map(tab => ({
       ...tab, dirty: dirtyPaths.has(tab.path) || dirtyPaths.has(workspacePathname(tab.path)),
     })), activePath, { allowDirty: true });
+    const retained = new Set(next.map(tab => tab.path));
+    for (const tab of tabs) if (!retained.has(tab.path)) discardPath(tab.path);
     persist(next);
   }
 
@@ -301,7 +306,7 @@ export function WorkspaceTabs() {
           const active = activePath === tab.path;
           const isDirty = dirtyPaths.has(tab.path) || dirtyPaths.has(workspacePathname(tab.path));
           return (
-            <div key={tab.path} className={`group inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-2xl border px-2.5 py-2 text-sm font-semibold shadow-sm transition-all duration-200 sm:gap-2 sm:px-3.5 ${active ? "border-[#174b91] bg-[#174b91] text-white shadow-md shadow-blue-900/15" : "border-[#dce5f3] bg-white text-[#344b70] hover:border-[#9bb7df] hover:bg-[#f8fbff] hover:shadow-md"}`}>
+            <div key={tab.path} role="presentation" className={`group inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-2xl border px-2.5 py-2 text-sm font-semibold shadow-sm transition-all duration-200 sm:gap-2 sm:px-3.5 ${active ? "border-[#174b91] bg-[#174b91] text-white shadow-md shadow-blue-900/15" : "border-[#dce5f3] bg-white text-[#344b70] hover:border-[#9bb7df] hover:bg-[#f8fbff] hover:shadow-md"}`}>
               <button
                 type="button"
                 onClick={() => navigate({ to: tab.path as any })}
