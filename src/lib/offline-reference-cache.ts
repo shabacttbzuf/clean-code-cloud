@@ -26,6 +26,8 @@ const DB_NAME = "restaurant-offline-reference";
 const DB_VERSION = 1;
 const STORE_NAME = "snapshots";
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_SNAPSHOT_BYTES = 512 * 1024;
+const MAX_STORAGE_USAGE_RATIO = 0.9;
 const BLOCKED_KEY = /password|secret|token|authorization|cookie|session|credential|payment|card|bank|salary|payroll|invoice|journal|ledger|transaction|cash|profit|cost|stock|inventory|customer|employee|phone|email|national.?id/i;
 
 function assertScope(scope: OfflineScope): void {
@@ -71,7 +73,7 @@ function openDatabase(): Promise<IDBDatabase> {
 }
 
 function recordId(scope: OfflineScope, kind: OfflineReferenceKind): string {
-  return [scope.userId, scope.companyId, scope.branchId, kind].join(":");
+  return [scope.userId, scope.companyId, scope.branchId, kind].map(encodeURIComponent).join("|");
 }
 
 export async function saveOfflineReference(
@@ -84,6 +86,23 @@ export async function saveOfflineReference(
   assertSafePayload(value);
   if (!Number.isFinite(maxAgeMs) || maxAgeMs <= 0 || maxAgeMs > MAX_AGE_MS) {
     throw new Error("Offline cache lifetime must be between 1ms and 7 days");
+  }
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(value);
+  } catch {
+    throw new Error("Offline reference data must be JSON-serializable");
+  }
+  if (serialized === undefined) throw new Error("Offline reference data must be JSON-serializable");
+  const byteLength = new TextEncoder().encode(serialized).byteLength;
+  if (byteLength > MAX_SNAPSHOT_BYTES) {
+    throw new Error("Offline reference snapshot exceeds the 512 KB per-record limit");
+  }
+  if (typeof navigator !== "undefined" && navigator.storage?.estimate) {
+    const estimate = await navigator.storage.estimate();
+    if (estimate.quota && (estimate.usage ?? 0) / estimate.quota >= MAX_STORAGE_USAGE_RATIO) {
+      throw new Error("Browser storage is nearly full; offline reference data was not saved");
+    }
   }
   const db = await openDatabase();
   try {
@@ -102,6 +121,11 @@ export async function saveOfflineReference(
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error ?? new Error("Unable to save offline reference"));
       tx.onabort = () => reject(tx.error ?? new Error("Offline reference save aborted"));
+    }).catch((error: unknown) => {
+      if (error instanceof DOMException && error.name === "QuotaExceededError") {
+        throw new Error("Browser storage is full; offline reference data was not saved");
+      }
+      throw error;
     });
   } finally {
     db.close();
@@ -127,7 +151,7 @@ export async function readOfflineReference<T>(
       record.companyId !== scope.companyId ||
       record.branchId !== scope.branchId
     ) return null;
-    if (record.expiresAt <= Date.now()) {
+    if (!Number.isFinite(record.expiresAt) || record.expiresAt <= Date.now()) {
       await deleteOfflineReference(scope, kind);
       return null;
     }
