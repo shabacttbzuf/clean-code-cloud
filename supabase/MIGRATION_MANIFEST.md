@@ -228,4 +228,8 @@
 
 116. `supabase/migrations/20261125060000_audit_history_permission_reads.sql`
 
-**الإجمالي: 116 ترحيلاً.**
+117. `supabase/migrations/20261125070000_private_purchase_rpc_wrappers.sql`
+
+118. `supabase/migrations/20261125080000_permission_override_write_gates.sql`
+
+**الإجمالي: 118 ترحيلاً.**
