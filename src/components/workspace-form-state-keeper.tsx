@@ -257,7 +257,7 @@ export function WorkspaceFormStateKeeper() {
           }
         });
         window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
-          detail: { path: routeKey, dirty: snapshot.dirty, scope: sessionScope },
+          detail: { path: routeKey, dirty: snapshot.dirty, scope: sessionScope, source: "form-state-keeper" },
         }));
       }
       restored = true;
@@ -308,7 +308,7 @@ export function WorkspaceFormStateKeeper() {
       hasUnsavedChanges = dirtyForms.size > 0;
       save(hasUnsavedChanges);
       window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
-        detail: { path: routeKey, dirty: true, scope: sessionScope },
+        detail: { path: routeKey, dirty: true, scope: sessionScope, source: "form-state-keeper" },
       }));
     };
     const saveViewState = () => {
@@ -325,7 +325,7 @@ export function WorkspaceFormStateKeeper() {
       dirtyForms.clear();
       hasUnsavedChanges = false;
       window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
-        detail: { path: routeKey, dirty: false, scope: sessionScope },
+        detail: { path: routeKey, dirty: false, scope: sessionScope, source: "form-state-keeper" },
       }));
     };
     const onSaved = (event: Event) => {
