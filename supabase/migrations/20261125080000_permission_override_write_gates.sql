@@ -73,6 +73,7 @@ AS $function$
               )
           )
           -- Managers may manage only the employees they hired.
+          AND private.can_access_creator_company(_tenant_id, _target_user_id)
           AND (
             NOT EXISTS (
               SELECT 1
