@@ -120,7 +120,7 @@ async function assertTargetUserManageable(
   }
 
   const { data: targetProfile, error: profileError } = await supabaseAdmin
-    .from("profiles").select("company_id, branch_id")
+    .from("profiles").select("company_id, branch_id, department_id")
     .eq("id", targetUserId).eq("tenant_id", tenantId).maybeSingle();
   if (profileError) throw new Error(profileError.message);
   if (!targetProfile) throw new Error("ملف المستخدم غير موجود داخل المؤسسة المحددة.");
@@ -461,10 +461,13 @@ async function assertEnterpriseProfilePatchScope(
     throw new Error("لا يمكنك نقل الموظف إلى شركة خارج نطاقك أو فصله عن شركته.");
   }
 
-  if (patch.department_id) {
+  const departmentIdToValidate = patch.department_id !== undefined
+    ? patch.department_id
+    : patch.company_id !== undefined ? targetProfile.department_id : null;
+  if (departmentIdToValidate) {
     const { data: department, error: departmentError } = await supabaseAdmin
       .from("departments").select("id, company_id, branch_id")
-      .eq("id", patch.department_id).eq("tenant_id", tenantId).maybeSingle();
+      .eq("id", departmentIdToValidate).eq("tenant_id", tenantId).maybeSingle();
     if (departmentError) throw new Error(departmentError.message);
     if (!department) throw new Error("القسم المحدد لا ينتمي إلى المؤسسة المطلوبة.");
     if (department.company_id && department.company_id !== resultingCompanyId) {
