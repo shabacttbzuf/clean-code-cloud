@@ -193,7 +193,7 @@ function SettingsPage() {
       if (!data) throw new Error("لم يتم حفظ الإعدادات؛ تحقق من صلاحية إدارة الشركة.");
     },
     onSuccess: () => {
-      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: window.location.pathname, formKey: "tenant-settings" } }));
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/settings", formKey: "tenant-settings" } }));
       qc.invalidateQueries({ queryKey: ["tenant", tenantId] });
       toast.success("تم حفظ الإعدادات");
     },
