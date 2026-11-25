@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
@@ -158,6 +158,7 @@ export function WorkspaceTabs() {
     scope: null,
     tabs: [{ path: "/dashboard", title: "الرئيسية", pinned: true }],
   });
+  const bypassNextBlocker = useRef(false);
   const [dirtyState, setDirtyState] = useState<{ scope: string | null; paths: Set<string> }>({
     scope: null,
     paths: new Set(),
@@ -223,7 +224,13 @@ export function WorkspaceTabs() {
 
   const currentDirty = isPathDirty(dirtyPaths, activePath) || isPathDirty(dirtyPaths, pathname);
   useBlocker({
-    shouldBlockFn: () => currentDirty && !window.confirm("توجد تغييرات غير محفوظة في هذه الصفحة. هل تريد مغادرتها دون حفظ؟"),
+    shouldBlockFn: () => {
+      if (bypassNextBlocker.current) {
+        bypassNextBlocker.current = false;
+        return false;
+      }
+      return currentDirty && !window.confirm("توجد تغييرات غير محفوظة في هذه الصفحة. هل تريد مغادرتها دون حفظ؟");
+    },
     enableBeforeUnload: currentDirty,
   });
 
@@ -295,6 +302,7 @@ export function WorkspaceTabs() {
     persist(next);
     if (activePath === path) {
       const fallback = next[next.length - 1]?.path ?? "/dashboard";
+      if (dirty) bypassNextBlocker.current = true;
       navigate({ to: fallback as any });
     }
   }
