@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>اختبار المتصفح المعزول — Offline Sync</title>
+  <style>
+    body{font:16px system-ui,sans-serif;max-width:900px;margin:24px auto;padding:0 16px;background:#f7f8fa;color:#18212f}
+    h1{font-size:1.35rem}.notice{background:#fff4d6;padding:12px;border-radius:8px}
+    button{padding:10px 14px;margin:4px;border:0;border-radius:7px;background:#174ea6;color:white}
+    pre{white-space:pre-wrap;background:#101827;color:#d9e5f5;padding:14px;border-radius:8px;min-height:180px}
+    .pass{color:#087443}.fail{color:#b42318}
+  </style>
+</head>
+<body>
+  <h1>اختبار المزامنة دون اتصال — بيئة متصفح معزولة</h1>
+  <p class="notice">هذه الصفحة تختبر طابور IndexedDB ومعالجة الاتصال بمعالجات وهمية فقط. لا تتصل بـSupabase ولا تعدّل طلبات أو بيانات حقيقية. استخدمها على بيئة التطوير فقط.</p>
+  <button id="run">تشغيل الاختبارات</button>
+  <button id="prepare">إنشاء عملية لاختبار بقاء البيانات بعد إعادة التحميل</button>
+  <button id="verify">التحقق من بقاء العملية بعد إعادة التحميل</button>
+  <pre id="log">جاهز. افتح الصفحة من خادم Vite المحلي.</pre>
+  <script type="module">
+    import {
+      enqueueOfflineOperation, listOfflineOperations, registerOfflineHandler,
+      startOfflineSync, syncOfflineOperations
+    } from "/src/lib/offline-sync.ts";
+
+    const out = document.querySelector("#log");
+    const write = (message, ok=true) => {
+      out.textContent += (ok ? "\n✓ " : "\n✗ ") + message;
+    };
+    const scope = { userId:"browser-test-user", tenantId:"browser-test-tenant", branchId:"browser-test-branch", companyId:"browser-test-company" };
+    const type = "browser_test_" + crypto.randomUUID().replaceAll("-","");
+    const sent = [];
+    const ledger = new Map();
+    let failAfterCommitOnce = true;
+    registerOfflineHandler(type, {
+      offlineSafe:true,
+      idempotentServerSide:true,
+      send:async op => {
+        const prior = ledger.get(op.idempotencyKey);
+        if (!prior) ledger.set(op.idempotencyKey, {payload:structuredClone(op.payload),count:1});
+        else {
+          if (JSON.stringify(prior.payload)!==JSON.stringify(op.payload)) throw new Error("idempotency key payload mismatch");
+          prior.count++;
+        }
+        sent.push(op.idempotencyKey);
+        if (op.payload.simulateLostResponse && failAfterCommitOnce) {
+          failAfterCommitOnce=false;
+          throw new Error("simulated lost response after fake server commit");
+        }
+      }
+    });
+
+    async function test(name, fn) {
+      try { await fn(); write(name,true); }
+      catch(e) { write(name + ": " + (e?.message ?? e),false); }
+    }
+    function assert(value,message){ if(!value) throw new Error(message); }
+
+    document.querySelector("#run").addEventListener("click", async () => {
+      out.textContent = "بدء الاختبارات…";
+      const onlineDescriptor = Object.getOwnPropertyDescriptor(Navigator.prototype,"onLine");
+      const setOnline = value => {
+        Object.defineProperty(navigator,"onLine",{configurable:true,get:()=>value});
+        window.dispatchEvent(new Event(value ? "online" : "offline"));
+      };
+      try {
+        await test("حفظ العملية في IndexedDB ثم قراءتها", async()=>{
+          const op=await enqueueOfflineOperation(type,{case:"persist"},scope);
+          const rows=await listOfflineOperations(scope);
+          assert(rows.some(x=>x.id===op.id),"لم نجد العملية بعد حفظها");
+        });
+        await test("عزل المستخدم والمؤسسة والفرع", async()=>{
+          const rows=await listOfflineOperations({...scope,userId:"another-user"});
+          assert(rows.length===0,"ظهرت عملية لمستخدم آخر");
+        });
+        await test("منع إدخال عملية مالية إلى الطابور", async()=>{
+          let rejected=false;
+          try { await enqueueOfflineOperation("payment",{amount:1},scope); } catch { rejected=true; }
+          assert(rejected,"لم تُرفض عملية الدفع");
+        });
+        await test("البقاء معلقة عند انقطاع الاتصال ثم المزامنة بعد عودته", async()=>{
+          const op=await enqueueOfflineOperation(type,{case:"toggle-network"},scope);
+          setOnline(false);
+          await syncOfflineOperations(scope);
+          let row=(await listOfflineOperations(scope)).find(x=>x.id===op.id);
+          assert(row.status==="pending","تم إرسال العملية أثناء وضع عدم الاتصال");
+          setOnline(true);
+          await syncOfflineOperations(scope);
+          row=(await listOfflineOperations(scope)).find(x=>x.id===op.id);
+          assert(row.status==="synced","لم تتم المزامنة بعد عودة الاتصال");
+        });
+        await test("إعادة المحاولة بعد فقدان الرد لا تكرر الأثر الخادمي الوهمي", async()=>{
+          const op=await enqueueOfflineOperation(type,{case:"lost-response",simulateLostResponse:true},scope);
+          await syncOfflineOperations(scope);
+          let row=(await listOfflineOperations(scope)).find(x=>x.id===op.id);
+          assert(row.status==="failed","كان متوقعاً تسجيل فشل الرد الأول");
+          row.nextRetryAt=null;
+          // Explicit retry is safe in this fixture because it reuses the same operation key.
+          const retryModule=await import("/src/lib/offline-sync.ts");
+          await retryModule.retryFailedOfflineOperations(scope);
+          await syncOfflineOperations(scope);
+          row=(await listOfflineOperations(scope)).find(x=>x.id===op.id);
+          assert(row.status==="synced","لم تنجح إعادة المحاولة");
+          assert(ledger.get(op.idempotencyKey)?.count===2,"لم يُستخدم المفتاح نفسه في إعادة المحاولة");
+        });
+        await test("تكرار انقطاع وعودة الشبكة", async()=>{
+          const op=await enqueueOfflineOperation(type,{case:"repeat-toggle"},scope);
+          for(let i=0;i<3;i++){setOnline(false);await syncOfflineOperations(scope);setOnline(true);await syncOfflineOperations(scope);}
+          const row=(await listOfflineOperations(scope)).find(x=>x.id===op.id);
+          assert(row.status==="synced","لم تكتمل العملية بعد تبدلات الشبكة");
+        });
+      } finally {
+        if(onlineDescriptor) Object.defineProperty(Navigator.prototype,"onLine",onlineDescriptor);
+        else delete navigator.onLine;
+      }
+      write("انتهى التشغيل. راجع كل نتيجة أعلاه.");
+    });
+
+    document.querySelector("#prepare").addEventListener("click",async()=>{
+      const op=await enqueueOfflineOperation(type,{case:"reload-persistence",marker:"reload-"+crypto.randomUUID()},scope);
+      sessionStorage.setItem("offline-sync-reload-marker",op.id);
+      out.textContent="حُفظت عملية معلقة بالمعرف: "+op.id+"\nأعد تحميل الصفحة الآن، ثم اضغط زر التحقق.";
+    });
+    document.querySelector("#verify").addEventListener("click",async()=>{
+      const id=sessionStorage.getItem("offline-sync-reload-marker");
+      if(!id){out.textContent="لا يوجد اختبار إعادة تحميل محضر. اضغط زر الإنشاء أولاً.";return;}
+      const row=(await listOfflineOperations(scope)).find(x=>x.id===id);
+      out.textContent=row && row.status==="pending" ? "✓ بقيت العملية في IndexedDB بعد إعادة تحميل الصفحة." : "✗ لم يتم العثور على العملية أو تغيرت حالتها.";
+    });
+    startOfflineSync(scope);
+  </script>
+</body>
+</html>
