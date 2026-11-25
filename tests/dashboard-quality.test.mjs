@@ -19,6 +19,38 @@ test("CI runs on the active feature branch and supports a manual verification ru
   assert.match(workflow, /workflow_dispatch:/);
 });
 
+
+test("dashboard metrics are permission-gated and do not query or display financial summaries without reports.view", () => {
+  assert.match(dashboard, /enabled: !!tenantId && hasPermission\("reports\.view"\)/);
+  assert.match(dashboard, /!hasPermission\("reports\.view"\)[\s\S]{0,240}لا تملك الصلاحية اللازمة لعرض المؤشرات المالية/);
+});
+
+test("dashboard query caches are isolated by active user, company, and branch", () => {
+  assert.match(dashboard, /dashboard-stats", tenantId, user\?\.id, membership\?\.company_id, membership\?\.branch_id/);
+  assert.match(dashboard, /dashboard-notifications", tenantId, user\?\.id, membership\?\.company_id, membership\?\.branch_id/);
+  assert.match(dashboard, /dashboard-latest-orders", tenantId, user\?\.id, membership\?\.company_id, membership\?\.branch_id/);
+  assert.match(dashboard, /dashboard-kitchen-counts", tenantId, user\?\.id, membership\?\.company_id, membership\?\.branch_id/);
+});
+
+test("dashboard branch scopes fail closed when membership scope is incomplete", () => {
+  assert.match(dashboard, /Fail closed: an incomplete or missing membership must never become tenant-wide access/);
+  assert.match(dashboard, /scopedBranchIds = \[\]/);
+  assert.match(dashboard, /assignedBranchError/);
+});
+
+test("welcome context is tenant-bound and POS shortcut respects sales creation permission", () => {
+  assert.match(dashboard, /dashboard-active-company-name/);
+  assert.match(dashboard, /from\("companies"\)[\s\S]{0,150}eq\("tenant_id", tenantId\)/);
+  assert.match(dashboard, /dashboard-active-branch-name/);
+  assert.match(dashboard, /hasPermission\("sales\.create"\) && <Link to="\/pos"/);
+});
+
+test("dashboard KPI summaries refresh automatically without keeping prior-scope data", () => {
+  assert.match(dashboard, /refetchInterval: 30_000/);
+  assert.match(dashboard, /refetchOnWindowFocus: true/);
+  assert.match(dashboard, /queryKey: \["dashboard-stats", tenantId, user\?\.id/);
+});
+
 test("authenticated workspace prevents horizontal overflow and motion respects accessibility preferences", () => {
   assert.match(layout, /<main className="min-w-0 flex-1/);
   assert.match(styles, /prefers-reduced-motion: no-preference/);
