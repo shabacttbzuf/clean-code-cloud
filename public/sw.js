@@ -1,48 +1,68 @@
-/* Offline shell only. Never cache Supabase data, auth responses, or mutations. */
+/* Public application shell only. Never cache tenant HTML, Supabase data, auth, or mutations. */
 const CACHE_PREFIX = "restaurant-pwa-";
-const STATIC_CACHE = CACHE_PREFIX + "static-v1";
-const SHELL_CACHE = CACHE_PREFIX + "shell-v1";
+const STATIC_CACHE = CACHE_PREFIX + "static-v2";
+const SHELL_CACHE = CACHE_PREFIX + "shell-v2";
 const SHELL_URLS = ["/", "/offline.html", "/manifest.webmanifest", "/icons/app-icon.svg"];
+const MAX_STATIC_ENTRIES = 180;
 
-async function precacheShellAssets() {
+async function cachePublicShell() {
   const shellCache = await caches.open(SHELL_CACHE);
+  // The root route is explicitly ssr:false; only this generic public shell is cached.
   await shellCache.addAll(SHELL_URLS);
+  const response = await shellCache.match("/");
+  if (!response || !response.headers.get("content-type")?.includes("text/html")) return;
 
-  // "/" is a public client-rendered shell (the route has ssr:false).
-  const shellResponse = await shellCache.match("/");
-  if (!shellResponse) return;
-  const html = await shellResponse.text();
+  const html = await response.clone().text();
   const assetPaths = [...html.matchAll(/(?:src|href)=["']([^"']+)["']/g)]
     .map((match) => match[1])
     .filter((path) => /\.(?:js|mjs|css|woff2?|ttf|otf|eot)$/i.test(new URL(path, self.location.origin).pathname));
-
   const staticCache = await caches.open(STATIC_CACHE);
-  const cssPaths = assetPaths.filter((path) => /\.css(?:$|\?)/i.test(path));
   await Promise.all(assetPaths.map(async (path) => {
     const url = new URL(path, self.location.origin);
     if (url.origin !== self.location.origin) return;
     try {
-      const response = await fetch(url.href);
-      if (response.ok && response.type === "basic") await staticCache.put(url.href, response.clone());
-      if (response.ok && cssPaths.includes(path)) {
-        const css = await response.clone().text();
+      const asset = await fetch(url.href, { credentials: "same-origin" });
+      if (asset.ok && asset.type === "basic") await putStaticAsset(staticCache, url.href, asset);
+      if (asset.ok && /\.css(?:$|\?)/i.test(path)) {
+        const css = await asset.clone().text();
         const fonts = [...css.matchAll(/url\(["']?([^"')]+)["']?\)/g)].map((match) => match[1]);
         await Promise.all(fonts.map(async (font) => {
           const fontUrl = new URL(font, url);
           if (fontUrl.origin !== self.location.origin || !/\.(?:woff2?|ttf|otf|eot)$/i.test(fontUrl.pathname)) return;
           try {
-            const fontResponse = await fetch(fontUrl.href);
-            if (fontResponse.ok && fontResponse.type === "basic") await staticCache.put(fontUrl.href, fontResponse);
-          } catch { /* A font can be fetched and cached on its first later use. */ }
+            const fontResponse = await fetch(fontUrl.href, { credentials: "same-origin" });
+            if (fontResponse.ok && fontResponse.type === "basic") await putStaticAsset(staticCache, fontUrl.href, fontResponse);
+          } catch { /* Optional font; cache it on first successful request. */ }
         }));
       }
-    } catch { /* Optional build assets are cached when first requested. */ }
+    } catch { /* Optional build asset; never fail installation for one asset. */ }
   }));
+  await trimStaticCache(staticCache);
+}
+
+async function trimStaticCache(cache) {
+  const keys = await cache.keys();
+  const excess = keys.length - MAX_STATIC_ENTRIES;
+  if (excess > 0) await Promise.all(keys.slice(0, excess).map((key) => cache.delete(key)));
+}
+
+async function putStaticAsset(cache, key, response) {
+  try {
+    await cache.put(key, response.clone());
+    await trimStaticCache(cache);
+  } catch (error) {
+    // A full browser quota must not break page loading or the app install.
+    if (error?.name === "QuotaExceededError") {
+      const keys = await cache.keys();
+      if (keys.length) await cache.delete(keys[0]);
+      try { await cache.put(key, response.clone()); } catch { /* Continue online without caching. */ }
+    }
+  }
 }
 
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
-    await precacheShellAssets();
+    await cachePublicShell();
     await self.skipWaiting();
   })());
 });
@@ -50,7 +70,9 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter((key) => key.startsWith(CACHE_PREFIX) && ![STATIC_CACHE, SHELL_CACHE].includes(key)).map((key) => caches.delete(key)));
+    await Promise.all(keys
+      .filter((key) => key.startsWith(CACHE_PREFIX) && ![STATIC_CACHE, SHELL_CACHE].includes(key))
+      .map((key) => caches.delete(key)));
     await self.clients.claim();
   })());
 });
@@ -58,6 +80,14 @@ self.addEventListener("activate", (event) => {
 function isSensitiveOrApiPath(pathname) {
   return /\/(rest\/v1|auth\/v1|functions\/v1|storage\/v1)(\/|$)/i.test(pathname)
     || /\/api(\/|$)/i.test(pathname);
+}
+
+function isCacheablePublicHtml(response) {
+  if (!response.ok || !response.headers.get("content-type")?.includes("text/html")) return false;
+  const cacheControl = response.headers.get("cache-control") || "";
+  if (/private|no-store|no-cache/i.test(cacheControl)) return false;
+  if (response.headers.get("vary") === "*") return false;
+  return true;
 }
 
 self.addEventListener("fetch", (event) => {
@@ -70,16 +100,14 @@ self.addEventListener("fetch", (event) => {
     event.respondWith((async () => {
       try {
         const response = await fetch(request);
-        // The "/" route is explicitly ssr:false in this app, so its HTML is a
-        // public application shell rather than user- or tenant-specific markup.
-        if (response.ok && url.pathname === "/" && response.headers.get("content-type")?.includes("text/html")) {
+        // Only "/" is a public client-rendered shell. Never cache other route HTML.
+        if (url.pathname === "/" && isCacheablePublicHtml(response)) {
           const cache = await caches.open(SHELL_CACHE);
-          await cache.put("/", response.clone());
+          try { await cache.put("/", response.clone()); } catch { /* Storage quota: keep network response. */ }
         }
         return response;
       } catch {
-        const shell = await caches.match("/");
-        return shell || (await caches.match("/offline.html")) || Response.error();
+        return (await caches.match("/")) || (await caches.match("/offline.html")) || Response.error();
       }
     })());
     return;
@@ -95,7 +123,7 @@ self.addEventListener("fetch", (event) => {
     if (cached) return cached;
     try {
       const response = await fetch(request);
-      if (response.ok && response.type === "basic") await cache.put(request, response.clone());
+      if (response.ok && response.type === "basic") await putStaticAsset(cache, request, response);
       return response;
     } catch {
       return cached || Response.error();
