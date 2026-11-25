@@ -137,8 +137,14 @@ test("permanent failures stop automatic retry and remain manually re-evaluable",
   assert.match(panel, /blocked/);
 });
 
-test("online kitchen updates and queued replays pass the expected actor to the guarded RPC", () => {
-  assert.match(kitchen, /_expected_actor_id:\s*userId/);
-  assert.match(handlers, /_expected_actor_id:\s*operation\.scope\.userId/);
+test("online kitchen updates and queued replays bind actor, tenant and branch to the guarded RPC", () => {
+  assert.match(kitchen, /_expected_actor_id:\\s*userId/);
+  assert.match(kitchen, /_expected_tenant_id:\\s*tenantId/);
+  assert.match(kitchen, /_expected_branch_id:\\s*branchId/);
+  assert.match(handlers, /_expected_actor_id: operation\\.scope\\.userId/);
+  assert.match(handlers, /_expected_tenant_id: operation\\.scope\\.tenantId/);
+  assert.match(handlers, /_expected_branch_id: operation\\.scope\\.branchId/);
   assert.match(migration, /_expected_actor_id IS DISTINCT FROM v_actor/);
+  assert.match(migration, /v_order\\.tenant_id IS DISTINCT FROM _expected_tenant_id/);
+  assert.match(migration, /v_order\\.branch_id IS DISTINCT FROM _expected_branch_id/);
 });
