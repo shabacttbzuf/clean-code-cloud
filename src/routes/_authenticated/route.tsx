@@ -27,6 +27,8 @@ import { safeInternalNotificationPath } from "@/lib/notification-links";
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
+    // Offline is never treated as authenticated; avoid redirect loops when the API is unreachable.
+    if (typeof navigator !== "undefined" && !navigator.onLine) throw redirect({ to: "/" });
     const { data } = await supabase.auth.getUser();
     if (!data.user) throw redirect({ to: "/auth" });
     return { userId: data.user.id, email: data.user.email };

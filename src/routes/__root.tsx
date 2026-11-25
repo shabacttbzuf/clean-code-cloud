@@ -7,7 +7,7 @@ import {
   Scripts,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import "../lib/fonts";
@@ -79,6 +79,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "theme-color", content: "#102a43" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "default" },
       { title: "نظام إدارة الأعمال — Business Management System" },
       {
         name: "description",
@@ -100,7 +103,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: "/icons/app-icon.svg", type: "image/svg+xml" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "apple-touch-icon", href: "/icons/app-icon.svg" },
     ],
   }),
   shellComponent: RootShell,
@@ -123,6 +128,51 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+function OfflineStatus() {
+  const [online, setOnline] = useState(true);
+  useEffect(() => {
+    let disposed = false;
+    let registration: ServiceWorkerRegistration | null = null;
+    const update = () => setOnline(navigator.onLine);
+    const checkForUpdate = () => {
+      if (!registration) return;
+      void registration.update().catch((error) => {
+        console.warn("تعذر التحقق من تحديث التطبيق:", error);
+      });
+    };
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    window.addEventListener("online", checkForUpdate);
+    if ("serviceWorker" in navigator && window.isSecureContext) {
+      navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }).then((value) => {
+        if (disposed) return;
+        registration = value;
+        if (navigator.onLine) checkForUpdate();
+      }).catch((error) => {
+        console.warn("تعذر تسجيل Service Worker:", error);
+      });
+    }
+    return () => {
+      disposed = true;
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+      window.removeEventListener("online", checkForUpdate);
+    };
+  }, []);
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed bottom-3 left-3 z-[100] flex max-w-[calc(100vw-1.5rem)] items-center gap-2 rounded-full border bg-background/95 px-3 py-2 text-xs font-medium shadow-lg backdrop-blur"
+      title={online ? "الاتصال متاح؛ تخضع البيانات لصلاحيات حسابك" : "الواجهة المحمّلة متاحة محلياً، أما بيانات الخادم والعمليات فتحتاج إلى اتصال"}
+    >
+      <span className={online ? "h-2 w-2 shrink-0 rounded-full bg-emerald-500" : "h-2 w-2 shrink-0 rounded-full bg-amber-500"} />
+      <span>{online ? "متصل بالإنترنت" : "غير متصل — الواجهة المحمّلة فقط"}</span>
+    </div>
+  );
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
@@ -131,6 +181,14 @@ function RootComponent() {
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
+      if (event === "SIGNED_OUT") {
+        // Remove in-memory query results as well as the optional IndexedDB cache.
+        // This prevents a second user of a shared device seeing the previous user's data.
+        queryClient.clear();
+        void import("@/lib/offline-reference-cache").then(({ clearOfflineReferences }) => clearOfflineReferences()).catch((error) => {
+          console.warn("تعذر مسح بيانات التخزين المحلي بعد تسجيل الخروج:", error);
+        });
+      }
       router.invalidate();
       if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
     });
@@ -140,6 +198,7 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
+        <OfflineStatus />
         <Outlet />
         <Toaster position="top-center" richColors />
       </ThemeProvider>
