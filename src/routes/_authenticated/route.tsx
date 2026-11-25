@@ -151,15 +151,15 @@ function permissionForPath(pathname: string): string | null {
 function PermissionRouteGuard() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const normalizedPath = normalizeRoutePath(pathname);
-  const { tenantId, userId, membership, loading: tenantLoading } = useActiveTenant();
+  const { tenantId, userId, tenant, membership, loading: tenantLoading } = useActiveTenant();
   const {
     isSuperOwner, totalCount, loading: ownerLoading, statusKnown: superOwnerStatusKnown,
     statusError: superOwnerStatusError, refetch: refetchSuperOwnerStatus,
   } = useSuperOwner();
   const requiredPermission = permissionForPath(normalizedPath);
-  const isFirstOwnerBootstrap = normalizedPath === "/admin" && superOwnerStatusKnown && totalCount === 0;
+  const isFirstOwnerBootstrap = normalizedPath === "/admin" && superOwnerStatusKnown && totalCount === 0 && tenant?.owner_id === userId;
   const ownerOnly = normalizedPath === "/owner-center" ||
-    (normalizedPath === "/admin" && (!superOwnerStatusKnown || totalCount > 0));
+    (normalizedPath === "/admin" && (!superOwnerStatusKnown || totalCount > 0 || tenant?.owner_id !== userId));
   const isExplicitlyPublic = AUTHENTICATED_OPEN_PATHS.has(normalizedPath);
   const isKnownRoute = !!requiredPermission || ownerOnly || isExplicitlyPublic || isFirstOwnerBootstrap;
 
