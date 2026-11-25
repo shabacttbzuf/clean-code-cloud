@@ -115,7 +115,8 @@ function applyFields(root: ParentNode, fields: SavedField[]) {
 }
 
 function scrollableElements(root: ParentNode): HTMLElement[] {
-  return Array.from(root.querySelectorAll<HTMLElement>("*")).filter((element) => {
+  const candidates = [ ...(root instanceof HTMLElement ? [root] : []), ...Array.from(root.querySelectorAll<HTMLElement>("*")) ];
+  return candidates.filter((element) => {
     if (element.closest("[data-workspace-restore='off']")) return false;
     const style = window.getComputedStyle(element);
     const vertical = /(auto|scroll|overlay)/.test(style.overflowY) && element.scrollHeight > element.clientHeight + 8;
@@ -303,6 +304,8 @@ export function WorkspaceFormStateKeeper() {
     const maxWait = window.setTimeout(() => { observer.disconnect(); }, 15_000);
     root.addEventListener("input", markDirty, true);
     root.addEventListener("change", markDirty, true);
+    root.addEventListener("focusin", saveViewState, true);
+    root.addEventListener("toggle", saveViewState, true);
     root.addEventListener("scroll", saveViewState, true);
     window.addEventListener("scroll", saveViewState, { passive: true });
     window.addEventListener("ras-workspace-form-saved", onSaved);
@@ -314,6 +317,8 @@ export function WorkspaceFormStateKeeper() {
       if (!discardCurrent) save();
       root.removeEventListener("input", markDirty, true);
       root.removeEventListener("change", markDirty, true);
+      root.removeEventListener("focusin", saveViewState, true);
+      root.removeEventListener("toggle", saveViewState, true);
       root.removeEventListener("scroll", saveViewState, true);
       window.removeEventListener("scroll", saveViewState);
       window.removeEventListener("ras-workspace-form-saved", onSaved);
