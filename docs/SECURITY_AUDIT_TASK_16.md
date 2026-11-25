@@ -358,3 +358,122 @@ RLS مفعّل على جميع جداول public وفق آخر فحص موثق،
 - حماية كلمات المرور المسرّبة معطلة في إعداد Auth. يتطلب تغييرها خطة تحقق منفصلة لتدفقات التسجيل وتغيير كلمة المرور.
 
 الاختبارات الثلاثة الجديدة تحتاج إلى اجتياز CI قبل اعتمادها. لا تزال المهمة غير جاهزة للدمج النهائي بسبب انحراف سجل migrations وعدم وجود اختبار JWT فعلي على Staging ومراجعة callers غير المكتملة.
+
+---
+## ملحق مصفوفة RLS والتحقق المباشر — 2026-11-26
+
+قراءة كتالوج PostgreSQL مباشرة وبوضع read-only: 55/55 جدولاً في public عليها RLS، وإجمالي 554 سياسة. جدول واحد فقط عليه FORCE ROW LEVEL SECURITY وهو pos_access_credentials. لا توجد سياسات لأي من marketing_campaign_events وpos_access_credentials.
+
+المصفوفة أدناه تعدّ تعريفات السياسات المطبقة على كل أمر؛ سياسة ALL تدخل في أعمدة SELECT/INSERT/UPDATE/DELETE. Restrictive وPermissive أعداد السياسات حسب النوع، وWITH CHECK عدد السياسات التي تحتوي فحصاً للصف الجديد. الأعداد وصف بنيوي، وليست اختبار JWT فعلياً.
+
+| الجدول | RLS | السياسات | SELECT | INSERT | UPDATE | DELETE | Restrictive | Permissive | WITH CHECK |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| attendance | نعم | 14 | 5 | 4 | 4 | 4 | 8 | 6 | 7 |
+| audit_logs | نعم | 5 | 4 | 0 | 0 | 1 | 2 | 3 | 0 |
+| bonuses | نعم | 14 | 5 | 4 | 4 | 4 | 8 | 6 | 7 |
+| branches | نعم | 13 | 4 | 4 | 4 | 8 | 5 | 7 | undefined |
+| cash_sessions | نعم | 14 | 3 | 4 | 4 | 3 | 10 | 4 | 8 |
+| categories | نعم | 9 | 3 | 3 | 3 | 3 | 4 | 5 | 5 |
+| companies | نعم | 14 | 5 | 4 | 4 | 4 | 8 | 6 | 7 |
+| custom_roles | نعم | 16 | 4 | 5 | 5 | 5 | 10 | 6 | 9 |
+| customer_payments | نعم | 6 | 3 | 1 | 1 | 1 | 4 | 2 | 2 |
+| customers | نعم | 13 | 4 | 4 | 4 | 4 | 8 | 5 | 7 |
+| deductions | نعم | 14 | 5 | 4 | 4 | 4 | 8 | 6 | 7 |
+| departments | نعم | 14 | 5 | 4 | 4 | 4 | 8 | 6 | 7 |
+| employees | نعم | 14 | 5 | 4 | 4 | 4 | 8 | 6 | 7 |
+| employment_types | نعم | 10 | 4 | 3 | 3 | 3 | 4 | 6 | 5 |
+| expense_categories | نعم | 10 | 4 | 3 | 3 | 3 | 4 | 6 | 5 |
+| expenses | نعم | 16 | 4 | 4 | 4 | 4 | 8 | 8 | 8 |
+| inventory | نعم | 13 | 4 | 4 | 4 | 4 | 8 | 5 | 7 |
+| inventory_transactions | نعم | 9 | 3 | 4 | 1 | 1 | 6 | 3 | 5 |
+| job_titles | نعم | 10 | 4 | 3 | 3 | 3 | 4 | 6 | 5 |
+| kitchen_order_events | نعم | 1 | 1 | 0 | 0 | 0 | 0 | 1 | 0 |
+| kitchen_orders | نعم | 1 | 1 | 0 | 0 | 0 | 0 | 1 | 0 |
+| leave_requests | نعم | 12 | 5 | 3 | 4 | 3 | 7 | 5 | 6 |
+| leave_types | نعم | 10 | 4 | 3 | 3 | 3 | 4 | 6 | 5 |
+| login_history | نعم | 4 | 4 | 0 | 0 | 0 | 2 | 2 | 0 |
+| marketing_ad_placements | نعم | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 |
+| marketing_campaign_events | نعم | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| marketing_campaigns | نعم | 8 | 2 | 2 | 2 | 2 | 4 | 4 | 4 |
+| notification_reads | نعم | 8 | 2 | 2 | 2 | 2 | 4 | 4 | 4 |
+| notifications | نعم | 12 | 3 | 3 | 3 | 3 | 8 | 4 | 6 |
+| payments | نعم | 15 | 5 | 5 | 4 | 4 | 8 | 7 | 8 |
+| payroll_items | نعم | 14 | 5 | 4 | 4 | 4 | 8 | 6 | 7 |
+| payroll_runs | نعم | 14 | 5 | 4 | 4 | 4 | 8 | 6 | 7 |
+| permissions | نعم | 1 | 1 | 0 | 0 | 0 | 0 | 1 | 0 |
+| platform_branding | نعم | 2 | 2 | 1 | 1 | 1 | 0 | 2 | 1 |
+| pos_access_credentials | نعم | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| products | نعم | 13 | 4 | 4 | 4 | 4 | 8 | 5 | 7 |
+| profiles | نعم | 16 | 7 | 2 | 8 | 2 | 6 | 10 | 9 |
+| promotion_redemptions | نعم | 1 | 1 | 0 | 0 | 0 | 0 | 1 | 0 |
+| promotional_offers | نعم | 4 | 1 | 1 | 1 | 1 | 0 | 4 | 2 |
+| purchase_items | نعم | 16 | 4 | 4 | 4 | 4 | 8 | 8 | 8 |
+| purchase_return_items | نعم | 13 | 4 | 3 | 3 | 3 | 8 | 5 | 6 |
+| purchase_returns | نعم | 13 | 4 | 3 | 3 | 3 | 8 | 5 | 6 |
+| purchases | نعم | 15 | 3 | 4 | 4 | 4 | 8 | 7 | 8 |
+| restaurant_tables | نعم | 4 | 1 | 1 | 1 | 1 | 0 | 4 | 2 |
+| role_permissions | نعم | 10 | 2 | 3 | 2 | 3 | 7 | 3 | 5 |
+| sale_items | نعم | 17 | 5 | 4 | 4 | 4 | 8 | 9 | 8 |
+| sale_refund_items | نعم | 13 | 4 | 3 | 3 | 3 | 8 | 5 | 6 |
+| sale_refunds | نعم | 13 | 4 | 3 | 3 | 3 | 8 | 5 | 6 |
+| sales | نعم | 16 | 4 | 4 | 4 | 4 | 8 | 8 | 8 |
+| super_owners | نعم | 3 | 1 | 1 | 0 | 1 | 0 | 3 | 1 |
+| supplier_payments | نعم | 6 | 2 | 2 | 1 | 1 | 4 | 2 | 3 |
+| suppliers | نعم | 13 | 4 | 4 | 4 | 4 | 8 | 5 | 7 |
+| tenants | نعم | 8 | 3 | 1 | 3 | 1 | 2 | 6 | 4 |
+| user_permission_overrides | نعم | 12 | 3 | 3 | 3 | 3 | 8 | 4 | 5 |
+| user_roles | نعم | 16 | 7 | 6 | 5 | 4 | 11 | 5 | 9 |
+
+### تفسير الجداول المغلقة افتراضياً
+- marketing_campaign_events: RLS دون سياسات؛ لا توجد صلاحيات API مباشرة حسب مراجعة المنح السابقة. الإغلاق الافتراضي مقصود حالياً. يجب اختبار RPC الخاص بتسجيل الأحداث بهويات JWT على Staging.
+- pos_access_credentials: RLS وFORCE RLS دون سياسات؛ الإغلاق الافتراضي مقصود لحماية بيانات اعتماد POS. لا تضف سياسات مباشرة.
+- لم تُضف سياسات لإزالة تحذيرات Advisor فقط.
+
+### ملاحظات تفسير السياسات
+- تعدد permissive policies لا يعني وحده ثغرة؛ permissive تُجمع بمنطق OR، بينما restrictive تتطلب تحقق جميع الشروط بمنطق AND. لا تُحذف سياسات متكررة دون إثبات أثرها.
+- promotional_offers لديها أربع سياسات permissive ولا طبقة restrictive مستقلة. شروطها الحالية تتضمن الصلاحية وعضوية الشركة ونطاق الفرع، لكنها تبقى نقطة تقوية بعد اختبارات regression للعروض العامة وعروض الشركة/الفرع وربط POS. لم يتم تعديلها.
+- marketing_ad_placements لديها restrictive وpermissive policies، لكن migration التاريخية المقابلة غير موجودة محلياً.
+- profiles وuser_roles وuser_permission_overrides تحوي طبقات حماية Super Owner؛ لم تُحذف أو تُبسّط.
+- الجداول المالية والمخزنية تشمل sales وsale_items وpayments وpurchases وpurchase_items وinventory وinventory_transactions وrefunds وexpenses وpayroll. لم تُنفذ أي عمليات مالية/مخزنية اختبارية على الإنتاج.
+
+### CI النهائي لرأس الفرع
+تشغيل GitHub Actions رقم 45692583235 على SHA bb057e0600bde29a7a826dfa13609385d9e2538b: completed / success. نجحت Lint وTypeScript Typecheck وTests وProduction Build وتشغيل Supabase المحلي وتطبيق جميع migrations المحلية على قاعدة نظيفة وpgTAP بخطة 14 assertion ثم إيقاف Supabase المحلي.
+
+هذا يثبت سلامة الشجرة المحلية في قاعدة اختبار نظيفة، ولا يثبت مطابقتها لسجل الإنتاج.
+
+### المصالحة النهائية لسجل migrations
+- ملفات SQL المحلية: 110.
+- سجل Supabase: 113.
+- تطابق أسماء بعد توحيد timestamps وعلامات الترقيم: 104.
+- migrations بعيدة دون ملف محلي مطابق: 9.
+- ملفات محلية دون اسم مطابق في السجل البعيد: 6.
+
+التسعة البعيدة:
+1. 20261111222451 / seed_restaurant_catalog_and_departments
+2. 20261114140334 / allow_branch_scoped_staff_to_view_assigned_branch
+3. 20261120004915 / secure_leave_decisions_and_deletion_live_repair
+4. 20261124010638 / marketing_campaign_analytics
+5. 20261124011554 / restore_marketing_campaign_write_grants
+6. 20261124011715 / marketing_campaign_events_fk_indexes
+7. 20261124224712 / ads_placements_branch_targeting
+8. 20261124224924 / ads_placements_company_fk_index
+9. 20261124230539 / ads_storage_permission_scope
+
+الستة المحلية غير المقابلة:
+1. 20261111000034_allow_super_owners_tenant_admin_rls.sql
+2. 20261115000005_company_branch_creator_isolation.sql
+3. 20261115000006_enforce_company_branch_rls.sql
+4. 20261115000007_scope_cash_sessions_to_company.sql
+5. 20261118000001_allow_company_members_to_read_assigned_company.sql
+6. 20261120010000_secure_leave_decisions_and_deletion.sql
+
+الانحراف غير مغلق على مستوى SQL الأصلي. لم تستعد ملفات SQL التسعة من مصدر موثوق، ولم تُنشأ ملفات تخمينية، ولم تنفذ migration repair أو db push أو DDL على الإنتاج.
+
+### الموانع المتبقية
+1. لا توجد فروع Supabase Staging حالياً (قائمة الفروع فارغة). لم يتم إنشاء مورد جديد دون موافقة؛ لذلك لم تنفذ اختبارات JWT متعددة الشركات والفروع.
+2. مراجعة سلسلة callers لجميع الدوال الداخلية الحساسة غير مكتملة؛ لا تغيّر EXECUTE أو أجسام الدوال قبل تتبع الاستدعاءات.
+3. يلزم استعادة SQL الأصلي للترحيلات التسعة والتحقق من سبب عدم تسجيل الملفات المحلية الستة ومقارنة آثارها.
+4. يلزم اختبار Storage عملياً لهويات مختلفة وتغطية سياسات القراءة والرفع والحذف.
+5. يلزم اختبار علاقات FK متعددة المستأجرين على Staging بما فيها سجلات الأبناء والمدفوعات والاستردادات والإشعارات.
+
+**الحكم: المهمة 16 غير مكتملة ولا يجوز اعتمادها أو دمج PR #63.** الانحراف غير المفسر في سجل migrations، وغياب اختبارات JWT/Staging، ومراجعة callers وStorage تمنع إعلان الاكتمال. لا تغييرات على قاعدة الإنتاج ولا تعديل على main.
