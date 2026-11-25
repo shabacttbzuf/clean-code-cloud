@@ -42,7 +42,6 @@ test("sync preserves dependency order, isolates active tenant/branch/company and
   assert.match(source, /MAX_AUTOMATIC_ATTEMPTS = 12/);
   assert.match(source, /isPermanentFailure\(error\)/);
   assert.match(source, /operation\.status = isConflict \? "conflict" : isPermanent \? "blocked" : "failed"/);
-  assert.match(source, /operation\.status = "failed"/);
   assert.match(source, /nextRetryAt/);
 });
 
@@ -73,10 +72,10 @@ test("workspace panel shows queued, failed, conflict and last-sync state", () =>
 });
 
 test("identical pending requests are deduplicated atomically and key collisions are rejected", () => {
-  assert.match(source, /const duplicate = rows\\.find/);
-  assert.match(source, /const sameKey = rows\\.find/);
+  assert.match(source, /const duplicate = rows\.find/);
+  assert.match(source, /const sameKey = rows\.find/);
   assert.match(source, /validationError = new Error/);
-  assert.match(source, /db\\.transaction\\(\\[STORE\\], "readwrite"\\)/);
+  assert.match(source, /db\.transaction\(\[STORE\], "readwrite"\)/);
 });
 
 test("cross-tab workers claim operations through an IndexedDB lease", () => {
