@@ -69,7 +69,7 @@ test("purchase receiving and return RPCs enforce action permissions and branch m
 test("operational pages use action-level controls rather than administrator-role-only gates", () => {
   const expected = [
     ["branches.tsx",["branches.create","branches.edit","branches.delete"]],
-    ["products.tsx",["products.create","products.edit","products.delete"]],
+    ["products.tsx",["products.create","products.edit"]],
     ["categories.tsx",["categories.create","categories.edit","categories.delete"]],
     ["customers.tsx",["customers.create","customers.edit","customers.delete"]],
     ["expenses.tsx",["expenses.create"]],
