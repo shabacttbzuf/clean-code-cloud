@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(7);
+select plan(8);
 
 select ok(
   to_regclass('private.kitchen_order_sync_requests') is not null
@@ -28,29 +28,38 @@ select ok(
 );
 
 select ok(
-  has_function_privilege('authenticated','public.set_kitchen_order_status_idempotent(uuid,uuid,text,text,uuid)','EXECUTE')
-  and not has_function_privilege('anon','public.set_kitchen_order_status_idempotent(uuid,uuid,text,text,uuid)','EXECUTE'),
+  has_function_privilege('authenticated','public.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,uuid,uuid,text,text,uuid)','EXECUTE')
+  and not has_function_privilege('anon','public.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,uuid,uuid,text,text,uuid)','EXECUTE'),
   'Only authenticated users can invoke the idempotent kitchen RPC'
 );
 
 select ok(
-  (select prosecdef from pg_proc where oid='private.set_kitchen_order_status_idempotent(uuid,uuid,text,text,uuid)'::regprocedure)
-  and not (select prosecdef from pg_proc where oid='public.set_kitchen_order_status_idempotent(uuid,uuid,text,text,uuid)'::regprocedure),
+  (select prosecdef from pg_proc where oid='private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure)
+  and not (select prosecdef from pg_proc where oid='public.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure),
   'A SECURITY INVOKER public wrapper delegates to a private SECURITY DEFINER implementation'
 );
 
 select ok(
-  position('auth.uid()' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,text,text,uuid)'::regprocedure)) > 0
-  and position('_expected_actor_id' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,text,text,uuid)'::regprocedure)) > 0
-  and position('private.has_permission' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,text,text,uuid)'::regprocedure)) > 0
-  and position('private.can_access_branch' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,text,text,uuid)'::regprocedure)) > 0,
+  position('auth.uid()' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure)) > 0
+  and position('_expected_actor_id' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure)) > 0
+  and position('private.has_permission' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure)) > 0
+  and position('private.can_access_branch' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure)) > 0,
   'Replay derives the actor from the JWT and re-checks kitchen permission and branch access'
 );
 
 select ok(
-  position('ON CONFLICT' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,text,text,uuid)'::regprocedure)) > 0
-  and position('result=to_jsonb(v_updated)' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,text,text,uuid)'::regprocedure)) > 0,
+  position('ON CONFLICT' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure)) > 0
+  and position('result=to_jsonb(v_updated)' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure)) > 0,
   'The operation result is stored atomically and returned for duplicate delivery'
+);
+
+
+select ok(
+  position('_expected_tenant_id' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure)) > 0
+  and position('_expected_branch_id' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure)) > 0
+  and position('v_order.tenant_id IS DISTINCT FROM _expected_tenant_id' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure)) > 0
+  and position('v_order.branch_id IS DISTINCT FROM _expected_branch_id' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure)) > 0,
+  'Replay must match the queued tenant and branch against the persisted kitchen order'
 );
 
 select * from finish();
