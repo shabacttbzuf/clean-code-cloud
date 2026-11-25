@@ -30,7 +30,10 @@ const statusColors: Record<string, string> = {
 };
 
 function PayrollPage() {
-  const { tenantId, tenant } = useActiveTenant();
+  const { tenantId, tenant, hasPermission } = useActiveTenant();
+  const canRunPayroll = hasPermission("payroll.run");
+  const canApprovePayroll = hasPermission("payroll.approve");
+  const canPrintPayroll = hasPermission("hr.payroll.print");
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -78,25 +81,25 @@ function PayrollPage() {
   const [rejectReason, setRejectReason] = useState("");
 
   const run = useMutation({
-    mutationFn: () => runFn({ data: { tenant_id: tenantId!, branch_id: null, month, year } }),
+    mutationFn: () => { if (!canRunPayroll) throw new Error("لا تملك صلاحية تشغيل الرواتب."); return runFn({ data: { tenant_id: tenantId!, branch_id: null, month, year } }); },
     onSuccess: (r) => { qc.invalidateQueries({ queryKey: ["payroll-runs", tenantId] }); toast.success(`تم إنشاء الدورة لـ ${r.employees_count} موظف`); setOpen(false); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشل"),
   });
 
   const approve = useMutation({
-    mutationFn: (id: string) => approveFn({ data: { id, tenant_id: tenantId! } }),
+    mutationFn: (id: string) => { if (!canApprovePayroll) throw new Error("لا تملك صلاحية اعتماد الرواتب."); return approveFn({ data: { id, tenant_id: tenantId! } }); },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["payroll-runs", tenantId] }); toast.success("تم الاعتماد"); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشل"),
   });
 
   const pay = useMutation({
-    mutationFn: (id: string) => payFn({ data: { id, tenant_id: tenantId! } }),
+    mutationFn: (id: string) => { if (!canApprovePayroll) throw new Error("لا تملك صلاحية تسجيل دفع الرواتب."); return payFn({ data: { id, tenant_id: tenantId! } }); },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["payroll-runs", tenantId] }); toast.success("تم تسجيل الدفع"); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشل"),
   });
 
   const reject = useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: string }) => rejectFn({ data: { id, tenant_id: tenantId!, reason } }),
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => { if (!canApprovePayroll) throw new Error("لا تملك صلاحية رفض دورة الرواتب."); return rejectFn({ data: { id, tenant_id: tenantId!, reason } }); },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["payroll-runs", tenantId] });
       toast.success("تم رفض الدورة — يمكن إعادة تشغيلها");
@@ -110,7 +113,7 @@ function PayrollPage() {
       <PageHeader title="الرواتب الشهرية"
         action={
           <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild><Button><Play className="ml-2 h-4 w-4" />تشغيل دورة</Button></DialogTrigger>
+            <DialogTrigger asChild><Button disabled={!canRunPayroll}><Play className="ml-2 h-4 w-4" />تشغيل دورة</Button></DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle>تشغيل دورة رواتب جديدة</DialogTitle></DialogHeader>
               <div className="space-y-3">
@@ -140,7 +143,7 @@ function PayrollPage() {
         }
       />
 
-      <div className="flex justify-end print:hidden"><Button variant="outline" onClick={() => window.print()}><Printer className="ml-2 h-4 w-4" />طباعة كشف الرواتب</Button></div>
+      {canPrintPayroll && <div className="flex justify-end print:hidden"><Button variant="outline" onClick={() => window.print()}><Printer className="ml-2 h-4 w-4" />طباعة كشف الرواتب</Button></div>}
       {runsQ.isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
       ) : (runsQ.data ?? []).length === 0 ? (
@@ -166,7 +169,7 @@ function PayrollPage() {
                     <div><div className="text-xs text-muted-foreground">صافي</div><div className="num font-bold text-primary">{formatMoney(r.total_net)} {tenant?.currency}</div></div>
                   </div>
                   <div className="flex gap-2">
-                    {r.status === "draft" && (
+                    {r.status === "draft" && canApprovePayroll && (
                       <>
                         <Button size="sm" onClick={() => approve.mutate(r.id)}><Check className="ml-1 h-3 w-3" />اعتماد</Button>
                         <Button size="sm" variant="outline" className="text-destructive" onClick={() => { setRejecting(r.id); setRejectReason(""); }}>
@@ -174,7 +177,7 @@ function PayrollPage() {
                         </Button>
                       </>
                     )}
-                    {r.status === "approved" && <Button size="sm" onClick={() => pay.mutate(r.id)}><DollarSign className="ml-1 h-3 w-3" />تسجيل الدفع</Button>}
+                    {r.status === "approved" && canApprovePayroll && <Button size="sm" onClick={() => pay.mutate(r.id)}><DollarSign className="ml-1 h-3 w-3" />تسجيل الدفع</Button>}
                     <Button size="sm" variant="ghost" onClick={() => setExpanded(expanded === r.id ? null : r.id)}>
                       {expanded === r.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                     </Button>
