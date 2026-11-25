@@ -61,7 +61,9 @@ const statusColors: Record<string, string> = {
 };
 
 function AttendancePage() {
-  const { tenantId, tenant, isAdmin } = useActiveTenant();
+  const { tenantId, tenant, hasPermission } = useActiveTenant();
+  const canManageAttendance = hasPermission("hr.attendance.manage");
+  const canPrintAttendance = hasPermission("hr.attendance.print");
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -90,6 +92,7 @@ function AttendancePage() {
 
   const quickPunch = useMutation({
     mutationFn: async ({ employeeId, kind }: { employeeId: string; kind: "in" | "out" }) => {
+      if (!canManageAttendance) throw new Error("لا تملك صلاحية تسجيل الحضور والانصراف.");
       const existing = (rows.data ?? []).find((r) => r.employee_id === employeeId);
       const now = new Date().toISOString();
       if (kind === "in" && existing?.check_in) throw new Error("تم تسجيل دخول هذا الموظف مسبقاً اليوم");
@@ -113,6 +116,7 @@ function AttendancePage() {
   });
 
   const printAttendance = () => {
+    if (!canPrintAttendance) { toast.error("لا تملك صلاحية طباعة كشف الحضور."); return; }
     const list = rows.data ?? [];
     const body = list.map((r, index) => "<tr><td>" + (index + 1) + "</td><td>" + empName(r.employee_id) + "</td><td>" + (statusLabels[r.status] ?? r.status) + "</td><td>" + (r.check_in ? new Date(r.check_in).toLocaleTimeString("ar-YE") : "—") + "</td><td>" + (r.check_out ? new Date(r.check_out).toLocaleTimeString("ar-YE") : "—") + "</td><td>" + Number(r.hours_worked).toFixed(2) + "</td><td>" + (r.notes ?? "") + "</td></tr>").join("");
     const w = window.open("", "_blank", "width=1000,height=800");
@@ -123,6 +127,7 @@ function AttendancePage() {
 
   const create = useMutation({
     mutationFn: async (v: { employee_id: string; date: string; status: string; check_in: string; check_out: string; notes: string }) => {
+      if (!canManageAttendance) throw new Error("لا تملك صلاحية إضافة أو تعديل سجلات الحضور.");
       let hours = 0;
       if (v.check_in && v.check_out) {
         const [h1, m1] = v.check_in.split(":").map(Number);
@@ -145,7 +150,7 @@ function AttendancePage() {
   return (
     <div className="space-y-6">
       <PageHeader title="سجل الحضور" subtitle={formatDate(date)}
-        action={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={printAttendance}><Printer className="ml-2 h-4 w-4" />طباعة الكشف</Button>{isAdmin && (
+        action={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={printAttendance}><Printer className="ml-2 h-4 w-4" />طباعة الكشف</Button>{canManageAttendance && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild><Button><Plus className="ml-2 h-4 w-4" />تسجيل يدوي</Button></DialogTrigger>
             <AttendanceDialog defaultDate={date} employees={employees.data ?? []} onSubmit={(v) => create.mutate(v)} pending={create.isPending} />
@@ -158,7 +163,7 @@ function AttendancePage() {
         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-44" />
       </div>
 
-      {isAdmin && (
+      {canManageAttendance && (
         <Card><CardContent className="space-y-3 p-4">
           <div><h3 className="font-semibold">التسجيل السريع</h3><p className="text-xs text-muted-foreground">تسجيل دخول أو انصراف بنقرة واحدة، مع منع التكرار والانصراف قبل تسجيل الدخول.</p></div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
