@@ -402,7 +402,7 @@ export async function syncOfflineOperations(scope: OfflineScope): Promise<void> 
           candidate.status = operation.status;
           operation.lastError = message.slice(0, 1000);
           const retryDelay = Math.min(30 * 60_000, 5_000 * 2 ** Math.min(operation.attempts - 1, 12));
-          operation.nextRetryAt = operation.status === "failed" ? new Date(Date.now() + retryDelay).toISOString();
+          operation.nextRetryAt = operation.status === "failed" ? new Date(Date.now() + retryDelay).toISOString() : null;
           releaseLease(operation);
           await saveOperation(operation);
         }
