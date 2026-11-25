@@ -42,7 +42,7 @@ function PromotionsPage() {
   const [formTouched, setFormTouched] = useState(false);
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
-      detail: { path: "/promotions", dirty: formTouched },
+      detail: { path: "/promotions", dirty: formTouched, source: "promotion-form" },
     }));
     return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
       detail: { path: "/promotions", dirty: false },
