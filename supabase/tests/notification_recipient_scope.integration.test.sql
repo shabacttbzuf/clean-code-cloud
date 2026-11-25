@@ -1,6 +1,6 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(32);
+SELECT plan(28);
 
 -- Isolated synthetic users and organization fixtures. This file runs only
 -- against the ephemeral local Supabase database in CI and rolls everything back.
