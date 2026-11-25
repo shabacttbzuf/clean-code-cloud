@@ -25,6 +25,8 @@ type KitchenOrder = {
 };
 type Sale = { id: string; invoice_no: number; created_at: string; notes: string | null; order_type: "dine_in" | "takeaway" | "delivery"; table_id: string | null; table_name?: string | null; delivery_customer_name: string | null; delivery_customer_phone: string | null; delivery_address: string | null; delivery_fee: number };
 type SaleItem = { sale_id: string; product_name: string; quantity: number };
+type KitchenQueueRow = KitchenOrder & { sale: Sale | null; items: SaleItem[] };
+type KitchenQueueResult = { orders: KitchenQueueRow[]; source: "live" | "cache"; savedAt: number };
 
 const statusLabel: Record<KitchenOrder["status"], string> = {
   new: "جديد",
@@ -89,7 +91,7 @@ function KitchenPage() {
         companyId: membership?.company_id,
         branchId: branchId || membership?.branch_id,
       }, "kitchen-queue");
-      if (!tenantId || !branchId) return [] as Array<KitchenOrder & { sale: Sale | null; items: SaleItem[] }>;
+      if (!tenantId || !branchId) return { orders: [], source: "live", savedAt: Date.now() } as KitchenQueueResult;
       try {
       const { data: orderRows, error } = await (supabase.from("kitchen_orders" as any) as any)
         .select("id,tenant_id,branch_id,sale_id,status,notes,created_at")
@@ -101,7 +103,7 @@ function KitchenPage() {
       const saleIds = orders.map((order) => order.sale_id);
       if (!saleIds.length) {
         await writeOfflineCache(cacheKey, []);
-        return [];
+        return { orders: [], source: "live", savedAt: Date.now() } as KitchenQueueResult;
       }
       const [salesResult, itemsResult] = await Promise.all([
         (supabase.from("sales" as any) as any).select("id,invoice_no,created_at,notes,order_type,table_id,delivery_customer_name,delivery_customer_phone,delivery_address,delivery_fee").in("id", saleIds),
@@ -129,14 +131,14 @@ function KitchenPage() {
         items: itemsMap.get(order.sale_id) ?? [],
       }));
       await writeOfflineCache(cacheKey, result);
-      return result;
+      return { orders: result, source: "live", savedAt: Date.now() } satisfies KitchenQueueResult;
     } catch (error) {
       const failure = error as { status?: number; code?: string };
       if (failure?.status === 401 || failure?.status === 403 ||
           failure?.code === "42501" || failure?.code === "PGRST301") throw error;
       // Offline mode is read-only: cached kitchen tickets can be viewed, never advanced.
-      const cached = await readOfflineCache<Array<KitchenOrder & { sale: Sale | null; items: SaleItem[] }>>(cacheKey);
-      if (cached) return cached.data;
+      const cached = await readOfflineCache<KitchenQueueRow[]>(cacheKey);
+      if (cached) return { orders: cached.data, source: "cache", savedAt: cached.savedAt } satisfies KitchenQueueResult;
       throw error;
     }
     },
@@ -156,6 +158,9 @@ function KitchenPage() {
 
   const statusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: "preparing" | "ready" | "delivered" }) => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        throw new Error("لا يمكن تحديث حالة المطبخ دون اتصال بالخادم.");
+      }
       const { error } = await (supabase.rpc as any)("set_kitchen_order_status", {
         _order_id: id,
         _new_status: status,
@@ -171,7 +176,7 @@ function KitchenPage() {
   });
 
   const kitchenMetrics = useMemo(() => {
-    const orders = queue.data ?? [];
+    const orders = queue.data?.orders ?? [];
     const newCount = orders.filter((order) => order.status === "new").length;
     const preparingCount = orders.filter((order) => order.status === "preparing").length;
     const readyCount = orders.filter((order) => order.status === "ready").length;
@@ -218,12 +223,13 @@ function KitchenPage() {
         </div>
       )}
       {!isOnline && <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">أنت تعمل دون اتصال. تُعرض آخر بيانات محفوظة، وتحديث الحالات متوقف حتى عودة الإنترنت.</div>}
+      {isOnline && queue.data?.source === "cache" && <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">تعذر الوصول إلى الخادم؛ هذه بيانات محفوظة وقد لا تعكس الحالة الحالية. آخر تحديث محفوظ: {new Intl.DateTimeFormat("ar-YE", { dateStyle: "short", timeStyle: "short" }).format(new Date(queue.data.savedAt))}. لا تعتمد عليها لتسليم الطلبات.</div>}
       {branches.isError && <div role="alert" className="rounded-lg border border-destructive/30 p-3 text-sm text-destructive">تعذر تحميل الفروع. أعد تحميل الصفحة أو تحقق من صلاحياتك.</div>}
       {queue.isError && <div role="alert" className="rounded-lg border border-destructive/30 p-3 text-sm text-destructive">تعذر تحميل طلبات المطبخ. <Button variant="link" onClick={() => queue.refetch()}>إعادة المحاولة</Button></div>}
       {queue.isLoading ? <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" /></div> : (
         <div className="grid gap-4 xl:grid-cols-3">
           {columns.map((column) => {
-            const orders = (queue.data ?? []).filter((order) => order.status === column.status);
+            const orders = (queue.data?.orders ?? []).filter((order) => order.status === column.status);
             return (
               <section key={column.status} className="min-w-0 space-y-3">
                 <div className="flex items-center justify-between">
