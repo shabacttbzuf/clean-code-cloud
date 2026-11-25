@@ -94,7 +94,8 @@ BEGIN
   RETURN NEW;
 EXCEPTION WHEN OTHERS THEN
   PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
-  RAISE;
+  RAISE WARNING 'Customer invoice notification was skipped for sale/payment event: %', SQLERRM;
+  RETURN NEW;
 END;
 $function$;
 
@@ -228,7 +229,8 @@ BEGIN
   RETURN NEW;
 EXCEPTION WHEN OTHERS THEN
   PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
-  RAISE;
+  RAISE WARNING 'Customer invoice notification was skipped for sale/payment event: %', SQLERRM;
+  RETURN NEW;
 END;
 $function$;
 
