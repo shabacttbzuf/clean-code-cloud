@@ -73,7 +73,8 @@ test("first-owner bootstrap remains reachable only while no Super Owner exists",
   assert.match(source, /const isFirstOwnerBootstrap = normalizedPath === "\/admin" && superOwnerStatusKnown && totalCount === 0 && tenant\?\.owner_id === userId/);
   assert.match(source, /isKnownRoute = !!requiredPermission \|\| ownerOnly \|\| isExplicitlyPublic \|\| isFirstOwnerBootstrap/);
   assert.match(source, /normalizedPath === "\/admin" && \(!superOwnerStatusKnown \|\| totalCount > 0 \|\| tenant\?\.owner_id !== userId\)/);
-  assert.match(source, /const \{ isSuperOwner, totalCount, loading: ownerLoading, statusKnown: superOwnerStatusKnown/);
+  assert.match(source, /statusKnown: superOwnerStatusKnown/);
+  assert.match(source, /statusError: superOwnerStatusError/);
 });
 
 
