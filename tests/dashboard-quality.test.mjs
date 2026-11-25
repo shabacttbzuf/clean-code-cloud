@@ -15,7 +15,10 @@ test("dashboard rejects partial query failures instead of presenting misleading 
 });
 
 test("CI runs on the active feature branch and supports a manual verification run", () => {
-  assert.match(workflow, /branches: \["main", "feature\/\*\*", "feat\/\*\*"\]/);
+  const pushBranches = workflow.match(/push:\s*\n\s*branches:\s*\[([^\]]+)\]/)?.[1] ?? "";
+  for (const branch of ["main", "feature/**", "feat/**", "work/**", "integration/**"]) {
+    assert.ok(pushBranches.includes(`"${branch}"`), `CI push trigger must include ${branch}`);
+  }
   assert.match(workflow, /workflow_dispatch:/);
 });
 
