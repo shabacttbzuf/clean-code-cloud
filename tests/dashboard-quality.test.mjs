@@ -303,3 +303,7 @@ test("tenant data caches are partitioned by authenticated user and active branch
   assert.match(customersPage, /queryKey: \["customers", tenantId, userId, membership\?\.branch_id\]/);
   assert.match(reportsPage, /queryKey: \["reports", tenantId, userId, membership\?\.branch_id, from, to, branchId\]/);
 });
+
+test("dashboard aggregate cache is partitioned by active user, company, and branch", () => {
+  assert.match(dashboard, /queryKey: \["dashboard-stats", tenantId, user\?\.id, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+});
