@@ -36,8 +36,11 @@ const schema = z.object({
 });
 
 function SuppliersPage() {
-  const { tenantId, userId, isAdmin, role, isSuperOwner, membership, tenant } = useActiveTenant();
+  const { tenantId, userId, isAdmin, role, isSuperOwner, membership, tenant, hasPermission } = useActiveTenant();
   const canManagePayments = isAdmin || role === "warehouse" || isSuperOwner;
+  const canCreateSupplier = isSuperOwner || hasPermission("suppliers.create") || hasPermission("suppliers.manage");
+  const canEditSupplier = isSuperOwner || hasPermission("suppliers.edit") || hasPermission("suppliers.manage");
+  const canDeleteSupplier = isSuperOwner || hasPermission("suppliers.delete") || hasPermission("suppliers.manage");
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Supplier | null>(null);
@@ -156,6 +159,7 @@ function SuppliersPage() {
 
   const upsert = useMutation({
     mutationFn: async (v: z.infer<typeof schema>) => {
+      if (editing ? !canEditSupplier : !canCreateSupplier) throw new Error("لا تملك صلاحية إنشاء الموردين أو تعديلهم.");
       const payload = {
         ...v,
         phone: v.phone || null, email: v.email || null,
@@ -182,6 +186,7 @@ function SuppliersPage() {
   // Suppliers may be referenced by historical purchase invoices; archive instead of deleting.
   const setActive = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      if (isActive ? !canEditSupplier : !canDeleteSupplier) throw new Error("لا تملك صلاحية تغيير حالة المورد.");
       const { error } = await supabase.from("suppliers").update({ is_active: isActive }).eq("id", id).eq("tenant_id", tenantId!);
       if (error) throw error;
     },
@@ -196,7 +201,7 @@ function SuppliersPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="الموردون" subtitle="قائمة الموردين لفواتير الشراء"
-        action={isAdmin && (
+        action={canCreateSupplier && (
           <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditing(null); }}>
             <DialogTrigger asChild><Button><Plus className="ml-2 h-4 w-4" />مورد جديد</Button></DialogTrigger>
             <SupplierDialog initial={editing} tenantId={tenantId!} onSubmit={(v) => upsert.mutate(v)} pending={upsert.isPending} />
@@ -249,15 +254,15 @@ function SuppliersPage() {
                   {s.email && <div dir="ltr">✉ {s.email}</div>}
                   {s.address && <div>📍 {s.address}</div>}
                 </div>
-                {(isAdmin || canManagePayments) && (
+                {(canEditSupplier || canDeleteSupplier || canManagePayments) && (
                   <div className="mt-3 flex flex-wrap gap-1 border-t pt-3">
                     {canManagePayments && <Button size="sm" variant="outline" className="flex-1" onClick={() => { const branchId = membership?.branch_id ?? branches.data?.[0]?.id ?? ""; setPaymentSupplier(s); setPaymentBranchId(branchId); setCashSessionId(cashSessions.data?.find((session) => session.branch_id === branchId)?.id ?? ""); }} disabled={!branches.data?.length || branches.isLoading}>
                       <Wallet className="ml-2 h-3 w-3" />تسجيل دفعة
                     </Button>}
-                    {isAdmin && <Button size="sm" variant="ghost" className="flex-1" onClick={() => { setEditing(s); setOpen(true); }}>
+                    {canEditSupplier && <Button size="sm" variant="ghost" className="flex-1" onClick={() => { setEditing(s); setOpen(true); }}>
                       <Edit className="ml-2 h-3 w-3" />تعديل
                     </Button>}
-                    {isAdmin && <Button size="sm" variant="ghost" className={s.is_active ? "text-amber-600" : "text-emerald-600"} disabled={setActive.isPending} onClick={() => {
+                    {(s.is_active ? canDeleteSupplier : canEditSupplier) && <Button size="sm" variant="ghost" className={s.is_active ? "text-amber-600" : "text-emerald-600"} disabled={setActive.isPending} onClick={() => {
                       const action = s.is_active ? "إيقاف" : "إعادة تفعيل";
                       if (confirm(`${action} المورد "${s.name}"؟ ستبقى جميع فواتيره وسجلاته محفوظة.`)) {
                         setActive.mutate({ id: s.id, isActive: !s.is_active });
