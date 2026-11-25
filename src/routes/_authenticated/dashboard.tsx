@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
 import { Loader2, TrendingUp, TrendingDown, Receipt, Wallet, Package, Crown, Building2, Users as UsersIcon, Bell, Wifi, WifiOff, CircleHelp, ClipboardList, ChefHat } from "lucide-react";
 import { formatMoney } from "@/lib/format";
+import { summarizeDashboardFinancialRows } from "@/lib/dashboard-metrics.mjs";
 import { Link } from "@tanstack/react-router";
 import { Sparkles, ShoppingBag, ArrowLeft, ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 
@@ -417,27 +418,21 @@ function Dashboard() {
       if (catsRes.error) throw catsRes.error;
       const catMap = new Map((catsRes.data ?? []).map((c) => [(c as { id: string }).id, c as { name: string; color: string | null }]));
 
-      const totalToday = (salesToday.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0)
-        - (refundsToday.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
-      const totalMonth = (salesMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0)
-        - (refundsMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
-      const totalExpMonth = (expensesMonth.data ?? []).reduce((s, r) => s + Number((r as { amount: number }).amount), 0);
-      const unknownSaleCosts = (saleCostRows.data ?? []).filter((row) => row.cost_price_snapshot == null).length;
-      const unknownReturnedCosts = (refundCostRows.data ?? []).filter((row) => row.restocked && row.cost_price_snapshot == null).length;
-      const unknownCostItems = unknownSaleCosts + unknownReturnedCosts;
-      const cogsSales = (saleCostRows.data ?? []).reduce(
-        (sum, row) => sum + Number(row.cost_price_snapshot ?? 0) * Number(row.quantity), 0,
-      );
-      const cogsRestockedReturns = (refundCostRows.data ?? []).reduce(
-        (sum, row) => sum + (row.restocked ? Number(row.cost_price_snapshot ?? 0) * Number(row.quantity) : 0), 0,
-      );
-      const revenueBeforeTax = (salesMonth.data ?? []).reduce(
-        (sum, row) => sum + Number(row.subtotal) - Number(row.discount), 0,
-      ) - (refundsMonth.data ?? []).reduce(
-        (sum, row) => sum + Number(row.subtotal) - Number(row.discount), 0,
-      );
-      const grossProfit = unknownCostItems > 0 ? null : revenueBeforeTax - cogsSales + cogsRestockedReturns;
-      const profit = grossProfit === null ? null : grossProfit - totalExpMonth;
+      const {
+        totalToday,
+        totalMonth,
+        totalExpMonth,
+        unknownCostItems,
+        profit,
+      } = summarizeDashboardFinancialRows({
+        salesToday: salesToday.data ?? [],
+        refundsToday: refundsToday.data ?? [],
+        salesMonth: salesMonth.data ?? [],
+        refundsMonth: refundsMonth.data ?? [],
+        expensesMonth: expensesMonth.data ?? [],
+        saleCostRows: saleCostRows.data ?? [],
+        refundCostRows: refundCostRows.data ?? [],
+      });
 
       // Trend: group by day
       const dayMap = new Map<string, number>();
