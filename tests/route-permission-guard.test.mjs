@@ -36,6 +36,8 @@ const requiredRoutes = [
   ["/notifications", "notifications.view"],
   ["/login-history", "login_history.view"],
   ["/audit-logs", "audit.view"],
+  ["/ads", "ads.view"],
+  ["/promotions", "promotions.view"],
   ["/settings", "settings.view"],
 ];
 
