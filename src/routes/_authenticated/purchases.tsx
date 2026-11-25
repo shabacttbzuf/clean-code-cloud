@@ -277,7 +277,7 @@ function PurchaseReturnDialog({
     },
     onSuccess: () => {
       try { sessionStorage.removeItem(returnDraftKey); } catch { /* optional */ }
-      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/purchases" } }));
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/purchases", formKey: "purchase-new" } }));
       toast.success("تم تسجيل إرجاع المورد وتحديث المخزون");
       onDone();
     },
@@ -470,7 +470,7 @@ function NewPurchaseDialog({
     },
     onSuccess: () => {
       try { sessionStorage.removeItem(draftKey); } catch { /* optional */ }
-      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/purchases" } }));
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/purchases", formKey: "purchase-return" } }));
       toast.success("تم تسجيل الفاتورة");
       onDone();
     },
