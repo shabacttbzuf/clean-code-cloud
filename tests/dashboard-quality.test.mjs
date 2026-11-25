@@ -264,7 +264,7 @@ test("workspace tabs restore per-user tenant sessions and preserve non-sensitive
   assert.match(workspaceFormKeeper, /restoreOpenDetails/);
   assert.match(workspaceFormKeeper, /authorization/);
   assert.match(workspaceFormKeeper, /Complex widgets with private React state/);
-  assert.match(workspaceFormKeeper, /const hasState = snapshot\.fields\.length \|\| snapshot\.scrollX \|\| snapshot\.scrollY/);
+  assert.match(workspaceFormKeeper, /const hasState = snapshot\.dirty \|\| snapshot\.fields\.length/);
   assert.match(workspaceFormKeeper, /root\.addEventListener\("scroll", saveViewState, true\)/);
   assert.match(workspaceFormKeeper, /Backward compatibility with snapshots/);
   assert.match(workspaceFormKeeper, /useLayoutEffect/);
@@ -296,7 +296,7 @@ test("complex authenticated pages restore their React-owned workspace state with
   assert.match(purchasesView, /workspace-purchase-draft-v1:/);
   assert.match(purchasesView, /restoredDraft\.lines/);
   assert.match(purchasesView, /Revalidate a restored branch/);
-  assert.match(purchasesView, /workspace-purchase-return-v1:/);
+  assert.match(purchasesView, /workspace-purchase-return-v2:/);
   assert.match(purchasesView, /sessionStorage\.setItem\(returnDraftKey/);
   assert.match(purchasesView, /ras-workspace-form-saved/);
   assert.match(posWorkspace, /pos-workspace-v1:.*membership\?\.company_id/);
