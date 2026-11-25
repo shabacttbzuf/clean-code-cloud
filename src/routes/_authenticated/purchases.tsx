@@ -298,14 +298,14 @@ function NewPurchaseDialog({
     },
   });
   const suppliers = useQuery({
-    queryKey: ["suppliers-min", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
+    queryKey: ["suppliers-min", tenantId, userId, companyId ?? "tenant", defaultBranchId ?? "all"],
     queryFn: async () => {
       const { data } = await supabase.from("suppliers").select("id, name").eq("tenant_id", tenantId).eq("is_active", true);
       return (data ?? []) as Array<{ id: string; name: string }>;
     },
   });
   const products = useQuery({
-    queryKey: ["products-purchase", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
+    queryKey: ["products-purchase", tenantId, userId, companyId ?? "tenant", defaultBranchId ?? "all"],
     queryFn: async (): Promise<Product[]> => {
       const { data } = await supabase.from("products").select("id, name, unit, cost_price").eq("tenant_id", tenantId).eq("is_active", true).order("name");
       return (data ?? []).map((p) => ({ ...(p as { id: string; name: string; unit: string; cost_price: number }) }));
