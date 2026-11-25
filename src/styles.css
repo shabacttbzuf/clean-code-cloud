@@ -343,23 +343,6 @@ button, [role="button"], a, input, select, textarea {
     min-width: 0;
     gap: .35rem;
   }
-  .responsive-topbar > div:first-child > a { display: none; }
-  .responsive-topbar > div:first-child > div:nth-of-type(2) {
-    width: 2.25rem;
-    height: 2.25rem;
-    border-radius: .7rem;
-  }
-  .responsive-topbar > div:first-child > div:nth-of-type(2) svg {
-    width: 1.15rem;
-    height: 1.15rem;
-  }
-  .responsive-topbar > div:first-child > div:nth-of-type(3) button > span:nth-child(2) {
-    display: none;
-  }
-  .responsive-topbar > div:first-child > div:nth-of-type(3) button > span:first-child {
-    max-width: min(38vw, 9rem);
-    font-size: .75rem;
-  }
   .responsive-topbar > div:last-child {
     flex: 0 0 auto;
     gap: .3rem;
@@ -417,9 +400,6 @@ button, [role="button"], a, input, select, textarea {
 }
 @media (max-width: 360px) {
   .responsive-topbar { padding-inline: .4rem; }
-  .responsive-topbar > div:first-child > div:nth-of-type(3) button > span:first-child {
-    max-width: 31vw;
-  }
   .responsive-topbar > div:last-child { gap: .15rem; }
   .workspace-surface main { padding-inline: .55rem; }
   .workspace-tabs > div { padding-inline: .5rem; }
