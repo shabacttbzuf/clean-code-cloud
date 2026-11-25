@@ -261,3 +261,14 @@ test("sidebar, route guard, and global search share one permission cache entry",
   assert.match(authLayout, /queryKey: \["route-effective-permissions", tenantId, user\?\.id\]/);
   assert.match(appLauncher, /queryKey: \["route-effective-permissions", tenantId, userId\]/);
 });
+
+const invoicePdf = readFileSync(new URL("../src/lib/invoice-pdf.ts", import.meta.url), "utf8");
+const saleDetail = readFileSync(new URL("../src/routes/_authenticated/sales.$id.tsx", import.meta.url), "utf8");
+
+test("PDF engine is loaded only when an explicit invoice PDF is generated", () => {
+  assert.doesNotMatch(invoicePdf, /^import\s+\{\s*jsPDF\s*\}\s+from\s+["']jspdf["']/m);
+  assert.match(invoicePdf, /await import\(["']jspdf["']\)/);
+  assert.match(invoicePdf, /async function generateInvoicePDF|async function generateInvoicePDF/);
+  assert.match(saleDetail, /await downloadInvoicePDF\(invoiceData\)/);
+  assert.match(saleDetail, /Invoice PDF export failed/);
+});
