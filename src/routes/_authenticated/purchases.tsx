@@ -224,10 +224,10 @@ function PurchaseReturnDialog({
   useEffect(() => {
     const dirty = open && (reason.trim().length > 0 || Object.values(quantities).some((value) => Number(value) > 0));
     window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
-      detail: { path: "/purchases", dirty, source: "purchase-new" },
+      detail: { path: "/purchases", dirty, source: "purchase-return" },
     }));
     return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
-      detail: { path: "/purchases", dirty: false },
+      detail: { path: "/purchases", dirty: false, source: "purchase-return" },
     })); };
   }, [open, reason, quantities]);
 
@@ -367,14 +367,6 @@ function NewPurchaseDialog({
       }
     } catch { /* Session storage is optional. */ }
   }, [draftKey, branchId, supplierId, reference, notes, lines, addProdId, defaultBranchId]);
-  useEffect(() => {
-    const dirty = open && (lines.length > 0 || supplierId !== "none" || !!reference.trim() ||
-      !!notes.trim() || branchId !== (defaultBranchId ?? ""));
-    window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
-      detail: { path: "/purchases", dirty, source: "purchase-return" },
-    }));
-  }, [open, lines, supplierId, reference, notes, branchId, defaultBranchId]);
-
   const branches = useQuery({
     queryKey: ["branches-active-purchase", tenantId, defaultBranchId, companyId],
     queryFn: async () => {
@@ -408,10 +400,10 @@ function NewPurchaseDialog({
       !!notes.trim() || lines.length > 0 || !!addProdId
     );
     window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
-      detail: { path: "/purchases", dirty },
+      detail: { path: "/purchases", dirty, source: "purchase-new" },
     }));
     return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
-      detail: { path: "/purchases", dirty: false },
+      detail: { path: "/purchases", dirty: false, source: "purchase-new" },
     })); };
   }, [open, defaultBranchId, branches.data, branchId, supplierId, reference, notes, lines, addProdId]);
 
