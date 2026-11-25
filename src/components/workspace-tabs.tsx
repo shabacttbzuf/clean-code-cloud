@@ -1,19 +1,39 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useActiveTenant } from "@/hooks/use-active-tenant";
+import { useAuthSession } from "@/hooks/use-auth-session";
+import { useSuperOwner } from "@/hooks/use-super-owner";
+import { useBlocker, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   X, Home, Pin, PinOff, ShoppingCart, Receipt, Armchair, ChefHat, Package,
   ArrowLeftRight, ShoppingBag, Truck, Users, Wallet, BarChart3, Megaphone,
-  Gift, Bell, Settings, UserRound, Building2, ShieldCheck, ClipboardList,
-  BriefcaseBusiness, Tags, FileText, CircleHelp, LayoutGrid,
+  Gift, Bell, Settings, UserRound, Building2, ShieldCheck, ClipboardList, Crown,
+  BriefcaseBusiness, Tags, FileText, CircleHelp, LayoutGrid, PanelTopClose,
 } from "lucide-react";
 
-type WorkspaceTab = { path: string; title: string; pinned?: boolean };
-type DirtyState = { path: string; dirty: boolean };
+import {
+  addWorkspaceTab, closeOtherWorkspaceTabs, closeWorkspaceTab,
+  createWorkspaceTabScope, limitWorkspaceTabs, normalizeWorkspacePath,
+  restoreWorkspaceTabs, toggleWorkspaceTabPin, workspacePathname,
+  type WorkspaceTabRecord,
+} from "@/lib/workspace-tabs-logic.mjs";
 
-// Pages dispatch ras-workspace-dirty-change with { path, dirty } when edits are pending.
-const STORAGE_KEY = "ras-workspace-tabs-v1";
-const MAX_TABS = 12;
+type WorkspaceTab = WorkspaceTabRecord;
+type DirtyState = { path: string; dirty: boolean; scope?: string; source?: string };
+const STORAGE_KEY = "ras-workspace-tabs-v3";
 const MAX_PINNED_TABS = 6;
+const DIRTY_KEY_SEPARATOR = "\\u0000";
+function isPathDirty(paths: Set<string>, path: string): boolean {
+  const normalized = normalizeWorkspacePath(path) ?? path;
+  const base = workspacePathname(normalized);
+  for (const entry of paths) {
+    const separator = entry.indexOf(DIRTY_KEY_SEPARATOR);
+    const dirtyPath = separator >= 0 ? entry.slice(0, separator) : entry;
+    if (dirtyPath === normalized || dirtyPath === base) return true;
+  }
+  return false;
+}
 const ROUTE_TITLES: Array<[string, string]> = [
   ["/dashboard", "الرئيسية"], ["/pos", "نقطة البيع"], ["/sales", "المبيعات"],
   ["/tables", "الطاولات"], ["/kitchen", "المطبخ"], ["/inventory/movements", "حركات المخزون"],
@@ -42,7 +62,7 @@ function iconFor(path: string) {
   if (path.startsWith("/purchases")) return ShoppingBag;
   if (path.startsWith("/suppliers")) return Truck;
   if (path.startsWith("/customers") || path.startsWith("/users")) return Users;
-  if (path.startsWith("/cash-sessions") || path.startsWith("/expenses")) return Wallet;
+  if (path.startsWith("/cash-sessions") || path.startsWith("/expenses") || path.startsWith("/expense-categories")) return Wallet;
   if (path.startsWith("/reports")) return BarChart3;
   if (path.startsWith("/ads")) return Megaphone;
   if (path.startsWith("/promotions")) return Gift;
@@ -50,12 +70,14 @@ function iconFor(path: string) {
   if (path.startsWith("/settings")) return Settings;
   if (path.startsWith("/profile")) return UserRound;
   if (path.startsWith("/branches") || path.startsWith("/companies")) return Building2;
+  if (path.startsWith("/owner-center")) return Crown;
+  if (path.startsWith("/admin")) return ShieldCheck;
   if (path.startsWith("/roles") || path.startsWith("/team-permissions")) return ShieldCheck;
   if (path.startsWith("/audit-logs") || path.startsWith("/login-history")) return ClipboardList;
   if (path.startsWith("/hr/")) return BriefcaseBusiness;
   if (path.startsWith("/categories")) return Tags;
   if (path.startsWith("/support")) return CircleHelp;
-  if (path.startsWith("/departments") || path.startsWith("/job-titles")) return FileText;
+  if (path.startsWith("/departments") || path.startsWith("/job-titles") || path.startsWith("/employment-types")) return FileText;
   return LayoutGrid;
 }
 
@@ -78,102 +100,224 @@ function iconToneFor(path: string) {
 }
 
 function titleFor(path: string) {
-  const match = ROUTE_TITLES.find(([route]) => path === route || path.startsWith(route + "/"));
-  if (path.startsWith("/sales/")) return "تفاصيل الفاتورة";
+  const routePath = workspacePathname(path);
+  const match = ROUTE_TITLES.find(([route]) => routePath === route || routePath.startsWith(route + "/"));
+  if (routePath.startsWith("/sales/")) return "تفاصيل الفاتورة";
   return match?.[1] ?? "صفحة النظام";
 }
 
-function readTabs(): WorkspaceTab[] {
+function readTabs(storageKey: string): unknown {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(parsed)) return [];
-    const valid = parsed.filter((tab): tab is WorkspaceTab =>
-      !!tab && typeof tab.path === "string" && tab.path.length <= 500 &&
-      typeof tab.title === "string" && tab.title.length <= 100 &&
-      tab.path.startsWith("/") && !tab.path.startsWith("//") && !tab.path.includes("\\") &&
-      (tab.pinned === undefined || typeof tab.pinned === "boolean")
-    );
-    return valid.slice(-MAX_TABS);
+    const raw = localStorage.getItem(storageKey);
+    return raw ? JSON.parse(raw) : [];
   } catch { return []; }
 }
 
-function limitTabs(tabs: WorkspaceTab[]) {
-  const unique = tabs.filter((tab, index, all) => all.findIndex((candidate) => candidate.path === tab.path) === index);
-  // Keep the dashboard pinned and reserve capacity for the active working tabs.
-  const pinned = unique.filter((tab) => tab.pinned).slice(0, MAX_PINNED_TABS);
-  const unpinned = unique.filter((tab) => !tab.pinned);
-  return [...pinned, ...unpinned.slice(-(MAX_TABS - pinned.length))];
+const ROUTE_PERMISSIONS: Array<[string, string]> = [
+  ["/dashboard", "dashboard.view"], ["/pos", "pos.use"], ["/sales", "sales.view"],
+  ["/tables", "tables.view"], ["/kitchen", "kitchen.view"], ["/inventory/movements", "inventory.movements.view"],
+  ["/inventory", "inventory.view"], ["/purchases", "purchases.view"], ["/suppliers", "suppliers.view"],
+  ["/products", "products.view"], ["/categories", "categories.view"], ["/customers", "customers.view"],
+  ["/cash-sessions", "cash.view"], ["/expenses", "expenses.view"], ["/reports", "reports.view"],
+  ["/hr/employees", "hr.employees.view"], ["/hr/attendance", "hr.attendance.view"], ["/hr/leaves", "hr.leaves.view"],
+  ["/hr/payroll", "hr.payroll.view"], ["/hr/compensation", "hr.compensation.view"], ["/branches", "branches.view"],
+  ["/companies", "companies.view"], ["/users", "users.view"], ["/users-admin", "users.manage"],
+  ["/team-permissions", "permissions.view"], ["/roles", "roles.view"], ["/departments", "departments.view"],
+  ["/job-titles", "job_titles.view"], ["/employment-types", "employment_types.view"],
+  ["/notifications", "notifications.view"], ["/settings", "settings.view"], ["/ads", "ads.manage"],
+  ["/promotions", "promotions.manage"], ["/audit-logs", "audit.view"], ["/login-history", "login_history.view"],
+  ["/expense-categories", "expense_categories.manage"],
+];
+function requiredPermission(path: string): string | null {
+  return ROUTE_PERMISSIONS
+    .filter(([prefix]) => path === prefix || path.startsWith(prefix + "/"))
+    .sort((a, b) => b[0].length - a[0].length)[0]?.[1] ?? null;
 }
 
 export function WorkspaceTabs() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const locationHref = useRouterState({ select: (state) => state.location.href });
+  const activePath = normalizeWorkspacePath(locationHref) ?? pathname;
   const navigate = useNavigate();
-  const [dirtyPaths, setDirtyPaths] = useState<Set<string>>(() => new Set());
-  const [tabs, setTabs] = useState<WorkspaceTab[]>(() => limitTabs([
-    { path: "/dashboard", title: "الرئيسية", pinned: true },
-    ...readTabs().filter((tab) => tab.path !== "/dashboard"),
-  ]));
-
-  function persist(nextTabs: WorkspaceTab[]) {
-    const limited = limitTabs(nextTabs);
-    setTabs(limited);
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(limited)); } catch { /* storage is optional */ }
-  }
+  const { tenantId, membership } = useActiveTenant();
+  const { user } = useAuthSession();
+  const { isSuperOwner } = useSuperOwner();
+  const sessionScope = createWorkspaceTabScope(user?.id, tenantId, membership?.company_id, membership?.branch_id);
+  const storageKey = sessionScope ? `${STORAGE_KEY}:${sessionScope}` : null;
+  const permissionQuery = useQuery({
+    queryKey: ["workspace-tabs-permissions", tenantId, user?.id],
+    queryFn: async () => {
+      if (!tenantId) return new Set<string>();
+      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId });
+      if (error) throw error;
+      return new Set<string>((data ?? []) as string[]);
+    },
+    enabled: !!tenantId && !!user?.id && !isSuperOwner,
+    staleTime: 30_000,
+  });
+  const [tabState, setTabState] = useState<{ scope: string | null; tabs: WorkspaceTab[] }>({
+    scope: null,
+    tabs: [{ path: "/dashboard", title: "الرئيسية", pinned: true }],
+  });
+  const bypassNextBlocker = useRef(false);
+  const [dirtyState, setDirtyState] = useState<{ scope: string | null; paths: Set<string> }>({
+    scope: null,
+    paths: new Set(),
+  });
+  const tabs = tabState.scope === storageKey && storageKey
+    ? tabState.tabs
+    : [{ path: "/dashboard", title: "الرئيسية", pinned: true }];
+  const dirtyPaths = dirtyState.scope === sessionScope && sessionScope ? dirtyState.paths : new Set<string>();
 
   useEffect(() => {
-    setTabs((current) => {
-      const existing = current.find((tab) => tab.path === pathname);
-      const next = existing
-        ? current.map((tab) => tab.path === pathname ? { ...tab, title: titleFor(pathname) } : tab)
-        : [...current, { path: pathname, title: titleFor(pathname) }];
-      const limited = limitTabs(next);
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(limited)); } catch { /* storage is optional */ }
-      return limited;
+    if (!storageKey || (!isSuperOwner && permissionQuery.isLoading)) return;
+    if (!isSuperOwner && permissionQuery.isError) {
+      setTabState({ scope: storageKey, tabs: [{ path: "/dashboard", title: "الرئيسية", pinned: true }] });
+      return;
+    }
+    const restored = restoreWorkspaceTabs(readTabs(storageKey), (path) => {
+      if (path === "/owner-center" || path === "/admin") return isSuperOwner;
+      const knownRoute = ROUTE_TITLES.some(([prefix]) => path === prefix || path.startsWith(prefix + "/"));
+      if (!knownRoute) return false;
+      const permission = requiredPermission(path);
+      return isSuperOwner || !permission || permissionQuery.data?.has(permission) === true;
+    }).map((tab) => ({ ...tab, title: titleFor(tab.path) }));
+    setTabState({
+      scope: storageKey,
+      tabs: limitWorkspaceTabs([
+        { path: "/dashboard", title: "الرئيسية", pinned: true },
+        ...restored.filter((tab) => tab.path !== "/dashboard"),
+      ]),
     });
-  }, [pathname]);
+  }, [storageKey, sessionScope, isSuperOwner, permissionQuery.data, permissionQuery.isLoading, permissionQuery.isError]);
 
-  const activePath = useMemo(() => pathname, [pathname]);
+  useEffect(() => {
+    if (!storageKey || tabState.scope !== storageKey) return;
+    setTabState((current) => current.scope !== storageKey ? current : {
+      scope: storageKey,
+      tabs: addWorkspaceTab(current.tabs, { path: activePath, title: titleFor(pathname) }),
+    });
+  }, [activePath, pathname, storageKey, tabState.scope]);
+
+  useEffect(() => {
+    if (!storageKey || tabState.scope !== storageKey) return;
+    try { localStorage.setItem(storageKey, JSON.stringify(tabState.tabs)); } catch { /* storage is optional */ }
+  }, [tabState, storageKey]);
 
   useEffect(() => {
     const onDirtyChange = (event: Event) => {
       const detail = (event as CustomEvent<DirtyState>).detail;
       if (!detail || typeof detail.path !== "string" || typeof detail.dirty !== "boolean") return;
-      setDirtyPaths((current) => {
-        const next = new Set(current);
-        if (detail.dirty) next.add(detail.path);
-        else next.delete(detail.path);
-        return next;
+      if (detail.scope && detail.scope !== sessionScope) return;
+      const path = normalizeWorkspacePath(detail.path) ?? detail.path;
+      const source = detail.source || "legacy";
+      const dirtyKey = path + DIRTY_KEY_SEPARATOR + source;
+      setDirtyState((current) => {
+        const paths = current.scope === sessionScope ? new Set(current.paths) : new Set<string>();
+        if (detail.dirty) paths.add(dirtyKey);
+        else paths.delete(dirtyKey);
+        return { scope: sessionScope, paths };
       });
     };
-    const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!dirtyPaths.size) return;
-      event.preventDefault();
-      event.returnValue = "";
-    };
     window.addEventListener("ras-workspace-dirty-change", onDirtyChange);
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => {
-      window.removeEventListener("ras-workspace-dirty-change", onDirtyChange);
-      window.removeEventListener("beforeunload", onBeforeUnload);
-    };
-  }, [dirtyPaths]);
+    return () => window.removeEventListener("ras-workspace-dirty-change", onDirtyChange);
+  }, [sessionScope]);
+
+  const currentDirty = isPathDirty(dirtyPaths, activePath) || isPathDirty(dirtyPaths, pathname);
+  useBlocker({
+    shouldBlockFn: () => {
+      if (bypassNextBlocker.current) {
+        bypassNextBlocker.current = false;
+        return false;
+      }
+      return currentDirty && !window.confirm("توجد تغييرات غير محفوظة في هذه الصفحة. هل تريد مغادرتها دون حفظ؟");
+    },
+    enableBeforeUnload: currentDirty,
+  });
+
+  useEffect(() => {
+    document.querySelector<HTMLElement>('[data-workspace-tab-active="true"]')
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activePath, tabs.length]);
+
+  function persist(nextTabs: WorkspaceTab[]) {
+    setTabState({ scope: storageKey, tabs: limitWorkspaceTabs(nextTabs) });
+  }
+
+  function discardPath(path: string) {
+    const normalizedPath = normalizeWorkspacePath(path) ?? path;
+    const basePath = workspacePathname(normalizedPath);
+    const pageScope = `${tenantId ?? "none"}:${user?.id ?? "none"}:${membership?.company_id ?? "none"}:${membership?.branch_id ?? "none"}`;
+    try {
+      if (sessionScope) sessionStorage.removeItem(`ras-workspace-form-state-v1:${sessionScope}:${normalizedPath}`);
+      if (basePath === "/sales") {
+        sessionStorage.removeItem(`workspace-sales-view-v1:${pageScope}:search`);
+        sessionStorage.removeItem(`workspace-sales-view-v1:${pageScope}:method`);
+      } else if (basePath === "/kitchen") {
+        sessionStorage.removeItem(`workspace-kitchen-view-v1:${pageScope}:branch`);
+      } else if (basePath === "/reports") {
+        sessionStorage.removeItem(`workspace-reports-view-v1:${pageScope}`);
+      } else if (basePath === "/customers") {
+        sessionStorage.removeItem(`workspace-customers-view-v1:${pageScope}:search`);
+      } else if (basePath === "/users-admin") {
+        sessionStorage.removeItem(`workspace-users-admin-v1:${pageScope}:search`);
+        sessionStorage.removeItem(`workspace-users-admin-v1:${pageScope}:status`);
+      } else if (basePath === "/purchases") {
+        const prefixes = [
+          `workspace-purchase-draft-v1:${tenantId ?? "none"}:${user?.id ?? "none"}:${membership?.company_id ?? "none"}:`,
+          `workspace-purchase-return-v2:${tenantId ?? "none"}:${user?.id ?? "none"}:${membership?.company_id ?? "none"}:${membership?.branch_id ?? "all"}:`,
+        ];
+        for (let index = sessionStorage.length - 1; index >= 0; index--) {
+          const key = sessionStorage.key(index);
+          if (key && prefixes.some(prefix => key.startsWith(prefix))) sessionStorage.removeItem(key);
+        }
+      }
+    } catch { /* Session storage is optional. */ }
+    try {
+      if (basePath === "/pos") sessionStorage.removeItem(`pos-workspace-v1:${pageScope}`);
+    } catch { /* Local storage is optional. */ }
+    window.dispatchEvent(new CustomEvent("ras-workspace-form-discard", {
+      detail: { path, scope: sessionScope },
+    }));
+    setDirtyState((current) => {
+      const paths = current.scope === sessionScope ? new Set(current.paths) : new Set<string>();
+      for (const key of paths) {
+        const separator = key.indexOf(DIRTY_KEY_SEPARATOR);
+        const keyPath = separator >= 0 ? key.slice(0, separator) : key;
+        if (keyPath === path || keyPath === workspacePathname(path)) paths.delete(key);
+      }
+      return { scope: sessionScope, paths };
+    });
+  }
 
   function closeTab(path: string) {
     const target = tabs.find((tab) => tab.path === path);
     if (!target || target.pinned) return;
-    if (dirtyPaths.has(path) && !window.confirm("توجد تغييرات غير محفوظة في هذه الصفحة. هل تريد إغلاق التبويب رغم ذلك؟")) return;
-    const next = tabs.filter((tab) => tab.path !== path);
-    setDirtyPaths((current) => {
-      const updated = new Set(current);
-      updated.delete(path);
-      return updated;
-    });
+    const dirty = isPathDirty(dirtyPaths, path);
+    if (dirty && !window.confirm("توجد تغييرات غير محفوظة في هذا التبويب. هل تريد إغلاقه وفقدان هذه التغييرات؟")) return;
+    const next = closeWorkspaceTab(tabs.map(tab => ({
+      ...tab, dirty: isPathDirty(dirtyPaths, tab.path),
+    })), path, { allowDirty: true });
+    if (next.length === tabs.length) return;
+    discardPath(path);
     persist(next);
     if (activePath === path) {
       const fallback = next[next.length - 1]?.path ?? "/dashboard";
+      if (dirty) bypassNextBlocker.current = true;
       navigate({ to: fallback as any });
     }
+  }
+
+  function closeOtherTabs() {
+    const removableDirty = tabs.filter(tab => tab.path !== activePath && !tab.pinned &&
+      isPathDirty(dirtyPaths, tab.path));
+    if (removableDirty.length && !window.confirm("توجد تغييرات غير محفوظة في تبويبات أخرى. هل تريد إغلاق هذه التبويبات وفقدان تغييراتها؟")) return;
+    const next = closeOtherWorkspaceTabs(tabs.map(tab => ({
+      ...tab, dirty: isPathDirty(dirtyPaths, tab.path),
+    })), activePath, { allowDirty: true });
+    const retained = new Set(next.map(tab => tab.path));
+    for (const tab of tabs) if (!retained.has(tab.path)) discardPath(tab.path);
+    persist(next);
   }
 
   function togglePinned(path: string) {
@@ -183,33 +327,79 @@ export function WorkspaceTabs() {
       window.alert("يمكن تثبيت ستة تبويبات كحد أقصى حتى تبقى مساحة كافية لصفحات العمل.");
       return;
     }
-    persist(tabs.map((tab) => tab.path === path ? { ...tab, pinned: !tab.pinned } : tab));
+    persist(toggleWorkspaceTabPin(tabs, path));
+  }
+
+  function onTabListKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+    const currentIndex = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (currentIndex < 0 || !buttons.length) return;
+    event.preventDefault();
+    const rtl = getComputedStyle(event.currentTarget).direction === "rtl";
+    let nextIndex = currentIndex;
+    if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = buttons.length - 1;
+    else if (event.key === "ArrowRight") nextIndex = (currentIndex + (rtl ? -1 : 1) + buttons.length) % buttons.length;
+    else if (event.key === "ArrowLeft") nextIndex = (currentIndex + (rtl ? 1 : -1) + buttons.length) % buttons.length;
+    buttons[nextIndex]?.focus();
+    buttons[nextIndex]?.click();
   }
 
   return (
-    <nav aria-label="تبويبات الصفحات المفتوحة" className="workspace-tabs flex min-h-[58px] min-w-0 items-center gap-2 overflow-x-auto border-b border-[#dce5f3] bg-[#f7faff]/95 px-3 py-2.5" role="tablist">
-      {tabs.map((tab) => {
-        const active = activePath === tab.path;
-        return (
-          <div key={tab.path} className={`group inline-flex min-h-11 shrink-0 items-center gap-2 rounded-2xl border px-3.5 py-2 text-sm font-semibold shadow-sm transition-all duration-200 ${active ? "border-[#174b91] bg-[#174b91] text-white shadow-md shadow-blue-900/15" : "border-[#dce5f3] bg-white text-[#344b70] hover:-translate-y-0.5 hover:border-[#9bb7df] hover:bg-[#f8fbff] hover:shadow-md"}`}>
-            <button type="button" onClick={() => navigate({ to: tab.path as any })} className="inline-flex min-h-8 items-center gap-2 whitespace-nowrap" role="tab" aria-selected={active} aria-current={active ? "page" : undefined}>
-              {(() => { const TabIcon = iconFor(tab.path); return <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${active ? "bg-white/15 text-white" : iconToneFor(tab.path)}`}><TabIcon className="h-4 w-4" aria-hidden="true" /></span>; })()}
-              <span>{tab.title}</span>
-              {dirtyPaths.has(tab.path) && <span className="h-2 w-2 rounded-full bg-amber-400" title="تغييرات غير محفوظة" aria-label="تغييرات غير محفوظة" />}
-            </button>
-            {tab.path !== "/dashboard" && (
-              <button type="button" onClick={() => togglePinned(tab.path)} className="rounded-full p-0.5 opacity-60 hover:bg-black/10 hover:opacity-100" aria-label={tab.pinned ? `إلغاء تثبيت ${tab.title}` : `تثبيت ${tab.title}`} title={tab.pinned ? "إلغاء التثبيت" : "تثبيت التبويب"}>
-                {tab.pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+    <div className="flex min-w-0 items-center gap-2 border-b border-[#dce5f3] bg-[#f7faff]/95 px-2 py-2 sm:px-3" dir="rtl">
+      <nav
+        aria-label="تبويبات الصفحات المفتوحة"
+        aria-orientation="horizontal"
+        className="workspace-tabs flex min-h-12 min-w-0 flex-1 items-center gap-2 overflow-x-auto overscroll-x-contain py-1"
+        role="tablist"
+        onKeyDown={onTabListKeyDown}
+      >
+        {tabs.map((tab) => {
+          const active = activePath === tab.path;
+          const isDirty = isPathDirty(dirtyPaths, tab.path);
+          return (
+            <div key={tab.path} role="presentation" className={`group inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-2xl border px-2.5 py-2 text-sm font-semibold shadow-sm transition-all duration-200 sm:gap-2 sm:px-3.5 ${active ? "border-[#174b91] bg-[#174b91] text-white shadow-md shadow-blue-900/15" : "border-[#dce5f3] bg-white text-[#344b70] hover:border-[#9bb7df] hover:bg-[#f8fbff] hover:shadow-md"}`}>
+              <button
+                type="button"
+                onClick={() => navigate({ to: tab.path as any })}
+                className="inline-flex min-h-9 min-w-0 items-center gap-2 whitespace-nowrap rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#e0ad36] focus-visible:ring-offset-2"
+                role="tab"
+                tabIndex={active ? 0 : -1}
+                aria-selected={active}
+                aria-current={active ? "page" : undefined}
+                aria-label={`${tab.title}${isDirty ? " — تغييرات غير محفوظة" : ""}`}
+                data-workspace-tab-active={active ? "true" : undefined}
+              >
+                {(() => { const TabIcon = iconFor(tab.path); return <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${active ? "bg-white/15 text-white" : iconToneFor(tab.path)}`}><TabIcon className="h-4 w-4" aria-hidden="true" /></span>; })()}
+                <span className="max-w-[9rem] truncate sm:max-w-[13rem]">{tab.title}</span>
+                {isDirty && <span className="h-2 w-2 shrink-0 rounded-full bg-amber-400" title="تغييرات غير محفوظة" aria-label="تغييرات غير محفوظة" />}
               </button>
-            )}
-            {!tab.pinned && (
-              <button type="button" onClick={() => closeTab(tab.path)} className="rounded-full p-0.5 opacity-60 hover:bg-black/10 hover:opacity-100" aria-label={`إغلاق تبويب ${tab.title}`}>
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-        );
-      })}
-    </nav>
+              {tab.path !== "/dashboard" && (
+                <button type="button" onClick={() => togglePinned(tab.path)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full opacity-70 outline-none hover:bg-black/10 hover:opacity-100 focus-visible:ring-2 focus-visible:ring-[#e0ad36]" aria-label={tab.pinned ? `إلغاء تثبيت ${tab.title}` : `تثبيت ${tab.title}`} title={tab.pinned ? "إلغاء التثبيت" : "تثبيت التبويب"}>
+                  {tab.pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                </button>
+              )}
+              {!tab.pinned && (
+                <button type="button" onClick={() => closeTab(tab.path)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full opacity-70 outline-none hover:bg-black/10 hover:opacity-100 focus-visible:ring-2 focus-visible:ring-[#e0ad36]" aria-label={`إغلاق تبويب ${tab.title}`} title="إغلاق التبويب">
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </nav>
+      {tabs.some(tab => tab.path !== activePath && !tab.pinned) && (
+        <button
+          type="button"
+          onClick={closeOtherTabs}
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[#dce5f3] bg-white text-[#344b70] shadow-sm outline-none hover:border-[#174b91] hover:bg-blue-50 focus-visible:ring-2 focus-visible:ring-[#174b91]"
+          aria-label="إغلاق جميع التبويبات الأخرى"
+          title="إغلاق التبويبات الأخرى"
+        >
+          <PanelTopClose className="h-4 w-4" aria-hidden="true" />
+        </button>
+      )}
+    </div>
   );
 }

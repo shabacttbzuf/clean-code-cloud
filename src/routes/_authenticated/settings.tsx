@@ -150,6 +150,7 @@ function SettingsPage() {
       if (error) throw error;
     },
     onSuccess: () => {
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/settings", formKey: "settings-editor" } }));
       qc.invalidateQueries({ queryKey: ["platform-branding"] });
       toast.success("تم حفظ هوية المنصة");
     },
@@ -193,6 +194,8 @@ function SettingsPage() {
       if (!data) throw new Error("لم يتم حفظ الإعدادات؛ تحقق من صلاحية إدارة الشركة.");
     },
     onSuccess: () => {
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/settings", formKey: "tenant-settings" } }));
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/settings", formKey: "settings-editor" } }));
       qc.invalidateQueries({ queryKey: ["tenant", tenantId] });
       toast.success("تم حفظ الإعدادات");
     },
@@ -226,11 +229,11 @@ function SettingsPage() {
       !!newTabTitle.trim() || newTabUrl !== "/dashboard" ||
       uploadingLogo || uploadingBackground;
     window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
-      detail: { path: "/settings", dirty },
+      detail: { path: "/settings", dirty, source: "settings-editor" },
     }));
     return () => {
       window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
-        detail: { path: "/settings", dirty: false },
+        detail: { path: "/settings", dirty: false, source: "settings-editor" },
       }));
     };
   }, [tenant, name, currency, tax, logoUrl, designDraft, design, platformBrand, platformBrandQuery.data, platformBrandQuery.isLoading, platformBrandQuery.isError, isSuperOwner, newTabTitle, newTabUrl, uploadingLogo, uploadingBackground]);
@@ -256,11 +259,13 @@ function SettingsPage() {
 
   function applyDesign() {
     saveDesign(designDraft);
+    window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/settings", formKey: "settings-editor" } }));
     toast.success("تم تطبيق التصميم على هذا الجهاز");
   }
 
   function resetWorkspaceDesign() {
     resetDesign();
+    window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/settings", formKey: "settings-editor" } }));
     setDesignDraft(DEFAULT_DESIGN);
     toast.success("تمت استعادة التصميم الافتراضي");
   }
@@ -338,7 +343,7 @@ function SettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); save.mutate(); }}>
+          <form id="workspace-tenant-settings" data-workspace-form-key="tenant-settings" className="space-y-4" onSubmit={(e) => { e.preventDefault(); save.mutate(); }}>
             <div className="space-y-2">
               <Label>شعار النشاط التجاري</Label>
               <div className="flex flex-wrap items-center gap-3">

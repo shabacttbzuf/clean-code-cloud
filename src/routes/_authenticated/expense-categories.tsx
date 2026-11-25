@@ -42,7 +42,8 @@ function Page() {
       if (editing) { const { error } = await supabase.from("expense_categories").update(payload).eq("id", editing.id); if (error) throw error; }
       else { const { error } = await supabase.from("expense_categories").insert(payload); if (error) throw error; }
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["expense-categories"] }); toast.success("تم"); setOpen(false); setEditing(null); },
+    onSuccess: () => {
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/expense-categories" } })); qc.invalidateQueries({ queryKey: ["expense-categories"] }); toast.success("تم"); setOpen(false); setEditing(null); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشل"),
   });
 

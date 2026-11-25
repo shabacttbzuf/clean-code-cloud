@@ -15,7 +15,7 @@ test("dashboard rejects partial query failures instead of presenting misleading 
 });
 
 test("CI runs on the active feature branch and supports a manual verification run", () => {
-  assert.match(workflow, /branches: \["main", "feature\/\*\*", "feat\/\*\*"\]/);
+  assert.match(workflow, /branches: \["main", "feature\/\*\*", "feat\/\*\*", "work\/uiux-03-tabs"\]/);
   assert.match(workflow, /workflow_dispatch:/);
 });
 
@@ -145,8 +145,11 @@ test("app launcher mirrors enterprise, system, and owner-only custom navigation 
 });
 
 test("workspace tabs preserve pinned pages and enforce a stable maximum", () => {
-  assert.match(workspaceTabs, /MAX_TABS = 12/);
-  assert.match(workspaceTabs, /function limitTabs/);
+  assert.match(workspaceTabs, /MAX_PINNED_TABS = 6/);
+  assert.match(workspaceTabs, /restoreWorkspaceTabs/);
+  assert.match(workspaceTabs, /closeOtherWorkspaceTabs/);
+  assert.match(workspaceTabs, /useBlocker/);
+  assert.match(workspaceTabs, /limitWorkspaceTabs/);
   assert.match(workspaceTabs, /function togglePinned/);
   assert.match(workspaceTabs, /PinOff/);
   assert.match(workspaceTabs, /tab\.pinned/);
@@ -234,4 +237,118 @@ test("dashboard provides permission-scoped operations, notifications, and a trut
   assert.match(dashboard, /hasPermission\("sales.create"\)/);
   assert.match(dashboard, /hasPermission\("kitchen.view"\)/);
   assert.match(dashboard, /hasPermission\("reports.view"\)/);
+});
+
+const workspaceFormKeeper = readFileSync(new URL("../src/components/workspace-form-state-keeper.tsx", import.meta.url), "utf8");
+
+test("workspace tabs restore per-user tenant sessions and preserve non-sensitive form fields across route changes", () => {
+  assert.match(workspaceTabs, /ras-workspace-tabs-v3/);
+  assert.match(workspaceTabs, /workspace-tabs-permissions/);
+  assert.match(workspaceTabs, /permissionQuery\.data\?\.has\(permission\) === true/);
+  assert.match(workspaceTabs, /ras-workspace-form-discard/);
+  assert.match(workspaceFormKeeper, /sessionStorage\.getItem\(storageKey\)/);
+  assert.match(workspaceFormKeeper, /sessionStorage\.setItem\(storageKey, JSON\.stringify\(snapshot\)\)/);
+  assert.match(workspaceFormKeeper, /sessionStorage\.removeItem\(storageKey\)/);
+  assert.match(workspaceFormKeeper, /MutationObserver/);
+  assert.match(workspaceFormKeeper, /scrollX/);
+  assert.match(workspaceFormKeeper, /scrollY/);
+  assert.match(workspaceFormKeeper, /version: 4/);
+  assert.match(workspaceFormKeeper, /scrollContainers/);
+  assert.match(workspaceFormKeeper, /scrollableElements/);
+  assert.match(workspaceFormKeeper, /restoreScrollContainers/);
+  assert.match(workspaceFormKeeper, /focusedField/);
+  assert.match(workspaceFormKeeper, /selectionStart/);
+  assert.match(workspaceFormKeeper, /openDetails/);
+  assert.match(workspaceFormKeeper, /focusin/);
+  assert.match(workspaceFormKeeper, /saveViewState/);
+  assert.match(workspaceFormKeeper, /restoreOpenDetails/);
+  assert.match(workspaceFormKeeper, /authorization/);
+  assert.match(workspaceFormKeeper, /Complex widgets with private React state/);
+  assert.match(workspaceFormKeeper, /const hasState = snapshot\.dirty \|\| snapshot\.fields\.length/);
+  assert.match(workspaceFormKeeper, /root\.addEventListener\("scroll", saveViewState, true\)/);
+  assert.match(workspaceFormKeeper, /Array\.isArray\(parsed\)/);
+  assert.match(workspaceFormKeeper, /useLayoutEffect/);
+  assert.match(workspaceFormKeeper, /data-sensitive/);
+  assert.match(workspaceFormKeeper, /password\|token\|secret\|otp/);
+  assert.match(workspaceFormKeeper, /ras-workspace-form-saved/);
+  assert.match(workspaceFormKeeper, /ras-workspace-form-discard/);
+  assert.doesNotMatch(workspaceFormKeeper, /type === "password".*value/);
+});
+
+test("authenticated navigation does not force-remount the entire page shell on every route change", () => {
+  assert.match(authLayout, /<WorkspaceFormStateKeeper \/>/);
+  assert.doesNotMatch(authLayout, /key=\{pathname\}/);
+});
+
+
+const salesView = readFileSync(new URL("../src/routes/_authenticated/sales.index.tsx", import.meta.url), "utf8");
+const kitchenView = readFileSync(new URL("../src/routes/_authenticated/kitchen.tsx", import.meta.url), "utf8");
+const purchasesView = readFileSync(new URL("../src/routes/_authenticated/purchases.tsx", import.meta.url), "utf8");
+const posWorkspace = readFileSync(new URL("../src/routes/_authenticated/pos.tsx", import.meta.url), "utf8");
+
+test("complex authenticated pages restore their React-owned workspace state within the user and company scope", () => {
+  assert.match(salesView, /workspace-sales-view-v1:/);
+  assert.match(salesView, /sessionStorage\.getItem\(salesViewKey \+ ":search"\)/);
+  assert.match(salesView, /sessionStorage\.setItem\(salesViewKey \+ ":method", methodFilter\)/);
+  assert.match(kitchenView, /workspace-kitchen-view-v1:/);
+  assert.match(kitchenView, /sessionStorage\.getItem\(kitchenViewKey \+ ":branch"\)/);
+  assert.match(kitchenView, /sessionStorage\.setItem\(kitchenViewKey \+ ":branch", branchId\)/);
+  assert.match(purchasesView, /workspace-purchase-draft-v1:/);
+  assert.match(purchasesView, /restoredDraft\.lines/);
+  assert.match(purchasesView, /Revalidate a restored branch/);
+  assert.match(purchasesView, /workspace-purchase-return-v2:/);
+  assert.match(purchasesView, /sessionStorage\.setItem\(returnDraftKey/);
+  assert.match(purchasesView, /ras-workspace-form-saved/);
+  assert.match(posWorkspace, /pos-workspace-v1:.*membership\?\.company_id/);
+});
+
+
+const reportsView = readFileSync(new URL("../src/routes/_authenticated/reports.tsx", import.meta.url), "utf8");
+const customersPage = readFileSync(new URL("../src/routes/_authenticated/customers.tsx", import.meta.url), "utf8");
+const usersAdminPage = readFileSync(new URL("../src/routes/_authenticated/users-admin.tsx", import.meta.url), "utf8");
+
+test("reports, customers, and user administration preserve view filters in isolated session scopes", () => {
+  assert.match(reportsView, /workspace-reports-view-v1:/);
+  assert.match(reportsView, /sessionStorage\.setItem\(reportViewKey/);
+  assert.match(reportsView, /validDate/);
+  assert.match(customersPage, /workspace-customers-view-v1:/);
+  assert.match(customersPage, /sessionStorage\.getItem\(customersViewKey \+ ":search"\)/);
+  assert.match(usersAdminPage, /workspace-users-admin-v1:/);
+  assert.match(usersAdminPage, /sessionStorage\.setItem\(usersViewKey \+ ":status", statusFilter\)/);
+  assert.match(usersAdminPage, /useEffect/);
+});
+
+
+const workspaceTabLogic = readFileSync(new URL("../src/lib/workspace-tabs-logic.mjs", import.meta.url), "utf8");
+const authenticatedRouteFiles = [
+  "/dashboard", "/pos", "/sales", "/tables", "/kitchen", "/inventory", "/inventory/movements",
+  "/purchases", "/suppliers", "/products", "/categories", "/customers", "/cash-sessions",
+  "/expenses", "/expense-categories", "/reports", "/hr/employees", "/hr/attendance", "/hr/leaves",
+  "/hr/payroll", "/hr/compensation", "/branches", "/companies", "/users", "/users-admin",
+  "/team-permissions", "/roles", "/departments", "/job-titles", "/employment-types",
+  "/notifications", "/settings", "/profile", "/ads", "/promotions", "/support", "/audit-logs",
+  "/login-history", "/owner-center", "/admin",
+];
+
+test("every authenticated route family has a page title and route-aware tab identity", () => {
+  for (const route of authenticatedRouteFiles) {
+    assert.ok(workspaceTabs.includes(`["${route}"`) || route === "/profile" || route === "/support" || route === "/audit-logs" || route === "/login-history" || route === "/owner-center" || route === "/admin",
+      `missing tab title for ${route}`);
+  }
+  assert.match(workspaceTabs, /تفاصيل الفاتورة/);
+  assert.match(workspaceTabs, /location\.href/);
+  assert.match(workspaceTabs, /normalizeWorkspacePath/);
+});
+
+test("tab state is isolated by user, tenant, company and branch and navigation has a blocker", () => {
+  assert.match(workspaceTabs, /createWorkspaceTabScope\(user\?\.id, tenantId, membership\?\.company_id, membership\?\.branch_id\)/);
+  assert.match(workspaceFormKeeper, /createWorkspaceTabScope\(user\?\.id, tenantId, membership\?\.company_id, membership\?\.branch_id\)/);
+  assert.match(workspaceTabs, /enableBeforeUnload: currentDirty/);
+  assert.match(workspaceTabs, /إغلاق جميع التبويبات الأخرى/);
+  assert.match(workspaceTabs, /onTabListKeyDown/);
+  assert.match(workspaceTabs, /tabIndex=\{active \? 0 : -1\}/);
+  assert.match(workspaceFormKeeper, /dirty: snapshot\.dirty/);
+  assert.match(workspaceFormKeeper, /event\.type !== "submit"/);
+  assert.match(workspaceFormKeeper, /version: 4/);
+  assert.match(workspaceTabLogic, /MAX_WORKSPACE_TABS = 12/);
 });

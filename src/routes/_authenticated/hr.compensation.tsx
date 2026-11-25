@@ -71,7 +71,8 @@ function CompensationPage() {
       const { error } = await supabase.from(table).insert(payload);
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: [table, tenantId] }); toast.success("تم"); setOpen(false); },
+    onSuccess: () => {
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/hr/compensation" } })); qc.invalidateQueries({ queryKey: [table, tenantId] }); toast.success("تم"); setOpen(false); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشل"),
   });
 

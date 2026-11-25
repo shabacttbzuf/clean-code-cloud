@@ -119,7 +119,8 @@ function LeavesPage() {
       });
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["leave-requests", tenantId] }); toast.success("تم إرسال الطلب"); setOpen(false); },
+    onSuccess: () => {
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/hr/leaves" } })); qc.invalidateQueries({ queryKey: ["leave-requests", tenantId] }); toast.success("تم إرسال الطلب"); setOpen(false); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشل"),
   });
 

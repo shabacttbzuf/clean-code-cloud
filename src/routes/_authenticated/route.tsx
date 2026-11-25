@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { appNavigationGroups } from "@/components/app-sidebar";
 import { AppLauncher } from "@/components/app-launcher";
 import { WorkspaceTabs } from "@/components/workspace-tabs";
+import { WorkspaceFormStateKeeper } from "@/components/workspace-form-state-keeper";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -75,14 +76,13 @@ function AuthLayout() {
 }
 
 function AuthShell() {
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
-
   return (
     <div className="workspace-surface flex min-h-screen w-full flex-col">
       <TopBar />
       <WorkspaceTabs />
+      <WorkspaceFormStateKeeper />
       <main className="min-w-0 flex-1 p-3 sm:p-4 md:p-6">
-        <div key={pathname} className="workspace-page-transition">
+        <div className="workspace-page-transition">
           <PermissionRouteGuard />
         </div>
       </main>

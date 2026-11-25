@@ -48,10 +48,10 @@ export function AdsPage() {
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
-      detail: { path: "/ads", dirty: formTouched },
+      detail: { path: "/ads", dirty: formTouched, source: "ads-form" },
     }));
     return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
-      detail: { path: "/ads", dirty: false },
+      detail: { path: "/ads", dirty: false, source: "ads-form" },
     })); };
   }, [formTouched]);
 
@@ -147,6 +147,7 @@ export function AdsPage() {
       if (!result.data?.id) throw new Error("لم يتم العثور على الحملة ضمن نطاق الشركة الحالي؛ لم يُنفّذ الحفظ.");
     },
     onSuccess: () => {
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/ads", formKey: "ads-form" } }));
       queryClient.invalidateQueries({ queryKey: ["marketing-campaigns", tenantId] });
       resetForm();
       toast.success("تم حفظ الحملة الإعلانية كمسودة");

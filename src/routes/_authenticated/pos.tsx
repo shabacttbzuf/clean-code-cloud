@@ -210,7 +210,7 @@ function POSWorkspace() {
     }
     setPosPasscode("");
   }, [unlockStorageKey]);
-  const workspaceStorageKey = `pos-workspace-v1:${tenantId ?? "none"}:${userId ?? "none"}`;
+  const workspaceStorageKey = `pos-workspace-v1:${tenantId ?? "none"}:${userId ?? "none"}:${membership?.company_id ?? "none"}:${membership?.branch_id ?? "none"}`;
   const restoredWorkspace = useMemo(() => readPOSWorkspaceSnapshot(workspaceStorageKey), [workspaceStorageKey]);
 
   const cashierProfile = useQuery({
@@ -231,6 +231,12 @@ function POSWorkspace() {
   const [search, setSearch] = useState(restoredWorkspace.search ?? "");
   const [catFilter, setCatFilter] = useState<string>(restoredWorkspace.catFilter ?? "all");
   const [cart, setCart] = useState<CartItem[]>(restoredWorkspace.cart ?? []);
+  useEffect(() => {
+    const dirty = cart.length > 0;
+    window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/pos", dirty, source: "pos-cart" },
+    }));
+  }, [cart]);
   const [discount, setDiscount] = useState(restoredWorkspace.discount ?? "0");
   const [selectedPromotionId, setSelectedPromotionId] = useState(restoredWorkspace.selectedPromotionId ?? "");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>(restoredWorkspace.selectedCustomerId ?? "none");
@@ -767,6 +773,7 @@ function POSWorkspace() {
       return { sale, method, items: invoiceItems };
     },
     onSuccess: ({ sale, method, items }) => {
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/pos", formKey: "pos-cart" } }));
       setReviewOpen(false);
       toast.success(`تم إصدار فاتورة #${sale.invoice_no}`);
       const inv = buildInvoice(sale, items, method, sale.payment_method);

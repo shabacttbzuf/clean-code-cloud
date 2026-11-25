@@ -1,0 +1,12 @@
+export type WorkspaceTabRecord = { path: string; title: string; pinned?: boolean; dirty?: boolean };
+export const MAX_WORKSPACE_TABS: number;
+export const MAX_PINNED_WORKSPACE_TABS: number;
+export function normalizeWorkspacePath(value: unknown): string | null;
+export function workspacePathname(value: string): string;
+export function createWorkspaceTabScope(userId?: string | null, tenantId?: string | null, companyId?: string | null, branchId?: string | null): string | null;
+export function limitWorkspaceTabs(tabs: WorkspaceTabRecord[]): WorkspaceTabRecord[];
+export function addWorkspaceTab(tabs: WorkspaceTabRecord[], tab: WorkspaceTabRecord): WorkspaceTabRecord[];
+export function closeWorkspaceTab(tabs: WorkspaceTabRecord[], path: string, options?: {allowDirty?: boolean}): WorkspaceTabRecord[];
+export function toggleWorkspaceTabPin(tabs: WorkspaceTabRecord[], path: string): WorkspaceTabRecord[];
+export function closeOtherWorkspaceTabs(tabs: WorkspaceTabRecord[], activePath: string, options?: {allowDirty?: boolean}): WorkspaceTabRecord[];
+export function restoreWorkspaceTabs(rawTabs: unknown, isAllowed: (pathname: string) => boolean): WorkspaceTabRecord[];
