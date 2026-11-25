@@ -234,7 +234,6 @@ function BranchesPage() {
                     </div>
                   )}
                 </div>
-                </div>
               </CardContent>
             </Card>
           ))}
