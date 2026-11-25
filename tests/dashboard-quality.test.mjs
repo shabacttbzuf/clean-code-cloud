@@ -261,7 +261,8 @@ test("workspace tabs restore per-user tenant sessions and preserve non-sensitive
   assert.match(workspaceFormKeeper, /restoreOpenDetails/);
   assert.match(workspaceFormKeeper, /authorization/);
   assert.match(workspaceFormKeeper, /Complex widgets with private React state/);
-  assert.match(workspaceFormKeeper, /restore scroll-only pages immediately/);
+  assert.match(workspaceFormKeeper, /const hasState = snapshot\.fields\.length \|\| snapshot\.scrollX \|\| snapshot\.scrollY/);
+  assert.match(workspaceFormKeeper, /root\.addEventListener\("scroll", saveViewState, true\)/);
   assert.match(workspaceFormKeeper, /Backward compatibility with snapshots/);
   assert.match(workspaceFormKeeper, /useLayoutEffect/);
   assert.match(workspaceFormKeeper, /data-sensitive/);
