@@ -15472,44 +15472,27 @@ VALUES
   ('cash.export','تصدير الورديات','Export cash sessions','finance')
 ON CONFLICT (key) DO NOTHING;
 
--- Mirror existing manage/view defaults into the new action keys for built-in
--- and custom roles. This only adds grants; it never revokes prior permissions.
+-- Mirror legacy management grants into CRUD actions for built-in and custom roles.
+-- Read-only access never implies permission to print or export sensitive records.
+-- Do not derive print/export from view: reading data must not imply permission to
+-- print or extract it. Those action keys are granted explicitly to authorized roles.
 WITH permission_map(legacy_key, new_key) AS (VALUES
   ('categories.manage','categories.create'),('categories.manage','categories.edit'),('categories.manage','categories.delete'),
-  ('categories.view','categories.print'),('categories.view','categories.export'),
   ('customers.manage','customers.create'),('customers.manage','customers.edit'),('customers.manage','customers.delete'),
-  ('customers.view','customers.print'),('customers.view','customers.export'),
   ('expenses.manage','expenses.create'),('expenses.manage','expenses.edit'),('expenses.manage','expenses.delete'),
-  ('expenses.view','expenses.print'),('expenses.view','expenses.export'),
   ('expense_categories.manage','expense_categories.create'),('expense_categories.manage','expense_categories.edit'),('expense_categories.manage','expense_categories.delete'),
   ('suppliers.manage','suppliers.create'),('suppliers.manage','suppliers.edit'),('suppliers.manage','suppliers.delete'),
-  ('suppliers.view','suppliers.print'),('suppliers.view','suppliers.export'),
   ('departments.manage','departments.create'),('departments.manage','departments.edit'),('departments.manage','departments.delete'),
-  ('departments.view','departments.print'),('departments.view','departments.export'),
   ('job_titles.manage','job_titles.create'),('job_titles.manage','job_titles.edit'),('job_titles.manage','job_titles.delete'),
-  ('job_titles.view','job_titles.print'),('job_titles.view','job_titles.export'),
   ('employment_types.manage','employment_types.create'),('employment_types.manage','employment_types.edit'),('employment_types.manage','employment_types.delete'),
-  ('employment_types.view','employment_types.print'),('employment_types.view','employment_types.export'),
   ('companies.manage','companies.create'),('companies.manage','companies.edit'),('companies.manage','companies.delete'),
-  ('companies.view','companies.print'),('companies.view','companies.export'),
   ('hr.employees.manage','hr.employees.create'),('hr.employees.manage','hr.employees.edit'),('hr.employees.manage','hr.employees.delete'),
-  ('hr.employees.view','hr.employees.print'),('hr.employees.view','hr.employees.export'),
   ('hr.attendance.manage','hr.attendance.create'),('hr.attendance.manage','hr.attendance.edit'),('hr.attendance.manage','hr.attendance.delete'),
-  ('hr.attendance.view','hr.attendance.export'),
   ('hr.compensation.manage','hr.compensation.create'),('hr.compensation.manage','hr.compensation.edit'),('hr.compensation.manage','hr.compensation.delete'),
-  ('hr.compensation.view','hr.compensation.print'),('hr.compensation.view','hr.compensation.export'),
   ('hr.manage','hr.leaves.create'),('hr.manage','hr.leaves.edit'),('hr.manage','hr.leaves.delete'),
-  ('hr.leaves.view','hr.leaves.export'),('hr.payroll.view','hr.payroll.export'),
   ('notifications.manage','notifications.create'),('notifications.manage','notifications.edit'),('notifications.manage','notifications.delete'),
   ('reports.export','reports.print'),
-  ('ads.view','ads.print'),('ads.view','ads.export'),
-  ('promotions.view','promotions.print'),('promotions.view','promotions.export'),
-  ('branches.view','branches.print'),('branches.view','branches.export'),
-  ('products.view','products.print'),('products.view','products.export'),
-  ('purchases.view','purchases.print'),('purchases.view','purchases.export'),
-  ('inventory.view','inventory.print'),('inventory.view','inventory.export'),
   ('cash.open_close','cash.open'),('cash.open_close','cash.close'),
-  ('cash.view','cash.print'),('cash.view','cash.export')
 )
 INSERT INTO public.role_permissions (tenant_id, role_kind, builtin_role, custom_role_id, permission_key)
 SELECT rp.tenant_id, rp.role_kind, rp.builtin_role, rp.custom_role_id, pm.new_key
