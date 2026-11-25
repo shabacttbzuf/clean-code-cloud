@@ -146,9 +146,14 @@ function OfflineStatus() {
     };
   }, []);
   return (
-    <div role="status" aria-live="polite" className="fixed bottom-3 left-3 z-[100] flex items-center gap-2 rounded-full border bg-background/95 px-3 py-2 text-xs font-medium shadow-lg backdrop-blur">
-      <span className={online ? "h-2 w-2 rounded-full bg-emerald-500" : "h-2 w-2 rounded-full bg-amber-500"} />
-      {online ? "متصل بالإنترنت" : "وضع عدم الاتصال"}
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed bottom-3 left-3 z-[100] flex max-w-[calc(100vw-1.5rem)] items-center gap-2 rounded-full border bg-background/95 px-3 py-2 text-xs font-medium shadow-lg backdrop-blur"
+      title={online ? "الاتصال متاح؛ تخضع البيانات لصلاحيات حسابك" : "الواجهة المحمّلة متاحة محلياً، أما بيانات الخادم والعمليات فتحتاج إلى اتصال"}
+    >
+      <span className={online ? "h-2 w-2 shrink-0 rounded-full bg-emerald-500" : "h-2 w-2 shrink-0 rounded-full bg-amber-500"} />
+      <span>{online ? "متصل بالإنترنت" : "غير متصل — الواجهة المحمّلة فقط"}</span>
     </div>
   );
 }
