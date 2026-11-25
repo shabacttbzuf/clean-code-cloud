@@ -290,3 +290,7 @@
 124. `supabase/migrations/20261125090000_sensitive_action_audit_triggers.sql`
 
 **الإجمالي: 124 ترحيلاً.**
+
+125. `supabase/migrations/20261125100000_prevent_direct_expense_deletion.sql`
+
+**الإجمالي: 125 ترحيلاً.**
