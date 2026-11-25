@@ -1,6 +1,6 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(4);
+SELECT plan(5);
 
 SELECT ok(
   to_regprocedure('private.emit_overdue_kitchen_order_notifications()') IS NOT NULL
@@ -53,6 +53,14 @@ $function$;
 SELECT ok(
   pg_temp.has_overdue_kitchen_scheduler(),
   'The minute scheduler is registered and enabled through pg_cron'
+);
+
+
+SELECT ok(
+  pg_get_functiondef('private.emit_overdue_kitchen_order_notifications()'::regprocedure) LIKE '%pg_advisory_xact_lock%'
+  AND pg_get_functiondef('private.emit_overdue_kitchen_order_notifications()'::regprocedure) LIKE '%FOR UPDATE OF ko SKIP LOCKED%'
+  AND pg_get_functiondef('private.emit_overdue_kitchen_order_notifications()'::regprocedure) LIKE '%RAISE WARNING%',
+  'Overlapping scans are serialized and a per-order notification failure is retried on the next scan'
 );
 
 SELECT * FROM finish();
