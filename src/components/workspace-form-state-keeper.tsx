@@ -301,7 +301,7 @@ export function WorkspaceFormStateKeeper() {
         !target?.closest("form, [role='dialog'], [data-workspace-dirty='on']")) return;
       const form = target?.closest("form");
       const formKey = form
-        ? (form.id || form.dataset.workspaceFormKey || `form-${Array.from(root.querySelectorAll("form")).indexOf(form)}`)
+        ? (form.dataset.workspaceFormKey || form.id || `form-${Array.from(root.querySelectorAll("form")).indexOf(form)}`)
         : "custom";
       discardCurrent = false;
       dirtyForms.add(formKey);
