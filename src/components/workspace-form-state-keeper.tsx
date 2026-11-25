@@ -278,6 +278,10 @@ export function WorkspaceFormStateKeeper() {
       save();
       window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: pathname, dirty: true } }));
     };
+    const saveViewState = () => {
+      if (restoring || !restored) return;
+      save();
+    };
     const onDiscard = (event: Event) => {
       const detail = (event as CustomEvent<{ path?: string }>).detail;
       if (!detail?.path) return;
@@ -299,8 +303,8 @@ export function WorkspaceFormStateKeeper() {
     const maxWait = window.setTimeout(() => { observer.disconnect(); }, 15_000);
     root.addEventListener("input", markDirty, true);
     root.addEventListener("change", markDirty, true);
-    root.addEventListener("scroll", markDirty, true);
-    window.addEventListener("scroll", markDirty, { passive: true });
+    root.addEventListener("scroll", saveViewState, true);
+    window.addEventListener("scroll", saveViewState, { passive: true });
     window.addEventListener("ras-workspace-form-saved", onSaved);
     window.addEventListener("ras-workspace-form-discard", onDiscard);
     return () => {
@@ -310,8 +314,8 @@ export function WorkspaceFormStateKeeper() {
       if (!discardCurrent) save();
       root.removeEventListener("input", markDirty, true);
       root.removeEventListener("change", markDirty, true);
-      root.removeEventListener("scroll", markDirty, true);
-      window.removeEventListener("scroll", markDirty);
+      root.removeEventListener("scroll", saveViewState, true);
+      window.removeEventListener("scroll", saveViewState);
       window.removeEventListener("ras-workspace-form-saved", onSaved);
       window.removeEventListener("ras-workspace-form-discard", onDiscard);
     };
