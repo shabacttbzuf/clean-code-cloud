@@ -11,6 +11,8 @@ test("database visibility checks tenant, company, audience, permission and sourc
   assert.match(migration, /private\.has_permission\(auth\.uid\(\), n\.tenant_id, 'notifications\.view'\)/);
   assert.match(migration, /WHEN 'branch' THEN private\.can_access_branch/);
   assert.match(migration, /WHEN 'department' THEN EXISTS/);
+  assert.match(migration, /private\.can_manage_notification_scope/);
+  assert.match(migration, /notifications_insert_scoped/);
   assert.match(migration, /WHEN 'owner' THEN EXISTS/);
   assert.match(migration, /WHEN 'manager' THEN EXISTS/);
   assert.match(migration, /WHEN 'customer_credit_invoice_issued' THEN private\.has_permission/);
