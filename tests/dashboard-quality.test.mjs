@@ -254,3 +254,9 @@ test("dashboard and product imagery use browser-native loading and decoding hint
   assert.match(dashboard, /loading="lazy" decoding="async"/);
   assert.match(productPage, /loading="lazy" decoding="async" fetchPriority="low"/);
 });
+
+test("sidebar, route guard, and global search share one permission cache entry", () => {
+  assert.match(appSidebar, /queryKey: \["route-effective-permissions", tenantId, userId\]/);
+  assert.match(authLayout, /queryKey: \["route-effective-permissions", tenantId, userId\]/);
+  assert.match(authLayout, /queryKey: \["route-effective-permissions", tenantId, user\?\.id\]/);
+});
