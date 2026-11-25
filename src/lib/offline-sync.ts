@@ -343,6 +343,7 @@ export async function syncOfflineOperations(scope: OfflineScope): Promise<void> 
         const handler = handlers.get(operation.type);
         if (!handler || handler.offlineSafe !== true || handler.idempotentServerSide !== true) {
           operation.status = "blocked";
+          candidate.status = "blocked";
           operation.lastError = "لا يوجد معالج آمن ومعتمد لهذا النوع من العمليات؛ أوقفنا الإرسال نهائياً.";
           operation.nextRetryAt = null;
           releaseLease(operation);
@@ -352,6 +353,7 @@ export async function syncOfflineOperations(scope: OfflineScope): Promise<void> 
         try {
           await handler.send(operation);
           operation.status = "synced";
+          candidate.status = "synced";
           operation.syncedAt = new Date().toISOString();
           operation.lastError = null;
           operation.nextRetryAt = null;
@@ -367,6 +369,7 @@ export async function syncOfflineOperations(scope: OfflineScope): Promise<void> 
           const isConflict = errorCode === "40001" || /conflict|version|stale|تعارض|changed or transition is invalid/i.test(message);
           const isPermanent = isPermanentFailure(error) || operation.attempts >= MAX_AUTOMATIC_ATTEMPTS;
           operation.status = isConflict ? "conflict" : isPermanent ? "blocked" : "failed";
+          candidate.status = operation.status;
           operation.lastError = message.slice(0, 1000);
           const retryDelay = Math.min(30 * 60_000, 5_000 * 2 ** Math.min(operation.attempts - 1, 12));
           operation.nextRetryAt = operation.status === "failed" ? new Date(Date.now() + retryDelay).toISOString();
