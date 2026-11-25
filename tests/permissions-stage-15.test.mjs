@@ -70,6 +70,12 @@ test("marketing CRUD and approval permissions are separate and database enforced
   assert.ok(alignmentMigration.includes("private.can_access_branch"));
 });
 
+test("view permissions never imply HR print or marketing export capabilities", () => {
+  assert.doesNotMatch(granularMigration, /\\('hr\\.(?:attendance|leaves|payroll)\\.print', 'hr\\.(?:attendance|leaves|payroll)\\.view'\\)/);
+  const sectionCrud = readFileSync(new URL("../supabase/migrations/20261125030000_section_crud_permissions.sql", import.meta.url), "utf8");
+  assert.doesNotMatch(sectionCrud, /\\('(?:[^']+\\.view|reports\\.export)','[^']+\\.(?:print|export)'\\)/);
+});
+
 test("platform branding writes remain exclusive to the unchanged Super Owner identity", () => {
   const settingsMigration = readFileSync(new URL("../supabase/migrations/20261118000006_platform_branding_and_notification_reads.sql", import.meta.url), "utf8");
   assert.ok(settingsMigration.includes("platform branding managed by super owner"));
