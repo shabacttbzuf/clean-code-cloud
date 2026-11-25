@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ["main", "feature/**", "feat/**", "work/uiux-**"]
+    branches: ["main", "feature/**", "feat/**", "work/**"]
   pull_request:
     branches: ["main", "work/uiux-**"]
   workflow_dispatch:
