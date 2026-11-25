@@ -57,6 +57,7 @@ const schema = z.object({
 
 function BranchesPage() {
   const { tenantId, isSuperOwner, membership, hasPermission } = useActiveTenant();
+  const canViewBranches = isSuperOwner || hasPermission("branches.view");
   const canCreateBranch = isSuperOwner || hasPermission("branches.create");
   const canEditBranch = isSuperOwner || hasPermission("branches.edit");
   const canDeleteBranch = isSuperOwner || hasPermission("branches.delete");
@@ -86,7 +87,7 @@ function BranchesPage() {
       if (error) throw error;
       return data ?? [];
     },
-    enabled: !!tenantId && canManageBranches,
+    enabled: !!tenantId && (canViewBranches || canManageBranches),
   });
   const availableCompanies = (companies.data ?? []).filter((c) => isSuperOwner || !membership?.company_id || c.id === membership.company_id);
 
