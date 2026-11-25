@@ -556,3 +556,21 @@ button, [role="button"], a, input, select, textarea {
 @media (prefers-reduced-motion: reduce) {
   .workspace-tabs { scroll-behavior: auto; scroll-snap-type: none; }
 }
+
+
+/* POS viewport sizing follows the visual viewport when the mobile keyboard opens. */
+@media (max-width: 640px) {
+  .pos-page {
+    height: max(0px, calc(100dvh - 10.5rem));
+    min-height: min(22rem, calc(100dvh - 10.5rem));
+    overflow: visible;
+  }
+  .pos-page > .grid { min-height: 0; }
+  .pos-page :where(input, textarea, select) { scroll-margin-block: 1rem; }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .pos-page {
+    height: max(0px, calc(100dvh - 8.5rem));
+    min-height: min(12rem, calc(100dvh - 8.5rem));
+  }
+}
