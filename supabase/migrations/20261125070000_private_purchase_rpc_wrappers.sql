@@ -34,6 +34,14 @@ BEGIN
       USING ERRCODE = '42501';
   END IF;
 
+  IF _branch_id IS NULL OR NOT EXISTS (
+    SELECT 1 FROM public.branches
+     WHERE id = _branch_id AND tenant_id = _tenant_id AND is_active = true
+  ) THEN
+    RAISE EXCEPTION 'Branch does not belong to the requested tenant or is inactive'
+      USING ERRCODE = '23503';
+  END IF;
+
   IF NOT (
     (
       public.has_permission(auth.uid(), _tenant_id, 'purchases.create')
@@ -54,7 +62,7 @@ BEGIN
       USING ERRCODE = '23503';
   END IF;
 
-  IF jsonb_typeof(_items) <> 'array'
+  IF _items IS NULL OR jsonb_typeof(_items) IS DISTINCT FROM 'array'
      OR jsonb_array_length(_items) = 0
      OR jsonb_array_length(_items) > 300 THEN
     RAISE EXCEPTION 'Purchase must contain between 1 and 300 items'
