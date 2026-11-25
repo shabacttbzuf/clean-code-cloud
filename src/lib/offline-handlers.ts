@@ -41,6 +41,7 @@ registerOfflineHandler("kitchen_status", {
     // The RPC derives the actor from auth.uid(), checks current kitchen.manage
     // permission and branch membership, and stores the idempotency result atomically.
     const { error } = await (supabase.rpc as any)("set_kitchen_order_status_idempotent", {
+      _expected_actor_id: operation.scope.userId,
       _order_id: payload.orderId,
       _new_status: payload.status,
       _notes: payload.notes,
