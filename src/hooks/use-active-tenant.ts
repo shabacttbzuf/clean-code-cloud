@@ -107,9 +107,10 @@ export function useActiveTenant() {
     [memQuery.data, activeId],
   );
   const hasTenantWideMembership = tenantMemberships.some((item) => item.company_id === null);
-  const companyMembershipIds = tenantMemberships
-    .map((item) => item.company_id)
-    .filter((id): id is string => !!id);
+  const companyMembershipIds = useMemo(
+    () => tenantMemberships.map((item) => item.company_id).filter((id): id is string => !!id),
+    [tenantMemberships],
+  );
   const companyScopeStorageKey = user?.id && activeId ? `ras-active-company:${user.id}:${activeId}` : null;
   const [companySelection, setCompanySelection] = useState<{ scope: string | null; companyId: string | null; ready: boolean }>({
     scope: null, companyId: null, ready: false,
@@ -129,7 +130,7 @@ export function useActiveTenant() {
     enabled: !!user?.id && !!activeId && (hasTenantWideMembership || companyMembershipIds.length > 0),
     staleTime: 30_000,
   });
-  const companyOptions = companyOptionsQuery.data ?? [];
+  const companyOptions = useMemo(() => companyOptionsQuery.data ?? [], [companyOptionsQuery.data]);
 
   useEffect(() => {
     if (!companyScopeStorageKey || !tenantMemberships.length || companyOptionsQuery.isLoading || companyOptionsQuery.isError) return;
@@ -146,7 +147,7 @@ export function useActiveTenant() {
       else if (hasTenantWideMembership) window.localStorage.setItem(companyScopeStorageKey, "__all__");
       else window.localStorage.removeItem(companyScopeStorageKey);
     }
-  }, [companyScopeStorageKey, tenantMemberships, companyOptionsQuery.data, companyOptionsQuery.isLoading, companyOptionsQuery.isError, hasTenantWideMembership]);
+  }, [companyScopeStorageKey, tenantMemberships, companyMembershipIds, companyOptions, companyOptionsQuery.isLoading, companyOptionsQuery.isError, hasTenantWideMembership]);
 
   const activeCompanyId = companySelection.scope === companyScopeStorageKey && companySelection.ready
     ? companySelection.companyId
@@ -202,7 +203,7 @@ export function useActiveTenant() {
       (!!membership.branch_id || ["owner", "manager", "accountant"].includes(membership.role) || hasPermission("branches.view") || isSuperOwner),
     staleTime: 30_000,
   });
-  const branchOptions = branchOptionsQuery.data ?? [];
+  const branchOptions = useMemo(() => branchOptionsQuery.data ?? [], [branchOptionsQuery.data]);
   const branchScopeKey = user?.id && activeId ? `${user.id}:${activeId}:${activeCompanyId ?? "all-companies"}` : null;
   const [branchSelection, setBranchSelection] = useState<{
     scope: string | null;
@@ -228,7 +229,7 @@ export function useActiveTenant() {
       else if (canSelectAll) window.localStorage.setItem(storageKey, "__all__");
       else window.localStorage.removeItem(storageKey);
     }
-  }, [branchScopeKey, membership?.branch_id, membership?.role, branchOptionsQuery.data, branchOptionsQuery.isLoading, branchOptionsQuery.isError, isSuperOwner, permissions]);
+  }, [branchScopeKey, membership, branchOptions, branchOptionsQuery.isLoading, branchOptionsQuery.isError, isSuperOwner, permissions]);
 
   const activeBranchId = branchSelection.scope === branchScopeKey && branchSelection.ready
     ? branchSelection.branchId
