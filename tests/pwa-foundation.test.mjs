@@ -54,3 +54,15 @@ test("offline status retries service worker updates when connectivity returns", 
   assert.ok(root.includes('window.removeEventListener("online", checkForUpdate)'));
   assert.ok(root.includes("queryClient.clear()"));
 });
+
+test("offline protected navigation never treats a cached session as authorization", async () => {
+  const worker = await read("../public/sw.js");
+  const authRoute = await read("../src/routes/_authenticated/route.tsx");
+  const homeRoute = await read("../src/routes/index.tsx");
+  const loginRoute = await read("../src/routes/auth.tsx");
+  assert.ok(worker.includes('if (url.pathname === "/")'));
+  assert.ok(worker.includes('caches.match("/offline.html")'));
+  assert.ok(authRoute.includes('!navigator.onLine) throw redirect({ to: "/" })'));
+  assert.ok(homeRoute.includes('!navigator.onLine) return;'));
+  assert.ok(loginRoute.includes('!navigator.onLine) return;'));
+});
