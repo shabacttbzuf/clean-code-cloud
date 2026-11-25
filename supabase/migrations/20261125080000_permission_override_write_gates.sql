@@ -40,7 +40,7 @@ AS $function$
             AND actor_role.branch_id IS NULL
         )
         OR (
-          NOT public.user_has_role_in_tenant(
+          NOT private.user_has_role_in_tenant(
             _target_user_id, _tenant_id, ARRAY['owner','manager']
           )
           -- Every target membership must match one complete actor scope tuple.
