@@ -51,7 +51,7 @@ export function AdsPage() {
       detail: { path: "/ads", dirty: formTouched, source: "ads-form" },
     }));
     return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
-      detail: { path: "/ads", dirty: false },
+      detail: { path: "/ads", dirty: false, source: "ads-form" },
     })); };
   }, [formTouched]);
 
