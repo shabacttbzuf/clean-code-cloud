@@ -25,6 +25,7 @@ import { useSuperOwner } from "@/hooks/use-super-owner";
 import { safeInternalNotificationPath } from "@/lib/notification-links";
 import { resolveAvatarUrl } from "@/lib/storage";
 import { OFFLINE_AUTH_CACHE_MAX_AGE_MS, withOfflineFallback } from "@/lib/offline-reference-cache";
+import { OfflineSyncCenter } from "@/components/offline-sync-center";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -81,6 +82,7 @@ function AuthShell() {
     <div className="workspace-surface flex min-h-screen w-full flex-col">
       <TopBar />
       <WorkspaceTabs />
+      <OfflineSyncCenter />
       <main className="min-w-0 flex-1 p-3 sm:p-4 md:p-6">
         <div key={pathname} className="workspace-page-transition">
           <PermissionRouteGuard />
