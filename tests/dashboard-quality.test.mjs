@@ -56,6 +56,20 @@ test("dashboard KPI summaries refresh automatically without keeping prior-scope 
   assert.match(dashboard, /queryKey: \["dashboard-stats", tenantId, user\?\.id/);
 });
 
+
+test("dashboard aggregate queries paginate past the Supabase row cap with deterministic ordering", () => {
+  assert.match(dashboard, /async function fetchAllRows<T>/);
+  assert.match(dashboard, /query\.range\(from, from \+ pageSize - 1\)/);
+  assert.match(dashboard, /pageSize = 500/);
+  assert.match(dashboard, /fetchAllRowsResult<any>\(salesMonthQuery\)/);
+  assert.match(dashboard, /fetchAllRowsResult<any>\(expensesMonthQuery\)/);
+  assert.match(dashboard, /fetchAllRowsResult<any>\(lowStockQuery\)/);
+  assert.match(dashboard, /fetchRowsByIdBatchesResult<any>\(saleIdsMonth/);
+  assert.match(dashboard, /fetchRowsByIdBatchesResult<any>\(refundIdsMonth/);
+  assert.match(dashboard, /batchSize = 200/);
+  assert.match(dashboard, /order\("created_at"\)\.order\("id"\)/);
+});
+
 test("authenticated workspace prevents horizontal overflow and motion respects accessibility preferences", () => {
   assert.match(layout, /<main className="min-w-0 flex-1/);
   assert.match(styles, /prefers-reduced-motion: no-preference/);
