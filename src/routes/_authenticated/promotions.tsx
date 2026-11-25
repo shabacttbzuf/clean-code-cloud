@@ -45,7 +45,7 @@ function PromotionsPage() {
       detail: { path: "/promotions", dirty: formTouched, source: "promotion-form" },
     }));
     return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
-      detail: { path: "/promotions", dirty: false },
+      detail: { path: "/promotions", dirty: false, source: "promotion-form" },
     })); };
   }, [formTouched]);
   useEffect(() => {
