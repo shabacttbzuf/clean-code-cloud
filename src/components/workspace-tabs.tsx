@@ -179,7 +179,7 @@ export function WorkspaceTabs() {
       if (!knownRoute) return false;
       const permission = requiredPermission(path);
       return isSuperOwner || !permission || permissionQuery.data?.has(permission) === true;
-    });
+    }).map((tab) => ({ ...tab, title: titleFor(tab.path) }));
     setTabState({
       scope: storageKey,
       tabs: limitWorkspaceTabs([
