@@ -42,6 +42,13 @@ SELECT ok(
   EXISTS (
     SELECT 1 FROM pg_policies
     WHERE schemaname='public' AND tablename='products'
+      AND policyname='products_select_permission' AND cmd='SELECT'
+      AND qual ILIKE '%is_super_owner%'
+      AND qual ILIKE '%is_tenant_member%'
+  )
+  AND EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname='public' AND tablename='products'
       AND policyname='products_create_permission' AND cmd='INSERT'
       AND with_check ILIKE '%has_permission%'
       AND with_check ILIKE '%is_tenant_member%'
