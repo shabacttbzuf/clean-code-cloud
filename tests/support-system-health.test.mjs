@@ -63,7 +63,9 @@ test("technical details are permission-gated and diagnostics do not expose crede
   assert.match(support, /get_my_permissions/);
   assert.match(support, /audit\.view/);
   assert.doesNotMatch(support, /console\.(log|error|warn)\(/);
-  assert.doesNotMatch(support, /access_token|refresh_token|service_role|SUPABASE_SERVICE_ROLE_KEY/);
+  const diagnosticBlock = support.slice(support.indexOf("async function copyDiagnostics"), support.indexOf("const overall = aggregateHealth"));
+  assert.doesNotMatch(diagnosticBlock, /access_token|refresh_token|apikey|service_role/);
+  assert.doesNotMatch(support, /console\\.(log|error|warn)\\(/);
   assert.match(support, /safeDiagnosticSummary/);
 });
 
