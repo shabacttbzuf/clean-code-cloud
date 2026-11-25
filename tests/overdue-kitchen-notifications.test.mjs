@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const migration = readFileSync(new URL("../supabase/migrations/20261125040000_overdue_kitchen_order_notifications.sql", import.meta.url), "utf8");
+const hardeningMigration = readFileSync(new URL("../supabase/migrations/20261126010000_notification_scope_archive_and_missing_sources.sql", import.meta.url), "utf8");
 const snapshot = readFileSync(new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url), "utf8");
 
 test("delayed kitchen alerts use the approved 30-minute SLA and actual kitchen workflow states", () => {
@@ -31,7 +32,15 @@ test("the scheduler is idempotent and the alert scanner never changes kitchen or
   assert.doesNotMatch(migration, /UPDATE public\.(kitchen_orders|sales|payments|cash_sessions)|DELETE FROM public\.(kitchen_orders|sales|payments|cash_sessions)/i);
 });
 
+test("concurrent delayed-order scans are serialized and failures remain retryable", () => {
+  assert.match(hardeningMigration, /pg_advisory_xact_lock/);
+  assert.match(hardeningMigration, /FOR UPDATE OF ko SKIP LOCKED/);
+  assert.match(hardeningMigration, /IF EXISTS \([\s\S]*kitchen_order_delayed/);
+  assert.match(hardeningMigration, /RAISE WARNING 'Delayed kitchen notification skipped/);
+});
+
 test("complete database snapshot contains the delayed-order notification migration", () => {
   assert.ok(snapshot.includes("-- SOURCE MIGRATION: 20261125040000_overdue_kitchen_order_notifications.sql"));
   assert.ok(snapshot.includes("-- END MIGRATION: 20261125040000_overdue_kitchen_order_notifications.sql"));
+  assert.equal(snapshot.split("SOURCE MIGRATION: 20261126010000_notification_scope_archive_and_missing_sources.sql").length - 1, 1);
 });
