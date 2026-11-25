@@ -40,7 +40,7 @@ function PromotionsPage() {
   const canEditOffers = isSuperOwner || isTenantOwner || hasPermission("promotions.edit") || hasPermission("promotions.manage");
   const canApproveOffers = isSuperOwner || isTenantOwner || hasPermission("promotions.approve") || hasPermission("promotions.manage");
   const canDeleteOffers = isSuperOwner || isTenantOwner || hasPermission("promotions.delete") || hasPermission("promotions.manage");
-  const canManage = isSuperOwner || isTenantOwner || hasPermission("promotions.manage");
+  const canViewAnalytics = canViewOffers;
   const [form, setForm] = useState({ ...emptyForm, branch_id: membership?.branch_id && !membership?.company_id ? membership.branch_id : "" });
   const [editing, setEditing] = useState<string | null>(null);
   useEffect(() => {
@@ -95,7 +95,7 @@ function PromotionsPage() {
       if (error) throw error;
       return (data ?? []) as Array<{promotion_id:string;discount_amount:number;created_at:string}>;
     },
-    enabled: !!tenantId && canManage,
+    enabled: !!tenantId && canViewAnalytics,
   });
 
   const stats = useMemo(() => {
