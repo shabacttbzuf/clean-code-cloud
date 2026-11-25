@@ -1,6 +1,6 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(10);
+SELECT plan(11);
 
 SELECT is(
   (SELECT count(*)::int
@@ -62,6 +62,39 @@ SELECT ok(
   AND NOT has_table_privilege('authenticated','public.role_permissions','UPDATE')
   AND NOT has_table_privilege('authenticated','public.role_permissions','DELETE'),
   'Authorization tables cannot be mutated directly by authenticated clients'
+);
+
+SELECT ok(
+  EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname='public' AND tablename='user_permission_overrides'
+      AND policyname='permission_gate_user_permission_overrides_insert'
+      AND permissive='RESTRICTIVE'
+      AND with_check LIKE '%permissions.manage%'
+      AND with_check LIKE '%permission_key%'
+      AND with_check LIKE '%granted_by%'
+  )
+  AND EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname='public' AND tablename='user_permission_overrides'
+      AND policyname='permission_gate_user_permission_overrides_update'
+      AND permissive='RESTRICTIVE'
+      AND qual LIKE '%permissions.manage%'
+      AND with_check LIKE '%granted_by%'
+  )
+  AND EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname='public' AND tablename='user_permission_overrides'
+      AND policyname='permission_gate_user_permission_overrides_delete'
+      AND permissive='RESTRICTIVE'
+      AND qual LIKE '%permissions.manage%'
+  )
+  AND EXISTS (
+    SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+    WHERE n.nspname='private' AND p.proname='can_manage_permission_override_target'
+      AND p.prosecdef
+  ),
+  'Permission override writes require manage authority, owned permission keys, actor identity and exact target scope'
 );
 
 SELECT ok(
