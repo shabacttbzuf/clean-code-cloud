@@ -221,7 +221,7 @@ function TopBar() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const searchPermissions = useQuery({
-    queryKey: ["topbar-search-permissions", tenantId, user?.id],
+    queryKey: ["topbar-search-permissions", tenantId, user?.id, membership?.role, membership?.company_id, membership?.branch_id, membership?.custom_role_id],
     queryFn: async () => {
       if (!tenantId) return new Set<string>();
       const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId });
@@ -229,7 +229,9 @@ function TopBar() {
       return new Set<string>((data ?? []) as string[]);
     },
     enabled: !!tenantId && !!user?.id && !isSuperOwner,
-    staleTime: 30_000,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   });
   const branchQuery = useQuery({
     queryKey: ["topbar-active-branch", tenantId, membership?.branch_id],
