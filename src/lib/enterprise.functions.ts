@@ -15,14 +15,20 @@ async function assertPermission(
   userId: string,
   tenantId: string,
   permissionKey: string,
+  fallbackPermissionKey?: string,
 ) {
-  const { data, error } = await supabase.rpc("has_permission", {
-    _user_id: userId,
-    _tenant_id: tenantId,
-    _permission_key: permissionKey,
-  });
-  if (error) throw new Error(error.message);
-  if (data !== true) throw new Error(`غير مصرح: الصلاحية المطلوبة ${permissionKey}.`);
+  const check = async (key: string) => {
+    const { data, error } = await supabase.rpc("has_permission", {
+      _user_id: userId,
+      _tenant_id: tenantId,
+      _permission_key: key,
+    });
+    if (error) throw new Error(error.message);
+    return data === true;
+  };
+  if (await check(permissionKey)) return;
+  if (fallbackPermissionKey && await check(fallbackPermissionKey)) return;
+  throw new Error(`غير مصرح: الصلاحية المطلوبة ${permissionKey}.`);
 }
 
 async function assertTenantOwnerOrSuperOwner(supabase: any, userId: string, tenantId: string) {
@@ -194,7 +200,7 @@ export const upsertCompany = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => companyInput.parse(data))
   .handler(async ({ data, context }) => {
-    await assertPermission(context.supabase, context.userId, data.tenant_id, "companies.manage");
+    await assertPermission(context.supabase, context.userId, data.tenant_id, data.id ? "companies.edit" : "companies.create", "companies.manage");
     const payload = { ...data };
     const { error } = data.id
       ? await context.supabase.from("companies").update(payload).eq("id", data.id)
@@ -207,7 +213,7 @@ export const deleteCompany = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: uuid, tenant_id: uuid }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertPermission(context.supabase, context.userId, data.tenant_id, "companies.manage");
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "companies.delete", "companies.manage");
     const { error } = await context.supabase.from("companies").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -231,7 +237,7 @@ export const upsertDepartment = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => departmentInput.parse(data))
   .handler(async ({ data, context }) => {
-    await assertPermission(context.supabase, context.userId, data.tenant_id, "departments.manage");
+    await assertPermission(context.supabase, context.userId, data.tenant_id, data.id ? "departments.edit" : "departments.create", "departments.manage");
     const { error } = data.id
       ? await context.supabase.from("departments").update(data).eq("id", data.id)
       : await context.supabase.from("departments").insert(data);
@@ -243,7 +249,7 @@ export const deleteDepartment = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: uuid, tenant_id: uuid }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertPermission(context.supabase, context.userId, data.tenant_id, "departments.manage");
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "departments.delete", "departments.manage");
     const { error } = await context.supabase.from("departments").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -263,7 +269,7 @@ export const upsertJobTitle = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => jobTitleInput.parse(data))
   .handler(async ({ data, context }) => {
-    await assertPermission(context.supabase, context.userId, data.tenant_id, "job_titles.manage");
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "job_titles.create", "job_titles.manage");
     const { error } = data.id
       ? await context.supabase.from("job_titles").update(data).eq("id", data.id)
       : await context.supabase.from("job_titles").insert(data);
@@ -275,7 +281,7 @@ export const deleteJobTitle = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: uuid, tenant_id: uuid }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertPermission(context.supabase, context.userId, data.tenant_id, "job_titles.manage");
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "job_titles.delete", "job_titles.manage");
     const { error } = await context.supabase.from("job_titles").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -295,7 +301,7 @@ export const upsertEmploymentType = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => employmentTypeInput.parse(data))
   .handler(async ({ data, context }) => {
-    await assertPermission(context.supabase, context.userId, data.tenant_id, "employment_types.manage");
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "employment_types.create", "employment_types.manage");
     const { error } = data.id
       ? await context.supabase.from("employment_types").update(data).eq("id", data.id)
       : await context.supabase.from("employment_types").insert(data);
@@ -307,7 +313,7 @@ export const deleteEmploymentType = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: uuid, tenant_id: uuid }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertPermission(context.supabase, context.userId, data.tenant_id, "employment_types.manage");
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "employment_types.delete", "employment_types.manage");
     const { error } = await context.supabase.from("employment_types").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
