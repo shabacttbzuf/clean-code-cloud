@@ -1,6 +1,6 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(11);
+SELECT plan(12);
 
 SELECT is(
   (SELECT count(*)::int
@@ -100,6 +100,30 @@ SELECT ok(
 SELECT ok(
   EXISTS (SELECT 1 FROM pg_class WHERE oid='public.super_owners'::regclass AND relrowsecurity),
   'Super-owner authority records remain protected by RLS'
+);
+
+SELECT is(
+  (SELECT count(DISTINCT tgrelid)::int
+   FROM pg_trigger
+   WHERE NOT tgisinternal
+     AND tgfoid = 'public.log_audit_change()'::regprocedure
+     AND tgrelid = ANY (ARRAY[
+       'public.attendance'::regclass,
+       'public.payroll_items'::regclass,
+       'public.cash_sessions'::regclass,
+       'public.payments'::regclass,
+       'public.inventory_transactions'::regclass,
+       'public.purchase_items'::regclass,
+       'public.sale_items'::regclass,
+       'public.sale_refunds'::regclass,
+       'public.sale_refund_items'::regclass,
+       'public.purchase_returns'::regclass,
+       'public.purchase_return_items'::regclass,
+       'public.marketing_campaigns'::regclass,
+       'public.promotional_offers'::regclass
+     ])),
+  13,
+  'Sensitive HR, cash, payment, inventory, refund, return and marketing records are audited'
 );
 
 SELECT is(
