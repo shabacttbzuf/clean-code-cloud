@@ -24,7 +24,8 @@ function escapeHtml(value: unknown) {
 
 function CompanyDetailsPage() {
   const { companyId } = useParams({ from: "/_authenticated/companies/$companyId" });
-  const { tenantId, tenant, isSuperOwner } = useActiveTenant();
+  const { tenantId, tenant, isSuperOwner, hasPermission } = useActiveTenant();
+  const canPrintCompany = isSuperOwner || hasPermission("companies.print");
   const query = useQuery({
     queryKey: ["company-drilldown", tenantId, companyId],
     queryFn: async () => {
@@ -70,6 +71,7 @@ function CompanyDetailsPage() {
   });
 
   const printReport = () => {
+    if (!canPrintCompany) return;
     if (!query.data) return;
     const company = query.data.company;
     const rows = query.data.branches.map((b) => `<tr><td>${escapeHtml(b.name)}</td><td>${b.is_active ? "نشط" : "متوقف"}</td><td>${b.employees}</td><td>${b.salesCount}</td><td>${escapeHtml(formatMoney(b.sales))}</td><td>${escapeHtml(formatMoney(b.expenses))}</td><td>${b.attendance}</td><td>${b.stockUnits}</td></tr>`).join("");
@@ -85,7 +87,7 @@ function CompanyDetailsPage() {
   const { company, branches } = query.data;
   const totals = branches.reduce((acc, b) => ({ sales: acc.sales + b.sales, expenses: acc.expenses + b.expenses, employees: acc.employees + b.employees, invoices: acc.invoices + b.salesCount }), { sales: 0, expenses: 0, employees: 0, invoices: 0 });
   return <div className="space-y-6">
-    <PageHeader title={company.name} subtitle="تفاصيل الشركة وأداء كل فرع على حدة" action={<div className="flex gap-2"><Button variant="outline" onClick={printReport}><Printer className="ml-2 h-4 w-4" />طباعة كشف الشركة</Button><Button variant="ghost" asChild><Link to="/companies"><ArrowRight className="ml-2 h-4 w-4" />الشركات</Link></Button></div>} />
+    <PageHeader title={company.name} subtitle="تفاصيل الشركة وأداء كل فرع على حدة" action={<div className="flex gap-2">{canPrintCompany && <Button variant="outline" onClick={printReport}><Printer className="ml-2 h-4 w-4" />طباعة كشف الشركة</Button>}<Button variant="ghost" asChild><Link to="/companies"><ArrowRight className="ml-2 h-4 w-4" />الشركات</Link></Button></div>} />
     <Card><CardContent className="flex flex-wrap items-center gap-4 p-4">
       {company.logo_url && <img src={company.logo_url} alt={company.name} className="h-16 w-16 rounded-lg object-contain" />}
       <div className="min-w-0 flex-1"><div className="text-lg font-bold">{company.name}</div>{company.legal_name && <div className="text-sm text-muted-foreground">{company.legal_name}</div>}{company.tax_number && <div className="text-xs text-muted-foreground" dir="ltr">{company.tax_number}</div>}</div>
