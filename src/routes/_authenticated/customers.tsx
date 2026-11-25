@@ -180,7 +180,7 @@ function CustomersPage() {
                     </Button>}
                     {canDeleteCustomer && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => { if (confirm(`إيقاف العميل "${c.name}"؟ سيبقى سجل حسابه وفواتيره محفوظاً.`)) del.mutate(c.id); }}>
                       <Trash2 className="h-3 w-3" />
-                    </Button>}}
+                    </Button>}
                   </div>
                 )}
               </CardContent>
