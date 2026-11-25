@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: ["main", "feature/**", "feat/**"]
+    branches: ["main", "feature/**", "feat/**", "work/uiux-**"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "work/ui-ux-1.0-complete"]
   workflow_dispatch:
 
 concurrency:
@@ -40,6 +40,8 @@ jobs:
           src/lib/hr.functions.ts
           src/lib/enterprise.functions.ts
           src/lib/pos-access.functions.ts
+          src/routes/_authenticated/route.tsx
+          src/hooks/use-active-tenant.ts
           --rule 'prettier/prettier: off'
           --rule '@typescript-eslint/no-explicit-any: off'
 
