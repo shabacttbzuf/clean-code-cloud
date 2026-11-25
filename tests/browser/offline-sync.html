@@ -52,6 +52,11 @@
       }
     });
 
+    const dependencyOrder = [];
+    registerOfflineHandler("browser_test_dependency_parent", {offlineSafe:true,idempotentServerSide:true,send:async()=>{dependencyOrder.push("parent");}});
+    registerOfflineHandler("browser_test_dependency_child", {offlineSafe:true,idempotentServerSide:true,send:async()=>{dependencyOrder.push("child");}});
+    registerOfflineHandler("browser_test_permission_denied", {offlineSafe:true,idempotentServerSide:true,send:async()=>{const error=new Error("Permission denied");error.code="42501";throw error;}});
+
     async function test(name, fn) {
       try { await fn(); write(name,true); }
       catch(e) { write(name + ": " + (e?.message ?? e),false); }
@@ -84,6 +89,19 @@
           let rejected=false;
           try { await enqueueOfflineOperation(type,{case:"same-key-changed"},scope,[],key); } catch { rejected=true; }
           assert(rejected,"قُبل المفتاح نفسه مع حمولة مختلفة");
+        });
+        await test("ترتيب العمليات التابعة", async()=>{
+          dependencyOrder.length=0;
+          const parent=await enqueueOfflineOperation("browser_test_dependency_parent",{case:"parent"},scope);
+          await enqueueOfflineOperation("browser_test_dependency_child",{case:"child"},scope,[parent.id]);
+          await syncOfflineOperations(scope);
+          assert(dependencyOrder.join(",")==="parent,child","لم تُنفذ العملية التابعة بعد الأصلية");
+        });
+        await test("إيقاف العملية عند رفض الصلاحية", async()=>{
+          const op=await enqueueOfflineOperation("browser_test_permission_denied",{case:"permission-denied"},scope);
+          await syncOfflineOperations(scope);
+          const row=(await listOfflineOperations(scope)).find(x=>x.id===op.id);
+          assert(row.status==="blocked","لم تتوقف العملية بعد رفض الصلاحية");
         });
         await test("منع إدخال عملية مالية إلى الطابور", async()=>{
           let rejected=false;
