@@ -54,14 +54,14 @@ AS $function$
               WHERE ur.user_id = auth.uid()
                 AND ur.tenant_id = n.tenant_id
                 AND ur.role = 'owner'
-                AND (ur.company_id = n.company_id OR (n.company_id IS NULL AND ur.company_id IS NULL))
+                AND (ur.company_id = n.company_id OR ur.company_id IS NULL)
             )
             WHEN 'manager' THEN EXISTS (
               SELECT 1 FROM public.user_roles ur
               WHERE ur.user_id = auth.uid()
                 AND ur.tenant_id = n.tenant_id
-                AND ur.role = 'manager'
-                AND (ur.company_id = n.company_id OR (n.company_id IS NULL AND ur.company_id IS NULL))
+                AND (ur.role = 'manager' OR (ur.role = 'owner' AND ur.company_id IS NULL))
+                AND (ur.company_id = n.company_id OR ur.company_id IS NULL)
             )
             WHEN 'user' THEN n.audience_id = auth.uid()
             WHEN 'branch' THEN private.can_access_branch(auth.uid(), n.tenant_id, n.audience_id)
