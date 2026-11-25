@@ -127,7 +127,7 @@ export function WorkspaceFormStateKeeper() {
     let restoring = false;
     let discardCurrent = false;
     const restore = () => {
-      if (restored || root.querySelectorAll(FIELD_SELECTOR).length === 0) return;
+      if (restored) return;
       let fields: SavedField[] = [];
       let scrollX = 0;
       let scrollY = 0;
@@ -148,6 +148,8 @@ export function WorkspaceFormStateKeeper() {
           scrollY = Number.isFinite(snapshot.scrollY) ? Number(snapshot.scrollY) : 0;
         }
       } catch { fields = []; }
+      // Wait for delayed form controls, but restore scroll-only pages immediately.
+      if (fields.length > 0 && root.querySelectorAll(FIELD_SELECTOR).length === 0) return;
       if (fields.length || scrollX || scrollY) {
         restoring = true;
         try { applyFields(root, fields); }
