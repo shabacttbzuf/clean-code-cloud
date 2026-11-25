@@ -171,7 +171,7 @@ function ProductsPage() {
             <Card key={p.id} className="overflow-hidden">
               <div className="aspect-square bg-muted">
                 {p.image_url ? (
-                  <img src={p.image_url} alt={p.name} className="h-full w-full object-cover" />
+                  <img src={p.image_url} alt={p.name} loading="lazy" decoding="async" fetchPriority="low" width={480} height={480} className="h-full w-full object-cover" />
                 ) : (
                   <div className="grid h-full place-items-center"><Package className="h-10 w-10 text-muted-foreground/40" /></div>
                 )}
