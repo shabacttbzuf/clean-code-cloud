@@ -294,3 +294,7 @@
 125. `supabase/migrations/20261125100000_prevent_direct_expense_deletion.sql`
 
 **الإجمالي: 125 ترحيلاً.**
+
+126. `supabase/migrations/20261125110000_prevent_product_history_deletion.sql`
+
+**الإجمالي: 126 ترحيلاً.**
