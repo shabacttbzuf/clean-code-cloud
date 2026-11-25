@@ -221,7 +221,14 @@ function SaleDetailPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           {canRefund && <Button variant="destructive" onClick={() => setRefundOpen(true)}><RotateCcw className="ml-2 h-4 w-4" />تسجيل مرتجع</Button>}
-          {permissionsQuery.data?.has("sales.export") && <Button variant="outline" onClick={() => downloadInvoicePDF(invoiceData)}>
+          {permissionsQuery.data?.has("sales.export") && <Button variant="outline" onClick={async () => {
+            try {
+              await downloadInvoicePDF(invoiceData);
+            } catch (error) {
+              console.error("Invoice PDF export failed", error);
+              toast.error("تعذر إنشاء ملف PDF. حاول مرة أخرى.");
+            }
+          }}>
             <Download className="ml-2 h-4 w-4" />تحميل PDF
           </Button>}
           {permissionsQuery.data?.has("sales.print") && <Button onClick={() => {
