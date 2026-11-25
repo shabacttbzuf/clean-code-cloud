@@ -137,7 +137,7 @@ function KitchenPage() {
       }
       try {
         const { error } = await (supabase.rpc as any)("set_kitchen_order_status_idempotent", {
-          _order_id: id, _new_status: status, _notes: null, _idempotency_key: idempotencyKey,
+          _expected_actor_id: userId, _order_id: id, _new_status: status, _notes: null, _idempotency_key: idempotencyKey,
         });
         if (error) throw error;
         return { queued: false };
