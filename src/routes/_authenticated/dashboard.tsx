@@ -363,8 +363,12 @@ function Dashboard() {
 
       const [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount] = await Promise.all([
         salesTodayQuery, salesMonthQuery, salesTrendQuery, refundsTodayQuery, refundsMonthQuery,
-        refundsTrendQuery, expensesMonthQuery, expensesByCategoryQuery, lowStockQuery, sessionsQuery,
-        supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
+        refundsTrendQuery, expensesMonthQuery, expensesByCategoryQuery,
+        hasPermission("inventory.view") ? lowStockQuery : Promise.resolve({ data: [], error: null }),
+        hasPermission("cash.view") ? sessionsQuery : Promise.resolve({ data: [], error: null }),
+        hasPermission("customers.view")
+          ? supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId)
+          : Promise.resolve({ count: null, error: null }),
       ]);
       for (const result of [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount]) {
         if (result.error) throw result.error;
@@ -439,7 +443,7 @@ function Dashboard() {
       }));
 
       const inventoryProductIds = [...new Set((lowStock.data ?? []).map((row) => row.product_id))];
-      const lowStockProducts = inventoryProductIds.length
+      const lowStockProducts = hasPermission("inventory.view") && inventoryProductIds.length
         ? await supabase.from("products").select("id, min_stock").eq("tenant_id", tenantId).in("id", inventoryProductIds)
         : { data: [], error: null };
       if (lowStockProducts.error) throw lowStockProducts.error;
@@ -455,13 +459,13 @@ function Dashboard() {
         totalToday, totalMonth, totalExpMonth,
         profit, unknownCostItems,
         salesTodayCount: (salesToday.data ?? []).length,
-        customersCount: customersCount.count ?? 0,
-        openSessions: (sessions.data ?? []).length,
-        lowStockCount,
+        customersCount: hasPermission("customers.view") ? customersCount.count ?? 0 : null,
+        openSessions: hasPermission("cash.view") ? (sessions.data ?? []).length : null,
+        lowStockCount: hasPermission("inventory.view") ? lowStockCount : null,
         trend, byCat,
       };
     },
-    enabled: !!tenantId && hasPermission("reports.view"),
+    enabled: !!tenantId && hasPermission("reports.view") && hasPermission("sales.view") && hasPermission("expenses.view"),
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
   });
@@ -719,7 +723,7 @@ function Dashboard() {
         </Card>
       )}
 
-      {!hasPermission("reports.view") ? (
+      {(!hasPermission("reports.view") || !hasPermission("sales.view") || !hasPermission("expenses.view")) ? (
         <Card><CardContent className="p-6 text-center text-sm text-muted-foreground">لا تملك الصلاحية اللازمة لعرض المؤشرات المالية والتشغيلية.</CardContent></Card>
       ) : stats.isLoading ? (
         <div className="flex justify-center py-12" role="status" aria-live="polite"><Loader2 className="h-6 w-6 animate-spin text-primary" /><span className="sr-only">جارٍ تحميل مؤشرات لوحة التحكم</span></div>
@@ -787,10 +791,10 @@ function Dashboard() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <MiniStat label="ورديات مفتوحة" value={stats.data.openSessions} icon={<Wallet className="h-4 w-4" />} />
-            <MiniStat label="نفاد مخزون" value={stats.data.lowStockCount} icon={<Package className="h-4 w-4" />} />
+            {stats.data.openSessions !== null && <MiniStat label="ورديات مفتوحة" value={stats.data.openSessions} icon={<Wallet className="h-4 w-4" />} />}
+            {stats.data.lowStockCount !== null && <MiniStat label="نفاد مخزون" value={stats.data.lowStockCount} icon={<Package className="h-4 w-4" />} />}
             <MiniStat label="فواتير اليوم" value={stats.data.salesTodayCount} icon={<Receipt className="h-4 w-4" />} />
-            <MiniStat label="إجمالي العملاء" value={stats.data.customersCount} icon={<UsersIcon className="h-4 w-4" />} />
+            {stats.data.customersCount !== null && <MiniStat label="إجمالي العملاء" value={stats.data.customersCount} icon={<UsersIcon className="h-4 w-4" />} />}
           </div>
         </>
       )}
