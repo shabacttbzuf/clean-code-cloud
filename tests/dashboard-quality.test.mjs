@@ -272,3 +272,16 @@ test("PDF engine is loaded only when an explicit invoice PDF is generated", () =
   assert.match(saleDetail, /await downloadInvoicePDF\(invoiceData\)/);
   assert.match(saleDetail, /Invoice PDF export failed/);
 });
+
+const fontImports = readFileSync(new URL("../src/lib/fonts.ts", import.meta.url), "utf8");
+
+test("font bundles include only Arabic Cairo and Latin Inter subsets", () => {
+  assert.match(fontImports, /@fontsource\/cairo\/arabic-400\.css/);
+  assert.match(fontImports, /@fontsource\/cairo\/arabic-500\.css/);
+  assert.match(fontImports, /@fontsource\/cairo\/arabic-600\.css/);
+  assert.match(fontImports, /@fontsource\/cairo\/arabic-700\.css/);
+  assert.match(fontImports, /@fontsource\/inter\/latin-400\.css/);
+  assert.match(fontImports, /@fontsource\/inter\/latin-500\.css/);
+  assert.match(fontImports, /@fontsource\/inter\/latin-600\.css/);
+  assert.doesNotMatch(fontImports, /@fontsource\/(?:cairo|inter)\/(?:400|500|600|700)\.css/);
+});
