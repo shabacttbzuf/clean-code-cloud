@@ -67,5 +67,5 @@ test("nested routes use the most specific permission mapping", () => {
 
 test("first-owner bootstrap remains reachable only while no Super Owner exists", () => {
   assert.match(source, /normalizedPath === "\/admin" && \(!superOwnerStatusKnown \|\| totalCount > 0\)/);
-  assert.match(source, /const \{ isSuperOwner, totalCount, loading: ownerLoading \} = useSuperOwner\(\)/);
+  assert.match(source, /const \{ isSuperOwner, totalCount, loading: ownerLoading, statusKnown: superOwnerStatusKnown/);
 });
