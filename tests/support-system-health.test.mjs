@@ -45,7 +45,7 @@ test("support center independently probes internet, app host, database, auth, se
   assert.match(support, /\/auth\/v1\/health/);
   assert.match(support, /\/storage\/v1\/status/);
   assert.match(support, /supabase\.auth\.getSession\(\)/);
-  assert.match(support, /supabase\.auth\.getUser\(\)/);
+  assert.match(support, /\/auth\/v1\/user/);
   assert.match(support, /Promise\.all/);
 });
 
