@@ -131,26 +131,33 @@ function RootShell({ children }: { children: ReactNode }) {
 function OfflineStatus() {
   const [online, setOnline] = useState(true);
   useEffect(() => {
+    let disposed = false;
+    let registration: ServiceWorkerRegistration | null = null;
     const update = () => setOnline(navigator.onLine);
+    const checkForUpdate = () => {
+      if (!registration) return;
+      void registration.update().catch((error) => {
+        console.warn("تعذر التحقق من تحديث التطبيق:", error);
+      });
+    };
     update();
     window.addEventListener("online", update);
     window.addEventListener("offline", update);
+    window.addEventListener("online", checkForUpdate);
     if ("serviceWorker" in navigator && window.isSecureContext) {
-      navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }).then((registration) => {
-        // Check for a newer worker whenever connectivity returns; never force a page reload.
-        const checkForUpdate = () => {
-          void registration.update().catch((error) => {
-            console.warn("تعذر التحقق من تحديث التطبيق:", error);
-          });
-        };
-        window.addEventListener("online", checkForUpdate);
+      navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }).then((value) => {
+        if (disposed) return;
+        registration = value;
+        if (navigator.onLine) checkForUpdate();
       }).catch((error) => {
         console.warn("تعذر تسجيل Service Worker:", error);
       });
     }
     return () => {
+      disposed = true;
       window.removeEventListener("online", update);
       window.removeEventListener("offline", update);
+      window.removeEventListener("online", checkForUpdate);
     };
   }, []);
   return (
