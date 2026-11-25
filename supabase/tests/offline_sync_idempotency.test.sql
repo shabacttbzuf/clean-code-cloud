@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(8);
+select plan(10);
 
 select ok(
   to_regclass('private.kitchen_order_sync_requests') is not null
@@ -60,6 +60,23 @@ select ok(
   and position('v_order.tenant_id IS DISTINCT FROM _expected_tenant_id' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure)) > 0
   and position('v_order.branch_id IS DISTINCT FROM _expected_branch_id' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure)) > 0,
   'Replay must match the queued tenant and branch against the persisted kitchen order'
+);
+
+
+select ok(
+  position('_new_status IS NULL' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure)) > 0
+  and position('length(_notes) > 1000' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure)) > 0
+  and position('v_valid_transition' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure)) > 0,
+  'Replay validates status, note length and the allowed kitchen state transition'
+);
+
+select ok(
+  position('UPDATE public.kitchen_orders' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure)) > 0
+  and position('INSERT INTO public.kitchen_order_events' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure)) > 0
+  and position('UPDATE public.sales' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure)) = 0
+  and position('UPDATE public.payments' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure)) = 0
+  and position('UPDATE public.inventory' in pg_get_functiondef('private.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure)) = 0,
+  'Kitchen replay changes only kitchen status and its event log, never sales, payments or inventory'
 );
 
 select * from finish();
