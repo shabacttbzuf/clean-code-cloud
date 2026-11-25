@@ -236,7 +236,7 @@ export async function listOfflineOperations(scope?: OfflineScope): Promise<Offli
     .filter((row) => !scope || (
       row.scope.userId === scope.userId &&
       row.scope.tenantId === scope.tenantId &&
-      row.scope.branchId === scope.branchId &&
+      (scope.branchId === null || row.scope.branchId === scope.branchId) &&
       row.scope.companyId === scope.companyId
     ))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -259,10 +259,31 @@ export async function retryFailedOfflineOperations(scope: OfflineScope): Promise
 }
 
 export async function getLastOfflineSyncAt(scope: OfflineScope): Promise<string | null> {
-  const key = `lastSuccessfulSyncAt:${scope.userId}:${scope.tenantId}:${scope.branchId ?? "all"}:${scope.companyId ?? "none"}`;
-  return (await transaction<string | undefined>([META], "readonly", (tx) =>
-    tx.objectStore(META).get(key),
-  )) ?? null;
+  const prefix = `lastSuccessfulSyncAt:${scope.userId}:${scope.tenantId}:`;
+  if (scope.branchId !== null) {
+    const key = prefix + scope.branchId + ":" + (scope.companyId ?? "none");
+    return (await transaction<string | undefined>([META], "readonly", (tx) => tx.objectStore(META).get(key))) ?? null;
+  }
+  const db = await openDb();
+  try {
+    return await new Promise<string | null>((resolve, reject) => {
+      const tx = db.transaction([META], "readonly");
+      const store = tx.objectStore(META);
+      const keysRequest = store.getAllKeys();
+      const valuesRequest = store.getAll();
+      tx.oncomplete = () => {
+        const keys = keysRequest.result as IDBValidKey[];
+        const values = valuesRequest.result as string[];
+        const suffix = ":" + (scope.companyId ?? "none");
+        const dates = keys.flatMap((key, index) => typeof key === "string" && key.startsWith(prefix) && key.endsWith(suffix) && values[index] ? [values[index]] : []);
+        resolve(dates.sort().at(-1) ?? null);
+      };
+      tx.onerror = () => reject(tx.error ?? new Error("تعذر قراءة سجل المزامنة."));
+      tx.onabort = () => reject(tx.error ?? new Error("أُلغيت قراءة سجل المزامنة."));
+    });
+  } finally {
+    db.close();
+  }
 }
 
 async function claimOperation(id: string, scope: OfflineScope): Promise<OfflineOperation | null> {
@@ -324,6 +345,13 @@ function releaseLease(operation: OfflineOperation) {
 
 export async function syncOfflineOperations(scope: OfflineScope): Promise<void> {
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
+  // Tenant-wide members fan out to exact branch scopes before any operation is claimed.
+  if (scope.branchId === null) {
+    const branchRows = await listOfflineOperations(scope);
+    const branchIds = [...new Set(branchRows.map((row) => row.scope.branchId).filter((id): id is string => !!id))];
+    await Promise.all(branchIds.map((branchId) => syncOfflineOperations({ ...scope, branchId })));
+    return;
+  }
   const lockKey = [scope.userId, scope.tenantId, scope.branchId ?? "*", scope.companyId ?? "*"].join(":");
   const existing = syncPromises.get(lockKey);
   if (existing) return existing;
