@@ -48,10 +48,10 @@ const methodLabels: Record<string, string> = {
 
 function SaleDetailPage() {
   const { id } = Route.useParams();
-  const { tenant, tenantId, userId } = useActiveTenant();
+  const { tenant, tenantId, userId, membership } = useActiveTenant();
   const qc = useQueryClient();
   const permissionsQuery = useQuery({
-    queryKey: ["sale-detail-permissions", tenantId, userId],
+    queryKey: ["sale-detail-permissions", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId! });
       if (error) throw error;
@@ -67,7 +67,7 @@ function SaleDetailPage() {
   const [restockFlags, setRestockFlags] = useState<Record<string, boolean>>({});
 
   const sale = useQuery({
-    queryKey: ["sale", id],
+    queryKey: ["sale", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all", id],
     queryFn: async (): Promise<{ sale: Sale; items: Item[]; branch: Branch | null; cashier: string; refunds: Refund[]; paidAmount: number | null } | null> => {
       const { data: s, error } = await supabase.from("sales").select("*").eq("id", id).maybeSingle();
       if (error) throw error;
@@ -160,7 +160,7 @@ function SaleDetailPage() {
       setRefundOpen(false);
       setRefundReason("");
       setRefundQuantities({});
-      qc.invalidateQueries({ queryKey: ["sale", id] });
+      qc.invalidateQueries({ queryKey: ["sale"] });
       qc.invalidateQueries({ queryKey: ["sales"] });
       qc.invalidateQueries({ queryKey: ["inventory"] });
       qc.invalidateQueries({ queryKey: ["inventory-movements"] });
@@ -221,7 +221,14 @@ function SaleDetailPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           {canRefund && <Button variant="destructive" onClick={() => setRefundOpen(true)}><RotateCcw className="ml-2 h-4 w-4" />تسجيل مرتجع</Button>}
-          {permissionsQuery.data?.has("sales.export") && <Button variant="outline" onClick={() => downloadInvoicePDF(invoiceData)}>
+          {permissionsQuery.data?.has("sales.export") && <Button variant="outline" onClick={async () => {
+            try {
+              await downloadInvoicePDF(invoiceData);
+            } catch (error) {
+              console.error("Invoice PDF export failed", error);
+              toast.error("تعذر إنشاء ملف PDF. حاول مرة أخرى.");
+            }
+          }}>
             <Download className="ml-2 h-4 w-4" />تحميل PDF
           </Button>}
           {permissionsQuery.data?.has("sales.print") && <Button onClick={() => {

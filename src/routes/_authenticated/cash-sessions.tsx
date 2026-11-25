@@ -33,13 +33,13 @@ type ProfileMap = Record<string, string>;
 type BranchMap = Record<string, string>;
 
 function CashSessionsPage() {
-  const { tenantId, userId, isAdmin } = useActiveTenant();
+  const { tenantId, userId, isAdmin, membership } = useActiveTenant();
   const qc = useQueryClient();
   const [closingId, setClosingId] = useState<Session | null>(null);
   const [closingCash, setClosingCash] = useState("0");
 
   const sessions = useQuery({
-    queryKey: ["cash-sessions", tenantId],
+    queryKey: ["cash-sessions", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("cash_sessions")
@@ -67,7 +67,7 @@ function CashSessionsPage() {
 
   // Preload expected cash when opening dialog
   const expectedCashQuery = useQuery({
-    queryKey: ["session-expected-cash", closingId?.id],
+    queryKey: ["session-expected-cash", tenantId, userId, closingId?.id],
     queryFn: async (): Promise<number> => {
       if (!closingId) return 0;
       const salesResult = await supabase

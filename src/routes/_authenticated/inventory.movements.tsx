@@ -34,12 +34,12 @@ const typeMeta: Record<string, { label: string; icon: typeof ArrowUp; className:
 };
 
 function MovementsPage() {
-  const { tenantId } = useActiveTenant();
+  const { tenantId, userId, membership } = useActiveTenant();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
 
   const q = useQuery({
-    queryKey: ["inventory-movements", tenantId],
+    queryKey: ["inventory-movements", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("inventory_transactions")

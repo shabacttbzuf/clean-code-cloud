@@ -48,7 +48,7 @@ const schema = z.object({
 });
 
 function ProductsPage() {
-  const { tenantId, isAdmin, tenant, membership } = useActiveTenant();
+  const { tenantId, userId, isAdmin, tenant, membership } = useActiveTenant();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
@@ -56,7 +56,7 @@ function ProductsPage() {
   const [filterCat, setFilterCat] = useState<string>("all");
 
   const cats = useQuery({
-    queryKey: ["categories-min", tenantId],
+    queryKey: ["categories-min", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async (): Promise<Category[]> => {
       const { data, error } = await supabase.from("categories").select("id, name").eq("tenant_id", tenantId!).order("sort_order");
       if (error) throw error;
@@ -66,7 +66,7 @@ function ProductsPage() {
   });
 
   const products = useQuery({
-    queryKey: ["products", tenantId],
+    queryKey: ["products", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async (): Promise<Product[]> => {
       const { data, error } = await supabase.from("products").select("*").eq("tenant_id", tenantId!).order("created_at", { ascending: false });
       if (error) throw error;
@@ -171,7 +171,7 @@ function ProductsPage() {
             <Card key={p.id} className="overflow-hidden">
               <div className="aspect-square bg-muted">
                 {p.image_url ? (
-                  <img src={p.image_url} alt={p.name} className="h-full w-full object-cover" />
+                  <img src={p.image_url} alt={p.name} loading="lazy" decoding="async" fetchPriority="low" width={480} height={480} className="h-full w-full object-cover" />
                 ) : (
                   <div className="grid h-full place-items-center"><Package className="h-10 w-10 text-muted-foreground/40" /></div>
                 )}

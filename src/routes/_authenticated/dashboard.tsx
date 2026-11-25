@@ -5,7 +5,7 @@ import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { useSuperOwner } from "@/hooks/use-super-owner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
+import { DeferredDashboardCharts } from "@/components/deferred-dashboard-charts";
 import { Loader2, TrendingUp, TrendingDown, Receipt, Wallet, Package, Crown, Building2, Users as UsersIcon, Bell, Wifi, WifiOff, CircleHelp, ClipboardList, ChefHat } from "lucide-react";
 import { formatMoney } from "@/lib/format";
 import { Link } from "@tanstack/react-router";
@@ -73,7 +73,7 @@ function Dashboard() {
   });
 
   const systemStatusQuery = useQuery({
-    queryKey: ["dashboard-system-status", tenantId, user?.id],
+    queryKey: ["dashboard-system-status", tenantId, user?.id, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       if (!tenantId || !user?.id) throw new Error("لا يوجد نطاق شركة أو مستخدم نشط.");
       const checkedAt = new Date().toISOString();
@@ -115,23 +115,26 @@ function Dashboard() {
       return { checkedAt, checks, overall };
     },
     enabled: !!tenantId && !!user?.id,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
     retry: 1,
   });
 
   const dashboardNotifications = useQuery({
-    queryKey: ["dashboard-notifications", tenantId, user?.id],
+    queryKey: ["dashboard-notifications", tenantId, user?.id, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       if (!tenantId || !user?.id) return [];
-      const [items, reads] = await Promise.all([
-        supabase.from("notifications").select("id,title,body,created_at,urgency")
-          .eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(6),
-        (supabase.from("notification_reads" as any) as any).select("notification_id").eq("user_id", user.id),
-      ]);
-      if (items.error) throw items.error;
-      if (reads.error) throw reads.error;
-      const readIds = new Set<string>((reads.data ?? []).map((row: { notification_id: string }) => row.notification_id));
-      return (items.data ?? []).map((item) => ({ ...item, isRead: readIds.has(item.id) }));
+      const itemsResult = await supabase.from("notifications").select("id,title,body,created_at,urgency")
+        .eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(6);
+      if (itemsResult.error) throw itemsResult.error;
+      const itemIds = (itemsResult.data ?? []).map((item) => item.id);
+      const readsResult = itemIds.length
+        ? await (supabase.from("notification_reads" as any) as any).select("notification_id")
+            .eq("user_id", user.id).in("notification_id", itemIds)
+        : { data: [], error: null };
+      if (readsResult.error) throw readsResult.error;
+      const readIds = new Set<string>((readsResult.data ?? []).map((row: { notification_id: string }) => row.notification_id));
+      return (itemsResult.data ?? []).map((item) => ({ ...item, isRead: readIds.has(item.id) }));
     },
     enabled: !!tenantId && !!user?.id && hasPermission("notifications.view"),
     refetchInterval: 30_000,
@@ -169,7 +172,7 @@ function Dashboard() {
   });
 
   const stats = useQuery({
-    queryKey: ["dashboard-stats", tenantId],
+    queryKey: ["dashboard-stats", tenantId, user?.id, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       if (!tenantId) return null;
       const now = new Date();
@@ -178,20 +181,18 @@ function Dashboard() {
       const last30 = new Date(now.getTime() - 29 * 86400000);
       const last30ISO = new Date(last30.getFullYear(), last30.getMonth(), last30.getDate()).toISOString();
 
-      const [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount] = await Promise.all([
-        supabase.from("sales").select("total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfDay),
+      const [salesMonth, salesTrend, refundsMonth, refundsTrend, expenses, lowStock, sessions, customersCount, categories] = await Promise.all([
         supabase.from("sales").select("id, total, subtotal, discount").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfMonth),
         supabase.from("sales").select("total, created_at").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", last30ISO),
-        supabase.from("sale_refunds").select("total").eq("tenant_id", tenantId).gte("created_at", startOfDay),
         supabase.from("sale_refunds").select("id, total, subtotal, discount").eq("tenant_id", tenantId).gte("created_at", startOfMonth),
         supabase.from("sale_refunds").select("total, created_at").eq("tenant_id", tenantId).gte("created_at", last30ISO),
-        supabase.from("expenses").select("amount").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10)),
         supabase.from("expenses").select("amount, category_id").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10)),
-        supabase.from("inventory").select("quantity, product_id").eq("tenant_id", tenantId),
-        supabase.from("cash_sessions").select("id").eq("tenant_id", tenantId).eq("status", "open"),
+        supabase.from("inventory").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).lte("quantity", 0),
+        supabase.from("cash_sessions").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "open"),
         supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
+        supabase.from("expense_categories").select("id, name, color").eq("tenant_id", tenantId),
       ]);
-      for (const result of [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount]) {
+      for (const result of [salesMonth, salesTrend, refundsMonth, refundsTrend, expenses, lowStock, sessions, customersCount, categories]) {
         if (result.error) throw result.error;
       }
 
@@ -207,15 +208,16 @@ function Dashboard() {
       ]);
       if (saleCostRows.error) throw saleCostRows.error;
       if (refundCostRows.error) throw refundCostRows.error;
-      const catsRes = await supabase.from("expense_categories").select("id, name, color").eq("tenant_id", tenantId);
-      if (catsRes.error) throw catsRes.error;
-      const catMap = new Map((catsRes.data ?? []).map((c) => [(c as { id: string }).id, c as { name: string; color: string | null }]));
+      const catMap = new Map((categories.data ?? []).map((c) => [(c as { id: string }).id, c as { name: string; color: string | null }]));
 
-      const totalToday = (salesToday.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0)
-        - (refundsToday.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
+      const todayStartTime = new Date(startOfDay).getTime();
+      const salesTodayRows = (salesTrend.data ?? []).filter((row) => new Date(row.created_at).getTime() >= todayStartTime);
+      const refundsTodayRows = (refundsTrend.data ?? []).filter((row) => new Date(row.created_at).getTime() >= todayStartTime);
+      const totalToday = salesTodayRows.reduce((sum, row) => sum + Number(row.total), 0)
+        - refundsTodayRows.reduce((sum, row) => sum + Number(row.total), 0);
       const totalMonth = (salesMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0)
         - (refundsMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
-      const totalExpMonth = (expensesMonth.data ?? []).reduce((s, r) => s + Number((r as { amount: number }).amount), 0);
+      const totalExpMonth = (expenses.data ?? []).reduce((s, r) => s + Number((r as { amount: number }).amount), 0);
       const unknownSaleCosts = (saleCostRows.data ?? []).filter((row) => row.cost_price_snapshot == null).length;
       const unknownReturnedCosts = (refundCostRows.data ?? []).filter((row) => row.restocked && row.cost_price_snapshot == null).length;
       const unknownCostItems = unknownSaleCosts + unknownReturnedCosts;
@@ -252,7 +254,7 @@ function Dashboard() {
 
       // Expenses by category
       const byCatMap = new Map<string, number>();
-      for (const e of expByCat.data ?? []) {
+      for (const e of expenses.data ?? []) {
         const cid = (e as { category_id: string | null }).category_id ?? "other";
         byCatMap.set(cid, (byCatMap.get(cid) ?? 0) + Number((e as { amount: number }).amount));
       }
@@ -263,24 +265,25 @@ function Dashboard() {
         color: catMap.get(cid)?.color ?? colors[i % colors.length],
       }));
 
-      const lowStockCount = (lowStock.data ?? []).filter((r) => Number((r as { quantity: number }).quantity) <= 0).length;
+      const lowStockCount = lowStock.count ?? 0;
 
       return {
         totalToday, totalMonth, totalExpMonth,
         profit, unknownCostItems,
-        salesTodayCount: (salesToday.data ?? []).length,
+        salesTodayCount: salesTodayRows.length,
         customersCount: customersCount.count ?? 0,
-        openSessions: (sessions.data ?? []).length,
+        openSessions: sessions.count ?? 0,
         lowStockCount,
         trend, byCat,
       };
     },
     enabled: !!tenantId,
+    staleTime: 15_000,
   });
 
 
   const latestOrders = useQuery({
-    queryKey: ["dashboard-latest-orders", tenantId, membership?.branch_id],
+    queryKey: ["dashboard-latest-orders", tenantId, user?.id, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       if (!tenantId) return [];
       let query = supabase.from("sales").select("id,invoice_no,total,status,created_at,order_type,customer_id")
@@ -295,7 +298,7 @@ function Dashboard() {
     staleTime: 5_000,
   });
   const kitchenOverview = useQuery({
-    queryKey: ["dashboard-kitchen-overview", tenantId, membership?.branch_id],
+    queryKey: ["dashboard-kitchen-overview", tenantId, user?.id, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       if (!tenantId) return [];
       let query = (supabase.from("kitchen_orders" as any) as any).select("id,branch_id,sale_id,status,created_at")
@@ -326,7 +329,7 @@ function Dashboard() {
   return (
     <div className="space-y-6">
       <section className="relative isolate min-h-[205px] overflow-hidden rounded-2xl border border-[#d7e2f6] bg-[#102f5c] text-white shadow-[0_8px_24px_rgba(16,47,92,.16)] sm:min-h-[220px]" aria-labelledby="dashboard-welcome-title">
-        <img src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1800&q=85" alt="" className="absolute inset-0 h-full w-full object-cover opacity-75" />
+        <img src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1280&q=70" alt="" fetchPriority="high" decoding="async" width={1280} height={720} className="absolute inset-0 h-full w-full object-cover opacity-75" />
         <div className="absolute inset-0 bg-gradient-to-l from-[#061c3d]/95 via-[#0c2d59]/80 to-[#102f5c]/5" />
         <div className="absolute inset-x-0 bottom-0 h-2 bg-gradient-to-l from-[#f0b52f] via-[#d9a441] to-transparent" />
         <div className="relative z-[1] flex min-h-[205px] flex-col justify-center px-6 py-7 sm:min-h-[220px] sm:px-10">
@@ -350,7 +353,7 @@ function Dashboard() {
           {campaignsQuery.data.map((campaign) => {
             const content = (
               <div className="relative flex min-h-28 overflow-hidden rounded-xl border bg-card shadow-sm">
-                {campaign.image_url && <img src={campaign.image_url} alt="" className="absolute inset-0 h-full w-full object-cover opacity-20" />}
+                {campaign.image_url && <img src={campaign.image_url} alt="" loading="lazy" decoding="async" width={960} height={360} className="absolute inset-0 h-full w-full object-cover opacity-20" />}
                 <div className="relative z-[1] flex w-full flex-col justify-center gap-1 bg-gradient-to-l from-background/95 via-background/85 to-background/40 p-4">
                   <div className="text-base font-bold">{campaign.title}</div>
                   {campaign.description && <p className="max-w-2xl text-sm text-muted-foreground">{campaign.description}</p>}
@@ -406,44 +409,7 @@ function Dashboard() {
             <Kpi label="الربح التقديري" value={stats.data.profit === null ? "غير مكتمل" : `${formatMoney(stats.data.profit)} ${currency}`} sub={stats.data.unknownCostItems > 0 ? `${stats.data.unknownCostItems} صنفاً بلا تكلفة محفوظة` : "بعد تكلفة البضاعة والمصروفات المسجلة"} icon={<Wallet className="h-5 w-5" />} tone={stats.data.profit !== null && stats.data.profit >= 0 ? "success" : "destructive"} />
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-3">
-            <Card className="lg:col-span-2">
-              <CardContent className="p-4">
-                <div className="mb-3 text-sm font-semibold">مبيعات آخر 30 يوم</div>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={stats.data.trend}>
-                      <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                      <XAxis dataKey="day" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} />
-                      <Tooltip />
-                      <Line type="monotone" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="mb-3 text-sm font-semibold">توزيع المصروفات</div>
-                {stats.data.byCat.length === 0 ? (
-                  <div className="grid h-64 place-items-center text-sm text-muted-foreground">لا توجد مصروفات</div>
-                ) : (
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={stats.data.byCat} dataKey="value" nameKey="name" outerRadius={80} label>
-                          {stats.data.byCat.map((e, i) => <Cell key={i} fill={e.color ?? "hsl(var(--primary))"} />)}
-                        </Pie>
-                        <Tooltip />
-                        <Legend wrapperStyle={{ fontSize: 11 }} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+          <DeferredDashboardCharts trend={stats.data.trend} byCategory={stats.data.byCat} />
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <MiniStat label="ورديات مفتوحة" value={stats.data.openSessions} icon={<Wallet className="h-4 w-4" />} />

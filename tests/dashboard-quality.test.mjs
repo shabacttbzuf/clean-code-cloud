@@ -8,9 +8,13 @@ const layout = readFileSync(new URL("../src/routes/_authenticated/route.tsx", im
 const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 
 test("dashboard rejects partial query failures instead of presenting misleading totals", () => {
-  assert.match(dashboard, /for \(const result of \[salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount\]\)/);
+  assert.match(dashboard, /for \(const result of \[salesMonth, salesTrend, refundsMonth, refundsTrend, expenses, lowStock, sessions, customersCount, categories\]\)/);
+  assert.match(dashboard, /const salesTodayRows = \(salesTrend\.data \?\? \[\]\)\.filter/);
+  assert.match(dashboard, /const refundsTodayRows = \(refundsTrend\.data \?\? \[\]\)\.filter/);
   assert.match(dashboard, /if \(result\.error\) throw result\.error/);
-  assert.match(dashboard, /if \(catsRes\.error\) throw catsRes\.error/);
+  assert.match(dashboard, /const totalExpMonth = \(expenses\.data \?\? \[\]\)/);
+  assert.match(dashboard, /const lowStockCount = lowStock\.count \?\? 0/);
+  assert.match(dashboard, /openSessions: sessions\.count \?\? 0/);
   assert.match(dashboard, /لم يتم عرض أرقام جزئية أو مضللة/);
 });
 
@@ -229,4 +233,101 @@ test("dashboard provides permission-scoped operations, notifications, and a trut
   assert.match(dashboard, /hasPermission\("sales.create"\)/);
   assert.match(dashboard, /hasPermission\("kitchen.view"\)/);
   assert.match(dashboard, /hasPermission\("reports.view"\)/);
+});
+
+
+const deferredCharts = readFileSync(new URL("../src/components/deferred-dashboard-charts.tsx", import.meta.url), "utf8");
+const chartModule = readFileSync(new URL("../src/components/dashboard-charts.tsx", import.meta.url), "utf8");
+const productPage = readFileSync(new URL("../src/routes/_authenticated/products.tsx", import.meta.url), "utf8");
+
+test("dashboard defers the Recharts bundle until charts approach the viewport", () => {
+  assert.match(dashboard, /DeferredDashboardCharts/);
+  assert.doesNotMatch(dashboard, /from "recharts"/);
+  assert.match(deferredCharts, /lazy\(\(\) =>/);
+  assert.match(deferredCharts, /IntersectionObserver/);
+  assert.match(deferredCharts, /rootMargin: "240px 0px"/);
+  assert.match(chartModule, /from "recharts"/);
+});
+
+test("dashboard and product imagery use browser-native loading and decoding hints", () => {
+  assert.match(dashboard, /fetchPriority="high"/);
+  assert.match(dashboard, /loading="lazy" decoding="async"/);
+  assert.match(productPage, /loading="lazy" decoding="async" fetchPriority="low"/);
+});
+
+test("sidebar, route guard, and global search share one permission cache entry", () => {
+  assert.match(appSidebar, /queryKey: \["route-effective-permissions", tenantId, userId\]/);
+  assert.match(authLayout, /queryKey: \["route-effective-permissions", tenantId, userId\]/);
+  assert.match(authLayout, /queryKey: \["route-effective-permissions", tenantId, user\?\.id\]/);
+  assert.match(appLauncher, /queryKey: \["route-effective-permissions", tenantId, userId\]/);
+});
+
+const invoicePdf = readFileSync(new URL("../src/lib/invoice-pdf.ts", import.meta.url), "utf8");
+const saleDetail = readFileSync(new URL("../src/routes/_authenticated/sales.$id.tsx", import.meta.url), "utf8");
+
+test("PDF engine is loaded only when an explicit invoice PDF is generated", () => {
+  assert.doesNotMatch(invoicePdf, /^import\s+\{\s*jsPDF\s*\}\s+from\s+["']jspdf["']/m);
+  assert.match(invoicePdf, /await import\(["']jspdf["']\)/);
+  assert.match(invoicePdf, /async function generateInvoicePDF|async function generateInvoicePDF/);
+  assert.match(saleDetail, /await downloadInvoicePDF\(invoiceData\)/);
+  assert.match(saleDetail, /Invoice PDF export failed/);
+});
+
+const fontImports = readFileSync(new URL("../src/lib/fonts.ts", import.meta.url), "utf8");
+
+test("font bundles include only Arabic Cairo and Latin Inter subsets", () => {
+  assert.match(fontImports, /@fontsource\/cairo\/arabic-400\.css/);
+  assert.match(fontImports, /@fontsource\/cairo\/arabic-500\.css/);
+  assert.match(fontImports, /@fontsource\/cairo\/arabic-600\.css/);
+  assert.match(fontImports, /@fontsource\/cairo\/arabic-700\.css/);
+  assert.match(fontImports, /@fontsource\/inter\/latin-400\.css/);
+  assert.match(fontImports, /@fontsource\/inter\/latin-500\.css/);
+  assert.match(fontImports, /@fontsource\/inter\/latin-600\.css/);
+  assert.doesNotMatch(fontImports, /@fontsource\/(?:cairo|inter)\/(?:400|500|600|700)\.css/);
+});
+
+const purchasesPage = readFileSync(new URL("../src/routes/_authenticated/purchases.tsx", import.meta.url), "utf8");
+const movementsPage = readFileSync(new URL("../src/routes/_authenticated/inventory.movements.tsx", import.meta.url), "utf8");
+const cashSessionsPage = readFileSync(new URL("../src/routes/_authenticated/cash-sessions.tsx", import.meta.url), "utf8");
+const expensesPage = readFileSync(new URL("../src/routes/_authenticated/expenses.tsx", import.meta.url), "utf8");
+const customersPage = readFileSync(new URL("../src/routes/_authenticated/customers.tsx", import.meta.url), "utf8");
+const reportsPage = readFileSync(new URL("../src/routes/_authenticated/reports.tsx", import.meta.url), "utf8");
+
+test("tenant data caches are partitioned by authenticated user and active branch where applicable", () => {
+  assert.match(sales, /queryKey: \["sales", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(purchasesPage, /queryKey: \["purchases", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(movementsPage, /queryKey: \["inventory-movements", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(cashSessionsPage, /queryKey: \["cash-sessions", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(cashSessionsPage, /queryKey: \["session-expected-cash", tenantId, userId, closingId\?\.id\]/);
+  assert.match(expensesPage, /queryKey: \["expenses", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(customersPage, /queryKey: \["customers", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(reportsPage, /queryKey: \["reports", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all", from, to, branchId\]/);
+});
+
+test("dashboard aggregate cache is partitioned by active user, company, and branch", () => {
+  assert.match(dashboard, /queryKey: \["dashboard-stats", tenantId, user\?\.id, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+});
+
+test("branch selector caches are partitioned by authenticated company, branch, and access scope", () => {
+  assert.match(pos, /queryKey: \["branches-active", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all", isAdmin, isSuperOwner\]/);
+  assert.match(inventory, /queryKey: \["branches-all", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(purchases, /queryKey: \["branches-active-purchase", tenantId, userId, companyId \?\? "tenant", defaultBranchId \?\? "all"\]/);
+  assert.match(purchases, /companyId=\{membership\?\.company_id \?\? null\}/);
+});
+
+const suppliersCachePage = readFileSync(new URL("../src/routes/_authenticated/suppliers.tsx", import.meta.url), "utf8");
+const notificationsCachePage = readFileSync(new URL("../src/routes/_authenticated/notifications.tsx", import.meta.url), "utf8");
+
+test("catalogue, suppliers, notifications, and detail caches cannot cross company or branch scope", () => {
+  assert.match(pos, /queryKey: \["pos-customers", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(pos, /queryKey: \["categories-min", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(pos, /queryKey: \["products-pos", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(products, /queryKey: \["products", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(categories, /queryKey: \["categories", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(suppliersCachePage, /queryKey: \["suppliers", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(suppliersCachePage, /queryKey: \["supplier-ledger", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(notificationsCachePage, /queryKey: \["notifications-list", tenantId, user\?\.id, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(authLayout, /queryKey: \["topbar-notifications", tenantId, user\?\.id, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(dashboard, /queryKey: \["dashboard-notifications", tenantId, user\?\.id, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(saleDetail, /queryKey: \["sale", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all", id\]/);
 });

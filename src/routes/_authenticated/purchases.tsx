@@ -48,7 +48,7 @@ function PurchasesPage() {
   const canReturn = isAdmin || role === "warehouse";
 
   const purchases = useQuery({
-    queryKey: ["purchases", tenantId],
+    queryKey: ["purchases", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       const baseList = await fetchAllRows<Omit<PurchaseRow, "returned_total">>(
         supabase.from("purchases")
@@ -167,6 +167,7 @@ function PurchasesPage() {
           tenantId={tenantId!}
           userId={userId!}
           defaultBranchId={membership?.branch_id ?? null}
+          companyId={membership?.company_id ?? null}
         />
       </Dialog>
       <Dialog open={!!returningPurchaseId} onOpenChange={(open) => { if (!open) setReturningPurchaseId(null); }}>
@@ -280,8 +281,8 @@ function PurchaseReturnDialog({
 }
 
 function NewPurchaseDialog({
-  onDone, tenantId, userId, defaultBranchId,
-}: { onDone: () => void; tenantId: string; userId: string; defaultBranchId: string | null }) {
+  onDone, tenantId, userId, defaultBranchId, companyId,
+}: { onDone: () => void; tenantId: string; userId: string; defaultBranchId: string | null; companyId: string | null }) {
   const [branchId, setBranchId] = useState<string>(defaultBranchId ?? "");
   const [supplierId, setSupplierId] = useState<string>("none");
   const [reference, setReference] = useState("");
@@ -290,21 +291,21 @@ function NewPurchaseDialog({
   const [addProdId, setAddProdId] = useState<string>("");
 
   const branches = useQuery({
-    queryKey: ["branches-active-purchase", tenantId],
+    queryKey: ["branches-active-purchase", tenantId, userId, companyId ?? "tenant", defaultBranchId ?? "all"],
     queryFn: async () => {
       const { data } = await supabase.from("branches").select("id, name").eq("tenant_id", tenantId).eq("is_active", true);
       return (data ?? []) as Array<{ id: string; name: string }>;
     },
   });
   const suppliers = useQuery({
-    queryKey: ["suppliers-min", tenantId],
+    queryKey: ["suppliers-min", tenantId, userId, companyId ?? "tenant", defaultBranchId ?? "all"],
     queryFn: async () => {
       const { data } = await supabase.from("suppliers").select("id, name").eq("tenant_id", tenantId).eq("is_active", true);
       return (data ?? []) as Array<{ id: string; name: string }>;
     },
   });
   const products = useQuery({
-    queryKey: ["products-purchase", tenantId],
+    queryKey: ["products-purchase", tenantId, userId, companyId ?? "tenant", defaultBranchId ?? "all"],
     queryFn: async (): Promise<Product[]> => {
       const { data } = await supabase.from("products").select("id, name, unit, cost_price").eq("tenant_id", tenantId).eq("is_active", true).order("name");
       return (data ?? []).map((p) => ({ ...(p as { id: string; name: string; unit: string; cost_price: number }) }));

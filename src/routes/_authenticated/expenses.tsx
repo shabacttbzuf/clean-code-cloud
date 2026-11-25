@@ -20,22 +20,22 @@ export const Route = createFileRoute("/_authenticated/expenses")({ component: Pa
 type Expense = { id: string; amount: number; description: string | null; paid_at: string; category_id: string | null; branch_id: string | null };
 
 function Page() {
-  const { tenantId, userId, tenant, isAdmin } = useActiveTenant();
+  const { tenantId, userId, tenant, isAdmin, membership } = useActiveTenant();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
 
   const cats = useQuery({
-    queryKey: ["expense-categories-min", tenantId],
+    queryKey: ["expense-categories-min", tenantId, userId],
     queryFn: async () => { const { data } = await supabase.from("expense_categories").select("id, name, icon").eq("tenant_id", tenantId!); return (data ?? []) as Array<{ id: string; name: string; icon: string | null }>; },
     enabled: !!tenantId,
   });
   const branches = useQuery({
-    queryKey: ["branches-exp", tenantId],
+    queryKey: ["branches-exp", tenantId, userId, membership?.branch_id],
     queryFn: async () => { const { data } = await supabase.from("branches").select("id, name").eq("tenant_id", tenantId!); return (data ?? []) as Array<{ id: string; name: string }>; },
     enabled: !!tenantId,
   });
   const q = useQuery({
-    queryKey: ["expenses", tenantId],
+    queryKey: ["expenses", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       const { data, error } = await supabase.from("expenses").select("id, amount, description, paid_at, category_id, branch_id").eq("tenant_id", tenantId!).order("paid_at", { ascending: false }).limit(200);
       if (error) throw error;

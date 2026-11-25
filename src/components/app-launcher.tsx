@@ -49,7 +49,7 @@ export function AppLauncher() {
   }, []);
 
   const permissions = useQuery({
-    queryKey: ["app-launcher-permissions", tenantId, userId],
+    queryKey: ["route-effective-permissions", tenantId, userId],
     queryFn: async () => {
       if (!tenantId) return new Set<string>();
       const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId });
@@ -57,7 +57,7 @@ export function AppLauncher() {
       return new Set<string>((data ?? []) as string[]);
     },
     enabled: !!tenantId && !!userId && !isSuperOwner,
-    staleTime: 30_000,
+    staleTime: 15_000,
   });
 
   const groups = useMemo(() => {

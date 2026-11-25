@@ -95,7 +95,7 @@ export function WorkspaceTabs() {
         const active = activePath === tab.path;
         return (
           <div key={tab.path} className={`group inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-colors ${active ? "border-primary/30 bg-primary text-primary-foreground shadow-sm" : "border-border bg-card text-foreground hover:border-primary/30 hover:bg-primary/5"}`}>
-            <button type="button" onClick={() => navigate({ to: tab.path as any })} className="inline-flex items-center gap-2 whitespace-nowrap" aria-current={active ? "page" : undefined}>
+            <button type="button" onClick={() => navigate({ to: tab.path as any })} className="inline-flex min-h-9 items-center gap-2 whitespace-nowrap" aria-current={active ? "page" : undefined}>
               {tab.path === "/dashboard" ? <Home className="h-4 w-4" /> : null}
               <span>{tab.title}</span>
             </button>

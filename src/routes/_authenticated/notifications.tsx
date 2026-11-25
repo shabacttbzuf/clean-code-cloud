@@ -14,12 +14,12 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/_authenticated/notifications")({ component: NotificationsPage });
 
 function NotificationsPage() {
-  const { tenantId, loading, hasPermission, isSuperOwner } = useActiveTenant();
+  const { tenantId, loading, hasPermission, isSuperOwner, membership } = useActiveTenant();
   const navigate = useNavigate();
   const { user } = useAuthSession();
   const qc = useQueryClient();
   const q = useQuery({
-    queryKey: ["notifications-list", tenantId, user?.id],
+    queryKey: ["notifications-list", tenantId, user?.id, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       const [items, readIds] = await Promise.all([
         (async () => {
