@@ -311,5 +311,6 @@ test("dashboard aggregate cache is partitioned by active user, company, and bran
 test("branch selector caches are partitioned by authenticated company, branch, and access scope", () => {
   assert.match(pos, /queryKey: \["branches-active", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all", isAdmin, isSuperOwner\]/);
   assert.match(inventory, /queryKey: \["branches-all", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
-  assert.match(purchases, /queryKey: \["branches-active-purchase", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(purchases, /queryKey: \["branches-active-purchase", tenantId, userId, companyId \?\? "tenant", defaultBranchId \?\? "all"\]/);
+  assert.match(purchases, /companyId=\{membership\?\.company_id \?\? null\}/);
 });
