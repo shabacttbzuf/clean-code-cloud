@@ -266,3 +266,7 @@
 114. `supabase/migrations/20261124151227_move_marketing_analytics_to_private_wrappers.sql`
 
 **الإجمالي: 114 ترحيلاً.**
+
+115. `supabase/migrations/20261125000100_offline_sync_kitchen_idempotency.sql`
+
+**الإجمالي: 115 ترحيلاً.**
