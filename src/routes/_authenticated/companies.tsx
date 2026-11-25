@@ -19,14 +19,18 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/_authenticated/companies")({ component: CompaniesPage });
 
 function CompaniesPage() {
-  const { tenantId, role, loading } = useActiveTenant();
+  const { tenantId, loading, isSuperOwner, hasPermission } = useActiveTenant();
   const qc = useQueryClient();
   const upsertFn = useServerFn(upsertCompany);
   const delFn = useServerFn(deleteCompany);
   const [editing, setEditing] = useState<any | null>(null);
   const [open, setOpen] = useState(false);
 
-  const canAccess = role === "owner" || role === "manager";
+  const canView = isSuperOwner || hasPermission("companies.view") || hasPermission("companies.manage");
+  const canCreate = isSuperOwner || hasPermission("companies.create") || hasPermission("companies.manage");
+  const canEdit = isSuperOwner || hasPermission("companies.edit") || hasPermission("companies.manage");
+  const canDelete = isSuperOwner || hasPermission("companies.delete") || hasPermission("companies.manage");
+  const canAccess = canView || canCreate || canEdit || canDelete;
 
   const q = useQuery({
     queryKey: ["companies-list", tenantId],
@@ -42,7 +46,7 @@ function CompaniesPage() {
   });
 
   const save = useMutation({
-    mutationFn: (v: any) => upsertFn({ data: { ...v, tenant_id: tenantId! } }),
+    mutationFn: (v: any) => { if (v.id ? !canEdit : !canCreate) throw new Error("لا تملك صلاحية إنشاء الشركات أو تعديلها."); return upsertFn({ data: { ...v, tenant_id: tenantId! } }); },
     onSuccess: () => {
       toast.success("تم الحفظ");
       qc.invalidateQueries({ queryKey: ["companies-list", tenantId] });
@@ -53,7 +57,7 @@ function CompaniesPage() {
   });
 
   const del = useMutation({
-    mutationFn: (id: string) => delFn({ data: { id, tenant_id: tenantId! } }),
+    mutationFn: (id: string) => { if (!canDelete) throw new Error("لا تملك صلاحية حذف الشركات."); return delFn({ data: { id, tenant_id: tenantId! } }); },
     onSuccess: () => {
       toast.success("تم الحذف");
       qc.invalidateQueries({ queryKey: ["companies-list", tenantId] });
@@ -80,7 +84,7 @@ function CompaniesPage() {
       <PageHeader
         title="الشركات"
         subtitle="هيكلة مؤسسية للشركات (قابلة للتوسع لعدد غير محدود)."
-        action={
+        action={canCreate && (
           <Button
             onClick={() => {
               setEditing({});
@@ -89,7 +93,7 @@ function CompaniesPage() {
           >
             <Plus className="ml-2 h-4 w-4" /> شركة جديدة
           </Button>
-        }
+        )}
       />
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         {(q.data ?? []).map((c: any) => (
@@ -105,12 +109,12 @@ function CompaniesPage() {
               {c.tax_number && <div className="text-xs" dir="ltr">RN: {c.tax_number}</div>}
               {c.description && <div className="text-xs text-muted-foreground line-clamp-2">{c.description}</div>}
               <div className="flex justify-end gap-1"><Button size="sm" variant="outline" asChild><a href={"/companies/" + c.id}>عرض التفاصيل</a></Button>
-                <Button size="sm" variant="ghost" onClick={() => { setEditing(c); setOpen(true); }}>
+                {canEdit && <Button size="sm" variant="ghost" onClick={() => { setEditing(c); setOpen(true); }}>
                   <Pencil className="h-3 w-3" />
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => confirm("حذف؟") && del.mutate(c.id)}>
+                </Button>}
+                {canDelete && <Button size="sm" variant="ghost" onClick={() => confirm("حذف؟") && del.mutate(c.id)}>
                   <Trash2 className="h-3 w-3" />
-                </Button>
+                </Button>}
               </div>
             </CardContent>
           </Card>
