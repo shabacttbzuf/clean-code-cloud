@@ -380,7 +380,9 @@ BEGIN
   IF NEW.tenant_id IS NULL OR NEW.company_id IS NULL THEN RETURN NEW; END IF;
   IF TG_OP = 'INSERT' THEN
     IF NEW.status::text <> 'pending_approval' THEN RETURN NEW; END IF;
-  ELSIF OLD.status IS NOT DISTINCT FROM NEW.status THEN
+  ELSIF OLD.status IS NOT DISTINCT FROM NEW.status
+    AND OLD.company_id IS NOT DISTINCT FROM NEW.company_id
+    AND OLD.tenant_id IS NOT DISTINCT FROM NEW.tenant_id THEN
     RETURN NEW;
   ELSIF NEW.status::text NOT IN ('pending_approval','suspended','frozen','archived') THEN
     RETURN NEW;
@@ -423,7 +425,7 @@ $function$;
 REVOKE ALL ON FUNCTION private.notify_admin_account_status_events() FROM PUBLIC, anon, authenticated;
 DROP TRIGGER IF EXISTS trg_notify_admin_account_status_events ON public.profiles;
 CREATE TRIGGER trg_notify_admin_account_status_events
-AFTER INSERT OR UPDATE OF status ON public.profiles
+AFTER INSERT OR UPDATE OF status, company_id, tenant_id ON public.profiles
 FOR EACH ROW EXECUTE FUNCTION private.notify_admin_account_status_events();
 
 COMMIT;
