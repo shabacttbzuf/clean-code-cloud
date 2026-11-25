@@ -153,7 +153,7 @@ function CategoriesPage() {
                   <div className="flex gap-1">
                     {canEditCategory && <Button size="icon" variant="ghost" onClick={() => { setEditing(c); setOpen(true); }}>
                       <Edit className="h-4 w-4" />
-                    </Button>
+                    </Button>}
                     {canDeleteCategory && <Button size="icon" variant="ghost" className="text-destructive" onClick={() => {
                       if (confirm(`حذف "${c.name}"؟`)) del.mutate(c.id);
                     }}>
