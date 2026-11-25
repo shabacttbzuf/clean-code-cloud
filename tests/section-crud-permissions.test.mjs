@@ -35,6 +35,13 @@ test("legacy manage grants are copied without revoking existing role grants", ()
   assert.ok(migration.includes("rp.role_kind='custom'"));
 });
 
+test("view-only roles are not silently granted print or export access", () => {
+  assert.doesNotMatch(migration, /\\('(?:[^']+\\.view|reports\\.export)','[^']+\\.(?:print|export)'\\)/);
+  for (const key of ["reports.print","ads.print","ads.export","promotions.print","promotions.export","hr.payroll.export"]) {
+    assert.ok(migration.includes("'" + key + "'"), "missing explicit action key " + key);
+  }
+});
+
 test("database action gates remain restrictive and retain legacy manage fallbacks", () => {
   for (const table of ["categories","customers","expenses","expense_categories","suppliers","departments","job_titles","employment_types","companies","employees","attendance","bonuses","deductions","leave_types","notifications","purchase_returns","purchase_return_items"]) {
     assert.ok(migration.includes("('" + table + "'"), "missing table gate " + table);
