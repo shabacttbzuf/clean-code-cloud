@@ -115,7 +115,8 @@ function Dashboard() {
       return { checkedAt, checks, overall };
     },
     enabled: !!tenantId && !!user?.id,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
     retry: 1,
   });
 
@@ -123,15 +124,17 @@ function Dashboard() {
     queryKey: ["dashboard-notifications", tenantId, user?.id],
     queryFn: async () => {
       if (!tenantId || !user?.id) return [];
-      const [items, reads] = await Promise.all([
-        supabase.from("notifications").select("id,title,body,created_at,urgency")
-          .eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(6),
-        (supabase.from("notification_reads" as any) as any).select("notification_id").eq("user_id", user.id),
-      ]);
-      if (items.error) throw items.error;
-      if (reads.error) throw reads.error;
-      const readIds = new Set<string>((reads.data ?? []).map((row: { notification_id: string }) => row.notification_id));
-      return (items.data ?? []).map((item) => ({ ...item, isRead: readIds.has(item.id) }));
+      const itemsResult = await supabase.from("notifications").select("id,title,body,created_at,urgency")
+        .eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(6);
+      if (itemsResult.error) throw itemsResult.error;
+      const itemIds = (itemsResult.data ?? []).map((item) => item.id);
+      const readsResult = itemIds.length
+        ? await (supabase.from("notification_reads" as any) as any).select("notification_id")
+            .eq("user_id", user.id).in("notification_id", itemIds)
+        : { data: [], error: null };
+      if (readsResult.error) throw readsResult.error;
+      const readIds = new Set<string>((readsResult.data ?? []).map((row: { notification_id: string }) => row.notification_id));
+      return (itemsResult.data ?? []).map((item) => ({ ...item, isRead: readIds.has(item.id) }));
     },
     enabled: !!tenantId && !!user?.id && hasPermission("notifications.view"),
     refetchInterval: 30_000,
@@ -178,20 +181,20 @@ function Dashboard() {
       const last30 = new Date(now.getTime() - 29 * 86400000);
       const last30ISO = new Date(last30.getFullYear(), last30.getMonth(), last30.getDate()).toISOString();
 
-      const [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount] = await Promise.all([
+      const [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expenses, lowStock, sessions, customersCount, categories] = await Promise.all([
         supabase.from("sales").select("total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfDay),
         supabase.from("sales").select("id, total, subtotal, discount").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfMonth),
         supabase.from("sales").select("total, created_at").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", last30ISO),
         supabase.from("sale_refunds").select("total").eq("tenant_id", tenantId).gte("created_at", startOfDay),
         supabase.from("sale_refunds").select("id, total, subtotal, discount").eq("tenant_id", tenantId).gte("created_at", startOfMonth),
         supabase.from("sale_refunds").select("total, created_at").eq("tenant_id", tenantId).gte("created_at", last30ISO),
-        supabase.from("expenses").select("amount").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10)),
         supabase.from("expenses").select("amount, category_id").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10)),
-        supabase.from("inventory").select("quantity, product_id").eq("tenant_id", tenantId),
-        supabase.from("cash_sessions").select("id").eq("tenant_id", tenantId).eq("status", "open"),
+        supabase.from("inventory").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).lte("quantity", 0),
+        supabase.from("cash_sessions").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "open"),
         supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
+        supabase.from("expense_categories").select("id, name, color").eq("tenant_id", tenantId),
       ]);
-      for (const result of [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount]) {
+      for (const result of [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expenses, lowStock, sessions, customersCount, categories]) {
         if (result.error) throw result.error;
       }
 
@@ -207,15 +210,13 @@ function Dashboard() {
       ]);
       if (saleCostRows.error) throw saleCostRows.error;
       if (refundCostRows.error) throw refundCostRows.error;
-      const catsRes = await supabase.from("expense_categories").select("id, name, color").eq("tenant_id", tenantId);
-      if (catsRes.error) throw catsRes.error;
-      const catMap = new Map((catsRes.data ?? []).map((c) => [(c as { id: string }).id, c as { name: string; color: string | null }]));
+      const catMap = new Map((categories.data ?? []).map((c) => [(c as { id: string }).id, c as { name: string; color: string | null }]));
 
       const totalToday = (salesToday.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0)
         - (refundsToday.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
       const totalMonth = (salesMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0)
         - (refundsMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
-      const totalExpMonth = (expensesMonth.data ?? []).reduce((s, r) => s + Number((r as { amount: number }).amount), 0);
+      const totalExpMonth = (expenses.data ?? []).reduce((s, r) => s + Number((r as { amount: number }).amount), 0);
       const unknownSaleCosts = (saleCostRows.data ?? []).filter((row) => row.cost_price_snapshot == null).length;
       const unknownReturnedCosts = (refundCostRows.data ?? []).filter((row) => row.restocked && row.cost_price_snapshot == null).length;
       const unknownCostItems = unknownSaleCosts + unknownReturnedCosts;
@@ -252,7 +253,7 @@ function Dashboard() {
 
       // Expenses by category
       const byCatMap = new Map<string, number>();
-      for (const e of expByCat.data ?? []) {
+      for (const e of expenses.data ?? []) {
         const cid = (e as { category_id: string | null }).category_id ?? "other";
         byCatMap.set(cid, (byCatMap.get(cid) ?? 0) + Number((e as { amount: number }).amount));
       }
@@ -263,19 +264,20 @@ function Dashboard() {
         color: catMap.get(cid)?.color ?? colors[i % colors.length],
       }));
 
-      const lowStockCount = (lowStock.data ?? []).filter((r) => Number((r as { quantity: number }).quantity) <= 0).length;
+      const lowStockCount = lowStock.count ?? 0;
 
       return {
         totalToday, totalMonth, totalExpMonth,
         profit, unknownCostItems,
         salesTodayCount: (salesToday.data ?? []).length,
         customersCount: customersCount.count ?? 0,
-        openSessions: (sessions.data ?? []).length,
+        openSessions: sessions.count ?? 0,
         lowStockCount,
         trend, byCat,
       };
     },
     enabled: !!tenantId,
+    staleTime: 15_000,
   });
 
 
