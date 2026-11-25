@@ -14,7 +14,7 @@ CREATE OR REPLACE FUNCTION public.create_purchase_with_items(
 RETURNS public.purchases
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   v_item jsonb;
@@ -28,6 +28,14 @@ BEGIN
   IF auth.uid() IS NULL OR auth.uid() <> _user_id THEN
     RAISE EXCEPTION 'Authenticated purchaser identity mismatch'
       USING ERRCODE = '42501';
+  END IF;
+
+  IF _branch_id IS NULL OR NOT EXISTS (
+    SELECT 1 FROM public.branches
+     WHERE id = _branch_id AND tenant_id = _tenant_id AND is_active = true
+  ) THEN
+    RAISE EXCEPTION 'Branch does not belong to the requested tenant or is inactive'
+      USING ERRCODE = '23503';
   END IF;
 
   IF NOT (
@@ -50,7 +58,7 @@ BEGIN
       USING ERRCODE = '23503';
   END IF;
 
-  IF jsonb_typeof(_items) <> 'array'
+  IF _items IS NULL OR jsonb_typeof(_items) IS DISTINCT FROM 'array'
      OR jsonb_array_length(_items) = 0
      OR jsonb_array_length(_items) > 300 THEN
     RAISE EXCEPTION 'Purchase must contain between 1 and 300 items'
