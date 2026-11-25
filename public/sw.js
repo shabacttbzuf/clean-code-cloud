@@ -107,7 +107,11 @@ self.addEventListener("fetch", (event) => {
         }
         return response;
       } catch {
-        return (await caches.match("/")) || (await caches.match("/offline.html")) || Response.error();
+        // Never answer a protected deep-link with the public root HTML.
+        if (url.pathname === "/") {
+          return (await caches.match("/")) || (await caches.match("/offline.html")) || Response.error();
+        }
+        return (await caches.match("/offline.html")) || Response.error();
       }
     })());
     return;
