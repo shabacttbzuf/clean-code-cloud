@@ -8,6 +8,7 @@ const launcher = read("../src/components/app-launcher.tsx");
 const chart = read("../src/components/ui/chart.tsx");
 test("mobile header uses stable semantic hooks for company, brand and help controls", () => {
   assert.match(route, /topbar-help-link/);
+  assert.match(css, /\.topbar-help-link\s*\{[^}]*display:\s*inline-flex\s*!important/s);
   assert.match(route, /topbar-brand/);
   assert.match(route, /topbar-tenant-trigger/);
   assert.doesNotMatch(css, /responsive-topbar > div:first-child > div:nth-of-type/);
