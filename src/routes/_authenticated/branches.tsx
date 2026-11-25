@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Edit, Trash2, Building2, Loader2, Clock, User as UserIcon } from "lucide-react";
+import { Plus, Edit, Building2, Loader2, Clock, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { PageHeader } from "@/components/page-header";
@@ -60,8 +60,7 @@ function BranchesPage() {
   const canViewBranches = isSuperOwner || hasPermission("branches.view");
   const canCreateBranch = isSuperOwner || hasPermission("branches.create");
   const canEditBranch = isSuperOwner || hasPermission("branches.edit");
-  const canDeleteBranch = isSuperOwner || hasPermission("branches.delete");
-  const canManageBranches = canCreateBranch || canEditBranch || canDeleteBranch;
+  const canManageBranches = canCreateBranch || canEditBranch;
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Branch | null>(null);
@@ -137,19 +136,6 @@ function BranchesPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشلت العملية"),
   });
 
-  const del = useMutation({
-    mutationFn: async (id: string) => {
-      if (!canDeleteBranch) throw new Error("لا تملك صلاحية حذف الفروع.");
-      const { error } = await supabase.from("branches").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["branches", tenantId] });
-      toast.success("تم الحذف");
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "فشل الحذف"),
-  });
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -223,16 +209,12 @@ function BranchesPage() {
                 </div>
                 <div className="mt-4 flex gap-2 border-t pt-3">
                   <Button size="sm" variant="outline" className="flex-1" asChild><a href={"/branches/" + b.id}>تفاصيل الفرع</a></Button>
-                  {(canEditBranch || canDeleteBranch) && (
+                  {canEditBranch && (
                     <div className="flex flex-1 gap-2">
                       {canEditBranch && <Button size="sm" variant="ghost" className="flex-1" onClick={() => { setEditing(b); setOpen(true); }}>
                         <Edit className="ml-2 h-3 w-3" />تعديل
                       </Button>}
-                      {canDeleteBranch && <Button size="sm" variant="ghost" className="flex-1 text-destructive hover:text-destructive" onClick={() => {
-                        if (confirm(`حذف الفرع "${b.name}"؟`)) del.mutate(b.id);
-                      }}>
-                        <Trash2 className="ml-2 h-3 w-3" />حذف
-                      </Button>}
+
                     </div>
                   )}
                 </div>
