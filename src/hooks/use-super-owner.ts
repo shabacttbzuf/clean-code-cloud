@@ -18,16 +18,18 @@ export function useSuperOwner() {
       if (!data || typeof data !== "object" || Array.isArray(data)) {
         throw new Error("Invalid super owner status");
       }
-      if (!Number.isSafeInteger(data.totalCount) || data.totalCount < 0 || typeof data.isSuperOwner !== "boolean") {
+      // Supabase JSON RPC payloads are typed as Json; narrow each field before use.
+      const payload = data as Record<string, unknown>;
+      const totalCount = payload.totalCount;
+      const isSuperOwner = payload.isSuperOwner;
+      if (typeof totalCount !== "number" || !Number.isSafeInteger(totalCount) || totalCount < 0 ||
+          typeof isSuperOwner !== "boolean") {
         throw new Error("Invalid super owner status payload");
       }
-      if (data.isSuperOwner && data.totalCount === 0) {
+      if (isSuperOwner && totalCount === 0) {
         throw new Error("Inconsistent super owner status payload");
       }
-      return {
-        totalCount: data.totalCount as number,
-        isSuperOwner: data.isSuperOwner,
-      };
+      return { totalCount, isSuperOwner };
     },
     enabled: !!user?.id,
     staleTime: 30_000,
