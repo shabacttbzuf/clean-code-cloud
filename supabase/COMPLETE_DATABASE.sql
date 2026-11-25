@@ -14856,6 +14856,7 @@ ALTER TABLE private.kitchen_order_sync_requests ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE private.kitchen_order_sync_requests FROM PUBLIC, anon, authenticated;
 
 CREATE OR REPLACE FUNCTION private.set_kitchen_order_status_idempotent(
+  _expected_actor_id uuid,
   _order_id uuid,
   _new_status text,
   _notes text,
@@ -14876,6 +14877,9 @@ DECLARE
 BEGIN
   IF v_actor IS NULL THEN
     RAISE EXCEPTION 'Authentication required' USING ERRCODE='42501';
+  END IF;
+  IF _expected_actor_id IS DISTINCT FROM v_actor THEN
+    RAISE EXCEPTION 'Queued actor no longer matches the authenticated session' USING ERRCODE='42501';
   END IF;
   IF _order_id IS NULL OR _idempotency_key IS NULL
      OR _new_status NOT IN ('preparing','ready','delivered','cancelled') THEN
@@ -14959,10 +14963,11 @@ BEGIN
 END;
 $function$;
 
-REVOKE ALL ON FUNCTION private.set_kitchen_order_status_idempotent(uuid,text,text,uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION private.set_kitchen_order_status_idempotent(uuid,uuid,text,text,uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION private.set_kitchen_order_status_idempotent(uuid,text,text,uuid) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.set_kitchen_order_status_idempotent(
+  _expected_actor_id uuid,
   _order_id uuid,
   _new_status text,
   _notes text,
@@ -14974,10 +14979,10 @@ SECURITY INVOKER
 SET search_path TO 'pg_catalog', 'public', 'private'
 AS $function$
   SELECT private.set_kitchen_order_status_idempotent(
-    _order_id,_new_status,_notes,_idempotency_key
+    _expected_actor_id,_order_id,_new_status,_notes,_idempotency_key
   );
 $function$;
 
-REVOKE ALL ON FUNCTION public.set_kitchen_order_status_idempotent(uuid,text,text,uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.set_kitchen_order_status_idempotent(uuid,uuid,text,text,uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.set_kitchen_order_status_idempotent(uuid,text,text,uuid) TO authenticated;
 -- END MIGRATION: 20261125000100_offline_sync_kitchen_idempotency.sql
