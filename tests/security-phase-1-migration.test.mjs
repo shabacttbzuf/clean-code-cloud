@@ -178,7 +178,9 @@ const enterpriseUsersSource = readFileSync(
 test("enterprise admin functions verify target tenant and protected role before admin writes", () => {
   assert.match(enterpriseUsersSource, /assertTargetUserManageable/);
   assert.match(enterpriseUsersSource, /المستخدم المستهدف لا ينتمي إلى المؤسسة المحددة/);
-  assert.match(enterpriseUsersSource, /لا يحق للمدير إدارة حساب مالك المؤسسة أو مدير آخر/);
+  assert.match(enterpriseUsersSource, /لا يمكن تعديل حساب مالك المؤسسة إلا بواسطة المالك الأعلى/);
+  assert.match(enterpriseUsersSource, /لا يحق لمدير الشركة إدارة حساب مدير آخر/);
+  assert.match(enterpriseUsersSource, /لا يمكن تعديل حساب المالك الأعلى من إدارة المستخدمين/);
 });
 
 test("login history is recorded and closed using trusted server-side credentials", () => {
