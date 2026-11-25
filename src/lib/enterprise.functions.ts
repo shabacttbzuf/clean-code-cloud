@@ -405,6 +405,86 @@ export const deleteEmploymentType = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+async function assertEnterpriseProfilePatchScope(
+  supabase: any,
+  supabaseAdmin: any,
+  actorId: string,
+  targetUserId: string,
+  tenantId: string,
+  patch: { company_id?: string | null; department_id?: string | null },
+) {
+  if (patch.company_id === undefined && patch.department_id === undefined) return;
+
+  const { data: isSuperOwner, error: superOwnerError } = await supabase.rpc(
+    "is_super_owner", { _user_id: actorId },
+  );
+  if (superOwnerError) throw new Error(superOwnerError.message);
+
+  const { data: actorRoles, error: actorError } = await supabase
+    .from("user_roles").select("role, company_id, branch_id")
+    .eq("user_id", actorId).eq("tenant_id", tenantId);
+  if (actorError) throw new Error(actorError.message);
+  const roles = actorRoles ?? [];
+  const isTenantOwner = roles.some((row: any) => row.role === "owner" && row.company_id == null);
+  const hasGlobalScope = isSuperOwner || isTenantOwner;
+
+  const { data: targetProfile, error: targetError } = await supabaseAdmin
+    .from("profiles").select("company_id, branch_id")
+    .eq("id", targetUserId).eq("tenant_id", tenantId).maybeSingle();
+  if (targetError) throw new Error(targetError.message);
+  if (!targetProfile) throw new Error("ملف المستخدم غير موجود داخل المؤسسة المحددة.");
+
+  let actorCompanyId = roles.find((row: any) => row.company_id)?.company_id ?? null;
+  const actorBranchIds = Array.from(new Set(roles.map((row: any) => row.branch_id).filter(Boolean))) as string[];
+  if (!hasGlobalScope && !actorCompanyId && actorBranchIds.length) {
+    const { data: branches, error: branchesError } = await supabaseAdmin
+      .from("branches").select("id, company_id")
+      .eq("tenant_id", tenantId).in("id", actorBranchIds);
+    if (branchesError) throw new Error(branchesError.message);
+    if ((branches ?? []).length !== actorBranchIds.length) throw new Error("تعذر التحقق من فروع حسابك.");
+    const ids = Array.from(new Set((branches ?? []).map((row: any) => row.company_id).filter(Boolean))) as string[];
+    if (ids.length === 1) actorCompanyId = ids[0];
+  }
+
+  const resultingCompanyId = patch.company_id === undefined ? targetProfile.company_id : patch.company_id;
+  if (patch.company_id !== undefined && patch.company_id !== null) {
+    const { data: company, error: companyError } = await supabaseAdmin
+      .from("companies").select("id").eq("id", patch.company_id)
+      .eq("tenant_id", tenantId).maybeSingle();
+    if (companyError) throw new Error(companyError.message);
+    if (!company) throw new Error("الشركة المحددة لا تنتمي إلى المؤسسة المطلوبة.");
+  }
+  if (!hasGlobalScope && (
+    !actorCompanyId || !resultingCompanyId || resultingCompanyId !== actorCompanyId ||
+    (patch.company_id !== undefined && patch.company_id === null)
+  )) {
+    throw new Error("لا يمكنك نقل الموظف إلى شركة خارج نطاقك أو فصله عن شركته.");
+  }
+
+  if (patch.department_id) {
+    const { data: department, error: departmentError } = await supabaseAdmin
+      .from("departments").select("id, company_id, branch_id")
+      .eq("id", patch.department_id).eq("tenant_id", tenantId).maybeSingle();
+    if (departmentError) throw new Error(departmentError.message);
+    if (!department) throw new Error("القسم المحدد لا ينتمي إلى المؤسسة المطلوبة.");
+    if (department.company_id && department.company_id !== resultingCompanyId) {
+      throw new Error("القسم المحدد لا يتبع شركة الموظف.");
+    }
+    if (!hasGlobalScope) {
+      if (department.company_id !== actorCompanyId) {
+        throw new Error("لا يمكنك إسناد الموظف إلى قسم خارج شركتك.");
+      }
+      if (department.branch_id && !actorBranchIds.includes(department.branch_id)) {
+        const companyWide = roles.some((row: any) =>
+          ["owner", "manager"].includes(row.role) &&
+          row.company_id === actorCompanyId && row.branch_id == null,
+        );
+        if (!companyWide) throw new Error("لا يمكنك إسناد الموظف إلى قسم خارج فروعك.");
+      }
+    }
+  }
+}
+
 /* -------------------- Enterprise user actions -------------------- */
 
 const STATUS = z.enum(["active", "suspended", "frozen", "pending_approval", "password_expired", "archived"]);
@@ -433,6 +513,9 @@ export const updateUserEnterpriseProfile = createServerFn({ method: "POST" })
     await assertPermission(context.supabase, context.userId, data.tenant_id, "users.edit");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await assertTargetUserManageable(context.supabase, supabaseAdmin, context.userId, data.user_id, data.tenant_id);
+    await assertEnterpriseProfilePatchScope(
+      context.supabase, supabaseAdmin, context.userId, data.user_id, data.tenant_id, data.patch,
+    );
     const { error } = await supabaseAdmin
       .from("profiles")
       .update(data.patch)
