@@ -145,7 +145,10 @@ test("app launcher mirrors enterprise, system, and owner-only custom navigation 
 });
 
 test("workspace tabs preserve pinned pages and enforce a stable maximum", () => {
-  assert.match(workspaceTabs, /MAX_TABS = 12/);
+  assert.match(workspaceTabs, /MAX_PINNED_TABS = 6/);
+  assert.match(workspaceTabs, /restoreWorkspaceTabs/);
+  assert.match(workspaceTabs, /closeOtherWorkspaceTabs/);
+  assert.match(workspaceTabs, /useBlocker/);
   assert.match(workspaceTabs, /function limitTabs/);
   assert.match(workspaceTabs, /function togglePinned/);
   assert.match(workspaceTabs, /PinOff/);
@@ -239,7 +242,7 @@ test("dashboard provides permission-scoped operations, notifications, and a trut
 const workspaceFormKeeper = readFileSync(new URL("../src/components/workspace-form-state-keeper.tsx", import.meta.url), "utf8");
 
 test("workspace tabs restore per-user tenant sessions and preserve non-sensitive form fields across route changes", () => {
-  assert.match(workspaceTabs, /ras-workspace-tabs-v2/);
+  assert.match(workspaceTabs, /ras-workspace-tabs-v3/);
   assert.match(workspaceTabs, /workspace-tabs-permissions/);
   assert.match(workspaceTabs, /permissionQuery\.data\?\.has\(permission\) === true/);
   assert.match(workspaceTabs, /ras-workspace-form-discard/);
@@ -249,7 +252,7 @@ test("workspace tabs restore per-user tenant sessions and preserve non-sensitive
   assert.match(workspaceFormKeeper, /MutationObserver/);
   assert.match(workspaceFormKeeper, /scrollX/);
   assert.match(workspaceFormKeeper, /scrollY/);
-  assert.match(workspaceFormKeeper, /version: 3/);
+  assert.match(workspaceFormKeeper, /version: 4/);
   assert.match(workspaceFormKeeper, /scrollContainers/);
   assert.match(workspaceFormKeeper, /scrollableElements/);
   assert.match(workspaceFormKeeper, /restoreScrollContainers/);
@@ -313,4 +316,39 @@ test("reports, customers, and user administration preserve view filters in isola
   assert.match(usersAdminPage, /workspace-users-admin-v1:/);
   assert.match(usersAdminPage, /sessionStorage\.setItem\(usersViewKey \+ ":status", statusFilter\)/);
   assert.match(usersAdminPage, /useEffect/);
+});
+
+
+const workspaceTabLogic = readFileSync(new URL("../src/lib/workspace-tabs-logic.mjs", import.meta.url), "utf8");
+const authenticatedRouteFiles = [
+  "/dashboard", "/pos", "/sales", "/tables", "/kitchen", "/inventory", "/inventory/movements",
+  "/purchases", "/suppliers", "/products", "/categories", "/customers", "/cash-sessions",
+  "/expenses", "/expense-categories", "/reports", "/hr/employees", "/hr/attendance", "/hr/leaves",
+  "/hr/payroll", "/hr/compensation", "/branches", "/companies", "/users", "/users-admin",
+  "/team-permissions", "/roles", "/departments", "/job-titles", "/employment-types",
+  "/notifications", "/settings", "/profile", "/ads", "/promotions", "/support", "/audit-logs",
+  "/login-history", "/owner-center", "/admin",
+];
+
+test("every authenticated route family has a page title and route-aware tab identity", () => {
+  for (const route of authenticatedRouteFiles) {
+    assert.ok(workspaceTabs.includes(`["${route}"`) || route === "/profile" || route === "/support" || route === "/audit-logs" || route === "/login-history" || route === "/owner-center" || route === "/admin",
+      `missing tab title for ${route}`);
+  }
+  assert.match(workspaceTabs, /تفاصيل الفاتورة/);
+  assert.match(workspaceTabs, /location\.href/);
+  assert.match(workspaceTabs, /normalizeWorkspacePath/);
+});
+
+test("tab state is isolated by user, tenant, company and branch and navigation has a blocker", () => {
+  assert.match(workspaceTabs, /createWorkspaceTabScope\(user\?\.id, tenantId, membership\?\.company_id, membership\?\.branch_id\)/);
+  assert.match(workspaceFormKeeper, /createWorkspaceTabScope\(user\?\.id, tenantId, membership\?\.company_id, membership\?\.branch_id\)/);
+  assert.match(workspaceTabs, /enableBeforeUnload: currentDirty/);
+  assert.match(workspaceTabs, /إغلاق جميع التبويبات الأخرى/);
+  assert.match(workspaceTabs, /onTabListKeyDown/);
+  assert.match(workspaceTabs, /tabIndex=\{active \? 0 : -1\}/);
+  assert.match(workspaceFormKeeper, /dirty: snapshot\.dirty/);
+  assert.match(workspaceFormKeeper, /event\.type !== "submit"/);
+  assert.match(workspaceFormKeeper, /version: 4/);
+  assert.match(workspaceTabLogic, /MAX_WORKSPACE_TABS = 12/);
 });
