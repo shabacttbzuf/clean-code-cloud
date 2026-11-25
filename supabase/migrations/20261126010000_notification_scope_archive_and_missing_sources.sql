@@ -112,6 +112,70 @@ $function$;
 REVOKE ALL ON FUNCTION private.can_read_notification(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION private.can_read_notification(uuid) TO authenticated, service_role;
 
+-- Administrative writes are also consolidated into a single company-scoped
+-- predicate. PostgreSQL combines permissive policies with OR, so retaining
+-- legacy admin/permission policies here would re-open cross-company writes.
+CREATE OR REPLACE FUNCTION private.can_manage_notification_scope(
+  _tenant_id uuid,
+  _company_id uuid
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $function$
+  SELECT auth.uid() IS NOT NULL
+    AND (
+      private.is_super_owner(auth.uid())
+      OR EXISTS (
+        SELECT 1 FROM public.user_roles ur
+        WHERE ur.user_id = auth.uid()
+          AND ur.tenant_id = _tenant_id
+          AND ur.role = 'owner'
+          AND ur.company_id IS NULL
+      )
+      OR (
+        _company_id IS NOT NULL
+        AND private.has_permission(auth.uid(), _tenant_id, 'notifications.manage')
+        AND EXISTS (
+          SELECT 1 FROM public.user_roles ur
+          WHERE ur.user_id = auth.uid()
+            AND ur.tenant_id = _tenant_id
+            AND ur.company_id = _company_id
+            AND ur.role IN ('owner','manager')
+        )
+      )
+    );
+$function$;
+
+REVOKE ALL ON FUNCTION private.can_manage_notification_scope(uuid, uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION private.can_manage_notification_scope(uuid, uuid) TO authenticated, service_role;
+
+DROP POLICY IF EXISTS company_scope_notifications_insert ON public.notifications;
+DROP POLICY IF EXISTS company_scope_notifications_update ON public.notifications;
+DROP POLICY IF EXISTS company_scope_notifications_delete ON public.notifications;
+DROP POLICY IF EXISTS notifications_admin_insert ON public.notifications;
+DROP POLICY IF EXISTS notifications_admin_update ON public.notifications;
+DROP POLICY IF EXISTS notifications_admin_delete ON public.notifications;
+DROP POLICY IF EXISTS permission_gate_notifications_insert ON public.notifications;
+DROP POLICY IF EXISTS permission_gate_notifications_update ON public.notifications;
+DROP POLICY IF EXISTS permission_gate_notifications_delete ON public.notifications;
+
+CREATE POLICY notifications_insert_scoped
+  ON public.notifications FOR INSERT TO authenticated
+  WITH CHECK (private.can_manage_notification_scope(tenant_id, company_id));
+
+CREATE POLICY notifications_update_scoped
+  ON public.notifications FOR UPDATE TO authenticated
+  USING (private.can_manage_notification_scope(tenant_id, company_id))
+  WITH CHECK (private.can_manage_notification_scope(tenant_id, company_id));
+
+CREATE POLICY notifications_delete_scoped
+  ON public.notifications FOR DELETE TO authenticated
+  USING (private.can_manage_notification_scope(tenant_id, company_id));
+
+
 -- Remove permissive SELECT policies whose OR-combination previously allowed
 -- same-company users to bypass audience and notification permission checks.
 DROP POLICY IF EXISTS company_scope_notifications_select ON public.notifications;
