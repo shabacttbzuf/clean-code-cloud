@@ -26,7 +26,7 @@ const requiredRoutes = [
   ["/products", "products.view"],
   ["/categories", "categories.view"],
   ["/users", "users.view"],
-  ["/users-admin", "users.manage"],
+  ["/users-admin", "users.view"],
   ["/team-permissions", "permissions.view"],
   ["/roles", "roles.view"],
   ["/companies", "companies.view"],
