@@ -328,7 +328,7 @@ function Dashboard() {
   return (
     <div className="space-y-6">
       <section className="relative isolate min-h-[205px] overflow-hidden rounded-2xl border border-[#d7e2f6] bg-[#102f5c] text-white shadow-[0_8px_24px_rgba(16,47,92,.16)] sm:min-h-[220px]" aria-labelledby="dashboard-welcome-title">
-        <img src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1800&q=85" alt="" className="absolute inset-0 h-full w-full object-cover opacity-75" />
+        <img src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1280&q=70" alt="" fetchPriority="high" decoding="async" width={1280} height={720} className="absolute inset-0 h-full w-full object-cover opacity-75" />
         <div className="absolute inset-0 bg-gradient-to-l from-[#061c3d]/95 via-[#0c2d59]/80 to-[#102f5c]/5" />
         <div className="absolute inset-x-0 bottom-0 h-2 bg-gradient-to-l from-[#f0b52f] via-[#d9a441] to-transparent" />
         <div className="relative z-[1] flex min-h-[205px] flex-col justify-center px-6 py-7 sm:min-h-[220px] sm:px-10">
@@ -352,7 +352,7 @@ function Dashboard() {
           {campaignsQuery.data.map((campaign) => {
             const content = (
               <div className="relative flex min-h-28 overflow-hidden rounded-xl border bg-card shadow-sm">
-                {campaign.image_url && <img src={campaign.image_url} alt="" className="absolute inset-0 h-full w-full object-cover opacity-20" />}
+                {campaign.image_url && <img src={campaign.image_url} alt="" loading="lazy" decoding="async" width={960} height={360} className="absolute inset-0 h-full w-full object-cover opacity-20" />}
                 <div className="relative z-[1] flex w-full flex-col justify-center gap-1 bg-gradient-to-l from-background/95 via-background/85 to-background/40 p-4">
                   <div className="text-base font-bold">{campaign.title}</div>
                   {campaign.description && <p className="max-w-2xl text-sm text-muted-foreground">{campaign.description}</p>}
