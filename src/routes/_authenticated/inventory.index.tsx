@@ -44,7 +44,7 @@ type InvRow = {
 };
 
 function InventoryPage() {
-  const { tenantId, isAdmin, isSuperOwner, role, membership } = useActiveTenant();
+  const { tenantId, isSuperOwner, membership, hasPermission } = useActiveTenant();
   const qc = useQueryClient();
   const [branchId, setBranchId] = useState<string>(membership?.branch_id ?? "all");
   const [search, setSearch] = useState("");
@@ -127,10 +127,11 @@ function InventoryPage() {
 
   const branchMap = useMemo(() => new Map((branches.data ?? []).map((b) => [b.id, b.name])), [branches.data]);
 
-  const canAdjust = isAdmin || isSuperOwner || role === "warehouse";
+  const canAdjust = isSuperOwner || hasPermission("inventory.adjust");
 
   const adjustMut = useMutation({
     mutationFn: async () => {
+      if (!canAdjust) throw new Error("لا تملك صلاحية تعديل أرصدة المخزون.");
       if (!adjustFor || !tenantId) throw new Error("Missing");
       const target = Number(adjustQty);
       if (!Number.isFinite(target) || target < 0) throw new Error("قيمة غير صالحة");
