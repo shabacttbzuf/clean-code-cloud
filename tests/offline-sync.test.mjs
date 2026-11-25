@@ -123,6 +123,12 @@ test("idempotency-key collisions and IndexedDB quota failures are handled explic
   assert.match(source, /idempotencyKey/);
 });
 
+test("tenant-wide branch scopes fan out without weakening exact company matching", () => {
+  assert.match(source, /scope\.branchId === null \|\| row\.scope\.branchId === scope\.branchId/);
+  assert.match(source, /branchIds\.map\(\(branchId\) => syncOfflineOperations\(\{ \.\.\.scope, branchId \}\)\)/);
+  assert.match(source, /row\.scope\.companyId === scope\.companyId/);
+});
+
 test("permanent failures stop automatic retry and remain manually re-evaluable", () => {
   assert.match(source, /MAX_AUTOMATIC_ATTEMPTS = 12/);
   assert.match(source, /status = isConflict \? "conflict" : isPermanent \? "blocked" : "failed"/);
