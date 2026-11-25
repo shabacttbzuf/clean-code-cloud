@@ -295,7 +295,10 @@ export function WorkspaceFormStateKeeper() {
       if (restoring || !restored) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (target?.closest("[data-workspace-dirty='off']")) return;
-      if (event.type !== "submit" && !target?.closest("form, [role='dialog'], [data-workspace-dirty='on']")) return;
+      if (event.type === "click" &&
+        !target?.closest("[role='combobox'], [role='checkbox'], [role='switch'], [role='radio'], [role='slider'], [data-workspace-edit-control]")) return;
+      if (event.type !== "submit" && event.type !== "click" &&
+        !target?.closest("form, [role='dialog'], [data-workspace-dirty='on']")) return;
       const form = target?.closest("form");
       const formKey = form
         ? (form.id || form.dataset.workspaceFormKey || `form-${Array.from(root.querySelectorAll("form")).indexOf(form)}`)
