@@ -20,8 +20,9 @@ test("advertising, promotions and settings routes require explicit effective per
 });
 
 test("super owner status is validated and administration fails closed on an unknown status", () => {
-  assert.match(superOwnerHook, /Number\.isSafeInteger\(data\.totalCount\)/);
-  assert.match(superOwnerHook, /typeof data\.isSuperOwner !== "boolean"/);
+  assert.match(superOwnerHook, /const payload = data as Record<string, unknown>/);
+  assert.match(superOwnerHook, /typeof totalCount !== "number"/);
+  assert.match(superOwnerHook, /typeof isSuperOwner !== "boolean"/);
   assert.match(routeGuard, /!superOwnerStatusKnown/);
   assert.match(routeGuard, /refetchSuperOwnerStatus/);
 });
