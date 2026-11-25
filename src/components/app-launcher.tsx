@@ -113,7 +113,7 @@ export function AppLauncher() {
         <LayoutGrid className="h-[18px] w-[18px]" />
       </Button>
       {open && (
-        <div className="app-launcher-panel absolute right-0 top-full z-50 mt-2 max-h-[min(78dvh,680px)] w-[min(92vw,460px)] overflow-y-auto rounded-2xl border bg-popover p-3 text-popover-foreground shadow-2xl ring-1 ring-black/5" dir="rtl">
+        <div className="app-launcher-panel absolute right-0 top-full z-50 mt-2 max-h-[min(78dvh,680px)] w-[min(92vw,460px)] overflow-y-auto overscroll-contain rounded-2xl border bg-popover p-3 text-popover-foreground shadow-2xl ring-1 ring-black/5" dir="rtl">
           <div className="mb-3 flex items-center gap-2">
             <Search className="h-4 w-4 text-muted-foreground" />
             <Input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ابحث عن تطبيق..." aria-label="البحث عن تطبيق" />
