@@ -56,7 +56,7 @@ function Dashboard() {
   const [heroSettingsOpen, setHeroSettingsOpen] = useState(false);
   const [heroImageUploading, setHeroImageUploading] = useState(false);
   const { tenantId, tenant, user, membership, role, hasPermission } = useActiveTenant();
-  const heroCustomizationKey = `restaurant-dashboard-hero:${tenantId ?? "global"}:${user?.id ?? "anonymous"}`;
+  const heroCustomizationKey = `restaurant-dashboard-hero:${tenantId ?? "global"}:${membership?.company_id ?? "tenant"}:${membership?.branch_id ?? "all-branches"}:${user?.id ?? "anonymous"}`;
 
   useEffect(() => {
     try {
@@ -158,11 +158,17 @@ function Dashboard() {
     },
     enabled: !!tenantId,
     staleTime: 60_000,
+    refetchInterval: 60_000,
   });
 
   useEffect(() => {
     setActiveCampaignIndex(0);
   }, [tenantId, membership?.company_id, membership?.branch_id]);
+
+  useEffect(() => {
+    const count = campaignsQuery.data?.length ?? 0;
+    setActiveCampaignIndex((current) => count === 0 ? 0 : current % count);
+  }, [campaignsQuery.data?.length]);
 
   useEffect(() => {
     const campaignCount = campaignsQuery.data?.length ?? 0;
