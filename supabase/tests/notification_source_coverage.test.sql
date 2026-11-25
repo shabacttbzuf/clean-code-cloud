@@ -1,6 +1,6 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(10);
+SELECT plan(12);
 
 SELECT ok(
   to_regprocedure('private.can_read_notification(uuid)') IS NOT NULL
@@ -29,6 +29,27 @@ SELECT ok(
   ),
   'Legacy permissive notification SELECT policies no longer bypass audience scope'
 );
+
+SELECT ok(
+  has_function_privilege('authenticated', 'private.can_manage_notification_scope(uuid,uuid)', 'EXECUTE')
+  AND NOT has_function_privilege('anon', 'private.can_manage_notification_scope(uuid,uuid)', 'EXECUTE'),
+  'Notification management helper is not exposed to anonymous callers'
+);
+
+SELECT ok(
+  (SELECT count(*) = 3 FROM pg_policies
+   WHERE schemaname='public' AND tablename='notifications'
+     AND policyname IN ('notifications_insert_scoped','notifications_update_scoped','notifications_delete_scoped'))
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname='public' AND tablename='notifications'
+      AND policyname IN ('company_scope_notifications_insert','company_scope_notifications_update','company_scope_notifications_delete',
+                         'notifications_admin_insert','notifications_admin_update','notifications_admin_delete',
+                         'permission_gate_notifications_insert','permission_gate_notifications_update','permission_gate_notifications_delete')
+  ),
+  'Notification writes use a single company-scoped policy per operation without permissive OR bypasses'
+);
+
 
 SELECT ok(
   (SELECT count(*) = 4 FROM pg_policies
