@@ -41,11 +41,11 @@ type Product = { id: string; name: string; unit: string; cost_price: number };
 type CartLine = { product_id: string; name: string; unit: string; quantity: string; cost_price: string };
 
 function PurchasesPage() {
-  const { tenantId, userId, isAdmin, role, membership } = useActiveTenant();
+  const { tenantId, userId, isSuperOwner, membership, hasPermission } = useActiveTenant();
   const qc = useQueryClient();
   const [creating, setCreating] = useState(false);
   const [returningPurchaseId, setReturningPurchaseId] = useState<string | null>(null);
-  const canReturn = isAdmin || role === "warehouse";
+  const canReturn = isSuperOwner || hasPermission("purchases.returns.create") || hasPermission("purchases.manage");
 
   const purchases = useQuery({
     queryKey: ["purchases", tenantId],
@@ -89,7 +89,7 @@ function PurchasesPage() {
     enabled: !!tenantId,
   });
 
-  const canCreate = isAdmin || role === "warehouse";
+  const canCreate = isSuperOwner || hasPermission("purchases.create") || hasPermission("purchases.manage");
 
   return (
     <div className="space-y-6">
@@ -159,6 +159,7 @@ function PurchasesPage() {
 
       <Dialog open={creating} onOpenChange={setCreating}>
         <NewPurchaseDialog
+          canCreate={canCreate}
           onDone={() => {
             setCreating(false);
             qc.invalidateQueries({ queryKey: ["purchases"] });
@@ -174,6 +175,7 @@ function PurchasesPage() {
           <PurchaseReturnDialog
             purchaseId={returningPurchaseId}
             tenantId={tenantId!}
+            canReturn={canReturn}
             onDone={() => {
               setReturningPurchaseId(null);
               qc.invalidateQueries({ queryKey: ["purchases"] });
@@ -189,8 +191,8 @@ function PurchasesPage() {
 }
 
 function PurchaseReturnDialog({
-  purchaseId, tenantId, onDone, onCancel,
-}: { purchaseId: string; tenantId: string; onDone: () => void; onCancel: () => void }) {
+  purchaseId, tenantId, canReturn, onDone, onCancel,
+}: { purchaseId: string; tenantId: string; canReturn: boolean; onDone: () => void; onCancel: () => void }) {
   const [reason, setReason] = useState("");
   const [quantities, setQuantities] = useState<Record<string, string>>({});
 
@@ -225,6 +227,7 @@ function PurchaseReturnDialog({
 
   const submit = useMutation({
     mutationFn: async () => {
+      if (!canReturn) throw new Error("لا تملك صلاحية إنشاء مرتجعات المشتريات.");
       const items = (purchaseLines.data ?? []).map((line) => ({
         purchase_item_id: line.id, quantity: Number(quantities[line.id] ?? 0),
       })).filter((line) => line.quantity > 0);
@@ -280,8 +283,8 @@ function PurchaseReturnDialog({
 }
 
 function NewPurchaseDialog({
-  onDone, tenantId, userId, defaultBranchId,
-}: { onDone: () => void; tenantId: string; userId: string; defaultBranchId: string | null }) {
+  onDone, tenantId, userId, defaultBranchId, canCreate,
+}: { onDone: () => void; tenantId: string; userId: string; defaultBranchId: string | null; canCreate: boolean }) {
   const [branchId, setBranchId] = useState<string>(defaultBranchId ?? "");
   const [supplierId, setSupplierId] = useState<string>("none");
   const [reference, setReference] = useState("");
@@ -337,6 +340,7 @@ function NewPurchaseDialog({
 
   const submit = useMutation({
     mutationFn: async () => {
+      if (!canCreate) throw new Error("لا تملك صلاحية إنشاء فواتير المشتريات.");
       if (!tenantId || !userId || !branchId) throw new Error("اختر الفرع وتأكد من تسجيل الدخول");
       if (lines.length === 0) throw new Error("أضف منتجات");
       const cleanLines = lines.map((l) => ({

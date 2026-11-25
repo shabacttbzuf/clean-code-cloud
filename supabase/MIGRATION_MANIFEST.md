@@ -202,3 +202,36 @@
 98. `supabase/migrations/20261120020000_leave_rejection_actor_integrity.sql`
 
 **الإجمالي: 98 ترحيلاً.**
+
+## الترحيلات اللاحقة — تغطية الصلاحيات والتكامل
+
+99. `supabase/migrations/20261120030000_enforce_company_scope_marketing_reads.sql`
+100. `supabase/migrations/20261120040000_kitchen_order_workflow.sql`
+101. `supabase/migrations/20261120050000_restaurant_tables_pos_order_types.sql`
+102. `supabase/migrations/20261120060000_sale_table_name_receipt_snapshot.sql`
+103. `supabase/migrations/20261121010000_separate_ads_management_permission.sql`
+104. `supabase/migrations/20261121020000_promotional_offers_and_pos_redemptions.sql`
+105. `supabase/migrations/20261121025000_promotions_read_permission_scope.sql`
+106. `supabase/migrations/20261121030000_notification_deep_links.sql`
+107. `supabase/migrations/20261121040000_reconcile_ads_campaign_write_permissions.sql`
+108. `supabase/migrations/20261122010000_stage15_fk_index_and_security_regression_guards.sql`
+109. `supabase/migrations/20261122030000_pos_cashier_access_credentials.sql`
+110. `supabase/migrations/20261122040000_grant_promotions_api_access_and_fk_indexes.sql`
+111. `supabase/migrations/20261125010000_granular_section_action_permissions.sql`
+112. `supabase/migrations/20261125020000_granular_marketing_rls_alignment.sql`
+
+113. `supabase/migrations/20261125030000_section_crud_permissions.sql`
+
+114. `supabase/migrations/20261125040000_purchase_rpc_action_permissions.sql`
+
+115. `supabase/migrations/20261125050000_purchase_return_rpc_action_permission.sql`
+
+116. `supabase/migrations/20261125060000_audit_history_permission_reads.sql`
+
+117. `supabase/migrations/20261125070000_private_purchase_rpc_wrappers.sql`
+
+118. `supabase/migrations/20261125080000_permission_override_write_gates.sql`
+
+119. `supabase/migrations/20261125090000_sensitive_action_audit_triggers.sql`
+
+**الإجمالي: 119 ترحيلاً.**

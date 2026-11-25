@@ -75,7 +75,7 @@ const schema = z.object({
 });
 
 function SettingsPage() {
-  const { tenant, tenantId, role, membership } = useActiveTenant();
+  const { tenant, tenantId, hasPermission } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
   const { design, saveDesign, resetDesign } = useTheme();
   const qc = useQueryClient();
@@ -202,7 +202,7 @@ function SettingsPage() {
     },
   });
 
-  const canEdit = isSuperOwner || (role === "owner" && !membership?.company_id);
+  const canEdit = isSuperOwner || hasPermission("settings.manage");
 
   async function uploadBackground(file?: File) {
     if (!file || !tenantId || !isSuperOwner) return;

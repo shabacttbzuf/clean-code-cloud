@@ -40,12 +40,15 @@ const schema = z.object({
 });
 
 function CustomersPage() {
-  const { tenantId, isAdmin } = useActiveTenant();
+  const { tenantId, isSuperOwner, hasPermission } = useActiveTenant();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Customer | null>(null);
   const [search, setSearch] = useState("");
   const [accountCustomer, setAccountCustomer] = useState<Customer | null>(null);
+  const canCreateCustomer = isSuperOwner || hasPermission("customers.create") || hasPermission("customers.manage");
+  const canEditCustomer = isSuperOwner || hasPermission("customers.edit") || hasPermission("customers.manage");
+  const canDeleteCustomer = isSuperOwner || hasPermission("customers.delete") || hasPermission("customers.manage");
   const balances = useQuery({
     queryKey: ["customer-account-balances", tenantId],
     queryFn: async () => {
@@ -80,6 +83,7 @@ function CustomersPage() {
 
   const upsert = useMutation({
     mutationFn: async (v: z.infer<typeof schema>) => {
+      if (editing ? !canEditCustomer : !canCreateCustomer) throw new Error("لا تملك صلاحية إنشاء العملاء أو تعديلهم.");
       const payload = {
         ...v,
         phone: v.phone || null, email: v.email || null,
@@ -107,6 +111,7 @@ function CustomersPage() {
 
   const del = useMutation({
     mutationFn: async (id: string) => {
+      if (!canDeleteCustomer) throw new Error("لا تملك صلاحية إيقاف العملاء.");
       const { error } = await (supabase.from("customers" as any) as any).update({ is_active: false }).eq("id", id).eq("tenant_id", tenantId!);
       if (error) throw error;
     },
@@ -117,7 +122,7 @@ function CustomersPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="العملاء" subtitle="قاعدة بيانات العملاء الدائمين للفرع"
-        action={isAdmin && (
+        action={canCreateCustomer && (
           <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditing(null); }}>
             <DialogTrigger asChild><Button><Plus className="ml-2 h-4 w-4" />عميل جديد</Button></DialogTrigger>
             <CustomerDialog initial={editing} tenantId={tenantId!} onSubmit={(v) => upsert.mutate(v)} pending={upsert.isPending} />
@@ -168,14 +173,14 @@ function CustomersPage() {
                   <Button size="sm" variant="outline" className="mt-2 w-full" onClick={() => setAccountCustomer(c)}>الحساب والفواتير</Button>
                   {c.notes && <div className="line-clamp-2 text-xs">📝 {c.notes}</div>}
                 </div>
-                {isAdmin && (
+                {(canEditCustomer || canDeleteCustomer) && (
                   <div className="mt-3 flex gap-1 border-t pt-3">
-                    <Button size="sm" variant="ghost" className="flex-1" onClick={() => { setEditing(c); setOpen(true); }}>
+                    {canEditCustomer && <Button size="sm" variant="ghost" className="flex-1" onClick={() => { setEditing(c); setOpen(true); }}>
                       <Edit className="ml-2 h-3 w-3" />تعديل
-                    </Button>
-                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => { if (confirm(`إيقاف العميل "${c.name}"؟ سيبقى سجل حسابه وفواتيره محفوظاً.`)) del.mutate(c.id); }}>
+                    </Button>}
+                    {canDeleteCustomer && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => { if (confirm(`إيقاف العميل "${c.name}"؟ سيبقى سجل حسابه وفواتيره محفوظاً.`)) del.mutate(c.id); }}>
                       <Trash2 className="h-3 w-3" />
-                    </Button>
+                    </Button>}
                   </div>
                 )}
               </CardContent>

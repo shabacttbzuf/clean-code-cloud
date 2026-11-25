@@ -3,41 +3,36 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("../src/routes/_authenticated/ads.tsx", import.meta.url), "utf8");
-const migration = readFileSync(new URL("../supabase/migrations/20261121010000_separate_ads_management_permission.sql", import.meta.url), "utf8");
-const repairMigration = readFileSync(new URL("../supabase/migrations/20261121040000_reconcile_ads_campaign_write_permissions.sql", import.meta.url), "utf8");
+const legacyMigration = readFileSync(new URL("../supabase/migrations/20261121010000_separate_ads_management_permission.sql", import.meta.url), "utf8");
+const granularMigration = readFileSync(new URL("../supabase/migrations/20261125010000_granular_section_action_permissions.sql", import.meta.url), "utf8");
+const alignmentMigration = readFileSync(new URL("../supabase/migrations/20261125020000_granular_marketing_rls_alignment.sql", import.meta.url), "utf8");
 
-test("company-scoped marketing controls require the dedicated ads.manage permission", () => {
-  assert.match(source, /permissions = useQuery/);
-  assert.match(source, /supabase\.rpc\("get_my_permissions", \{ _tenant_id: tenantId \}\)/);
-  assert.match(source, /permissions\.data\?\.includes\("ads\.manage"\) === true/);
-  assert.doesNotMatch(source, /permissions\.data\?\.includes\("settings\.manage"\)/);
+test("advertising UI separates view, create, edit, approve and delete capabilities", () => {
+  for (const key of ["ads.view", "ads.create", "ads.edit", "ads.approve", "ads.delete"]) {
+    assert.ok(source.includes('hasPermission("' + key + '")'), "missing UI gate: " + key);
+  }
+  assert.ok(source.includes("if (editingId ? !canEditAds : !canCreateAds)"));
+  assert.ok(source.includes("if (!canApproveAds)"));
+  assert.ok(source.includes("if (!canDeleteAds)"));
 });
 
-test("tenant-wide and Super Owner management remain explicit while campaign actions stay company-scoped", () => {
-  assert.match(source, /const isTenantOwner = role === "owner" && !membership\?\.company_id/);
-  assert.match(source, /if \(!isSuperOwner && !isTenantOwner\)[\s\S]*query = query\.eq\("company_id", membership\.company_id\)/);
-  assert.match(source, /\.update\(payload\)\.eq\("id", editingId\)\.eq\("tenant_id", tenantId!\)/);
+test("legacy ads.manage permission remains backward compatible", () => {
+  assert.ok(legacyMigration.includes("VALUES ('ads.manage'"));
+  assert.ok(granularMigration.includes("'ads.manage'"));
+  assert.ok(source.includes('hasPermission("ads.manage")'));
 });
 
-test("database grants dedicated ads permission without changing company-scope boundaries", () => {
-  assert.match(migration, /INSERT INTO public\.permissions[\s\S]*'ads\.manage'/);
-  assert.match(migration, /'ads\.manage'\)/);
-  assert.match(migration, /company_scope_marketing_campaigns_insert/);
-  assert.match(migration, /company_scope_marketing_campaigns_update/);
-  assert.match(migration, /company_scope_marketing_campaigns_delete/);
-  assert.doesNotMatch(migration, /DROP POLICY IF EXISTS company_scope_marketing_campaigns_select/);
-});
-
-test("follow-up migration reconciles ads.manage writes without weakening company isolation", () => {
-  assert.ok(repairMigration.includes("'ads.manage'"));
-  assert.match(repairMigration, /company_scope_marketing_campaigns_insert/);
-  assert.match(repairMigration, /company_scope_marketing_campaigns_update/);
-  assert.match(repairMigration, /company_scope_marketing_campaigns_delete/);
-  assert.match(repairMigration, /FOR INSERT TO authenticated/);
-  assert.match(repairMigration, /FOR UPDATE TO authenticated/);
-  assert.match(repairMigration, /FOR DELETE TO authenticated/);
-  assert.doesNotMatch(repairMigration, /DROP POLICY IF EXISTS company_scope_marketing_campaigns_select/);
-  assert.match(source, /created_by: userId/);
-  assert.match(source, /select\("id"\)\.single\(\)/);
-  assert.match(source, /Marketing campaign RLS failure/);
+test("campaign action RLS and trigger checks are enforced without weakening company scope", () => {
+  for (const key of ["ads.create", "ads.edit", "ads.approve", "ads.delete"]) {
+    assert.ok(alignmentMigration.includes("'" + key + "'"), "missing database action gate: " + key);
+    assert.ok(granularMigration.includes("'" + key + "'"), "missing trigger action gate: " + key);
+  }
+  for (const name of ["company_scope_marketing_campaigns_insert", "company_scope_marketing_campaigns_update", "company_scope_marketing_campaigns_delete"]) {
+    assert.ok(alignmentMigration.includes(name));
+  }
+  assert.ok(alignmentMigration.includes("AS RESTRICTIVE FOR INSERT TO authenticated"));
+  assert.ok(alignmentMigration.includes("AS RESTRICTIVE FOR UPDATE TO authenticated"));
+  assert.ok(alignmentMigration.includes("AS RESTRICTIVE FOR DELETE TO authenticated"));
+  assert.ok(source.includes("company_id: editingId ? editingCompanyId"));
+  assert.ok(source.includes('query = query.eq("company_id", membership.company_id)'));
 });

@@ -33,7 +33,8 @@ type ProfileMap = Record<string, string>;
 type BranchMap = Record<string, string>;
 
 function CashSessionsPage() {
-  const { tenantId, userId, isAdmin } = useActiveTenant();
+  const { tenantId, userId, hasPermission, isSuperOwner } = useActiveTenant();
+  const canCloseCash = isSuperOwner || hasPermission("cash.close") || hasPermission("cash.open_close");
   const qc = useQueryClient();
   const [closingId, setClosingId] = useState<Session | null>(null);
   const [closingCash, setClosingCash] = useState("0");
@@ -167,7 +168,7 @@ function CashSessionsPage() {
                 </thead>
                 <tbody>
                   {list.map((s) => {
-                    const canClose = s.status === "open" && (s.cashier_id === userId || isAdmin);
+                    const canClose = s.status === "open" && canCloseCash;
                     return (
                       <tr key={s.id} className="border-t hover:bg-muted/30">
                         <td className="p-3">

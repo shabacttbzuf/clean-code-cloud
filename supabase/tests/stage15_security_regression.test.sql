@@ -1,6 +1,6 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(10);
+SELECT plan(13);
 
 SELECT is(
   (SELECT count(*)::int
@@ -65,8 +65,65 @@ SELECT ok(
 );
 
 SELECT ok(
+  EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname='public' AND tablename='user_permission_overrides'
+      AND policyname='permission_gate_user_permission_overrides_insert'
+      AND permissive='RESTRICTIVE'
+      AND with_check LIKE '%permissions.manage%'
+      AND with_check LIKE '%permission_key%'
+      AND with_check LIKE '%granted_by%'
+  )
+  AND EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname='public' AND tablename='user_permission_overrides'
+      AND policyname='permission_gate_user_permission_overrides_update'
+      AND permissive='RESTRICTIVE'
+      AND qual LIKE '%permissions.manage%'
+      AND with_check LIKE '%granted_by%'
+  )
+  AND EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname='public' AND tablename='user_permission_overrides'
+      AND policyname='permission_gate_user_permission_overrides_delete'
+      AND permissive='RESTRICTIVE'
+      AND qual LIKE '%permissions.manage%'
+  )
+  AND EXISTS (
+    SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+    WHERE n.nspname='private' AND p.proname='can_manage_permission_override_target'
+      AND p.prosecdef
+  ),
+  'Permission override writes require manage authority, owned permission keys, actor identity and exact target scope'
+);
+
+SELECT ok(
   EXISTS (SELECT 1 FROM pg_class WHERE oid='public.super_owners'::regclass AND relrowsecurity),
   'Super-owner authority records remain protected by RLS'
+);
+
+SELECT is(
+  (SELECT count(DISTINCT tgrelid)::int
+   FROM pg_trigger
+   WHERE NOT tgisinternal
+     AND tgfoid = 'public.log_audit_change()'::regprocedure
+     AND tgrelid = ANY (ARRAY[
+       'public.attendance'::regclass,
+       'public.payroll_items'::regclass,
+       'public.cash_sessions'::regclass,
+       'public.payments'::regclass,
+       'public.inventory_transactions'::regclass,
+       'public.purchase_items'::regclass,
+       'public.sale_items'::regclass,
+       'public.sale_refunds'::regclass,
+       'public.sale_refund_items'::regclass,
+       'public.purchase_returns'::regclass,
+       'public.purchase_return_items'::regclass,
+       'public.marketing_campaigns'::regclass,
+       'public.promotional_offers'::regclass
+     ])),
+  13,
+  'Sensitive HR, cash, payment, inventory, refund, return and marketing records are audited'
 );
 
 SELECT is(
@@ -91,6 +148,16 @@ SELECT ok(
       AND policyname='platform branding readable by authenticated'
       AND cmd='SELECT' AND qual='true'),
   'Global platform branding remains intentionally readable to authenticated users'
+);
+
+
+SELECT ok(
+  position('_items IS NULL' in pg_get_functiondef('private.create_purchase_with_items(uuid,uuid,uuid,uuid,text,text,jsonb)'::regprocedure)) > 0
+  AND position('jsonb_typeof(_items) IS DISTINCT FROM ''array''' in pg_get_functiondef('private.create_purchase_with_items(uuid,uuid,uuid,uuid,text,text,jsonb)'::regprocedure)) > 0
+  AND position('is_active = true' in pg_get_functiondef('private.create_purchase_with_items(uuid,uuid,uuid,uuid,text,text,jsonb)'::regprocedure)) > 0
+  AND position('pg_catalog' in pg_get_functiondef('private.create_purchase_with_items(uuid,uuid,uuid,uuid,text,text,jsonb)'::regprocedure)) > 0
+  AND position('pg_temp' in pg_get_functiondef('private.create_purchase_with_items(uuid,uuid,uuid,uuid,text,text,jsonb)'::regprocedure)) > 0,
+  'Purchase RPC rejects NULL/non-array item payloads, validates an active tenant branch and uses a hardened search path'
 );
 
 SELECT * FROM finish();

@@ -11,54 +11,59 @@ const sidebar = readFileSync(new URL("../src/components/app-sidebar.tsx", import
 const tabs = readFileSync(new URL("../src/components/workspace-tabs.tsx", import.meta.url), "utf8");
 const guard = readFileSync(new URL("../src/routes/_authenticated/route.tsx", import.meta.url), "utf8");
 const routeTree = readFileSync(new URL("../src/routeTree.gen.ts", import.meta.url), "utf8");
+const granularRls = readFileSync(new URL("../supabase/migrations/20261125020000_granular_marketing_rls_alignment.sql", import.meta.url), "utf8");
 
 test("promotional offers have a dedicated schema and independent permission", () => {
-  assert.match(migration, /'promotions\.manage'/);
-  assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.promotional_offers/);
-  assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.promotion_redemptions/);
-  assert.match(migration, /ALTER TABLE public\.promotional_offers ENABLE ROW LEVEL SECURITY/);
-  assert.match(migration, /private\.can_access_branch/);
-  assert.match(migration, /private\.is_company_member/);
-  assert.match(migration, /validate_promotional_offer_scope/);
+  assert.ok(migration.includes("'promotions.manage'"));
+  assert.ok(migration.includes("CREATE TABLE IF NOT EXISTS public.promotional_offers"));
+  assert.ok(migration.includes("CREATE TABLE IF NOT EXISTS public.promotion_redemptions"));
+  assert.ok(migration.includes("ALTER TABLE public.promotional_offers ENABLE ROW LEVEL SECURITY"));
+  assert.ok(migration.includes("private.can_access_branch"));
+  assert.ok(migration.includes("private.is_company_member"));
+  assert.ok(migration.includes("validate_promotional_offer_scope"));
 });
 
 test("POS promotion redemption is validated server-side and recorded atomically", () => {
-  assert.match(migration, /_promotion_id uuid/);
-  assert.match(migration, /FOR UPDATE/);
-  assert.match(migration, /usage_limit/);
-  assert.match(migration, /INSERT INTO public\.promotion_redemptions/);
-  assert.match(migration, /private\.create_pos_order_with_promotion/);
-  assert.match(migration, /LANGUAGE sql\s+SECURITY INVOKER/);
-  assert.match(pos, /pos-active-promotions/);
-  assert.match(pos, /_promotion_id: selectedPromotionId/);
-  assert.match(pos, /خصم العرض الترويجي/);
+  assert.ok(migration.includes("_promotion_id uuid"));
+  assert.ok(migration.includes("FOR UPDATE"));
+  assert.ok(migration.includes("usage_limit"));
+  assert.ok(migration.includes("INSERT INTO public.promotion_redemptions"));
+  assert.ok(migration.includes("private.create_pos_order_with_promotion"));
+  assert.ok(migration.includes("SECURITY INVOKER"));
+  assert.ok(pos.includes("pos-active-promotions"));
+  assert.ok(pos.includes("_promotion_id: selectedPromotionId"));
+  assert.ok(pos.includes("خصم العرض الترويجي"));
 });
 
-test("promotions are separate from advertising and have their own navigation and guard", () => {
-  assert.match(page, /createFileRoute\("\/_authenticated\/promotions"\)/);
-  assert.match(page, /promotions\.manage/);
-  assert.match(page, /buy_x_get_y/);
-  assert.match(page, /promotion-redemptions/);
-  assert.match(sidebar, /title: "العروض الترويجية", url: "\/promotions".*promotions\.manage/);
-  assert.match(tabs, /\["\/promotions", "العروض الترويجية"\]/);
-  assert.match(guard, /prefix: "\/promotions", permission: "promotions\.manage"/);
-  assert.match(routeTree, /AuthenticatedPromotionsRouteImport/);
+test("promotions are separate from advertising and route entry uses the view permission", () => {
+  assert.ok(page.includes('createFileRoute("/_authenticated/promotions")'));
+  for (const key of ["promotions.view", "promotions.create", "promotions.edit", "promotions.delete", "promotions.approve"]) {
+    assert.ok(page.includes('hasPermission("' + key + '")'), "missing " + key);
+  }
+  assert.ok(page.includes("buy_x_get_y"));
+  assert.ok(page.includes("promotion-redemptions"));
+  assert.ok(sidebar.includes('url: "/promotions", icon: Gift, permission: "promotions.view"'));
+  assert.ok(tabs.includes('["/promotions", "العروض الترويجية"]'));
+  assert.ok(guard.includes('{ prefix: "/promotions", permission: "promotions.view" }'));
+  assert.ok(routeTree.includes("AuthenticatedPromotionsRouteImport"));
   assert.ok(routeTree.includes("fullPath: '/promotions'"));
 });
 
-
-test("active offer visibility and redemption analytics enforce dedicated permission scopes", () => {
-  assert.match(readScopeMigration, /status='active'/);
-  assert.match(readScopeMigration, /promotions\.manage/);
-  assert.match(readScopeMigration, /Promotion managers read redemptions/);
-  assert.match(readScopeMigration, /private\.can_access_branch/);
-  assert.match(readScopeMigration, /Promotion managers insert offers/);
-  assert.ok(snapshot.includes("-- SOURCE MIGRATION: 20261121025000_promotions_read_permission_scope.sql"));
+test("granular promotion writes retain tenant, company and branch row boundaries", () => {
+  for (const action of ["promotions.create", "promotions.edit", "promotions.approve", "promotions.delete"]) {
+    assert.ok(granularRls.includes("'" + action + "'"), "missing " + action);
+  }
+  assert.ok(granularRls.includes("promotional_offers_granular_scope_insert"));
+  assert.ok(granularRls.includes("promotional_offers_granular_scope_update"));
+  assert.ok(granularRls.includes("promotional_offers_granular_scope_delete"));
+  assert.ok(granularRls.includes("private.is_company_member"));
+  assert.ok(granularRls.includes("private.can_access_branch"));
+  assert.ok(granularRls.includes("DROP POLICY IF EXISTS permission_gate_promotional_offers_select"));
 });
 
-test("complete database snapshot contains the exact promotions migration", () => {
-  const marker = "-- SOURCE MIGRATION: 20261121020000_promotional_offers_and_pos_redemptions.sql";
-  assert.ok(snapshot.includes(marker));
-  assert.ok(snapshot.includes("-- END MIGRATION: 20261121020000_promotional_offers_and_pos_redemptions.sql"));
-  assert.ok(snapshot.includes("CREATE TABLE IF NOT EXISTS public.promotional_offers"));
+test("complete database snapshot includes both granular permission migrations exactly once", () => {
+  for (const name of ["20261125010000_granular_section_action_permissions.sql", "20261125020000_granular_marketing_rls_alignment.sql"]) {
+    assert.equal(snapshot.split("SOURCE MIGRATION: " + name).length - 1, 1);
+    assert.ok(snapshot.includes("END MIGRATION: " + name));
+  }
 });

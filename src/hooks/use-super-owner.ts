@@ -18,19 +18,29 @@ export function useSuperOwner() {
       if (!data || typeof data !== "object" || Array.isArray(data)) {
         throw new Error("Invalid super owner status");
       }
-      return {
-        totalCount: typeof data.totalCount === "number" ? data.totalCount : 0,
-        isSuperOwner: data.isSuperOwner === true,
-      };
+      // Supabase JSON RPC payloads are typed as Json; narrow each field before use.
+      const payload = data as Record<string, unknown>;
+      const totalCount = payload.totalCount;
+      const isSuperOwner = payload.isSuperOwner;
+      if (typeof totalCount !== "number" || !Number.isSafeInteger(totalCount) || totalCount < 0 ||
+          typeof isSuperOwner !== "boolean") {
+        throw new Error("Invalid super owner status payload");
+      }
+      if (isSuperOwner && totalCount === 0) {
+        throw new Error("Inconsistent super owner status payload");
+      }
+      return { totalCount, isSuperOwner };
     },
     enabled: !!user?.id,
     staleTime: 30_000,
   });
 
   return {
-    isSuperOwner: query.data?.isSuperOwner ?? false,
-    totalCount: query.data?.totalCount ?? 0,
+    isSuperOwner: !query.isError && query.data?.isSuperOwner === true,
+    totalCount: query.isError ? 0 : query.data?.totalCount ?? 0,
     loading: query.isLoading,
+    statusKnown: !query.isLoading && !query.isError && query.data !== undefined,
+    statusError: query.error,
     refetch: query.refetch,
   };
 }

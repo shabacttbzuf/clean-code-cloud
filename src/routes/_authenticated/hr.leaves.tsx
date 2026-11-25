@@ -36,7 +36,11 @@ const statusColors: Record<string, string> = {
 };
 
 function LeavesPage() {
-  const { tenantId, isAdmin, userId } = useActiveTenant();
+  const { tenantId, isSuperOwner, userId, hasPermission } = useActiveTenant();
+  const canApproveLeaves = hasPermission("hr.leaves.approve");
+  const canRejectLeaves = hasPermission("hr.leaves.reject");
+  const canPrintLeaves = hasPermission("hr.leaves.print");
+  const canDeleteLeaves = isSuperOwner || hasPermission("hr.leaves.delete") || hasPermission("hr.manage");
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("all");
@@ -78,6 +82,7 @@ function LeavesPage() {
 
   const setStatus = useMutation({
     mutationFn: async (v: { id: string; status: "approved" | "rejected"; reason?: string }) => {
+      if (v.status === "approved" ? !canApproveLeaves : !canRejectLeaves) throw new Error("لا تملك صلاحية اتخاذ قرار الإجازة.");
       if (!tenantId || !userId) throw new Error("تعذر تحديد المؤسسة أو المستخدم الحالي");
       const now = new Date().toISOString();
       const payload = v.status === "approved"
@@ -94,6 +99,7 @@ function LeavesPage() {
 
   const remove = useMutation({
     mutationFn: async (id: string) => {
+      if (!canDeleteLeaves) throw new Error("لا تملك صلاحية حذف طلبات الإجازة.");
       if (!tenantId) throw new Error("المؤسسة غير محددة");
       const { data, error } = await supabase.from("leave_requests").delete()
         .eq("id", id).eq("tenant_id", tenantId).select("id").maybeSingle();
@@ -134,7 +140,7 @@ function LeavesPage() {
         }
       />
 
-      <div className="flex justify-end print:hidden"><Button variant="outline" onClick={() => window.print()}><Printer className="ml-2 h-4 w-4" />طباعة كشف الإجازات</Button></div>
+      {canPrintLeaves && <div className="flex justify-end print:hidden"><Button variant="outline" onClick={() => window.print()}><Printer className="ml-2 h-4 w-4" />طباعة كشف الإجازات</Button></div>}
       <Select value={filter} onValueChange={setFilter}>
         <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
         <SelectContent>
@@ -168,22 +174,22 @@ function LeavesPage() {
                   {l.reason && <div className="mt-1 text-xs text-muted-foreground">📝 {l.reason}</div>}
                   {l.rejection_reason && <div className="mt-1 text-xs text-destructive">سبب الرفض: {l.rejection_reason}</div>}
                 </div>
-                {isAdmin && l.status === "pending" && (
+                {l.status === "pending" && (
                   <div className="flex flex-wrap gap-2">
-                    <Button size="sm" disabled={setStatus.isPending} onClick={() => setStatus.mutate({ id: l.id, status: "approved" })}>
+                    {canApproveLeaves && <Button size="sm" disabled={setStatus.isPending} onClick={() => setStatus.mutate({ id: l.id, status: "approved" })}>
                       <Check className="ml-1 h-3 w-3" />اعتماد
-                    </Button>
-                    <Button size="sm" variant="outline" className="text-destructive" disabled={setStatus.isPending} onClick={() => {
+                    </Button>}
+                    {canRejectLeaves && <Button size="sm" variant="outline" className="text-destructive" disabled={setStatus.isPending} onClick={() => {
                       const r = prompt("سبب الرفض (إلزامي):");
                       if (r === null) return;
                       if (!r.trim()) { toast.error("يجب كتابة سبب الرفض"); return; }
                       setStatus.mutate({ id: l.id, status: "rejected", reason: r.trim() });
                     }}>
                       <X className="ml-1 h-3 w-3" />رفض
-                    </Button>
+                    </Button>}
                   </div>
                 )}
-                {isAdmin && (
+                {canDeleteLeaves && (
                   <Button size="sm" variant="ghost" className="text-destructive" disabled={remove.isPending} onClick={() => {
                     if (window.confirm("هل تريد حذف طلب الإجازة؟ سيتم منع الحذف إذا احتُسب ضمن مسير رواتب معتمد أو مدفوع.")) remove.mutate(l.id);
                   }}>

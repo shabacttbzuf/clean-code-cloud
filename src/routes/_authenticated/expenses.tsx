@@ -20,9 +20,11 @@ export const Route = createFileRoute("/_authenticated/expenses")({ component: Pa
 type Expense = { id: string; amount: number; description: string | null; paid_at: string; category_id: string | null; branch_id: string | null };
 
 function Page() {
-  const { tenantId, userId, tenant, isAdmin } = useActiveTenant();
+  const { tenantId, userId, tenant, isSuperOwner, hasPermission } = useActiveTenant();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
+  const canCreateExpense = isSuperOwner || hasPermission("expenses.create") || hasPermission("expenses.manage");
+  const canDeleteExpense = isSuperOwner || hasPermission("expenses.delete") || hasPermission("expenses.manage");
 
   const cats = useQuery({
     queryKey: ["expense-categories-min", tenantId],
@@ -56,6 +58,7 @@ function Page() {
 
   const create = useMutation({
     mutationFn: async () => {
+      if (!canCreateExpense) throw new Error("لا تملك صلاحية إضافة المصروفات.");
       const amt = Number(amount);
       if (!Number.isFinite(amt) || amt <= 0) throw new Error("مبلغ غير صالح");
       const { error } = await supabase.from("expenses").insert({
@@ -78,13 +81,13 @@ function Page() {
   });
 
   const del = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("expenses").delete().eq("id", id); if (error) throw error; },
+    mutationFn: async (id: string) => { if (!canDeleteExpense) throw new Error("لا تملك صلاحية حذف المصروفات."); const { error } = await supabase.from("expenses").delete().eq("id", id); if (error) throw error; },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["expenses"] }); toast.success("تم الحذف"); },
   });
 
   return (
     <div className="space-y-6">
-      <PageHeader title="المصروفات" subtitle={`إجمالي ${formatMoney(total)} ${tenant?.currency ?? ""}`} action={
+      <PageHeader title="المصروفات" subtitle={`إجمالي ${formatMoney(total)} ${tenant?.currency ?? ""}`} action={canCreateExpense && (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild><Button><Plus className="ml-2 h-4 w-4" />مصروف جديد</Button></DialogTrigger>
           <DialogContent>
@@ -119,7 +122,7 @@ function Page() {
             </form>
           </DialogContent>
         </Dialog>
-      } />
+      )} />
 
       {q.isLoading ? <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
       : !q.data || q.data.length === 0 ? (
@@ -147,7 +150,7 @@ function Page() {
                     <td className="p-3 text-muted-foreground">{e.branch_id ? (brMap.get(e.branch_id) ?? "—") : "عام"}</td>
                     <td className="p-3">{e.description ?? "—"}</td>
                     <td className="p-3 num font-bold text-destructive">{formatMoney(e.amount)}</td>
-                    <td className="p-3">{isAdmin && (
+                    <td className="p-3">{canDeleteExpense && (
                       <Button size="icon" variant="ghost" className="text-destructive" onClick={() => { if (confirm("حذف؟")) del.mutate(e.id); }}><Trash2 className="h-3 w-3" /></Button>
                     )}</td>
                   </tr>

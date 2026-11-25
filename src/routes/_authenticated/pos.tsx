@@ -158,7 +158,7 @@ function saveDrafts(list: Draft[], storageKey: string) {
 }
 
 function POSWorkspace() {
-  const { tenantId, tenant, userId, membership, isAdmin, isSuperOwner } = useActiveTenant();
+  const { tenantId, tenant, userId, membership, isSuperOwner } = useActiveTenant();
   const qc = useQueryClient();
   const getPosAccessStatus = useServerFn(getMyPosAccessStatus);
   const verifyPosPasscode = useServerFn(verifyMyPosPasscode);
@@ -250,7 +250,7 @@ function POSWorkspace() {
         .eq("tenant_id", tenantId!)
         .eq("is_active", true);
       // Branch-scoped staff must never see or select another branch in POS.
-      if (membership?.branch_id && !isAdmin && !isSuperOwner) {
+      if (membership?.branch_id && !isSuperOwner) {
         query = query.eq("id", membership.branch_id);
       }
       const { data, error } = await query;
@@ -261,10 +261,10 @@ function POSWorkspace() {
   });
 
   useEffect(() => {
-    if (membership?.branch_id && !isAdmin && !isSuperOwner && branchId !== membership.branch_id) {
+    if (membership?.branch_id && !isSuperOwner && branchId !== membership.branch_id) {
       setBranchId(membership.branch_id);
     }
-  }, [membership?.branch_id, isAdmin, isSuperOwner, branchId]);
+  }, [membership?.branch_id, isSuperOwner, branchId]);
 
   useEffect(() => {
     if (branchId) return;
@@ -851,7 +851,7 @@ function POSWorkspace() {
           <CardContent className="space-y-4 pt-6">
             <div className="space-y-2">
               <Label>الفرع</Label>
-              <Select value={branchId ?? ""} onValueChange={setBranchId} disabled={!isAdmin && !isSuperOwner}>
+              <Select value={branchId ?? ""} onValueChange={setBranchId} disabled={!!membership?.branch_id && !isSuperOwner}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {branches.data.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}

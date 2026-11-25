@@ -1,6 +1,6 @@
 -- SECURITY DEFINER implementations must not remain callable from exposed public schema.
 BEGIN;
-SELECT plan(5);
+SELECT plan(9);
 
 SELECT ok(
   NOT EXISTS (
@@ -32,6 +32,28 @@ SELECT ok(
 SELECT ok(
   (SELECT prosecdef FROM pg_proc WHERE oid = 'private.create_sale_with_items(uuid,uuid,uuid,uuid,numeric,payment_method,jsonb)'::regprocedure),
   'Privileged POS implementation remains private SECURITY DEFINER'
+);
+
+SELECT ok(
+  has_function_privilege('authenticated', 'public.create_purchase_with_items(uuid,uuid,uuid,uuid,text,text,jsonb)'::regprocedure, 'EXECUTE')
+  AND NOT (SELECT prosecdef FROM pg_proc WHERE oid='public.create_purchase_with_items(uuid,uuid,uuid,uuid,text,text,jsonb)'::regprocedure),
+  'Purchase receiving RPC remains callable through a public invoker wrapper'
+);
+
+SELECT ok(
+  (SELECT prosecdef FROM pg_proc WHERE oid='private.create_purchase_with_items(uuid,uuid,uuid,uuid,text,text,jsonb)'::regprocedure),
+  'Purchase receiving implementation is private SECURITY DEFINER'
+);
+
+SELECT ok(
+  has_function_privilege('authenticated', 'public.create_purchase_return(uuid,uuid,text,jsonb)'::regprocedure, 'EXECUTE')
+  AND NOT (SELECT prosecdef FROM pg_proc WHERE oid='public.create_purchase_return(uuid,uuid,text,jsonb)'::regprocedure),
+  'Purchase return RPC remains callable through a public invoker wrapper'
+);
+
+SELECT ok(
+  (SELECT prosecdef FROM pg_proc WHERE oid='private.create_purchase_return(uuid,uuid,text,jsonb)'::regprocedure),
+  'Purchase return implementation is private SECURITY DEFINER'
 );
 
 SELECT * FROM finish();

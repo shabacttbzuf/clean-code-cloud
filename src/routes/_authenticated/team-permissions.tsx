@@ -24,7 +24,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 function TeamPermissionsPage() {
-  const { tenantId, userId, role, loading: tLoading } = useActiveTenant();
+  const { tenantId, userId, role, loading: tLoading, hasPermission } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
   const qc = useQueryClient();
   const setPerm = useServerFn(setUserPermission);
@@ -34,7 +34,8 @@ function TeamPermissionsPage() {
 
   const isOwner = role === "owner";
   const isManager = role === "manager";
-  const canAccess = isOwner || isManager || isSuperOwner;
+  const canAccess = isSuperOwner || hasPermission("permissions.view");
+  const canManagePermissions = isSuperOwner || hasPermission("permissions.manage");
 
   const team = useQuery({
     queryKey: ["team-list", tenantId, userId, role, isSuperOwner],
@@ -150,6 +151,7 @@ function TeamPermissionsPage() {
   const canEditSelected = useMemo(() => {
     if (!selectedTeamMember) return false;
     if (isSuperOwner) return true;
+    if (!canManagePermissions) return false;
     if (isManager) return selectedTeamMember.hired_by === userId;
     if (isOwner) {
       // owner can edit managers and users they hired themselves; view-only otherwise
@@ -158,7 +160,7 @@ function TeamPermissionsPage() {
       return false;
     }
     return false;
-  }, [selectedTeamMember, isOwner, isManager, isSuperOwner, userId]);
+  }, [selectedTeamMember, isOwner, isManager, isSuperOwner, canManagePermissions, userId]);
 
   const overrideMap = useMemo(() => {
     const m = new Map<string, boolean>();

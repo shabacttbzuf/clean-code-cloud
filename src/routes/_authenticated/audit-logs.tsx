@@ -26,7 +26,7 @@ const ACTION_LABEL: Record<string, string> = {
 };
 
 function AuditLogsPage() {
-  const { tenantId, isAdmin, loading: tLoading } = useActiveTenant();
+  const { tenantId, hasPermission, loading: tLoading } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
 
   const [entity, setEntity] = useState<string>("all");
@@ -34,7 +34,7 @@ function AuditLogsPage() {
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const canView = isSuperOwner || isAdmin;
+  const canView = isSuperOwner || hasPermission("audit.view");
 
   const logs = useQuery({
     queryKey: ["audit-logs", tenantId, entity, action, isSuperOwner],

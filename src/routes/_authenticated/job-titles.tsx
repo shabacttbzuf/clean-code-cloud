@@ -15,12 +15,15 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/_authenticated/job-titles")({ component: JobTitlesPage });
 
 function JobTitlesPage() {
-  const { tenantId, role, loading } = useActiveTenant();
+  const { tenantId, loading, isSuperOwner, hasPermission } = useActiveTenant();
   const qc = useQueryClient();
   const upsertFn = useServerFn(upsertJobTitle);
   const delFn = useServerFn(deleteJobTitle);
   const [name, setName] = useState("");
-  const canAccess = role === "owner" || role === "manager";
+  const canView = isSuperOwner || hasPermission("job_titles.view") || hasPermission("job_titles.manage");
+  const canCreate = isSuperOwner || hasPermission("job_titles.create") || hasPermission("job_titles.manage");
+  const canDelete = isSuperOwner || hasPermission("job_titles.delete") || hasPermission("job_titles.manage");
+  const canAccess = canView || canCreate || canDelete;
 
   const q = useQuery({
     queryKey: ["job-titles-list", tenantId],
@@ -30,7 +33,7 @@ function JobTitlesPage() {
   });
 
   const add = useMutation({
-    mutationFn: () => upsertFn({ data: { tenant_id: tenantId!, name: name.trim() } }),
+    mutationFn: () => { if (!canCreate) throw new Error("لا تملك صلاحية إضافة المسميات الوظيفية."); return upsertFn({ data: { tenant_id: tenantId!, name: name.trim() } }); },
     onSuccess: () => {
       setName("");
       qc.invalidateQueries({ queryKey: ["job-titles-list", tenantId] });
@@ -40,7 +43,7 @@ function JobTitlesPage() {
   });
 
   const del = useMutation({
-    mutationFn: (id: string) => delFn({ data: { id, tenant_id: tenantId! } }),
+    mutationFn: (id: string) => { if (!canDelete) throw new Error("لا تملك صلاحية حذف المسميات الوظيفية."); return delFn({ data: { id, tenant_id: tenantId! } }); },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["job-titles-list", tenantId] }),
     onError: (e: Error) => toast.error(e.message),
   });
@@ -65,17 +68,17 @@ function JobTitlesPage() {
         <CardContent className="p-4">
           <div className="mb-4 flex gap-2">
             <Input placeholder="مسمى وظيفي جديد" value={name} onChange={(e) => setName(e.target.value)} />
-            <Button disabled={!name.trim() || add.isPending} onClick={() => add.mutate()}>
+            {canCreate && <Button disabled={!name.trim() || add.isPending} onClick={() => add.mutate()}>
               <Plus className="ml-2 h-4 w-4" /> إضافة
-            </Button>
+            </Button>}
           </div>
           <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
             {(q.data ?? []).map((j: any) => (
               <div key={j.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
                 <span>{j.name}</span>
-                <Button size="icon" variant="ghost" onClick={() => confirm("حذف؟") && del.mutate(j.id)}>
+                {canDelete && <Button size="icon" variant="ghost" onClick={() => confirm("حذف؟") && del.mutate(j.id)}>
                   <Trash2 className="h-3 w-3" />
-                </Button>
+                </Button>}
               </div>
             ))}
           </div>
