@@ -298,3 +298,19 @@ test("complex authenticated pages restore their React-owned workspace state with
   assert.match(purchasesView, /ras-workspace-form-saved/);
   assert.match(posWorkspace, /pos-workspace-v1:.*membership\?\.company_id/);
 });
+
+
+const reportsView = readFileSync(new URL("../src/routes/_authenticated/reports.tsx", import.meta.url), "utf8");
+const customersPage = readFileSync(new URL("../src/routes/_authenticated/customers.tsx", import.meta.url), "utf8");
+const usersAdminPage = readFileSync(new URL("../src/routes/_authenticated/users-admin.tsx", import.meta.url), "utf8");
+
+test("reports, customers, and user administration preserve view filters in isolated session scopes", () => {
+  assert.match(reportsView, /workspace-reports-view-v1:/);
+  assert.match(reportsView, /sessionStorage\.setItem\(reportViewKey/);
+  assert.match(reportsView, /validDate/);
+  assert.match(customersPage, /workspace-customers-view-v1:/);
+  assert.match(customersPage, /sessionStorage\.getItem\(customersViewKey \+ ":search"\)/);
+  assert.match(usersAdminPage, /workspace-users-admin-v1:/);
+  assert.match(usersAdminPage, /sessionStorage\.setItem\(usersViewKey \+ ":status", statusFilter\)/);
+  assert.match(usersAdminPage, /useEffect/);
+});
