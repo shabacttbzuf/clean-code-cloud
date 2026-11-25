@@ -156,7 +156,7 @@ function SupportPage() {
         try {
           const result = await supabase.from("tenants").select("id", { head: true }).limit(1).abortSignal(controller.signal);
           if (!result.error) return { id: "database", label: "قاعدة البيانات وREST API", state: "healthy", detail: "نجح استعلام قراءة فعلي عبر جلسة المستخدم مع احترام سياسات RLS.", statusCode: result.status, checkedAt: timestamp() };
-          const status = result.status || result.error.code && /^5/.test(result.error.code) ? result.status || 500 : result.status;
+          const status = result.status;
           const state = status >= 500 ? "down" : "degraded";
           return { id: "database", label: "قاعدة البيانات وREST API", state, detail: state === "down" ? "وصل الطلب إلى قاعدة البيانات لكن الخدمة أعادت خطأ خادم." : "واجهة قاعدة البيانات متاحة، لكن استعلام المستخدم تعذر بسبب الصلاحية أو إعداد الطلب أو اتصال مؤقت.", statusCode: status || undefined, checkedAt: timestamp() };
         } finally {
