@@ -11,6 +11,13 @@ type SavedField = {
   checked?: boolean;
 };
 
+type SavedPageSnapshot = {
+  version: 2;
+  fields: SavedField[];
+  scrollX: number;
+  scrollY: number;
+};
+
 const STORAGE_PREFIX = "ras-workspace-form-state-v1";
 const FIELD_SELECTOR = "input, textarea, select, [contenteditable='true']";
 
@@ -122,26 +129,46 @@ export function WorkspaceFormStateKeeper() {
     const restore = () => {
       if (restored || root.querySelectorAll(FIELD_SELECTOR).length === 0) return;
       let fields: SavedField[] = [];
+      let scrollX = 0;
+      let scrollY = 0;
       try {
         const raw = sessionStorage.getItem(storageKey);
         const parsed: unknown = raw ? JSON.parse(raw) : [];
-        fields = Array.isArray(parsed) ? parsed.filter((field): field is SavedField =>
-          !!field && typeof field === "object" && typeof field.key === "string" &&
-          typeof field.tag === "string" && typeof field.type === "string"
-        ) : [];
+        const validFields = (items: unknown[]): SavedField[] => items.filter((field): field is SavedField =>
+          !!field && typeof field === "object" && typeof (field as SavedField).key === "string" &&
+          typeof (field as SavedField).tag === "string" && typeof (field as SavedField).type === "string"
+        );
+        if (Array.isArray(parsed)) {
+          // Backward compatibility with snapshots saved before scroll restoration.
+          fields = validFields(parsed);
+        } else if (parsed && typeof parsed === "object" && "fields" in parsed) {
+          const snapshot = parsed as Partial<SavedPageSnapshot>;
+          fields = Array.isArray(snapshot.fields) ? validFields(snapshot.fields) : [];
+          scrollX = Number.isFinite(snapshot.scrollX) ? Number(snapshot.scrollX) : 0;
+          scrollY = Number.isFinite(snapshot.scrollY) ? Number(snapshot.scrollY) : 0;
+        }
       } catch { fields = []; }
-      if (fields.length) {
+      if (fields.length || scrollX || scrollY) {
         restoring = true;
         try { applyFields(root, fields); }
         finally { restoring = false; }
-        window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: pathname, dirty: true } }));
+        requestAnimationFrame(() => window.scrollTo({ left: scrollX, top: scrollY, behavior: "instant" }));
+        window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: pathname, dirty: fields.length > 0 } }));
       }
       restored = true;
     };
     const save = () => {
       try {
         const fields = collectFields(root);
-        if (fields.length) sessionStorage.setItem(storageKey, JSON.stringify(fields));
+        const snapshot: SavedPageSnapshot = {
+          version: 2,
+          fields,
+          scrollX: window.scrollX,
+          scrollY: window.scrollY,
+        };
+        if (fields.length || snapshot.scrollX || snapshot.scrollY) {
+          sessionStorage.setItem(storageKey, JSON.stringify(snapshot));
+        }
       } catch { /* session storage is optional */ }
     };
     const markDirty = () => {
