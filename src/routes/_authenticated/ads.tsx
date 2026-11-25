@@ -29,7 +29,7 @@ type Campaign = {
 };
 
 export function AdsPage() {
-  const { tenantId, userId, role, membership } = useActiveTenant();
+  const { tenantId, userId, role, membership, hasPermission } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
   const queryClient = useQueryClient();
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -44,20 +44,11 @@ export function AdsPage() {
   const [uploading, setUploading] = useState(false);
 
   const isTenantOwner = role === "owner" && !membership?.company_id;
-  const permissions = useQuery({
-    queryKey: ["marketing-management-permissions", tenantId, userId],
-    queryFn: async () => {
-      if (!tenantId) return [] as string[];
-      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId });
-      if (error) throw error;
-      return (data ?? []) as string[];
-    },
-    enabled: !!tenantId && !isSuperOwner && !isTenantOwner,
-    staleTime: 30_000,
-  });
-  const canManage = isSuperOwner || isTenantOwner ||
-    ((role === "owner" || role === "manager") && !!membership?.company_id &&
-      permissions.data?.includes("ads.manage") === true);
+  const canViewAds = isSuperOwner || isTenantOwner || hasPermission("ads.view") || hasPermission("ads.manage");
+  const canCreateAds = isSuperOwner || isTenantOwner || hasPermission("ads.create") || hasPermission("ads.manage");
+  const canEditAds = isSuperOwner || isTenantOwner || hasPermission("ads.edit") || hasPermission("ads.manage");
+  const canApproveAds = isSuperOwner || isTenantOwner || hasPermission("ads.approve") || hasPermission("ads.manage");
+  const canDeleteAds = isSuperOwner || isTenantOwner || hasPermission("ads.delete") || hasPermission("ads.manage");
 
   const campaigns = useQuery({
     queryKey: ["marketing-campaigns", tenantId, membership?.company_id ?? "tenant"],
