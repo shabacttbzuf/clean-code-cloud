@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthSession } from "./use-auth-session";
 import { OFFLINE_AUTH_CACHE_MAX_AGE_MS, withOfflineFallback } from "@/lib/offline-reference-cache";
@@ -30,6 +30,7 @@ export type Tenant = {
  */
 export function useActiveTenant() {
   const { user, loading: sessionLoading } = useAuthSession();
+  const queryClient = useQueryClient();
 
   const memQuery = useQuery({
     queryKey: ["memberships", user?.id],
@@ -48,25 +49,24 @@ export function useActiveTenant() {
       );
     },
     enabled: !!user?.id,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   });
 
   const superOwnerQuery = useQuery({
     queryKey: ["is-super-owner", user?.id],
+    // Privileged status must never be inferred from an offline/stale cache.
     queryFn: async () => {
-      return withOfflineFallback(
-        `auth-super-owner:v1:${user!.id}`,
-        async () => {
-          const { data, error } = await supabase.rpc("is_super_owner", {
-            _user_id: user!.id,
-          });
-          if (error) throw error;
-          return data === true;
-        },
-        OFFLINE_AUTH_CACHE_MAX_AGE_MS,
-      );
+      const { data, error } = await supabase.rpc("is_super_owner", {
+        _user_id: user!.id,
+      });
+      if (error) throw error;
+      return data === true;
     },
     enabled: !!user?.id,
-    staleTime: 60_000,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   });
 
   const [activeId, setActiveId] = useState<string | null>(() => {
@@ -109,25 +109,47 @@ export function useActiveTenant() {
 
   const role = membership?.role ?? null;
   const isAdmin = role === "owner" || role === "manager";
-  const isSuperOwner = superOwnerQuery.data === true;
+  const isSuperOwner = !superOwnerQuery.isError && superOwnerQuery.data === true;
 
   const permissionsQuery = useQuery({
-    queryKey: ["effective-permissions", user?.id, activeId],
+    queryKey: ["effective-permissions", user?.id, activeId, membership?.role, membership?.company_id, membership?.branch_id, membership?.custom_role_id],
+    // Authorization decisions fail closed; cached offline permissions are not grants.
     queryFn: async (): Promise<string[]> => {
-      return withOfflineFallback(
-        `auth-permissions:v1:${user!.id}:${activeId!}`,
-        async () => {
-          const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: activeId! });
-          if (error) throw error;
-          return data ?? [];
-        },
-        OFFLINE_AUTH_CACHE_MAX_AGE_MS,
-      );
+      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: activeId! });
+      if (error) throw error;
+      return data ?? [];
     },
     enabled: !!user?.id && !!activeId,
     staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   });
-  const permissions = useMemo(() => new Set(permissionsQuery.data ?? []), [permissionsQuery.data]);
+
+  useEffect(() => {
+    if (!user?.id || !activeId) return;
+    const invalidateAuthorizationState = () => {
+      queryClient.removeQueries({
+        predicate: (query) => query.queryKey.includes(activeId) && query.queryKey[0] !== "tenant",
+      });
+      void queryClient.invalidateQueries({ queryKey: ["memberships", user.id] });
+      void queryClient.invalidateQueries({ queryKey: ["effective-permissions", user.id, activeId] });
+      void queryClient.invalidateQueries({ queryKey: ["route-effective-permissions", activeId, user.id] });
+      void queryClient.invalidateQueries({ queryKey: ["topbar-search-permissions", activeId, user.id] });
+    };
+    const channel = supabase
+      .channel(`authorization-state:${user.id}:${activeId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "user_roles", filter: `user_id=eq.${user.id}` }, invalidateAuthorizationState)
+      .on("postgres_changes", { event: "*", schema: "public", table: "user_permission_overrides", filter: `user_id=eq.${user.id}` }, invalidateAuthorizationState)
+      .on("postgres_changes", { event: "*", schema: "public", table: "role_permissions", filter: `tenant_id=eq.${activeId}` }, invalidateAuthorizationState)
+      .on("postgres_changes", { event: "*", schema: "public", table: "custom_roles", filter: `tenant_id=eq.${activeId}` }, invalidateAuthorizationState)
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [user?.id, activeId, queryClient]);
+
+  const permissions = useMemo(
+    () => new Set(permissionsQuery.isError ? [] : permissionsQuery.data ?? []),
+    [permissionsQuery.data, permissionsQuery.isError],
+  );
   const hasPermission = (permission: string) => isSuperOwner || permissions.has(permission);
 
   return {
