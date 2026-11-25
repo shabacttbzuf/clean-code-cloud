@@ -15492,7 +15492,7 @@ WITH permission_map(legacy_key, new_key) AS (VALUES
   ('hr.manage','hr.leaves.create'),('hr.manage','hr.leaves.edit'),('hr.manage','hr.leaves.delete'),
   ('notifications.manage','notifications.create'),('notifications.manage','notifications.edit'),('notifications.manage','notifications.delete'),
   ('reports.export','reports.print'),
-  ('cash.open_close','cash.open'),('cash.open_close','cash.close'),
+  ('cash.open_close','cash.open'),('cash.open_close','cash.close')
 )
 INSERT INTO public.role_permissions (tenant_id, role_kind, builtin_role, custom_role_id, permission_key)
 SELECT rp.tenant_id, rp.role_kind, rp.builtin_role, rp.custom_role_id, pm.new_key
