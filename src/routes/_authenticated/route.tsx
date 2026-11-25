@@ -172,7 +172,7 @@ function TopBar() {
   const [globalSearch, setGlobalSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchPermissions = useQuery({
-    queryKey: ["topbar-search-permissions", tenantId, user?.id],
+    queryKey: ["route-effective-permissions", tenantId, user?.id],
     queryFn: async () => {
       if (!tenantId) return new Set<string>();
       const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId });
