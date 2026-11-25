@@ -190,6 +190,7 @@ export function WorkspaceFormStateKeeper() {
           typeof (field as SavedField).tag === "string" && typeof (field as SavedField).type === "string"
         );
         if (Array.isArray(parsed)) {
+          // Backward compatibility with snapshots saved before versioned view state.
           return { version: 3, fields: validFields(parsed), scrollX: 0, scrollY: 0, scrollContainers: [], openDetails: [] };
         }
         if (parsed && typeof parsed === "object" && "fields" in parsed) {
