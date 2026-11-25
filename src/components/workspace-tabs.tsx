@@ -220,6 +220,9 @@ export function WorkspaceTabs() {
   }
 
   function discardPath(path: string) {
+    try {
+      if (sessionScope) sessionStorage.removeItem(`ras-workspace-form-state-v1:${sessionScope}:${normalizeWorkspacePath(path) ?? path}`);
+    } catch { /* Session storage is optional. */ }
     window.dispatchEvent(new CustomEvent("ras-workspace-form-discard", {
       detail: { path, scope: sessionScope },
     }));
