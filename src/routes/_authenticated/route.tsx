@@ -1,5 +1,5 @@
 import { createFileRoute, Link, Outlet, redirect, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { appNavigationGroups } from "@/components/app-sidebar";
 import { AppLauncher } from "@/components/app-launcher";
@@ -364,11 +364,14 @@ function TopBar() {
     }
   }
 
-  const searchItems = appNavigationGroups.flatMap((group) => group.items).filter((item) => {
+  const searchItems = useMemo(() => {
     const query = globalSearch.trim().toLocaleLowerCase("ar");
-    const permitted = isSuperOwner || (!!searchPermissions.data && (!item.permission || searchPermissions.data.has(item.permission)));
-    return permitted && query.length > 0 && item.title.toLocaleLowerCase("ar").includes(query);
-  }).slice(0, 8);
+    if (!query) return [];
+    return appNavigationGroups.flatMap((group) => group.items).filter((item) => {
+      const permitted = isSuperOwner || (!!searchPermissions.data && (!item.permission || searchPermissions.data.has(item.permission)));
+      return permitted && item.title.toLocaleLowerCase("ar").includes(query);
+    }).slice(0, 8);
+  }, [globalSearch, isSuperOwner, searchPermissions.data]);
 
   const initial = displayName.charAt(0) || "?";
 
