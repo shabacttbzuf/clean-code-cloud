@@ -210,7 +210,7 @@ function POSWorkspace() {
     }
     setPosPasscode("");
   }, [unlockStorageKey]);
-  const workspaceStorageKey = `pos-workspace-v1:${tenantId ?? "none"}:${userId ?? "none"}`;
+  const workspaceStorageKey = `pos-workspace-v1:${tenantId ?? "none"}:${userId ?? "none"}:${membership?.company_id ?? "none"}`;
   const restoredWorkspace = useMemo(() => readPOSWorkspaceSnapshot(workspaceStorageKey), [workspaceStorageKey]);
 
   const cashierProfile = useQuery({
