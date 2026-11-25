@@ -51,6 +51,27 @@ jobs:
       - name: Production build
         run: bun run build
 
+      - name: Browser acceptance — offline sync in Chromium
+        run: |
+          npm install --prefix /tmp/offline-playwright --no-save --package-lock=false playwright
+          /tmp/offline-playwright/node_modules/.bin/playwright install --with-deps chromium
+          bun run dev --host 127.0.0.1 --port 4173 > /tmp/offline-vite.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:4173/tests/browser/offline-sync.html >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          if ! curl --fail --silent http://127.0.0.1:4173/tests/browser/offline-sync.html >/dev/null; then
+            cat /tmp/offline-vite.log
+            echo "::error::Vite did not become ready for the offline sync browser test."
+            exit 1
+          fi
+          PLAYWRIGHT_PATH=/tmp/offline-playwright/node_modules/playwright node tests/browser/offline-sync.playwright.cjs
+
+
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v3
         with:
