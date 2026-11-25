@@ -11,15 +11,15 @@ test("advertising UI separates view, create, edit, approve and delete capabiliti
   for (const key of ["ads.view", "ads.create", "ads.edit", "ads.approve", "ads.delete"]) {
     assert.ok(source.includes('hasPermission("' + key + '")'), "missing UI gate: " + key);
   }
-  assert.match(source, /if \(editingId \? !canEditAds : !canCreateAds\)/);
-  assert.match(source, /if \(!canApproveAds\)/);
-  assert.match(source, /if \(!canDeleteAds\)/);
+  assert.ok(source.includes("if (editingId ? !canEditAds : !canCreateAds)"));
+  assert.ok(source.includes("if (!canApproveAds)"));
+  assert.ok(source.includes("if (!canDeleteAds)"));
 });
 
 test("legacy ads.manage permission remains backward compatible", () => {
-  assert.match(legacyMigration, /VALUES \('ads\\.manage'/);
-  assert.match(granularMigration, /'ads\\.manage'/);
-  assert.match(source, /hasPermission\("ads\\.manage"\)/);
+  assert.ok(legacyMigration.includes("VALUES ('ads.manage'"));
+  assert.ok(granularMigration.includes("'ads.manage'"));
+  assert.ok(source.includes('hasPermission("ads.manage")'));
 });
 
 test("campaign action RLS and trigger checks are enforced without weakening company scope", () => {
@@ -27,12 +27,12 @@ test("campaign action RLS and trigger checks are enforced without weakening comp
     assert.ok(alignmentMigration.includes("'" + key + "'"), "missing database action gate: " + key);
     assert.ok(granularMigration.includes("'" + key + "'"), "missing trigger action gate: " + key);
   }
-  assert.match(alignmentMigration, /company_scope_marketing_campaigns_insert/);
-  assert.match(alignmentMigration, /company_scope_marketing_campaigns_update/);
-  assert.match(alignmentMigration, /company_scope_marketing_campaigns_delete/);
-  assert.match(alignmentMigration, /AS RESTRICTIVE FOR INSERT TO authenticated/);
-  assert.match(alignmentMigration, /AS RESTRICTIVE FOR UPDATE TO authenticated/);
-  assert.match(alignmentMigration, /AS RESTRICTIVE FOR DELETE TO authenticated/);
-  assert.match(source, /company_id: editingId \? editingCompanyId/);
-  assert.match(source, /query = query\.eq\("company_id", membership\.company_id\)/);
+  for (const name of ["company_scope_marketing_campaigns_insert", "company_scope_marketing_campaigns_update", "company_scope_marketing_campaigns_delete"]) {
+    assert.ok(alignmentMigration.includes(name));
+  }
+  assert.ok(alignmentMigration.includes("AS RESTRICTIVE FOR INSERT TO authenticated"));
+  assert.ok(alignmentMigration.includes("AS RESTRICTIVE FOR UPDATE TO authenticated"));
+  assert.ok(alignmentMigration.includes("AS RESTRICTIVE FOR DELETE TO authenticated"));
+  assert.ok(source.includes("company_id: editingId ? editingCompanyId"));
+  assert.ok(source.includes('query = query.eq("company_id", membership.company_id)'));
 });
