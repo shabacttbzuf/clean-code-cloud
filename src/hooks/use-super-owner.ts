@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { OFFLINE_AUTH_CACHE_MAX_AGE_MS, withOfflineFallback } from "@/lib/offline-reference-cache";
 import { useAuthSession } from "./use-auth-session";
 
 /**
@@ -13,26 +12,35 @@ export function useSuperOwner() {
 
   const query = useQuery({
     queryKey: ["super-owner-status", user?.id],
-    queryFn: async () =>
-      withOfflineFallback(`auth-super-owner-status:v1:${user!.id}`, async () => {
-        const { data, error } = await supabase.rpc("get_super_owner_status");
-        if (error) throw error;
-        if (!data || typeof data !== "object" || Array.isArray(data)) {
-          throw new Error("Invalid super owner status");
-        }
-        return {
-          totalCount: typeof data.totalCount === "number" ? data.totalCount : 0,
-          isSuperOwner: data.isSuperOwner === true,
-        };
-      }, OFFLINE_AUTH_CACHE_MAX_AGE_MS),
+    queryFn: async () => {
+      // A stale offline value must never grant platform-wide access.
+      const { data, error } = await supabase.rpc("get_super_owner_status");
+      if (error) throw error;
+      if (!data || typeof data !== "object" || Array.isArray(data)) {
+        throw new Error("Invalid super owner status");
+      }
+      const payload = data as Record<string, unknown>;
+      const totalCount = payload.totalCount;
+      const isSuperOwner = payload.isSuperOwner;
+      if (typeof totalCount !== "number" || !Number.isSafeInteger(totalCount) || totalCount < 0 ||
+          typeof isSuperOwner !== "boolean") {
+        throw new Error("Invalid super owner status payload");
+      }
+      if (isSuperOwner && totalCount === 0) {
+        throw new Error("Inconsistent super owner status payload");
+      }
+      return { totalCount, isSuperOwner };
+    },
     enabled: !!user?.id,
     staleTime: 30_000,
   });
 
   return {
-    isSuperOwner: query.data?.isSuperOwner ?? false,
-    totalCount: query.data?.totalCount ?? 0,
+    isSuperOwner: !query.isError && query.data?.isSuperOwner === true,
+    totalCount: query.isError ? 0 : query.data?.totalCount ?? 0,
     loading: query.isLoading,
+    statusKnown: !query.isLoading && !query.isError && query.data !== undefined,
+    statusError: query.error,
     refetch: query.refetch,
   };
 }
