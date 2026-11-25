@@ -195,6 +195,7 @@ function CustomersPage() {
 }
 
 function CustomerAccount({ customer, tenantId }: { customer: Customer; tenantId: string }) {
+  const { userId, membership } = useActiveTenant();
   const accountSummary = useQuery({
     queryKey: ["customer-account-summary", tenantId, userId, membership?.branch_id, customer.id],
     queryFn: async () => {
