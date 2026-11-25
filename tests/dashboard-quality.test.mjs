@@ -294,8 +294,8 @@ const customersPage = readFileSync(new URL("../src/routes/_authenticated/custome
 const reportsPage = readFileSync(new URL("../src/routes/_authenticated/reports.tsx", import.meta.url), "utf8");
 
 test("tenant data caches are partitioned by authenticated user and active branch where applicable", () => {
-  assert.match(sales, /queryKey: \["sales", tenantId, userId, membership\?\.branch_id\]/);
-  assert.match(purchasesPage, /queryKey: \["purchases", tenantId, userId, membership\?\.branch_id\]/);
+  assert.match(sales, /queryKey: \["sales", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(purchasesPage, /queryKey: \["purchases", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
   assert.match(movementsPage, /queryKey: \["inventory-movements", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
   assert.match(cashSessionsPage, /queryKey: \["cash-sessions", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
   assert.match(cashSessionsPage, /queryKey: \["session-expected-cash", tenantId, userId, closingId\?\.id\]/);
