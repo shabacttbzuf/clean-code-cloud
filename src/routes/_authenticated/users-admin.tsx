@@ -77,11 +77,18 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 function UsersAdminPage() {
-  const { tenantId, role, loading } = useActiveTenant();
+  const { tenantId, loading, isSuperOwner, hasPermission } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
   const qc = useQueryClient();
 
-  const canAccess = role === "owner" || role === "manager" || isSuperOwner;
+  const canAccess = isSuperOwner || hasPermission("users.view");
+  const canEditUsers = isSuperOwner || hasPermission("users.edit");
+  const canApproveUsers = isSuperOwner || hasPermission("users.approve");
+  const canSuspendUsers = isSuperOwner || hasPermission("users.suspend");
+  const canFreezeUsers = isSuperOwner || hasPermission("users.freeze");
+  const canArchiveUsers = isSuperOwner || hasPermission("users.archive");
+  const canForcePasswordReset = isSuperOwner || hasPermission("users.force_password_reset");
+  const canManageRoles = isSuperOwner || hasPermission("roles.manage");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [editing, setEditing] = useState<EnterpriseUser | null>(null);
@@ -133,7 +140,7 @@ function UsersAdminPage() {
       if (error) throw error;
       return data ?? [];
     },
-    enabled: !!tenantId && (role === "owner" || isSuperOwner),
+    enabled: !!tenantId && canManageRoles,
   });
 
   const branchesQ = useQuery({
@@ -315,10 +322,10 @@ function UsersAdminPage() {
                       <TableCell className="text-xs">{u.last_device ?? "—"}</TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
-                          <Button size="sm" variant="outline" onClick={() => setEditing(u)}>
+                          {canEditUsers && <Button size="sm" variant="outline" onClick={() => setEditing(u)}>
                             تعديل
-                          </Button>
-                          {u.status === "pending_approval" && (
+                          </Button>}
+                          {u.status === "pending_approval" && canApproveUsers && (
                             <Button
                               size="sm"
                               variant="secondary"
@@ -328,7 +335,7 @@ function UsersAdminPage() {
                               <UserCheck className="ml-1 h-3 w-3" /> اعتماد
                             </Button>
                           )}
-                          {u.status !== "suspended" && (
+                          {u.status !== "suspended" && canSuspendUsers && (
                             <Button
                               size="sm"
                               variant="ghost"
@@ -337,7 +344,7 @@ function UsersAdminPage() {
                               <Ban className="ml-1 h-3 w-3" /> تعليق
                             </Button>
                           )}
-                          {u.status !== "frozen" && (
+                          {u.status !== "frozen" && canFreezeUsers && (
                             <Button
                               size="sm"
                               variant="ghost"
@@ -346,7 +353,7 @@ function UsersAdminPage() {
                               <Snowflake className="ml-1 h-3 w-3" /> تجميد
                             </Button>
                           )}
-                          {u.status !== "archived" && (
+                          {u.status !== "archived" && canArchiveUsers && (
                             <Button
                               size="sm"
                               variant="ghost"
@@ -355,7 +362,7 @@ function UsersAdminPage() {
                               <Archive className="ml-1 h-3 w-3" /> أرشفة
                             </Button>
                           )}
-                          {u.status !== "active" && (
+                          {u.status !== "active" && canApproveUsers && (
                             <Button
                               size="sm"
                               variant="ghost"
@@ -364,13 +371,13 @@ function UsersAdminPage() {
                               تفعيل
                             </Button>
                           )}
-                          <Button
+                          {canForcePasswordReset && <Button
                             size="sm"
                             variant="ghost"
                             onClick={() => doForceReset.mutate(u.id)}
                           >
                             <KeyRound className="ml-1 h-3 w-3" /> إجبار تغيير كلمة السر
-                          </Button>
+                          </Button>}
                         </div>
                       </TableCell>
                     </TableRow>
