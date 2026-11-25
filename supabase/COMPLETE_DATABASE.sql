@@ -15156,7 +15156,8 @@ BEGIN
   END IF;
   IF _expected_tenant_id IS NULL OR _expected_branch_id IS NULL
      OR _order_id IS NULL OR _idempotency_key IS NULL
-     OR _new_status NOT IN ('preparing','ready','delivered','cancelled') THEN
+     OR _new_status IS NULL OR _new_status NOT IN ('preparing','ready','delivered','cancelled')
+     OR length(_notes) > 1000 THEN
     RAISE EXCEPTION 'Invalid kitchen sync request' USING ERRCODE='22023';
   END IF;
 
