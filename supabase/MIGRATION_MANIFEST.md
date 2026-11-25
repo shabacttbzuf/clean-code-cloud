@@ -232,4 +232,6 @@
 
 118. `supabase/migrations/20261125080000_permission_override_write_gates.sql`
 
-**الإجمالي: 118 ترحيلاً.**
+119. `supabase/migrations/20261125090000_sensitive_action_audit_triggers.sql`
+
+**الإجمالي: 119 ترحيلاً.**
