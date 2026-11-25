@@ -6,6 +6,17 @@ The browser queue in `src/lib/offline-sync.ts` is a durable IndexedDB transport.
 
 IndexedDB is device-local persistence, not encryption. Do not enqueue passwords, access tokens, payment credentials, full card data, or unnecessary personal data. The server remains the source of truth.
 
+## Supported operation matrix
+
+| Operation | Offline support | Safety boundary |
+| --- | --- | --- |
+| Kitchen order status (`kitchen_status`) | Supported, limited | Only the status transition is queued; server checks actor, current permission, branch access, transition validity and idempotency. |
+| POS checkout and sales | Not supported (online-only) | No offline posting, invoice numbering or stock effects. |
+| Payments, refunds and cash movements | Not supported (online-only) | No offline financial balance changes. |
+| Returns and purchase receiving | Not supported (online-only) | No offline inventory or supplier/customer ledger changes. |
+| Stock deductions, adjustments and transfers | Not supported (online-only) | No offline quantity or valuation changes. |
+| Payroll, expenses, journals and taxes | Not supported (online-only) | No offline payroll or accounting postings. |
+
 ## Operations that must remain online-only
 
 Until each database RPC has a reviewed transactional idempotency contract, keep these operations online-only:
