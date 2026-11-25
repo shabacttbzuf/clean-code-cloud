@@ -248,7 +248,7 @@ export function useActiveTenant() {
       else window.localStorage.setItem(companyScopeStorageKey, "__all__");
     }
     setBranchSelection({ scope: null, branchId: null, ready: false });
-    void queryClient.invalidateQueries();
+    queryClient.clear();
   }
 
   function switchBranch(id: string | null) {
@@ -262,8 +262,8 @@ export function useActiveTenant() {
       if (id) window.localStorage.setItem(storageKey, id);
       else window.localStorage.setItem(storageKey, "__all__");
     }
-    // Invalidate all tenant-scoped data so screens refetch under the new branch.
-    void queryClient.invalidateQueries();
+    // Clear cached records before rendering the new branch scope; mounted queries refetch.
+    queryClient.clear();
   }
 
   return {
@@ -287,8 +287,13 @@ export function useActiveTenant() {
     permissionsLoading: permissionsQuery.isLoading,
     permissionsError: permissionsQuery.error,
     switchTenant: (id: string) => {
+      if (!memQuery.data?.some((item) => item.tenant_id === id) || id === activeId) return;
       setActiveId(id);
+      setCompanySelection({ scope: null, companyId: null, ready: false });
+      setBranchSelection({ scope: null, branchId: null, ready: false });
       if (typeof window !== "undefined") window.localStorage.setItem(ACTIVE_TENANT_KEY, id);
+      // Tenant-scoped data must not remain visible after changing the active institution.
+      queryClient.clear();
     },
   };
 }
