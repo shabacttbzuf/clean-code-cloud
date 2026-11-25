@@ -99,7 +99,7 @@ function ProductsPage() {
       }
     },
     onSuccess: () => {
-      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: window.location.pathname } }));
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/products" } }));
       qc.invalidateQueries({ queryKey: ["products", tenantId] });
       toast.success("تم الحفظ");
       setOpen(false); setEditing(null);
