@@ -105,7 +105,7 @@ const ROUTE_PERMISSION_RULES: Array<{ prefix: string; permission: string }> = [
   { prefix: "/products", permission: "products.view" },
   { prefix: "/categories", permission: "categories.view" },
   { prefix: "/users", permission: "users.view" },
-  { prefix: "/users-admin", permission: "users.manage" },
+  { prefix: "/users-admin", permission: "users.view" },
   { prefix: "/team-permissions", permission: "permissions.view" },
   { prefix: "/roles", permission: "roles.view" },
   { prefix: "/companies", permission: "companies.view" },
