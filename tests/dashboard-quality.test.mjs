@@ -8,9 +8,11 @@ const layout = readFileSync(new URL("../src/routes/_authenticated/route.tsx", im
 const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 
 test("dashboard rejects partial query failures instead of presenting misleading totals", () => {
-  assert.match(dashboard, /for \(const result of \[salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount\]\)/);
+  assert.match(dashboard, /for \(const result of \[salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expenses, lowStock, sessions, customersCount, categories\]\)/);
   assert.match(dashboard, /if \(result\.error\) throw result\.error/);
-  assert.match(dashboard, /if \(catsRes\.error\) throw catsRes\.error/);
+  assert.match(dashboard, /const totalExpMonth = \(expenses\.data \?\? \[\]\)/);
+  assert.match(dashboard, /const lowStockCount = lowStock\.count \?\? 0/);
+  assert.match(dashboard, /openSessions: sessions\.count \?\? 0/);
   assert.match(dashboard, /لم يتم عرض أرقام جزئية أو مضللة/);
 });
 
@@ -229,4 +231,24 @@ test("dashboard provides permission-scoped operations, notifications, and a trut
   assert.match(dashboard, /hasPermission\("sales.create"\)/);
   assert.match(dashboard, /hasPermission\("kitchen.view"\)/);
   assert.match(dashboard, /hasPermission\("reports.view"\)/);
+});
+
+
+const deferredCharts = readFileSync(new URL("../src/components/deferred-dashboard-charts.tsx", import.meta.url), "utf8");
+const chartModule = readFileSync(new URL("../src/components/dashboard-charts.tsx", import.meta.url), "utf8");
+const productPage = readFileSync(new URL("../src/routes/_authenticated/products.tsx", import.meta.url), "utf8");
+
+test("dashboard defers the Recharts bundle until charts approach the viewport", () => {
+  assert.match(dashboard, /DeferredDashboardCharts/);
+  assert.doesNotMatch(dashboard, /from "recharts"/);
+  assert.match(deferredCharts, /lazy\(\(\) =>/);
+  assert.match(deferredCharts, /IntersectionObserver/);
+  assert.match(deferredCharts, /rootMargin: "240px 0px"/);
+  assert.match(chartModule, /from "recharts"/);
+});
+
+test("dashboard and product imagery use browser-native loading and decoding hints", () => {
+  assert.match(dashboard, /fetchPriority="high"/);
+  assert.match(dashboard, /loading="lazy" decoding="async"/);
+  assert.match(productPage, /loading="lazy" decoding="async" fetchPriority="low"/);
 });
