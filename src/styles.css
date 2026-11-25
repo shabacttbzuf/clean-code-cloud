@@ -628,3 +628,12 @@ button, [role="button"], a, input, select, textarea {
   .pos-mobile-invoice { gap: .35rem; }
   .pos-mobile-invoice > button { flex: 1 1 auto; min-width: 2.5rem; }
 }
+
+@media (max-width: 640px) {
+  .responsive-topbar .topbar-fullscreen-toggle,
+  .responsive-topbar .topbar-theme-toggle {
+    display: inline-flex;
+    min-width: 2.65rem;
+    min-height: 2.65rem;
+  }
+}
