@@ -42,3 +42,37 @@ test("favorite and frequent shortcuts are derived from permission-filtered visib
   assert.match(launcher, /usageCounts\[item\.url\] \?\? 0/);
   assert.match(launcher, /\.sort\(\(a, b\) =>/);
 });
+
+const routeTree = readFileSync(new URL("../src/routeTree.gen.ts", import.meta.url), "utf8");
+
+test("every launcher route is a real authenticated route and all base authenticated routes are represented", () => {
+  const routeSection = routeTree.split("export interface FileRoutesByFullPath {")[1]?.split("}")[0] ?? "";
+  const actualRoutes = new Set(
+    [...routeSection.matchAll(/^\s*'([^']+)': typeof Authenticated/mg)]
+      .map((match) => match[1].replace(/\/$/, ""))
+      .filter((path) => !path.includes("$")),
+  );
+  const launcherSection = launcher.match(/const APP_LAUNCHER_ROUTE_PATHS = new Set\(\[([\s\S]*?)\]\);/)?.[1] ?? "";
+  const launcherRoutes = [...launcherSection.matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+  assert.ok(launcherRoutes.length > 0, "launcher route registry must not be empty");
+  for (const path of launcherRoutes) assert.ok(actualRoutes.has(path), `launcher path is not registered: ${path}`);
+  for (const path of actualRoutes) assert.ok(launcherRoutes.includes(path), `authenticated base route is missing from launcher: ${path}`);
+});
+
+test("launcher search matches both default and customized application names", () => {
+  assert.match(launcher, /searchableNames = \[item\.title, effectiveTitle\]/);
+  assert.match(launcher, /searchableNames\.some\(\(title\) => title\.includes\(needle\)\)/);
+});
+
+test("launcher route filtering fails closed and never renders stale inaccessible favorites", () => {
+  assert.match(launcher, /APP_LAUNCHER_ROUTE_PATHS\.has\(basePath\)/);
+  assert.match(launcher, /const visibleItems = useMemo\(\(\) => groups\.flatMap/);
+  assert.match(launcher, /visibleItems\.filter\(\(item\) => favoriteUrls\.includes\(item\.url\)\)/);
+  assert.match(launcher, /permissions\.isError \?/);
+});
+
+test("launcher provides per-application descriptions and a profile entry", () => {
+  assert.match(launcher, /const APP_DESCRIPTIONS/);
+  assert.match(launcher, /بيانات حسابك وتفضيلاته/);
+  assert.match(launcher, /url: "\/profile", icon: UserRound/);
+});
