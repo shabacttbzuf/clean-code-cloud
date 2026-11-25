@@ -439,7 +439,7 @@ function CreateUserDialog({
           <DialogTitle>إضافة موظف جديد</DialogTitle>
         </DialogHeader>
         <div className="grid gap-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <Label>الاسم الكامل *</Label>
               <Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
@@ -449,7 +449,7 @@ function CreateUserDialog({
               <Input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <Label>البريد الإلكتروني *</Label>
               <Input type="email" dir="ltr" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
@@ -463,7 +463,7 @@ function CreateUserDialog({
             <Label>كلمة المرور * (8+ أحرف)</Label>
             <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <Label>الدور</Label>
               <Select value={form.custom_role_id ? `custom:${form.custom_role_id}` : form.role} onValueChange={(v) => v.startsWith("custom:") ? setForm({ ...form, role: "waiter", custom_role_id: v.slice(7) }) : setForm({ ...form, role: v as any, custom_role_id: "" })}>
