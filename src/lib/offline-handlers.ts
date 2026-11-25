@@ -34,7 +34,7 @@ registerOfflineHandler("kitchen_status", {
     const { data: authData, error: authError } = await supabase.auth.getUser();
     if (authError) throw authError;
     if (!authData.user || authData.user.id !== operation.scope.userId) {
-      throw new Error("conflict: تغير المستخدم المسجل؛ أوقفنا مزامنة العملية حتى يعود صاحبها.");
+      throw new Error("session: تغير المستخدم المسجل؛ أوقفنا مزامنة العملية حتى يعود صاحبها.");
     }
 
     const payload = parseKitchenPayload(operation);
