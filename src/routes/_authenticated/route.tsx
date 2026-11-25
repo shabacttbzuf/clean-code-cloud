@@ -183,7 +183,7 @@ function TopBar() {
     staleTime: 15_000,
   });
   const branchQuery = useQuery({
-    queryKey: ["topbar-active-branch", tenantId, membership?.branch_id],
+    queryKey: ["topbar-active-branch", tenantId, user?.id, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       if (!tenantId || !membership?.branch_id) return null;
       const { data, error } = await supabase.from("branches").select("id,name").eq("tenant_id", tenantId).eq("id", membership.branch_id).maybeSingle();
@@ -237,7 +237,7 @@ function TopBar() {
   const qc = useQueryClient();
   const [signingOut, setSigningOut] = useState(false);
   const notificationsQuery = useQuery({
-    queryKey: ["topbar-notifications", tenantId, user?.id],
+    queryKey: ["topbar-notifications", tenantId, user?.id, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       if (!tenantId || !user?.id) return { items: [], readIds: new Set<string>(), unreadCount: 0 };
       const [itemsResult, totalResult, readCountResult] = await Promise.all([

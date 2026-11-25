@@ -73,7 +73,7 @@ function Dashboard() {
   });
 
   const systemStatusQuery = useQuery({
-    queryKey: ["dashboard-system-status", tenantId, user?.id],
+    queryKey: ["dashboard-system-status", tenantId, user?.id, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       if (!tenantId || !user?.id) throw new Error("لا يوجد نطاق شركة أو مستخدم نشط.");
       const checkedAt = new Date().toISOString();
@@ -121,7 +121,7 @@ function Dashboard() {
   });
 
   const dashboardNotifications = useQuery({
-    queryKey: ["dashboard-notifications", tenantId, user?.id],
+    queryKey: ["dashboard-notifications", tenantId, user?.id, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       if (!tenantId || !user?.id) return [];
       const itemsResult = await supabase.from("notifications").select("id,title,body,created_at,urgency")
@@ -283,7 +283,7 @@ function Dashboard() {
 
 
   const latestOrders = useQuery({
-    queryKey: ["dashboard-latest-orders", tenantId, membership?.branch_id],
+    queryKey: ["dashboard-latest-orders", tenantId, user?.id, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       if (!tenantId) return [];
       let query = supabase.from("sales").select("id,invoice_no,total,status,created_at,order_type,customer_id")
@@ -298,7 +298,7 @@ function Dashboard() {
     staleTime: 5_000,
   });
   const kitchenOverview = useQuery({
-    queryKey: ["dashboard-kitchen-overview", tenantId, membership?.branch_id],
+    queryKey: ["dashboard-kitchen-overview", tenantId, user?.id, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       if (!tenantId) return [];
       let query = (supabase.from("kitchen_orders" as any) as any).select("id,branch_id,sale_id,status,created_at")

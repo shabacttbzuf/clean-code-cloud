@@ -324,7 +324,7 @@ function POSWorkspace() {
   });
 
   const customers = useQuery({
-    queryKey: ["pos-customers", tenantId],
+    queryKey: ["pos-customers", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async (): Promise<CustomerOption[]> => {
       const { data, error } = await (supabase.from("customers" as any) as any)
         .select("id,name,phone,credit_limit").eq("tenant_id", tenantId!).eq("is_active", true).order("name");
@@ -336,7 +336,7 @@ function POSWorkspace() {
   });
 
   const categories = useQuery({
-    queryKey: ["categories-min", tenantId],
+    queryKey: ["categories-min", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async (): Promise<Category[]> => {
       const { data, error } = await supabase.from("categories").select("id, name").eq("tenant_id", tenantId!).order("sort_order");
       if (error) throw error;
@@ -346,7 +346,7 @@ function POSWorkspace() {
   });
 
   const products = useQuery({
-    queryKey: ["products-pos", tenantId],
+    queryKey: ["products-pos", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async (): Promise<Product[]> => {
       return fetchAllRows<Product>(
         supabase.from("products")

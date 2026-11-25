@@ -50,7 +50,7 @@ function SuppliersPage() {
   const [paymentNotes, setPaymentNotes] = useState("");
 
   const q = useQuery({
-    queryKey: ["suppliers", tenantId],
+    queryKey: ["suppliers", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async (): Promise<Supplier[]> => {
       const rows: Supplier[] = [];
       const pageSize = 500;
@@ -70,7 +70,7 @@ function SuppliersPage() {
   });
 
   const branches = useQuery({
-    queryKey: ["supplier-payment-branches", tenantId],
+    queryKey: ["supplier-payment-branches", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       const { data, error } = await supabase.from("branches").select("id, name, is_active")
         .eq("tenant_id", tenantId!).eq("is_active", true).order("name");
@@ -81,7 +81,7 @@ function SuppliersPage() {
   });
 
   const cashSessions = useQuery({
-    queryKey: ["supplier-payment-open-cash-sessions", tenantId, userId],
+    queryKey: ["supplier-payment-open-cash-sessions", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       const { data, error } = await supabase.from("cash_sessions")
         .select("id, branch_id, opened_at, cashier_id")
@@ -94,7 +94,7 @@ function SuppliersPage() {
   });
 
   const ledger = useQuery({
-    queryKey: ["supplier-ledger", tenantId],
+    queryKey: ["supplier-ledger", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       const page = async <T,>(base: any): Promise<T[]> => {
         const all: T[] = [];

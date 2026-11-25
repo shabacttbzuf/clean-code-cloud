@@ -41,13 +41,13 @@ const schema = z.object({
 });
 
 function CategoriesPage() {
-  const { tenantId, isAdmin, membership } = useActiveTenant();
+  const { tenantId, userId, isAdmin, membership } = useActiveTenant();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Category | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["categories", tenantId],
+    queryKey: ["categories", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async (): Promise<Category[]> => {
       const { data, error } = await supabase
         .from("categories")

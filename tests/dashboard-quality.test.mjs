@@ -314,3 +314,20 @@ test("branch selector caches are partitioned by authenticated company, branch, a
   assert.match(purchases, /queryKey: \["branches-active-purchase", tenantId, userId, companyId \?\? "tenant", defaultBranchId \?\? "all"\]/);
   assert.match(purchases, /companyId=\{membership\?\.company_id \?\? null\}/);
 });
+
+const suppliersCachePage = readFileSync(new URL("../src/routes/_authenticated/suppliers.tsx", import.meta.url), "utf8");
+const notificationsCachePage = readFileSync(new URL("../src/routes/_authenticated/notifications.tsx", import.meta.url), "utf8");
+
+test("catalogue, suppliers, notifications, and detail caches cannot cross company or branch scope", () => {
+  assert.match(pos, /queryKey: \["pos-customers", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(pos, /queryKey: \["categories-min", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(pos, /queryKey: \["products-pos", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(products, /queryKey: \["products", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(categories, /queryKey: \["categories", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(suppliersCachePage, /queryKey: \["suppliers", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(suppliersCachePage, /queryKey: \["supplier-ledger", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(notificationsCachePage, /queryKey: \["notifications-list", tenantId, user\?\.id, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(authLayout, /queryKey: \["topbar-notifications", tenantId, user\?\.id, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(dashboard, /queryKey: \["dashboard-notifications", tenantId, user\?\.id, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(saleDetail, /queryKey: \["sale", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all", id\]/);
+});
