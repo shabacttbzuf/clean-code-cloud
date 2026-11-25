@@ -37,7 +37,7 @@ function KitchenPage() {
   const { tenantId, userId, membership, isSuperOwner, hasPermission } = useActiveTenant();
   const canManage = hasPermission("kitchen.manage");
   const qc = useQueryClient();
-  const kitchenViewKey = `workspace-kitchen-view-v1:${tenantId ?? "none"}:${userId ?? "none"}:${membership?.company_id ?? "none"}`;
+  const kitchenViewKey = `workspace-kitchen-view-v1:${tenantId ?? "none"}:${userId ?? "none"}:${membership?.company_id ?? "none"}:${membership?.branch_id ?? "none"}`;
   const [branchId, setBranchId] = useState<string>(() => {
     try { return membership?.branch_id ?? sessionStorage.getItem(kitchenViewKey + ":branch") ?? ""; }
     catch { return membership?.branch_id ?? ""; }
