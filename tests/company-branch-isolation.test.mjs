@@ -89,5 +89,5 @@ const branchesPage = readFileSync(new URL("../src/routes/_authenticated/branches
 test("Super Owner and company admins can load company choices and access the add-branch action", () => {
   assert.ok(branchesPage.includes("enabled: !!tenantId && canManageBranches"));
   assert.ok(branchesPage.includes("action="));
-  assert.ok(branchesPage.includes("canManageBranches && ("));
+  assert.ok(branchesPage.includes("canCreateBranch && ("));
 });
