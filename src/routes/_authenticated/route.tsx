@@ -180,7 +180,7 @@ function TopBar() {
       return new Set<string>((data ?? []) as string[]);
     },
     enabled: !!tenantId && !!user?.id && !isSuperOwner,
-    staleTime: 30_000,
+    staleTime: 15_000,
   });
   const branchQuery = useQuery({
     queryKey: ["topbar-active-branch", tenantId, membership?.branch_id],
