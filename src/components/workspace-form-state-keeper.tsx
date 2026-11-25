@@ -2,6 +2,7 @@ import { useLayoutEffect } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { useAuthSession } from "@/hooks/use-auth-session";
+import { createWorkspaceTabScope, normalizeWorkspacePath } from "@/lib/workspace-tabs-logic.mjs";
 
 type SavedField = {
   key: string;
@@ -13,7 +14,8 @@ type SavedField = {
 
 type SavedScrollContainer = { key: string; left: number; top: number };
 type SavedPageSnapshot = {
-  version: 3;
+  version: 4;
+  dirty: boolean;
   fields: SavedField[];
   scrollX: number;
   scrollY: number;
@@ -169,17 +171,21 @@ function restoreOpenDetails(root: ParentNode, keys: string[]) {
  */
 export function WorkspaceFormStateKeeper() {
   const pathname = useRouterState({ select: state => state.location.pathname });
-  const { tenantId } = useActiveTenant();
+  const locationHref = useRouterState({ select: state => state.location.href });
+  const routeKey = normalizeWorkspacePath(locationHref) ?? pathname;
+  const { tenantId, membership } = useActiveTenant();
   const { user } = useAuthSession();
-  const scope = tenantId && user?.id ? `${STORAGE_PREFIX}:${user.id}:${tenantId}` : null;
+  const sessionScope = createWorkspaceTabScope(user?.id, tenantId, membership?.company_id, membership?.branch_id);
+  const scope = sessionScope ? \`\${STORAGE_PREFIX}:\${sessionScope}\` : null;
 
   useLayoutEffect(() => {
-    if (!scope || !pathname) return;
-    const storageKey = `${scope}:${pathname}`;
+    if (!scope || !sessionScope || !pathname) return;
+    const storageKey = \`\${scope}:\${routeKey}\`;
     const root = document.querySelector("main") ?? document.body;
     let restored = false;
     let restoring = false;
     let discardCurrent = false;
+    let hasUnsavedChanges = false;
 
     const readSnapshot = (): SavedPageSnapshot => {
       try {
@@ -190,14 +196,16 @@ export function WorkspaceFormStateKeeper() {
           typeof (field as SavedField).tag === "string" && typeof (field as SavedField).type === "string"
         );
         if (Array.isArray(parsed)) {
-          // Backward compatibility with snapshots saved before versioned view state.
-          return { version: 3, fields: validFields(parsed), scrollX: 0, scrollY: 0, scrollContainers: [], openDetails: [] };
+          const fields = validFields(parsed);
+          return { version: 4, dirty: fields.length > 0, fields, scrollX: 0, scrollY: 0, scrollContainers: [], openDetails: [] };
         }
         if (parsed && typeof parsed === "object" && "fields" in parsed) {
           const snapshot = parsed as Partial<SavedPageSnapshot>;
+          const fields = Array.isArray(snapshot.fields) ? validFields(snapshot.fields) : [];
           return {
-            version: 3,
-            fields: Array.isArray(snapshot.fields) ? validFields(snapshot.fields) : [],
+            version: 4,
+            dirty: typeof snapshot.dirty === "boolean" ? snapshot.dirty : fields.length > 0,
+            fields,
             scrollX: Number.isFinite(snapshot.scrollX) ? Number(snapshot.scrollX) : 0,
             scrollY: Number.isFinite(snapshot.scrollY) ? Number(snapshot.scrollY) : 0,
             scrollContainers: Array.isArray(snapshot.scrollContainers) ? snapshot.scrollContainers.filter(item =>
@@ -210,15 +218,14 @@ export function WorkspaceFormStateKeeper() {
           };
         }
       } catch { /* Corrupt or unavailable session storage is ignored safely. */ }
-      return { version: 3, fields: [], scrollX: 0, scrollY: 0, scrollContainers: [], openDetails: [] };
+      return { version: 4, dirty: false, fields: [], scrollX: 0, scrollY: 0, scrollContainers: [], openDetails: [] };
     };
 
     const restore = () => {
       if (restored) return;
       const snapshot = readSnapshot();
       if (snapshot.fields.length > 0 && root.querySelectorAll(FIELD_SELECTOR).length === 0) return;
-      // restore scroll-only pages immediately, even when they contain no form controls.
-      const hasState = snapshot.fields.length || snapshot.scrollX || snapshot.scrollY ||
+      const hasState = snapshot.dirty || snapshot.fields.length || snapshot.scrollX || snapshot.scrollY ||
         snapshot.scrollContainers.length || snapshot.openDetails.length;
       if (hasState) {
         restoring = true;
@@ -226,6 +233,7 @@ export function WorkspaceFormStateKeeper() {
           applyFields(root, snapshot.fields);
           restoreOpenDetails(root, snapshot.openDetails);
           restoreScrollContainers(root, snapshot.scrollContainers);
+          hasUnsavedChanges = snapshot.dirty;
         } finally { restoring = false; }
         requestAnimationFrame(() => {
           window.scrollTo({ left: snapshot.scrollX, top: snapshot.scrollY, behavior: "instant" });
@@ -243,20 +251,21 @@ export function WorkspaceFormStateKeeper() {
           }
         });
         window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
-          detail: { path: pathname, dirty: snapshot.fields.length > 0 },
+          detail: { path: routeKey, dirty: snapshot.dirty, scope: sessionScope },
         }));
       }
       restored = true;
     };
 
-    const save = () => {
+    const save = (dirty = hasUnsavedChanges) => {
       try {
         const active = document.activeElement instanceof HTMLElement && root.contains(document.activeElement)
           ? document.activeElement : null;
         const textControl = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? active : null;
         const fields = collectFields(root);
         const snapshot: SavedPageSnapshot = {
-          version: 3,
+          version: 4,
+          dirty,
           fields,
           scrollX: window.scrollX,
           scrollY: window.scrollY,
@@ -267,7 +276,7 @@ export function WorkspaceFormStateKeeper() {
           selectionEnd: textControl?.selectionEnd,
           openDetails: collectOpenDetails(root),
         };
-        if (fields.length || snapshot.scrollX || snapshot.scrollY || snapshot.scrollContainers.length || snapshot.openDetails.length) {
+        if (dirty || fields.length || snapshot.scrollX || snapshot.scrollY || snapshot.scrollContainers.length || snapshot.openDetails.length) {
           sessionStorage.setItem(storageKey, JSON.stringify(snapshot));
         } else {
           sessionStorage.removeItem(storageKey);
@@ -275,29 +284,45 @@ export function WorkspaceFormStateKeeper() {
       } catch { /* Session storage is optional; never block navigation. */ }
     };
 
-    const markDirty = () => {
+    const markDirty = (event: Event) => {
       if (restoring || !restored) return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (target?.closest("[data-workspace-dirty='off']")) return;
+      if (event.type !== "submit" && !target?.closest("form, [data-workspace-dirty='on']")) return;
       discardCurrent = false;
-      save();
-      window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: pathname, dirty: true } }));
+      hasUnsavedChanges = true;
+      save(true);
+      window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+        detail: { path: routeKey, dirty: true, scope: sessionScope },
+      }));
     };
     const saveViewState = () => {
       if (restoring || !restored) return;
-      save();
+      save(hasUnsavedChanges);
     };
     const onDiscard = (event: Event) => {
-      const detail = (event as CustomEvent<{ path?: string }>).detail;
-      if (!detail?.path) return;
-      try { sessionStorage.removeItem(`${scope}:${detail.path}`); } catch { /* optional */ }
-      if (detail.path === pathname) discardCurrent = true;
-      window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: detail.path, dirty: false } }));
-    };
-    const onSaved = (event: Event) => {
-      const detail = (event as CustomEvent<{ path?: string }>).detail;
-      if (detail?.path !== pathname) return;
+      const detail = (event as CustomEvent<{ path?: string; scope?: string }>).detail;
+      if (!detail?.path || (detail.scope && detail.scope !== sessionScope)) return;
+      const discardedPath = normalizeWorkspacePath(detail.path) ?? detail.path;
+      if (discardedPath !== routeKey && discardedPath !== pathname) return;
       try { sessionStorage.removeItem(storageKey); } catch { /* optional */ }
       discardCurrent = true;
-      window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: pathname, dirty: false } }));
+      hasUnsavedChanges = false;
+      window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+        detail: { path: routeKey, dirty: false, scope: sessionScope },
+      }));
+    };
+    const onSaved = (event: Event) => {
+      const detail = (event as CustomEvent<{ path?: string; scope?: string }>).detail;
+      if (!detail?.path || (detail.scope && detail.scope !== sessionScope)) return;
+      const savedPath = normalizeWorkspacePath(detail.path) ?? detail.path;
+      if (savedPath !== routeKey && savedPath !== pathname) return;
+      try { sessionStorage.removeItem(storageKey); } catch { /* optional */ }
+      discardCurrent = true;
+      hasUnsavedChanges = false;
+      window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+        detail: { path: routeKey, dirty: false, scope: sessionScope },
+      }));
     };
 
     const observer = new MutationObserver(() => restore());
@@ -306,6 +331,7 @@ export function WorkspaceFormStateKeeper() {
     const maxWait = window.setTimeout(() => { observer.disconnect(); }, 15_000);
     root.addEventListener("input", markDirty, true);
     root.addEventListener("change", markDirty, true);
+    root.addEventListener("submit", markDirty, true);
     root.addEventListener("focusin", saveViewState, true);
     root.addEventListener("toggle", saveViewState, true);
     root.addEventListener("scroll", saveViewState, true);
@@ -316,9 +342,10 @@ export function WorkspaceFormStateKeeper() {
       window.clearTimeout(timer);
       window.clearTimeout(maxWait);
       observer.disconnect();
-      if (!discardCurrent) save();
+      if (!discardCurrent) save(hasUnsavedChanges);
       root.removeEventListener("input", markDirty, true);
       root.removeEventListener("change", markDirty, true);
+      root.removeEventListener("submit", markDirty, true);
       root.removeEventListener("focusin", saveViewState, true);
       root.removeEventListener("toggle", saveViewState, true);
       root.removeEventListener("scroll", saveViewState, true);
@@ -326,7 +353,7 @@ export function WorkspaceFormStateKeeper() {
       window.removeEventListener("ras-workspace-form-saved", onSaved);
       window.removeEventListener("ras-workspace-form-discard", onDiscard);
     };
-  }, [pathname, scope]);
+  }, [pathname, routeKey, scope, sessionScope]);
 
   return null;
 }
