@@ -37,3 +37,20 @@ test("CI runs for the isolated work branch family", async () => {
   const workflow = await read("../.github/workflows/ci.yml");
   assert.ok(workflow.includes('"work/**"'));
 });
+
+test("service worker caches only the public root HTML and bounds static storage", async () => {
+  const worker = await read("../public/sw.js");
+  assert.ok(worker.includes('url.pathname === "/" && isCacheablePublicHtml(response)'));
+  assert.ok(worker.includes("MAX_STATIC_ENTRIES = 180"));
+  assert.ok(worker.includes("QuotaExceededError"));
+  assert.ok(worker.includes('cacheControl = response.headers.get("cache-control")'));
+  assert.ok(worker.includes('response.headers.get("vary") === "*"'));
+});
+
+test("offline status retries service worker updates when connectivity returns", async () => {
+  const root = await read("../src/routes/__root.tsx");
+  assert.ok(root.includes('updateViaCache: "none"'));
+  assert.ok(root.includes("registration.update()"));
+  assert.ok(root.includes('window.removeEventListener("online", checkForUpdate)'));
+  assert.ok(root.includes("queryClient.clear()"));
+});
