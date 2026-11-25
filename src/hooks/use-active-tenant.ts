@@ -102,9 +102,60 @@ export function useActiveTenant() {
     enabled: !!activeId,
   });
 
-  const membership = useMemo(
-    () => memQuery.data?.find((m) => m.tenant_id === activeId) ?? null,
+  const tenantMemberships = useMemo(
+    () => (memQuery.data ?? []).filter((item) => item.tenant_id === activeId),
     [memQuery.data, activeId],
+  );
+  const hasTenantWideMembership = tenantMemberships.some((item) => item.company_id === null);
+  const companyMembershipIds = tenantMemberships
+    .map((item) => item.company_id)
+    .filter((id): id is string => !!id);
+  const companyScopeStorageKey = user?.id && activeId ? `ras-active-company:${user.id}:${activeId}` : null;
+  const [companySelection, setCompanySelection] = useState<{ scope: string | null; companyId: string | null; ready: boolean }>({
+    scope: null, companyId: null, ready: false,
+  });
+
+  const companyOptionsQuery = useQuery({
+    queryKey: ["authorized-companies", user?.id, activeId, hasTenantWideMembership ? "tenant-wide" : companyMembershipIds.slice().sort().join(":")],
+    queryFn: async () => {
+      if (!activeId) return [];
+      let query = supabase.from("companies").select("id,name").eq("tenant_id", activeId).eq("is_active", true).order("name");
+      if (!hasTenantWideMembership && companyMembershipIds.length) query = query.in("id", companyMembershipIds);
+      else if (!hasTenantWideMembership) return [];
+      const { data, error } = await query;
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!user?.id && !!activeId && (hasTenantWideMembership || companyMembershipIds.length > 0),
+    staleTime: 30_000,
+  });
+  const companyOptions = companyOptionsQuery.data ?? [];
+
+  useEffect(() => {
+    if (!companyScopeStorageKey || !tenantMemberships.length || companyOptionsQuery.isLoading || companyOptionsQuery.isError) return;
+    const stored = typeof window !== "undefined" ? window.localStorage.getItem(companyScopeStorageKey) : null;
+    const allowedIds = new Set(companyOptions.map((item) => item.id));
+    const nextCompanyId =
+      stored === "__all__" && hasTenantWideMembership ? null :
+      stored && allowedIds.has(stored) ? stored :
+      hasTenantWideMembership ? null :
+      companyMembershipIds.find((id) => allowedIds.has(id)) ?? companyMembershipIds[0] ?? null;
+    setCompanySelection({ scope: companyScopeStorageKey, companyId: nextCompanyId, ready: true });
+    if (typeof window !== "undefined") {
+      if (nextCompanyId) window.localStorage.setItem(companyScopeStorageKey, nextCompanyId);
+      else if (hasTenantWideMembership) window.localStorage.setItem(companyScopeStorageKey, "__all__");
+      else window.localStorage.removeItem(companyScopeStorageKey);
+    }
+  }, [companyScopeStorageKey, tenantMemberships, companyOptionsQuery.data, companyOptionsQuery.isLoading, companyOptionsQuery.isError, hasTenantWideMembership]);
+
+  const activeCompanyId = companySelection.scope === companyScopeStorageKey && companySelection.ready
+    ? companySelection.companyId
+    : tenantMemberships.find((item) => item.company_id === null)?.company_id ?? tenantMemberships[0]?.company_id ?? null;
+  const membership = useMemo(
+    () => tenantMemberships.find((item) => item.company_id === activeCompanyId) ??
+      tenantMemberships.find((item) => item.company_id === null) ??
+      tenantMemberships[0] ?? null,
+    [tenantMemberships, activeCompanyId],
   );
 
   const role = membership?.role ?? null;
@@ -134,15 +185,16 @@ export function useActiveTenant() {
   // The branch list is always obtained through the user's authenticated RLS context.
   // Users without branches.view can only receive branches explicitly assigned to them.
   const branchOptionsQuery = useQuery({
-    queryKey: ["authorized-branches", user?.id, activeId, membership?.company_id, membership?.branch_id],
+    queryKey: ["authorized-branches", user?.id, activeId, activeCompanyId, membership?.branch_id],
     queryFn: async () => {
       if (!activeId) return [];
-      const { data, error } = await supabase
+      let query = supabase
         .from("branches")
         .select("id,name,company_id")
         .eq("tenant_id", activeId)
-        .eq("is_active", true)
-        .order("name");
+        .eq("is_active", true);
+      if (activeCompanyId) query = query.eq("company_id", activeCompanyId);
+      const { data, error } = await query.order("name");
       if (error) throw error;
       return data ?? [];
     },
@@ -151,7 +203,7 @@ export function useActiveTenant() {
     staleTime: 30_000,
   });
   const branchOptions = branchOptionsQuery.data ?? [];
-  const branchScopeKey = user?.id && activeId ? `${user.id}:${activeId}:${membership?.company_id ?? "tenant"}` : null;
+  const branchScopeKey = user?.id && activeId ? `${user.id}:${activeId}:${activeCompanyId ?? "all-companies"}` : null;
   const [branchSelection, setBranchSelection] = useState<{
     scope: string | null;
     branchId: string | null;
@@ -182,9 +234,22 @@ export function useActiveTenant() {
     ? branchSelection.branchId
     : membership?.branch_id ?? null;
   const effectiveMembership = useMemo(
-    () => membership ? { ...membership, branch_id: activeBranchId } : null,
-    [membership, activeBranchId],
+    () => membership ? { ...membership, company_id: activeCompanyId, branch_id: activeBranchId } : null,
+    [membership, activeCompanyId, activeBranchId],
   );
+
+  function switchCompany(companyId: string | null) {
+    if (companyId === null && !hasTenantWideMembership) return;
+    if (companyId !== null && !companyOptions.some((item) => item.id === companyId)) return;
+    if (!companyScopeStorageKey) return;
+    setCompanySelection({ scope: companyScopeStorageKey, companyId, ready: true });
+    if (typeof window !== "undefined") {
+      if (companyId) window.localStorage.setItem(companyScopeStorageKey, companyId);
+      else window.localStorage.setItem(companyScopeStorageKey, "__all__");
+    }
+    setBranchSelection({ scope: null, branchId: null, ready: false });
+    void queryClient.invalidateQueries();
+  }
 
   function switchBranch(id: string | null) {
     const canSelectAll = isSuperOwner || ["owner", "manager", "accountant"].includes(membership?.role ?? "");
