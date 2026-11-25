@@ -92,6 +92,7 @@ function Page() {
       if (error) throw error;
     },
     onSuccess: () => {
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: window.location.pathname } }));
       qc.invalidateQueries({ queryKey: ["expenses"] });
       toast.success("تم"); setOpen(false);
       setAmount(""); setDescription(""); setCategoryId("none"); setBranchId("none");
