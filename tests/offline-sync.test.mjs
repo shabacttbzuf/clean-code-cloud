@@ -106,7 +106,7 @@ test("kitchen replay RPC persists idempotency and rechecks permission and branch
   assert.match(migration, /private\.has_permission\(v_actor,v_order\.tenant_id,'kitchen\.manage'\)/);
   assert.match(migration, /private\.can_access_branch\(v_actor,v_order\.tenant_id,v_order\.branch_id\)/);
   assert.match(migration, /SET result=to_jsonb\(v_updated\)/);
-  assert.match(migration, /GRANT EXECUTE ON FUNCTION public\\.set_kitchen_order_status_idempotent\\(uuid,uuid,text,text,uuid\\)/);
+  assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.set_kitchen_order_status_idempotent\(uuid,uuid,text,text,uuid\)/);
   assert.match(migration, /REVOKE ALL ON TABLE private\.kitchen_order_sync_requests FROM PUBLIC, anon, authenticated/);
 });
 
