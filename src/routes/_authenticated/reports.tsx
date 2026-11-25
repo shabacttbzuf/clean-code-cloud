@@ -32,7 +32,7 @@ function ReportsPage() {
   const savedReportView = useMemo(() => {
     try {
       const value = JSON.parse(sessionStorage.getItem(reportViewKey) || "{}") as Record<string, unknown>;
-      const validDate = (date: unknown) => typeof date === "string" && /^\\d{4}-\\d{2}-\\d{2}$/.test(date);
+      const validDate = (date: unknown) => typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date);
       return {
         from: validDate(value.from) ? value.from : null,
         to: validDate(value.to) ? value.to : null,
