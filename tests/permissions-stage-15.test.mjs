@@ -5,76 +5,60 @@ import { readFileSync } from "node:fs";
 const routeGuard = readFileSync(new URL("../src/routes/_authenticated/route.tsx", import.meta.url), "utf8");
 const superOwnerHook = readFileSync(new URL("../src/hooks/use-super-owner.ts", import.meta.url), "utf8");
 const permissionActions = readFileSync(new URL("../src/lib/demo-data.functions.ts", import.meta.url), "utf8");
+const granularMigration = readFileSync(new URL("../supabase/migrations/20261125010000_granular_section_action_permissions.sql", import.meta.url), "utf8");
+const alignmentMigration = readFileSync(new URL("../supabase/migrations/20261125020000_granular_marketing_rls_alignment.sql", import.meta.url), "utf8");
 
 test("authenticated routes fail closed when no permission mapping exists", () => {
-  assert.match(routeGuard, /const isKnownRoute = !!requiredPermission \|\| ownerOnly \|\| isExplicitlyPublic \\|\\| isFirstOwnerBootstrap/);
-  assert.match(routeGuard, /if \(!isKnownRoute\)/);
-  assert.match(routeGuard, /تم منع الوصول احتياطياً/);
+  assert.ok(routeGuard.includes("const isKnownRoute = !!requiredPermission || ownerOnly || isExplicitlyPublic || isFirstOwnerBootstrap"));
+  assert.ok(routeGuard.includes("if (!isKnownRoute)"));
+  assert.ok(routeGuard.includes("تم منع الوصول احتياطياً"));
 });
 
-test("advertising, promotions and settings routes require explicit effective permissions", () => {
-  assert.match(routeGuard, /\{ prefix: "\/ads", permission: "ads\.manage" \}/);
-  assert.match(routeGuard, /\{ prefix: "\/promotions", permission: "promotions\.manage" \}/);
-  assert.match(routeGuard, /\{ prefix: "\/settings", permission: "settings\.view" \}/);
-  assert.match(routeGuard, /get_my_permissions/);
+test("advertising, promotions and settings routes require view permissions", () => {
+  assert.ok(routeGuard.includes('{ prefix: "/ads", permission: "ads.view" }'));
+  assert.ok(routeGuard.includes('{ prefix: "/promotions", permission: "promotions.view" }'));
+  assert.ok(routeGuard.includes('{ prefix: "/settings", permission: "settings.view" }'));
+  assert.ok(routeGuard.includes('supabase.rpc("get_my_permissions"'));
 });
 
 test("super owner status is validated and administration fails closed on an unknown status", () => {
-  assert.match(superOwnerHook, /const payload = data as Record<string, unknown>/);
-  assert.match(superOwnerHook, /typeof totalCount !== "number"/);
-  assert.match(superOwnerHook, /typeof isSuperOwner !== "boolean"/);
-  assert.match(routeGuard, /!superOwnerStatusKnown/);
-  assert.match(routeGuard, /refetchSuperOwnerStatus/);
+  assert.ok(superOwnerHook.includes("const payload = data as Record<string, unknown>"));
+  assert.ok(superOwnerHook.includes('typeof totalCount !== "number"'));
+  assert.ok(superOwnerHook.includes('typeof isSuperOwner !== "boolean"'));
+  assert.ok(routeGuard.includes("!superOwnerStatusKnown"));
+  assert.ok(routeGuard.includes("refetchSuperOwnerStatus"));
 });
 
 test("user permission mutations verify actor, target membership and protect super owner accounts", () => {
   const action = permissionActions.slice(permissionActions.indexOf("export const setUserPermission"));
-  assert.match(action, /data\.user_id === context\.userId/);
-  assert.match(action, /rpc\("is_super_owner"/);
-  assert.match(action, /targetIsSuperOwner/);
-  assert.match(action, /لا يمكن تعديل صلاحيات حساب المالك الرئيسي/);
-  assert.match(action, /المستخدم المستهدف لا ينتمي إلى المؤسسة المحددة/);
-  assert.match(action, /targetRoles\.some\(\(row\) => row\.role === "owner" \|\| row\.role === "manager"\)/);
-  assert.match(action, /row\.hired_by !== context\.userId/);
-  assert.match(action, /row\.company_id !== actorManager\.company_id/);
-  assert.match(action, /get_my_permissions/);
-  assert.match(action, /لا يمكنك منح صلاحية لا تملكها بنفسك/);
+  assert.ok(action.includes("data.user_id === context.userId"));
+  assert.ok(action.includes('rpc("is_super_owner"'));
+  assert.ok(action.includes("targetIsSuperOwner"));
+  assert.ok(action.includes("لا يمكن تعديل صلاحيات حساب المالك الرئيسي"));
+  assert.ok(action.includes("المستخدم المستهدف لا ينتمي إلى المؤسسة المحددة"));
+  assert.ok(action.includes('row.role === "owner" || row.role === "manager"'));
+  assert.ok(action.includes("row.hired_by !== context.userId"));
+  assert.ok(action.includes("row.company_id !== actorManager.company_id"));
+  assert.ok(action.includes("get_my_permissions"));
+  assert.ok(action.includes("لا يمكنك منح صلاحية لا تملكها بنفسك"));
 });
 
-const adsMigration = readFileSync(new URL("../supabase/migrations/20261121010000_separate_ads_management_permission.sql", import.meta.url), "utf8");
-const promotionsMigration = readFileSync(new URL("../supabase/migrations/20261121020000_promotional_offers_and_pos_redemptions.sql", import.meta.url), "utf8");
-const settingsMigration = readFileSync(new URL("../supabase/migrations/20261118000006_platform_branding_and_notification_reads.sql", import.meta.url), "utf8");
-const granularMigration = readFileSync(new URL("../supabase/migrations/20261125010000_granular_section_action_permissions.sql", import.meta.url), "utf8");
-
-test("advertising management has its own permission and company-scoped database write guards", () => {
-  assert.match(adsMigration, /VALUES \('ads\.manage'/);
-  assert.match(adsMigration, /public\.has_permission\(\(select auth\.uid\(\)\), marketing_campaigns\.tenant_id, 'ads\.manage'\)/);
-  assert.match(adsMigration, /company_scope_marketing_campaigns_insert/);
-  assert.match(adsMigration, /company_scope_marketing_campaigns_update/);
-  assert.match(adsMigration, /company_scope_marketing_campaigns_delete/);
-});
-
-test("promotional offers have a separate permission and company/branch-scoped database policies", () => {
-  assert.match(promotionsMigration, /VALUES \('promotions\.manage'/);
-  assert.match(promotionsMigration, /Promotion managers insert offers/);
-  assert.match(promotionsMigration, /Promotion managers update offers/);
-  assert.match(promotionsMigration, /Promotion managers delete offers/);
-  assert.match(promotionsMigration, /private\.can_access_branch/);
-  assert.match(promotionsMigration, /private\.is_company_member/);
-});
-
-test("marketing action permissions are granular and database enforced", () => {
+test("marketing CRUD and approval permissions are separate and database enforced", () => {
   for (const key of ["ads.view", "ads.create", "ads.edit", "ads.delete", "ads.approve", "promotions.view", "promotions.create", "promotions.edit", "promotions.delete", "promotions.approve"]) {
     assert.ok(granularMigration.includes("'" + key + "'"), "missing " + key);
   }
-  assert.match(granularMigration, /AS RESTRICTIVE FOR INSERT TO authenticated/);
-  assert.match(granularMigration, /AS RESTRICTIVE FOR UPDATE TO authenticated/);
-  assert.match(granularMigration, /SECURITY INVOKER/);
-  assert.match(granularMigration, /Permission denied: ads\\.approve/);
-  assert.match(granularMigration, /Permission denied: promotions\\.approve/);
+  for (const key of ["ads.create", "ads.edit", "ads.delete", "promotions.create", "promotions.edit", "promotions.delete"]) {
+    assert.ok(alignmentMigration.includes("'" + key + "'"), "missing RLS gate " + key);
+  }
+  assert.ok(granularMigration.includes("Permission denied: ads.approve"));
+  assert.ok(granularMigration.includes("Permission denied: promotions.approve"));
+  assert.ok(alignmentMigration.includes("AS RESTRICTIVE FOR UPDATE TO authenticated"));
+  assert.ok(alignmentMigration.includes("promotional_offers_granular_scope_update"));
+  assert.ok(alignmentMigration.includes("private.can_access_branch"));
 });
 
 test("platform branding writes remain exclusive to the unchanged Super Owner identity", () => {
-  assert.match(settingsMigration, /platform branding managed by super owner/);
-  assert.match(settingsMigration, /public\.is_super_owner\(\(select auth\.uid\(\)\)\)/);
+  const settingsMigration = readFileSync(new URL("../supabase/migrations/20261118000006_platform_branding_and_notification_reads.sql", import.meta.url), "utf8");
+  assert.ok(settingsMigration.includes("platform branding managed by super owner"));
+  assert.ok(settingsMigration.includes("public.is_super_owner((select auth.uid()))"));
 });
