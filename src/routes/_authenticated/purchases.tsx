@@ -175,6 +175,7 @@ function PurchasesPage() {
           <PurchaseReturnDialog
             purchaseId={returningPurchaseId}
             tenantId={tenantId!}
+            canReturn={canReturn}
             onDone={() => {
               setReturningPurchaseId(null);
               qc.invalidateQueries({ queryKey: ["purchases"] });
