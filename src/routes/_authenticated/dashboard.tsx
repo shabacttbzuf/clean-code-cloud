@@ -311,7 +311,7 @@ function Dashboard() {
   });
 
   const stats = useQuery({
-    queryKey: ["dashboard-stats", tenantId, user?.id, membership?.company_id, membership?.branch_id, role, isSuperOwner, hasPermission("reports.view")],
+    queryKey: ["dashboard-stats", tenantId, user?.id, membership?.company_id, membership?.branch_id, role, isSuperOwner, hasPermission("reports.view"), hasPermission("sales.view"), hasPermission("expenses.view"), hasPermission("inventory.view"), hasPermission("cash.view"), hasPermission("customers.view")],
     queryFn: async () => {
       if (!tenantId) return null;
       const now = new Date();
