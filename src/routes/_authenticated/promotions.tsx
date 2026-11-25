@@ -158,6 +158,7 @@ function PromotionsPage() {
       if (!result.data?.id) throw new Error("لم يتم العثور على العرض ضمن نطاق الشركة والفرع الحاليين؛ لم يُنفّذ الحفظ.");
     },
     onSuccess: () => {
+      window.dispatchEvent(new CustomEvent("ras-workspace-form-saved", { detail: { path: "/promotions", formKey: "promotion-form" } }));
       toast.success(editing ? "تم تحديث العرض" : "تم حفظ العرض كمسودة");
       resetForm();
       void qc.invalidateQueries({ queryKey: ["promotional-offers", tenantId] });
