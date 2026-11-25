@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 const migration = readFileSync(new URL("../supabase/migrations/20261125030000_section_crud_permissions.sql", import.meta.url), "utf8");
 const purchaseRpc = readFileSync(new URL("../supabase/migrations/20261125040000_purchase_rpc_action_permissions.sql", import.meta.url), "utf8");
+const purchaseReturnRpc = readFileSync(new URL("../supabase/migrations/20261125050000_purchase_return_rpc_action_permission.sql", import.meta.url), "utf8");
 const snapshot = readFileSync(new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url), "utf8");
 
 const source = (path) => readFileSync(new URL("../src/routes/_authenticated/" + path, import.meta.url), "utf8");
@@ -45,12 +46,16 @@ test("database action gates remain restrictive and retain legacy manage fallback
   assert.ok(migration.includes("private.can_access_branch"));
 });
 
-test("purchase receiving RPC enforces purchases.create and branch membership", () => {
+test("purchase receiving and return RPCs enforce action permissions and branch membership", () => {
   assert.ok(purchaseRpc.includes("'purchases.create'"));
   assert.ok(purchaseRpc.includes("'purchases.manage'"));
   assert.ok(purchaseRpc.includes("private.can_access_branch"));
   assert.ok(!purchaseRpc.includes("role = 'warehouse'"));
   assert.ok(purchaseRpc.includes("INSERT INTO public.purchase_items"));
+  assert.ok(purchaseReturnRpc.includes("'purchases.returns.create'"));
+  assert.ok(purchaseReturnRpc.includes("'purchases.manage'"));
+  assert.ok(purchaseReturnRpc.includes("private.can_access_branch"));
+  assert.ok(purchaseReturnRpc.includes("INSERT INTO public.purchase_return_items"));
 });
 
 test("operational pages use action-level controls rather than administrator-role-only gates", () => {
@@ -66,7 +71,10 @@ test("operational pages use action-level controls rather than administrator-role
     ["hr.compensation.tsx",["hr.compensation.create","hr.compensation.delete"]],
     ["hr.attendance.tsx",["hr.attendance.create","hr.attendance.edit","hr.attendance.print"]],
     ["hr.leaves.tsx",["hr.leaves.delete"]],
-    ["purchases.tsx",["purchases.create","purchases.returns.create"]]
+    ["purchases.tsx",["purchases.create","purchases.returns.create"]],
+    ["companies.tsx",["companies.create","companies.edit","companies.delete"]],
+    ["companies.$companyId.tsx",["companies.print"]],
+    ["branches.$branchId.tsx",["branches.print"]]
   ];
   for (const [file, keys] of expected) {
     const text = source(file);
@@ -75,7 +83,8 @@ test("operational pages use action-level controls rather than administrator-role
 });
 
 test("complete database snapshot includes the section CRUD migration exactly once", () => {
-  const name = "20261125030000_section_crud_permissions.sql";
-  assert.equal(snapshot.split("SOURCE MIGRATION: " + name).length - 1, 1);
-  assert.ok(snapshot.includes("END MIGRATION: " + name));
+  for (const name of ["20261125030000_section_crud_permissions.sql", "20261125040000_purchase_rpc_action_permissions.sql", "20261125050000_purchase_return_rpc_action_permission.sql"]) {
+    assert.equal(snapshot.split("SOURCE MIGRATION: " + name).length - 1, 1);
+    assert.ok(snapshot.includes("END MIGRATION: " + name));
+  }
 });
