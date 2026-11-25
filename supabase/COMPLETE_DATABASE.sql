@@ -14589,20 +14589,51 @@ AS $function$
 DECLARE
   v_company_id uuid;
   v_invoice_no integer;
+  v_actor_id uuid;
+  v_previous_sub text := current_setting('request.jwt.claim.sub', true);
 BEGIN
   IF NEW.status='ready' AND OLD.status IS DISTINCT FROM NEW.status THEN
     SELECT company_id INTO v_company_id FROM public.branches
      WHERE id=NEW.branch_id AND tenant_id=NEW.tenant_id;
+    IF v_company_id IS NULL THEN
+      RETURN NEW;
+    END IF;
+
+    SELECT ur.user_id
+      INTO v_actor_id
+    FROM public.user_roles ur
+    WHERE ur.tenant_id=NEW.tenant_id
+      AND ur.role IN ('owner','manager')
+      AND (
+        ur.company_id=v_company_id
+        OR (ur.role='owner' AND ur.company_id IS NULL)
+      )
+    ORDER BY CASE WHEN ur.company_id=v_company_id THEN 0 ELSE 1 END,
+             ur.created_at
+    LIMIT 1;
+
+    IF v_actor_id IS NULL THEN
+      RETURN NEW;
+    END IF;
+
     SELECT invoice_no INTO v_invoice_no FROM public.sales
      WHERE id=NEW.sale_id AND tenant_id=NEW.tenant_id;
-    INSERT INTO public.notifications
-      (tenant_id,company_id,audience_type,audience_id,kind,urgency,title,body,payload,action_path,action_label,created_by)
-    VALUES
-      (NEW.tenant_id,v_company_id,'branch',NEW.branch_id,'kitchen_order_ready','normal',
-       'الطلب جاهز للاستلام',
-       'الطلب رقم '||coalesce(v_invoice_no::text,'—')||' أصبح جاهزاً.',
-       jsonb_build_object('sale_id',NEW.sale_id,'kitchen_order_id',NEW.id,'invoice_no',v_invoice_no),
-       '/kitchen','فتح شاشة المطبخ',auth.uid());
+
+    BEGIN
+      PERFORM set_config('request.jwt.claim.sub', v_actor_id::text, true);
+      INSERT INTO public.notifications
+        (tenant_id,company_id,audience_type,audience_id,kind,urgency,title,body,payload,action_path,action_label,created_by)
+      VALUES
+        (NEW.tenant_id,v_company_id,'branch',NEW.branch_id,'kitchen_order_ready','normal',
+         'الطلب جاهز للاستلام',
+         'الطلب رقم '||coalesce(v_invoice_no::text,'—')||' أصبح جاهزاً.',
+         jsonb_build_object('sale_id',NEW.sale_id,'kitchen_order_id',NEW.id,'invoice_no',v_invoice_no),
+         '/kitchen','فتح شاشة المطبخ',v_actor_id);
+      PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+    EXCEPTION WHEN OTHERS THEN
+      PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+      RAISE WARNING 'Kitchen-ready notification was skipped for order %: %', NEW.id, SQLERRM;
+    END;
   END IF;
   RETURN NEW;
 END;
@@ -14880,6 +14911,8 @@ AS $function$
 DECLARE
   v_product public.products%ROWTYPE;
   v_company_id uuid;
+  v_actor_id uuid;
+  v_previous_sub text := current_setting('request.jwt.claim.sub', true);
   v_crossed_threshold boolean := false;
 BEGIN
   IF NEW.quantity IS NULL THEN
@@ -14915,32 +14948,60 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  INSERT INTO public.notifications (
-    tenant_id, company_id, audience_type, audience_id,
-    kind, urgency, title, body, payload, action_path, action_label, created_by
-  )
-  VALUES (
-    NEW.tenant_id,
-    v_company_id,
-    'branch',
-    NEW.branch_id,
-    'low_stock',
-    CASE WHEN NEW.quantity <= 0 THEN 'critical' ELSE 'urgent' END,
-    'تنبيه انخفاض المخزون',
-    'المنتج ' || v_product.name || ' وصل إلى ' ||
-      trim(to_char(NEW.quantity, 'FM999999999990D999')) ||
-      '، والحد الأدنى المحدد ' ||
-      trim(to_char(v_product.min_stock, 'FM999999999990D999')) || '.',
-    jsonb_build_object(
-      'product_id', NEW.product_id,
-      'branch_id', NEW.branch_id,
-      'quantity', NEW.quantity,
-      'min_stock', v_product.min_stock
-    ),
-    '/inventory',
-    'فتح المخزون',
-    auth.uid()
-  );
+  -- Notifications are ancillary: use a company manager/owner as the audited actor,
+  -- and never let an alert failure roll back a valid inventory/POS transaction.
+  SELECT ur.user_id
+    INTO v_actor_id
+  FROM public.user_roles ur
+  WHERE ur.tenant_id = NEW.tenant_id
+    AND ur.role IN ('owner', 'manager')
+    AND (
+      ur.company_id = v_company_id
+      OR (ur.role = 'owner' AND ur.company_id IS NULL)
+    )
+  ORDER BY CASE WHEN ur.company_id = v_company_id THEN 0 ELSE 1 END,
+           ur.created_at
+  LIMIT 1;
+
+  IF v_actor_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  BEGIN
+    PERFORM set_config('request.jwt.claim.sub', v_actor_id::text, true);
+
+    INSERT INTO public.notifications (
+      tenant_id, company_id, audience_type, audience_id,
+      kind, urgency, title, body, payload, action_path, action_label, created_by
+    )
+    VALUES (
+      NEW.tenant_id,
+      v_company_id,
+      'branch',
+      NEW.branch_id,
+      'low_stock',
+      CASE WHEN NEW.quantity <= 0 THEN 'critical' ELSE 'urgent' END,
+      'تنبيه انخفاض المخزون',
+      'المنتج ' || v_product.name || ' وصل إلى ' ||
+        trim(to_char(NEW.quantity, 'FM999999999990D999')) ||
+        '، والحد الأدنى المحدد ' ||
+        trim(to_char(v_product.min_stock, 'FM999999999990D999')) || '.',
+      jsonb_build_object(
+        'product_id', NEW.product_id,
+        'branch_id', NEW.branch_id,
+        'quantity', NEW.quantity,
+        'min_stock', v_product.min_stock
+      ),
+      '/inventory',
+      'فتح المخزون',
+      v_actor_id
+    );
+
+    PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+    RAISE WARNING 'Low-stock notification was skipped for inventory row %: %', NEW.id, SQLERRM;
+  END;
 
   RETURN NEW;
 END;
@@ -14959,7 +15020,7 @@ COMMIT;
 
 -- SOURCE MIGRATION: 20261125030000_hr_leave_event_notifications.sql
 -- Notify HR recipients from real leave-request creation and decision events.
--- Notifications are informational only; this trigger never changes the HR record.
+-- Notification delivery is best-effort and never blocks the underlying HR workflow.
 BEGIN;
 
 CREATE OR REPLACE FUNCTION private.notify_leave_request_events()
@@ -14972,9 +15033,8 @@ DECLARE
   v_employee public.employees%ROWTYPE;
   v_company_id uuid;
   v_employee_user_id uuid;
-  v_start_date date;
-  v_end_date date;
-  v_status text;
+  v_actor_id uuid;
+  v_previous_sub text := current_setting('request.jwt.claim.sub', true);
 BEGIN
   SELECT * INTO v_employee
   FROM public.employees
@@ -14993,26 +15053,58 @@ BEGIN
       AND tenant_id = NEW.tenant_id;
   END IF;
 
-  IF TG_OP = 'INSERT' AND NEW.status = 'pending' THEN
-    INSERT INTO public.notifications (
-      tenant_id, company_id, audience_type, kind, urgency,
-      title, body, payload, action_path, action_label
+  -- A company-scoped notification must have a real company and a trusted
+  -- owner/manager actor; otherwise skip the alert, not the leave transaction.
+  IF v_company_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT ur.user_id
+    INTO v_actor_id
+  FROM public.user_roles ur
+  WHERE ur.tenant_id = NEW.tenant_id
+    AND ur.role IN ('owner', 'manager')
+    AND (
+      ur.company_id = v_company_id
+      OR (ur.role = 'owner' AND ur.company_id IS NULL)
     )
-    VALUES
-    (
-      NEW.tenant_id, v_company_id, 'owner', 'hr_leave_requested', 'normal',
-      'طلب إجازة جديد',
-      'تم تقديم طلب إجازة جديد يحتاج إلى المراجعة.',
-      jsonb_build_object('leave_request_id', NEW.id, 'employee_id', NEW.employee_id),
-      '/hr/leaves', 'مراجعة الطلب'
-    ),
-    (
-      NEW.tenant_id, v_company_id, 'manager', 'hr_leave_requested', 'normal',
-      'طلب إجازة جديد',
-      'تم تقديم طلب إجازة جديد يحتاج إلى المراجعة.',
-      jsonb_build_object('leave_request_id', NEW.id, 'employee_id', NEW.employee_id),
-      '/hr/leaves', 'مراجعة الطلب'
-    );
+  ORDER BY CASE WHEN ur.company_id = v_company_id THEN 0 ELSE 1 END,
+           ur.created_at
+  LIMIT 1;
+
+  IF v_actor_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'INSERT' AND NEW.status = 'pending' THEN
+    BEGIN
+      PERFORM set_config('request.jwt.claim.sub', v_actor_id::text, true);
+
+      INSERT INTO public.notifications (
+        tenant_id, company_id, audience_type, kind, urgency,
+        title, body, payload, action_path, action_label, created_by
+      )
+      VALUES
+      (
+        NEW.tenant_id, v_company_id, 'owner', 'hr_leave_requested', 'normal',
+        'طلب إجازة جديد',
+        'تم تقديم طلب إجازة جديد يحتاج إلى المراجعة.',
+        jsonb_build_object('leave_request_id', NEW.id, 'employee_id', NEW.employee_id),
+        '/hr/leaves', 'مراجعة الطلب', v_actor_id
+      ),
+      (
+        NEW.tenant_id, v_company_id, 'manager', 'hr_leave_requested', 'normal',
+        'طلب إجازة جديد',
+        'تم تقديم طلب إجازة جديد يحتاج إلى المراجعة.',
+        jsonb_build_object('leave_request_id', NEW.id, 'employee_id', NEW.employee_id),
+        '/hr/leaves', 'مراجعة الطلب', v_actor_id
+      );
+
+      PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+    EXCEPTION WHEN OTHERS THEN
+      PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+      RAISE WARNING 'Leave-request notification was skipped for request %: %', NEW.id, SQLERRM;
+    END;
   ELSIF TG_OP = 'UPDATE'
     AND OLD.status = 'pending'
     AND NEW.status IN ('approved', 'rejected')
@@ -15021,33 +15113,44 @@ BEGIN
       SELECT 1 FROM public.user_roles ur
       WHERE ur.user_id = v_employee_user_id
         AND ur.tenant_id = NEW.tenant_id
+        AND ur.company_id = v_company_id
     )
   THEN
-    INSERT INTO public.notifications (
-      tenant_id, company_id, audience_type, audience_id, kind, urgency,
-      title, body, payload, action_path, action_label
-    )
-    VALUES (
-      NEW.tenant_id,
-      v_company_id,
-      'user',
-      v_employee_user_id,
-      CASE WHEN NEW.status = 'approved' THEN 'hr_leave_approved' ELSE 'hr_leave_rejected' END,
-      'normal',
-      CASE WHEN NEW.status = 'approved' THEN 'تمت الموافقة على طلب الإجازة' ELSE 'تم رفض طلب الإجازة' END,
-      CASE WHEN NEW.status = 'approved'
-        THEN 'تمت الموافقة على طلب الإجازة المقدم منك.'
-        ELSE 'تم رفض طلب الإجازة المقدم منك. يرجى مراجعة التفاصيل مع الإدارة.'
-      END,
-      jsonb_build_object(
-        'leave_request_id', NEW.id,
-        'status', NEW.status,
-        'start_date', NEW.start_date,
-        'end_date', NEW.end_date
-      ),
-      '/hr/leaves',
-      'عرض طلباتي'
-    );
+    BEGIN
+      PERFORM set_config('request.jwt.claim.sub', v_actor_id::text, true);
+
+      INSERT INTO public.notifications (
+        tenant_id, company_id, audience_type, audience_id, kind, urgency,
+        title, body, payload, action_path, action_label, created_by
+      )
+      VALUES (
+        NEW.tenant_id,
+        v_company_id,
+        'user',
+        v_employee_user_id,
+        CASE WHEN NEW.status = 'approved' THEN 'hr_leave_approved' ELSE 'hr_leave_rejected' END,
+        'normal',
+        CASE WHEN NEW.status = 'approved' THEN 'تمت الموافقة على طلب الإجازة' ELSE 'تم رفض طلب الإجازة' END,
+        CASE WHEN NEW.status = 'approved'
+          THEN 'تمت الموافقة على طلب الإجازة المقدم منك.'
+          ELSE 'تم رفض طلب الإجازة المقدم منك. يرجى مراجعة التفاصيل مع الإدارة.'
+        END,
+        jsonb_build_object(
+          'leave_request_id', NEW.id,
+          'status', NEW.status,
+          'start_date', NEW.start_date,
+          'end_date', NEW.end_date
+        ),
+        '/hr/leaves',
+        'عرض طلباتي',
+        v_actor_id
+      );
+
+      PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+    EXCEPTION WHEN OTHERS THEN
+      PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+      RAISE WARNING 'Leave-decision notification was skipped for request %: %', NEW.id, SQLERRM;
+    END;
   END IF;
 
   RETURN NEW;
@@ -15304,7 +15407,8 @@ BEGIN
   RETURN NEW;
 EXCEPTION WHEN OTHERS THEN
   PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
-  RAISE;
+  RAISE WARNING 'Customer invoice notification was skipped for sale/payment event: %', SQLERRM;
+  RETURN NEW;
 END;
 $function$;
 
@@ -15438,7 +15542,8 @@ BEGIN
   RETURN NEW;
 EXCEPTION WHEN OTHERS THEN
   PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
-  RAISE;
+  RAISE WARNING 'Customer invoice notification was skipped for sale/payment event: %', SQLERRM;
+  RETURN NEW;
 END;
 $function$;
 
