@@ -56,8 +56,12 @@ const schema = z.object({
 });
 
 function BranchesPage() {
-  const { tenantId, isAdmin, isSuperOwner, membership } = useActiveTenant();
-  const canManageBranches = isAdmin || isSuperOwner;
+  const { tenantId, isSuperOwner, membership, hasPermission } = useActiveTenant();
+  const canViewBranches = isSuperOwner || hasPermission("branches.view");
+  const canCreateBranch = isSuperOwner || hasPermission("branches.create");
+  const canEditBranch = isSuperOwner || hasPermission("branches.edit");
+  const canDeleteBranch = isSuperOwner || hasPermission("branches.delete");
+  const canManageBranches = canCreateBranch || canEditBranch || canDeleteBranch;
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Branch | null>(null);
@@ -83,7 +87,7 @@ function BranchesPage() {
       if (error) throw error;
       return data ?? [];
     },
-    enabled: !!tenantId && canManageBranches,
+    enabled: !!tenantId && (canViewBranches || canManageBranches),
   });
   const availableCompanies = (companies.data ?? []).filter((c) => isSuperOwner || !membership?.company_id || c.id === membership.company_id);
 
@@ -135,6 +139,7 @@ function BranchesPage() {
 
   const del = useMutation({
     mutationFn: async (id: string) => {
+      if (!canDeleteBranch) throw new Error("لا تملك صلاحية حذف الفروع.");
       const { error } = await supabase.from("branches").delete().eq("id", id);
       if (error) throw error;
     },
@@ -151,7 +156,7 @@ function BranchesPage() {
         title="الفروع"
         subtitle="أدر فروع مطعمك — كل فرع لديه إعدادات وعملة ورقم ضريبي مستقلين."
         action={
-          canManageBranches && (
+          canCreateBranch && (
             <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditing(null); }}>
               <DialogTrigger asChild>
                 <Button><Plus className="ml-2 h-4 w-4" />إضافة فرع</Button>
@@ -175,7 +180,7 @@ function BranchesPage() {
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
       ) : !branches || branches.length === 0 ? (
-        <EmptyState onAdd={canManageBranches ? () => setOpen(true) : undefined} />
+        <EmptyState onAdd={canCreateBranch ? () => setOpen(true) : undefined} />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {branches.map((b) => (
@@ -218,28 +223,18 @@ function BranchesPage() {
                 </div>
                 <div className="mt-4 flex gap-2 border-t pt-3">
                   <Button size="sm" variant="outline" className="flex-1" asChild><a href={"/branches/" + b.id}>تفاصيل الفرع</a></Button>
-                {canManageBranches && (
-                  <div className="flex flex-1 gap-2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="flex-1"
-                      onClick={() => { setEditing(b); setOpen(true); }}
-                    >
-                      <Edit className="ml-2 h-3 w-3" />تعديل
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="flex-1 text-destructive hover:text-destructive"
-                      onClick={() => {
+                  {(canEditBranch || canDeleteBranch) && (
+                    <div className="flex flex-1 gap-2">
+                      {canEditBranch && <Button size="sm" variant="ghost" className="flex-1" onClick={() => { setEditing(b); setOpen(true); }}>
+                        <Edit className="ml-2 h-3 w-3" />تعديل
+                      </Button>}
+                      {canDeleteBranch && <Button size="sm" variant="ghost" className="flex-1 text-destructive hover:text-destructive" onClick={() => {
                         if (confirm(`حذف الفرع "${b.name}"؟`)) del.mutate(b.id);
-                      }}
-                    >
-                      <Trash2 className="ml-2 h-3 w-3" />حذف
-                    </Button>
-                  </div>
-                )}
+                      }}>
+                        <Trash2 className="ml-2 h-3 w-3" />حذف
+                      </Button>}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
