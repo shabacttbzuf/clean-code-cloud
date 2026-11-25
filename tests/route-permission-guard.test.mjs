@@ -16,7 +16,7 @@ const requiredRoutes = [
   ["/suppliers", "suppliers.view"],
   ["/purchases", "purchases.view"],
   ["/expenses", "expenses.view"],
-  ["/expense-categories", "expense_categories.view"],
+  ["/expense-categories", "expense_categories.manage"],
   ["/hr/employees", "hr.employees.view"],
   ["/hr/attendance", "hr.attendance.view"],
   ["/hr/leaves", "hr.leaves.view"],
