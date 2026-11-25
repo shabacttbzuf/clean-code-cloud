@@ -270,3 +270,23 @@
 115. `supabase/migrations/20261125000100_offline_sync_kitchen_idempotency.sql`
 
 **الإجمالي: 115 ترحيلاً.**
+
+116. `supabase/migrations/20261125010000_granular_section_action_permissions.sql`
+
+117. `supabase/migrations/20261125020000_granular_marketing_rls_alignment.sql`
+
+118. `supabase/migrations/20261125030000_section_crud_permissions.sql`
+
+119. `supabase/migrations/20261125040000_purchase_rpc_action_permissions.sql`
+
+120. `supabase/migrations/20261125050000_purchase_return_rpc_action_permission.sql`
+
+121. `supabase/migrations/20261125060000_audit_history_permission_reads.sql`
+
+122. `supabase/migrations/20261125070000_private_purchase_rpc_wrappers.sql`
+
+123. `supabase/migrations/20261125080000_permission_override_write_gates.sql`
+
+124. `supabase/migrations/20261125090000_sensitive_action_audit_triggers.sql`
+
+**الإجمالي: 124 ترحيلاً.**
