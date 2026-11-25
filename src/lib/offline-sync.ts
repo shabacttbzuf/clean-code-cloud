@@ -153,8 +153,8 @@ export async function enqueueOfflineOperation(
     throw new Error("هذه العملية تتطلب اتصالاً بالخادم ولا يمكن حفظها كعملية قابلة للإرسال.");
   }
   if (!scope.userId || !scope.tenantId) throw new Error("تعذر تحديد المستخدم والمؤسسة للعملية.");
-  if (!scope.companyId || !scope.branchId) {
-    throw new Error("يجب تحديد الشركة والفرع صراحةً قبل حفظ عملية قابلة للمزامنة.");
+  if (!scope.branchId) {
+    throw new Error("يجب تحديد الفرع صراحةً قبل حفظ عملية قابلة للمزامنة؛ وتُحفظ الشركة إن كانت مرتبطة بالفرع.");
   }
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
