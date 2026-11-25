@@ -72,8 +72,11 @@
           assert(rows.some(x=>x.id===op.id),"لم نجد العملية بعد حفظها");
         });
         await test("عزل المستخدم والمؤسسة والفرع", async()=>{
-          const rows=await listOfflineOperations({...scope,userId:"another-user"});
-          assert(rows.length===0,"ظهرت عملية لمستخدم آخر");
+          const userRows=await listOfflineOperations({...scope,userId:"another-user"});
+          const tenantRows=await listOfflineOperations({...scope,tenantId:"another-tenant"});
+          const branchRows=await listOfflineOperations({...scope,branchId:"another-branch"});
+          const companyRows=await listOfflineOperations({...scope,companyId:"another-company"});
+          assert(userRows.length===0 && tenantRows.length===0 && branchRows.length===0 && companyRows.length===0,"تسربت عملية خارج نطاق المستخدم أو المؤسسة أو الفرع أو الشركة");
         });
         await test("منع إدخال عملية مالية إلى الطابور", async()=>{
           let rejected=false;
