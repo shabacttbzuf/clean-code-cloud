@@ -253,6 +253,8 @@ export async function retryFailedOfflineOperations(scope: OfflineScope): Promise
   for (const operation of rows) {
     if (operation.status !== "failed" && operation.status !== "blocked") continue;
     operation.status = "pending";
+    operation.attempts = 0;
+    operation.lastError = null;
     operation.nextRetryAt = null;
     await saveOperation(operation);
   }
