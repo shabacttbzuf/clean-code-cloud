@@ -42,7 +42,7 @@ Every handler must:
 7. Validate dependencies and process them in dependency order.
 8. Return success only after the server confirms the committed transaction.
 
-Only explicitly approved, non-financial operations may be registered with `registerOfflineHandler(type, { offlineSafe: true, idempotentServerSide: true, send })`. Registration and replay both reject handlers without the server-idempotency assertion. The function rejects the known financial and stock-ledger operation types. The kitchen status handler sends the same operation UUID on every retry to `set_kitchen_order_status_idempotent`; the migration stores the result in a private RLS-enabled ledger and rechecks the authenticated actor, current `kitchen.manage` permission, and branch access.
+Only explicitly approved, non-financial operations may be registered with `registerOfflineHandler(type, { offlineSafe: true, idempotentServerSide: true, send })`. Registration and replay both reject handlers without the server-idempotency assertion. The function rejects the known financial and stock-ledger operation types. The kitchen status handler sends the same operation UUID on every retry to `set_kitchen_order_status_idempotent`. The RPC receives the expected actor, tenant and branch and compares them with the persisted kitchen order before applying the transition; it independently derives `auth.uid()`, rechecks current `kitchen.manage` permission and branch access, and stores the result in a private RLS-enabled ledger.
 
 ## Current UI and behavior
 
