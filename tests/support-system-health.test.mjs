@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { classifyHttpStatus, classifyProbeFailure, aggregateHealth, canViewTechnicalDetails, safeDiagnosticSummary } from "../src/lib/support-health.mjs";
 
 const support = readFileSync(new URL("../src/routes/_authenticated/support.tsx", import.meta.url), "utf8");
+const healthHelpers = readFileSync(new URL("../src/lib/support-health.mjs", import.meta.url), "utf8");
 const navigation = readFileSync(new URL("../src/components/app-sidebar.tsx", import.meta.url), "utf8");
 const topbar = readFileSync(new URL("../src/routes/_authenticated/route.tsx", import.meta.url), "utf8");
 const routeTree = readFileSync(new URL("../src/routeTree.gen.ts", import.meta.url), "utf8");
@@ -61,7 +62,7 @@ test("checks are throttled, retried safely, abort on unmount, and preserve parti
 test("technical details are permission-gated and diagnostics do not expose credentials", () => {
   assert.match(support, /canViewTechnicalDetails/);
   assert.match(support, /get_my_permissions/);
-  assert.match(support, /audit\.view/);
+  assert.match(healthHelpers, /audit\.view/);
   assert.doesNotMatch(support, /console\.(log|error|warn)\(/);
   const diagnosticBlock = support.slice(support.indexOf("async function copyDiagnostics"), support.indexOf("const overall = aggregateHealth"));
   assert.doesNotMatch(diagnosticBlock, /access_token|refresh_token|apikey|service_role/);
