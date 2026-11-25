@@ -40,7 +40,7 @@ test("CI runs for the isolated work branch family", async () => {
 
 test("service worker caches only the public root HTML and bounds static storage", async () => {
   const worker = await read("../public/sw.js");
-  assert.ok(worker.includes('url.pathname === "/" && isCacheablePublicHtml(response)'));
+  assert.ok(worker.includes('url.pathname === "/" && isCacheablePublicResponse(response)'));
   assert.ok(worker.includes("MAX_STATIC_ENTRIES = 180"));
   assert.ok(worker.includes("QuotaExceededError"));
   assert.ok(worker.includes('cacheControl = response.headers.get("cache-control")'));
