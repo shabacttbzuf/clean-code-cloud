@@ -323,7 +323,7 @@ export function AdsPage() {
                       const stats = analyticsByCampaign.get(campaign.id);
                       return `المشاهدات الفريدة يومياً: ${stats?.impressions ?? 0} · النقرات الفريدة يومياً: ${stats?.clicks ?? 0}`;
                     })()}
-                  </div>}</div></div>
+                  </div>}</div>
                 <Button type="button" size="sm" variant="ghost" disabled={!canEditCampaign} onClick={() => editCampaign(campaign)}>تعديل</Button>
                 <Button type="button" size="sm" variant="outline" disabled={!canApproveCampaign || updateStatus.isPending} onClick={() => updateStatus.mutate({
                   id: campaign.id,
