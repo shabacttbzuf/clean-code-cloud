@@ -166,6 +166,11 @@ function RootComponent() {
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
+      if (event === "SIGNED_OUT") {
+        void import("@/lib/offline-reference-cache").then(({ clearOfflineReferences }) => clearOfflineReferences()).catch((error) => {
+          console.warn("تعذر مسح بيانات التخزين المحلي بعد تسجيل الخروج:", error);
+        });
+      }
       router.invalidate();
       if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
     });
