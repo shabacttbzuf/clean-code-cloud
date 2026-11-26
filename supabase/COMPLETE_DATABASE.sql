@@ -17399,7 +17399,7 @@ COMMIT;
 -- END MIGRATION: 20261126220000_inventory_adjustment_permission_and_branch_guard.sql
 
 
--- SOURCE MIGRATION: supabase/migrations/20261127010000_fix_promotion_gift_eligibility_and_same_sku.sql
+-- SOURCE MIGRATION: 20261127010000_fix_promotion_gift_eligibility_and_same_sku.sql
 -- Fix same-product Buy X Get Y calculations and enforce minimums on eligible items.
 -- This is additive and does not rewrite existing sales, invoices, payments, or inventory movements.
 BEGIN;
@@ -17566,4 +17566,4 @@ REVOKE ALL ON FUNCTION private.create_pos_order_with_promotion(uuid,uuid,uuid,uu
 GRANT EXECUTE ON FUNCTION private.create_pos_order_with_promotion(uuid,uuid,uuid,uuid,numeric,uuid,numeric,public.payment_method,jsonb,text,uuid,text,text,text,numeric,uuid) TO authenticated;
 
 COMMIT;
--- END MIGRATION: supabase/migrations/20261127010000_fix_promotion_gift_eligibility_and_same_sku.sql
+-- END MIGRATION: 20261127010000_fix_promotion_gift_eligibility_and_same_sku.sql
