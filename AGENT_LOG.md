@@ -110,3 +110,9 @@
 - أضيف `tests/reports-permission-scope.test.mjs`. لا migration مطلوبة؛ تغيير واجهة واستعلامات فقط.
 - CI Run #2589 `45900519526` على SHA `92cc4ca73d9fe196429a35bf78fc915e06d09755` نجح بالكامل: TypeScript، tests، build، Chromium offline، migrations على قاعدة نظيفة، وpgTAP.
 - التعديل الجديد ينتظر CI جديداً قبل اعتماده.
+
+### تصحيح TypeScript في تقارير Task 11 — 27 نوفمبر 2026
+
+- فشل CI Run #2590 `45900981731` في Typecheck فقط: callbacks الممررة إلى `fetchAllRows` أعادت مصفوفة فارغة مباشرة في مسارات عدم السماح، بينما العقد يتطلب PromiseLike بنتيجة `{data,error}`.
+- تم تحويل جميع مسارات الإغلاق الآمن داخل callbacks إلى `Promise.resolve({ data: [], error: null })`؛ تبقى نتائج عدم وجود صلاحية فارغة ولا توسع نطاق الاستعلام.
+- لا تغييرات DB؛ ينتظر إصلاح TypeScript CI جديداً.
