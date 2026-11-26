@@ -159,7 +159,7 @@ function saveDrafts(list: Draft[], storageKey: string) {
 }
 
 function POSWorkspace() {
-  const { tenantId, tenant, userId, membership, role, isAdmin, isSuperOwner } = useActiveTenant();
+  const { tenantId, tenant, userId, membership, role, isSuperOwner } = useActiveTenant();
   const qc = useQueryClient();
   const [isOnline, setIsOnline] = useState(true);
   useEffect(() => {
@@ -303,7 +303,7 @@ function POSWorkspace() {
     if (membership?.branch_id && !isSuperOwner && branchId !== membership.branch_id) {
       setBranchId(membership.branch_id);
     }
-  }, [membership?.branch_id, isAdmin, isSuperOwner, branchId]);
+  }, [membership?.branch_id, isSuperOwner, branchId]);
 
   useEffect(() => {
     if (branchId) return;
@@ -402,7 +402,7 @@ function POSWorkspace() {
   });
 
   const posPromos = useQuery({
-    queryKey: ["pos-marketing-campaigns", tenantId, membership?.company_id ?? "tenant", branchId],
+    queryKey: ["pos-marketing-campaigns", tenantId, userId, membership?.company_id ?? "tenant", branchId ?? "all"],
     queryFn: async () => {
       const now = new Date().toISOString();
       let query = supabase.from("marketing_campaigns")
@@ -420,8 +420,12 @@ function POSWorkspace() {
         // Do not expose company-specific campaigns to branch-only or regular tenant members.
         query = query.is("company_id", null);
       }
+      // Branch-targeted POS campaigns are visible only in their assigned branch.
+      // A tenant-wide session without an active branch receives only global campaigns.
       if (branchId) {
         query = query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
+      } else {
+        query = query.is("branch_id", null);
       }
       const { data, error } = await query;
       if (error) throw error;
@@ -436,17 +440,10 @@ function POSWorkspace() {
   });
   useEffect(() => {
     for (const promo of posPromos.data ?? []) {
-      void (async () => {
-        try {
-          const { error } = await (supabase.rpc as any)("record_marketing_campaign_event", {
-            _campaign_id: promo.id,
-            _event_type: "impression",
-          });
-          if (error) console.warn("POS campaign impression tracking failed", error);
-        } catch (error) {
-          console.warn("POS campaign impression tracking failed", error);
-        }
-      })();
+      void (supabase.rpc as any)("record_marketing_campaign_event", {
+        _campaign_id: promo.id,
+        _event_type: "impression",
+      }).catch((error: unknown) => console.warn("POS campaign impression tracking failed", error));
     }
   }, [posPromos.data]);
 
@@ -930,7 +927,7 @@ function POSWorkspace() {
           <CardContent className="space-y-4 pt-6">
             <div className="space-y-2">
               <Label>الفرع</Label>
-              <Select value={branchId ?? ""} onValueChange={setBranchId} disabled={!isAdmin && !isSuperOwner}>
+              <Select value={branchId ?? ""} onValueChange={setBranchId} disabled={!!membership?.branch_id && !isSuperOwner}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {branches.data.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}

@@ -15,14 +15,20 @@ async function assertPermission(
   userId: string,
   tenantId: string,
   permissionKey: string,
+  fallbackPermissionKey?: string,
 ) {
-  const { data, error } = await supabase.rpc("has_permission", {
-    _user_id: userId,
-    _tenant_id: tenantId,
-    _permission_key: permissionKey,
-  });
-  if (error) throw new Error(error.message);
-  if (data !== true) throw new Error(`غير مصرح: الصلاحية المطلوبة ${permissionKey}.`);
+  const check = async (key: string) => {
+    const { data, error } = await supabase.rpc("has_permission", {
+      _user_id: userId,
+      _tenant_id: tenantId,
+      _permission_key: key,
+    });
+    if (error) throw new Error(error.message);
+    return data === true;
+  };
+  if (await check(permissionKey)) return;
+  if (fallbackPermissionKey && await check(fallbackPermissionKey)) return;
+  throw new Error(`غير مصرح: الصلاحية المطلوبة ${permissionKey}.`);
 }
 
 async function assertTenantOwnerOrSuperOwner(supabase: any, userId: string, tenantId: string) {
@@ -30,7 +36,8 @@ async function assertTenantOwnerOrSuperOwner(supabase: any, userId: string, tena
   if (superOwnerError) throw new Error(superOwnerError.message);
   if (isSuperOwner) return;
   const { data, error } = await supabase.from("user_roles").select("id")
-    .eq("user_id", userId).eq("tenant_id", tenantId).eq("role", "owner").limit(1);
+    .eq("user_id", userId).eq("tenant_id", tenantId).eq("role", "owner")
+    .is("company_id", null).is("branch_id", null).limit(1);
   if (error) throw new Error(error.message);
   if (!data?.length) throw new Error("إدارة الأدوار المخصصة متاحة لمالك المؤسسة فقط.");
 }
@@ -42,33 +49,118 @@ async function assertTargetUserManageable(
   targetUserId: string,
   tenantId: string,
 ) {
-  const { data: targetRoles, error: targetError } = await supabaseAdmin
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", targetUserId)
-    .eq("tenant_id", tenantId);
-  if (targetError) throw new Error(targetError.message);
-  if (!targetRoles?.length) {
-    throw new Error("المستخدم المستهدف لا ينتمي إلى المؤسسة المحددة.");
+  if (actorId === targetUserId) {
+    throw new Error("لا يمكنك إدارة صلاحيات أو حالة حسابك من إدارة المستخدمين.");
   }
 
+  const { data: targetSuperOwner, error: targetSuperError } = await supabaseAdmin
+    .from("super_owners").select("user_id").eq("user_id", targetUserId).maybeSingle();
+  if (targetSuperError) throw new Error(targetSuperError.message);
+  if (targetSuperOwner) throw new Error("لا يمكن تعديل حساب المالك الأعلى من إدارة المستخدمين.");
+
   const { data: isSuperOwner, error: superOwnerError } = await supabase.rpc(
-    "is_super_owner",
-    { _user_id: actorId },
+    "is_super_owner", { _user_id: actorId },
   );
   if (superOwnerError) throw new Error(superOwnerError.message);
   if (isSuperOwner) return;
 
   const { data: actorRoles, error: actorError } = await supabase
     .from("user_roles")
-    .select("role")
-    .eq("user_id", actorId)
-    .eq("tenant_id", tenantId);
+    .select("role, branch_id, company_id")
+    .eq("user_id", actorId).eq("tenant_id", tenantId);
   if (actorError) throw new Error(actorError.message);
-  if ((actorRoles ?? []).some((r: any) => r.role === "owner")) return;
+  const actorRows = actorRoles ?? [];
+  if (!actorRows.length) throw new Error("لا تملك عضوية في المؤسسة المحددة.");
 
-  if ((targetRoles ?? []).some((r: any) => ["owner", "manager"].includes(r.role))) {
-    throw new Error("لا يحق للمدير إدارة حساب مالك المؤسسة أو مدير آخر.");
+  const { data: targetRoles, error: targetError } = await supabaseAdmin
+    .from("user_roles")
+    .select("role, branch_id, company_id, hired_by")
+    .eq("user_id", targetUserId).eq("tenant_id", tenantId);
+  if (targetError) throw new Error(targetError.message);
+  if (!targetRoles?.length) throw new Error("المستخدم المستهدف لا ينتمي إلى المؤسسة المحددة.");
+  if (targetRoles.some((row: any) => row.role === "owner")) {
+    throw new Error("لا يمكن تعديل حساب مالك المؤسسة إلا بواسطة المالك الأعلى.");
+  }
+  if (!actorRows.some((row: any) => ["owner", "manager"].includes(row.role))) {
+    throw new Error("غير مصرح: إدارة حسابات الموظفين للمالك أو المدير المخول فقط.");
+  }
+
+  const isTenantOwner = actorRows.some((row: any) => row.role === "owner" && row.company_id == null);
+  if (isTenantOwner) return;
+
+  if (targetRoles.some((row: any) => row.role === "manager")) {
+    throw new Error("لا يحق لمدير الشركة إدارة حساب مدير آخر.");
+  }
+
+  const actorCompanyIds = Array.from(new Set(
+    actorRows.map((row: any) => row.company_id).filter(Boolean),
+  )) as string[];
+  const actorBranchIds = Array.from(new Set(
+    actorRows.map((row: any) => row.branch_id).filter(Boolean),
+  )) as string[];
+  if (actorCompanyIds.length > 1 || (actorCompanyIds.length === 0 && actorBranchIds.length === 0)) {
+    throw new Error("لا يمكن تحديد نطاق الشركة المخول لحسابك؛ تم رفض العملية احتياطياً.");
+  }
+  let actorCompanyId = actorCompanyIds[0] ?? null;
+  if (!actorCompanyId && actorBranchIds.length) {
+    const { data: actorBranches, error: actorBranchesError } = await supabaseAdmin
+      .from("branches").select("id, company_id")
+      .eq("tenant_id", tenantId).in("id", actorBranchIds);
+    if (actorBranchesError) throw new Error(actorBranchesError.message);
+    if ((actorBranches ?? []).length !== actorBranchIds.length) {
+      throw new Error("يوجد فرع غير صالح ضمن إسناد حسابك؛ تم رفض العملية.");
+    }
+    const inferredCompanyIds = Array.from(new Set(
+      (actorBranches ?? []).map((row: any) => row.company_id).filter(Boolean),
+    )) as string[];
+    if (inferredCompanyIds.length === 1) actorCompanyId = inferredCompanyIds[0];
+  }
+  if (!actorCompanyId) {
+    throw new Error("حسابك غير مرتبط بشركة أو فرع محدد؛ لا يمكنه إدارة حسابات الموظفين.");
+  }
+
+  const { data: targetProfile, error: profileError } = await supabaseAdmin
+    .from("profiles").select("company_id, branch_id, department_id")
+    .eq("id", targetUserId).eq("tenant_id", tenantId).maybeSingle();
+  if (profileError) throw new Error(profileError.message);
+  if (!targetProfile) throw new Error("ملف المستخدم غير موجود داخل المؤسسة المحددة.");
+
+  const targetBranchIds = Array.from(new Set([
+    targetProfile.branch_id,
+    ...targetRoles.map((row: any) => row.branch_id),
+  ].filter(Boolean))) as string[];
+  const targetCompanyIds = new Set<string>([
+    targetProfile.company_id,
+    ...targetRoles.map((row: any) => row.company_id),
+  ].filter(Boolean) as string[]);
+
+  if (targetBranchIds.length) {
+    const { data: targetBranches, error: branchesError } = await supabaseAdmin
+      .from("branches").select("id, company_id")
+      .eq("tenant_id", tenantId).in("id", targetBranchIds);
+    if (branchesError) throw new Error(branchesError.message);
+    if ((targetBranches ?? []).length !== targetBranchIds.length) {
+      throw new Error("يوجد فرع غير صالح ضمن إسناد الموظف؛ تم رفض العملية.");
+    }
+    for (const row of targetBranches ?? []) if (row.company_id) targetCompanyIds.add(row.company_id);
+  }
+
+  if (targetCompanyIds.size !== 1 || !targetCompanyIds.has(actorCompanyId)) {
+    throw new Error("لا يمكنك إدارة حساب موظف لا يتبع شركتك.");
+  }
+
+  const hasCompanyWideScope = actorRows.some((row: any) =>
+    ["owner", "manager"].includes(row.role) &&
+    row.company_id === actorCompanyId && row.branch_id == null,
+  );
+  if (!hasCompanyWideScope &&
+      (!targetBranchIds.length || targetBranchIds.some((id) => !actorBranchIds.includes(id)))) {
+    throw new Error("لا يمكنك إدارة موظف خارج الفروع المسندة إلى حسابك.");
+  }
+
+  if (actorRows.some((row: any) => row.role === "manager") &&
+      targetRoles.some((row: any) => row.hired_by !== actorId)) {
+    throw new Error("يمكن لمدير الفرع إدارة الموظفين المخولين له فقط.");
   }
 }
 
@@ -194,7 +286,7 @@ export const upsertCompany = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => companyInput.parse(data))
   .handler(async ({ data, context }) => {
-    await assertPermission(context.supabase, context.userId, data.tenant_id, "companies.manage");
+    await assertPermission(context.supabase, context.userId, data.tenant_id, data.id ? "companies.edit" : "companies.create", "companies.manage");
     const payload = { ...data };
     const { error } = data.id
       ? await context.supabase.from("companies").update(payload).eq("id", data.id)
@@ -207,7 +299,7 @@ export const deleteCompany = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: uuid, tenant_id: uuid }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertPermission(context.supabase, context.userId, data.tenant_id, "companies.manage");
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "companies.delete", "companies.manage");
     const { error } = await context.supabase.from("companies").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -231,7 +323,7 @@ export const upsertDepartment = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => departmentInput.parse(data))
   .handler(async ({ data, context }) => {
-    await assertPermission(context.supabase, context.userId, data.tenant_id, "departments.manage");
+    await assertPermission(context.supabase, context.userId, data.tenant_id, data.id ? "departments.edit" : "departments.create", "departments.manage");
     const { error } = data.id
       ? await context.supabase.from("departments").update(data).eq("id", data.id)
       : await context.supabase.from("departments").insert(data);
@@ -243,7 +335,7 @@ export const deleteDepartment = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: uuid, tenant_id: uuid }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertPermission(context.supabase, context.userId, data.tenant_id, "departments.manage");
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "departments.delete", "departments.manage");
     const { error } = await context.supabase.from("departments").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -263,7 +355,7 @@ export const upsertJobTitle = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => jobTitleInput.parse(data))
   .handler(async ({ data, context }) => {
-    await assertPermission(context.supabase, context.userId, data.tenant_id, "job_titles.manage");
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "job_titles.create", "job_titles.manage");
     const { error } = data.id
       ? await context.supabase.from("job_titles").update(data).eq("id", data.id)
       : await context.supabase.from("job_titles").insert(data);
@@ -275,7 +367,7 @@ export const deleteJobTitle = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: uuid, tenant_id: uuid }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertPermission(context.supabase, context.userId, data.tenant_id, "job_titles.manage");
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "job_titles.delete", "job_titles.manage");
     const { error } = await context.supabase.from("job_titles").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -295,7 +387,7 @@ export const upsertEmploymentType = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => employmentTypeInput.parse(data))
   .handler(async ({ data, context }) => {
-    await assertPermission(context.supabase, context.userId, data.tenant_id, "employment_types.manage");
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "employment_types.create", "employment_types.manage");
     const { error } = data.id
       ? await context.supabase.from("employment_types").update(data).eq("id", data.id)
       : await context.supabase.from("employment_types").insert(data);
@@ -307,11 +399,94 @@ export const deleteEmploymentType = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: uuid, tenant_id: uuid }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertPermission(context.supabase, context.userId, data.tenant_id, "employment_types.manage");
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "employment_types.delete", "employment_types.manage");
     const { error } = await context.supabase.from("employment_types").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+async function assertEnterpriseProfilePatchScope(
+  supabase: any,
+  supabaseAdmin: any,
+  actorId: string,
+  targetUserId: string,
+  tenantId: string,
+  patch: { company_id?: string | null; department_id?: string | null },
+) {
+  if (patch.company_id === undefined && patch.department_id === undefined) return;
+
+  const { data: isSuperOwner, error: superOwnerError } = await supabase.rpc(
+    "is_super_owner", { _user_id: actorId },
+  );
+  if (superOwnerError) throw new Error(superOwnerError.message);
+
+  const { data: actorRoles, error: actorError } = await supabase
+    .from("user_roles").select("role, company_id, branch_id")
+    .eq("user_id", actorId).eq("tenant_id", tenantId);
+  if (actorError) throw new Error(actorError.message);
+  const roles = actorRoles ?? [];
+  const isTenantOwner = roles.some((row: any) => row.role === "owner" && row.company_id == null);
+  const hasGlobalScope = isSuperOwner || isTenantOwner;
+
+  const { data: targetProfile, error: targetError } = await supabaseAdmin
+    .from("profiles").select("company_id, branch_id")
+    .eq("id", targetUserId).eq("tenant_id", tenantId).maybeSingle();
+  if (targetError) throw new Error(targetError.message);
+  if (!targetProfile) throw new Error("ملف المستخدم غير موجود داخل المؤسسة المحددة.");
+
+  let actorCompanyId = roles.find((row: any) => row.company_id)?.company_id ?? null;
+  const actorBranchIds = Array.from(new Set(roles.map((row: any) => row.branch_id).filter(Boolean))) as string[];
+  if (!hasGlobalScope && !actorCompanyId && actorBranchIds.length) {
+    const { data: branches, error: branchesError } = await supabaseAdmin
+      .from("branches").select("id, company_id")
+      .eq("tenant_id", tenantId).in("id", actorBranchIds);
+    if (branchesError) throw new Error(branchesError.message);
+    if ((branches ?? []).length !== actorBranchIds.length) throw new Error("تعذر التحقق من فروع حسابك.");
+    const ids = Array.from(new Set((branches ?? []).map((row: any) => row.company_id).filter(Boolean))) as string[];
+    if (ids.length === 1) actorCompanyId = ids[0];
+  }
+
+  const resultingCompanyId = patch.company_id === undefined ? targetProfile.company_id : patch.company_id;
+  if (patch.company_id !== undefined && patch.company_id !== null) {
+    const { data: company, error: companyError } = await supabaseAdmin
+      .from("companies").select("id").eq("id", patch.company_id)
+      .eq("tenant_id", tenantId).maybeSingle();
+    if (companyError) throw new Error(companyError.message);
+    if (!company) throw new Error("الشركة المحددة لا تنتمي إلى المؤسسة المطلوبة.");
+  }
+  if (!hasGlobalScope && (
+    !actorCompanyId || !resultingCompanyId || resultingCompanyId !== actorCompanyId ||
+    (patch.company_id !== undefined && patch.company_id === null)
+  )) {
+    throw new Error("لا يمكنك نقل الموظف إلى شركة خارج نطاقك أو فصله عن شركته.");
+  }
+
+  const departmentIdToValidate = patch.department_id !== undefined
+    ? patch.department_id
+    : patch.company_id !== undefined ? targetProfile.department_id : null;
+  if (departmentIdToValidate) {
+    const { data: department, error: departmentError } = await supabaseAdmin
+      .from("departments").select("id, company_id, branch_id")
+      .eq("id", departmentIdToValidate).eq("tenant_id", tenantId).maybeSingle();
+    if (departmentError) throw new Error(departmentError.message);
+    if (!department) throw new Error("القسم المحدد لا ينتمي إلى المؤسسة المطلوبة.");
+    if (department.company_id && department.company_id !== resultingCompanyId) {
+      throw new Error("القسم المحدد لا يتبع شركة الموظف.");
+    }
+    if (!hasGlobalScope) {
+      if (department.company_id !== actorCompanyId) {
+        throw new Error("لا يمكنك إسناد الموظف إلى قسم خارج شركتك.");
+      }
+      if (department.branch_id && !actorBranchIds.includes(department.branch_id)) {
+        const companyWide = roles.some((row: any) =>
+          ["owner", "manager"].includes(row.role) &&
+          row.company_id === actorCompanyId && row.branch_id == null,
+        );
+        if (!companyWide) throw new Error("لا يمكنك إسناد الموظف إلى قسم خارج فروعك.");
+      }
+    }
+  }
+}
 
 /* -------------------- Enterprise user actions -------------------- */
 
@@ -341,6 +516,9 @@ export const updateUserEnterpriseProfile = createServerFn({ method: "POST" })
     await assertPermission(context.supabase, context.userId, data.tenant_id, "users.edit");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await assertTargetUserManageable(context.supabase, supabaseAdmin, context.userId, data.user_id, data.tenant_id);
+    await assertEnterpriseProfilePatchScope(
+      context.supabase, supabaseAdmin, context.userId, data.user_id, data.tenant_id, data.patch,
+    );
     const { error } = await supabaseAdmin
       .from("profiles")
       .update(data.patch)
@@ -619,7 +797,7 @@ export const createNotification = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertPermission(context.supabase, context.userId, data.tenant_id, "notifications.manage");
+    await assertPermission(context.supabase, context.userId, data.tenant_id, "notifications.create", "notifications.manage");
     const { error } = await context.supabase.from("notifications").insert({
       ...data,
       audience_id: data.audience_id ?? null,

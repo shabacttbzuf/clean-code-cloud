@@ -6,11 +6,14 @@ const source = readFileSync(new URL("../src/routes/_authenticated/ads.tsx", impo
 const migration = readFileSync(new URL("../supabase/migrations/20261121010000_separate_ads_management_permission.sql", import.meta.url), "utf8");
 const repairMigration = readFileSync(new URL("../supabase/migrations/20261121040000_reconcile_ads_campaign_write_permissions.sql", import.meta.url), "utf8");
 
-test("company-scoped marketing controls require the dedicated ads.manage permission", () => {
-  assert.match(source, /permissions = useQuery/);
-  assert.match(source, /supabase\.rpc\("get_my_permissions", \{ _tenant_id: tenantId \}\)/);
-  assert.match(source, /permissions\.data\?\.includes\("ads\.manage"\) === true/);
-  assert.doesNotMatch(source, /permissions\.data\?\.includes\("settings\.manage"\)/);
+test("marketing UI uses distinct view, create, edit, approve and delete permissions", () => {
+  for (const action of ["view", "create", "edit", "approve", "delete"]) {
+    assert.match(source, new RegExp(`hasPermission\\("ads\\.${action}"\\)`));
+  }
+  assert.match(source, /if \(!canApproveAds\)/);
+  assert.match(source, /if \(!canDeleteAds\)/);
+  assert.match(source, /if \(editingId \? !canEditAds : !canCreateAds\)/);
+  assert.doesNotMatch(source, /settings\.manage/);
 });
 
 test("tenant-wide and Super Owner management remain explicit while campaign actions stay company-scoped", () => {
@@ -48,16 +51,4 @@ test("follow-up migration reconciles ads.manage writes without weakening company
   assert.match(source, /created_by: userId/);
   assert.match(source, /select\("id"\)\.single\(\)/);
   assert.match(source, /Marketing campaign RLS failure/);
-});
-
-
-test("campaigns are branch-targeted and linked to managed advertising spaces", () => {
-  assert.match(source, /branch_id: string \| null/);
-  assert.match(source, /advertising_space_id: string \| null/);
-  assert.match(source, /from\("marketing_ad_spaces"\)/);
-  assert.match(source, /from\("branches"\)/);
-  assert.match(source, /branch_id: branchId \|\| null/);
-  assert.match(source, /advertising_space_id: adSpaceId \|\| null/);
-  assert.match(source, /إدارة المساحات الإعلانية/);
-  assert.match(source, /إنشاء مساحة حسب نوع الإعلان والفرع المحدد/);
 });

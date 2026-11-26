@@ -107,7 +107,7 @@ function Dashboard() {
 
   useEffect(() => {
     setActiveCampaignIndex(0);
-  }, [tenantId, membership?.company_id]);
+  }, [tenantId, membership?.company_id, membership?.branch_id]);
 
   useEffect(() => {
     const campaignCount = campaignsQuery.data?.length ?? 0;

@@ -144,8 +144,8 @@ export const appNavigationGroups: AppNavigationGroup[] = [
       { title: "الموظفون", url: "/users", icon: Users, permission: "users.view" },
       { title: "صلاحيات الفريق", url: "/team-permissions", icon: KeyRound, permission: "permissions.view" },
       { title: "الإعدادات", url: "/settings", icon: Settings, permission: "settings.view" },
-      { title: "الإعلانات", url: "/ads", icon: Megaphone, permission: "ads.manage" },
-      { title: "العروض الترويجية", url: "/promotions", icon: Gift, permission: "promotions.manage" },
+      { title: "الإعلانات", url: "/ads", icon: Megaphone, permission: "ads.view" },
+      { title: "العروض الترويجية", url: "/promotions", icon: Gift, permission: "promotions.view" },
     ],
   },
 ];
@@ -154,8 +154,8 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { isSuperOwner, totalCount } = useSuperOwner();
-  const { tenantId, userId } = useActiveTenant();
+  const { isSuperOwner, totalCount, statusKnown } = useSuperOwner();
+  const { tenantId, userId, tenant } = useActiveTenant();
   const [customItems, setCustomItems] = useState<Array<{ title: string; url: string }>>([]);
   const [navOverrides, setNavOverrides] = useState<Record<string, { title?: string; hidden?: boolean }>>({});
 
@@ -199,7 +199,7 @@ export function AppSidebar() {
     staleTime: 30_000,
   });
   const allowed = (item: AppNavigationItem) =>
-    isSuperOwner || (!!permissionsQuery.data && (!item.permission || permissionsQuery.data.has(item.permission)));
+    isSuperOwner || (!permissionsQuery.isError && !!permissionsQuery.data && (!item.permission || permissionsQuery.data.has(item.permission)));
 
   const enterpriseGroup: AppNavigationGroup = {
     label: "المؤسسة",
@@ -214,7 +214,7 @@ export function AppSidebar() {
     ],
   };
 
-  const showAdmin = isSuperOwner || totalCount === 0;
+  const showAdmin = isSuperOwner || (statusKnown && totalCount === 0 && tenant?.owner_id === userId);
   const systemItems: AppNavigationItem[] = [];
   if (isSuperOwner) systemItems.push({ title: "مركز تحكم المالك", url: "/owner-center", icon: Crown });
   if (isSuperOwner) systemItems.push({ title: "استوديو تطوير النظام", url: "/settings#developer-studio", icon: Palette });

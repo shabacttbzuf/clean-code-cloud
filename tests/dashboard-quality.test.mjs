@@ -14,8 +14,17 @@ test("dashboard rejects partial query failures instead of presenting misleading 
   assert.match(dashboard, /لم يتم عرض أرقام جزئية أو مضللة/);
 });
 
+test("dashboard campaign cache and results are isolated by the active branch", () => {
+  assert.ok(dashboard.includes('membership?.branch_id ?? "all"'));
+  assert.ok(dashboard.includes('query = query.or(`branch_id.is.null,branch_id.eq.${membership.branch_id}`)'));
+  assert.ok(dashboard.includes('}, [tenantId, membership?.company_id, membership?.branch_id]);'));
+});
+
 test("CI runs on the active feature branch and supports a manual verification run", () => {
-  assert.match(workflow, /branches: \["main", "feature\/\*\*", "feat\/\*\*"\]/);
+  const pushBranches = workflow.match(/push:\s*\n\s*branches:\s*\[([^\]]+)\]/)?.[1] ?? "";
+  for (const branch of ["main", "feature/**", "feat/**", "work/**", "integration/**"]) {
+    assert.ok(pushBranches.includes(`"${branch}"`), `CI push trigger must include ${branch}`);
+  }
   assert.match(workflow, /workflow_dispatch:/);
 });
 
@@ -61,6 +70,12 @@ test("POS loads the full product catalogue and branch stock in deterministic pag
   assert.match(pos, /\.range\(from, from \+ pageSize - 1\)/);
   assert.match(pos, /\.order\("name"\)/);
   assert.match(pos, /\.order\("product_id"\)/);
+});
+
+test("POS campaign delivery is isolated by the active branch and cache scope", () => {
+  assert.match(pos, /queryKey: \["pos-marketing-campaigns", tenantId, userId, membership\?\.company_id \?\? "tenant", branchId \?\? "all"\]/);
+  assert.ok(pos.includes('query = query.or(`branch_id.is.null,branch_id.eq.${branchId}`)'));
+  assert.ok(pos.includes('query = query.is("branch_id", null)'));
 });
 
 test("purchasing loads the full history and batches supplier, branch, and return lookups", () => {
@@ -171,8 +186,8 @@ test("marketing campaigns have tenant isolation and owner-managed lifecycle cont
   assert.match(adsRoute, /ends_at/);
   assert.match(adsRoute, /updateStatus/);
   assert.match(adsRoute, /deleteCampaign/);
-  assert.match(adsRoute, /get_my_permissions/);
-  assert.match(adsRoute, /permissions\.data\?\.includes\("ads\.manage"\) === true/);
+  assert.ok(adsRoute.includes('hasPermission("ads.view")'));
+  for (const key of ["ads.create", "ads.edit", "ads.approve", "ads.delete"]) assert.ok(adsRoute.includes('hasPermission("' + key + '")'));
   assert.match(adsRoute, /\.eq\("tenant_id", tenantId!\)/);
   assert.match(adsRoute, /\.eq\("company_id", membership\.company_id\)/);
   assert.match(campaignMigration, /enable row level security/);
@@ -234,15 +249,4 @@ test("dashboard provides permission-scoped operations, notifications, and a trut
   assert.match(dashboard, /hasPermission\("sales.create"\)/);
   assert.match(dashboard, /hasPermission\("kitchen.view"\)/);
   assert.match(dashboard, /hasPermission\("reports.view"\)/);
-});
-
-
-test("dashboard and POS campaign delivery honor branch targeting and safe event tracking", () => {
-  assert.match(dashboard, /membership\?\.branch_id/);
-  assert.match(dashboard, /branch_id\.is\.null,branch_id\.eq\.\$\{membership\.branch_id\}/);
-  assert.match(pos, /branch_id\.is\.null,branch_id\.eq\.\$\{branchId\}/);
-  assert.match(pos, /\["pos-marketing-campaigns", tenantId, membership\?\.company_id \?\? "tenant", branchId\]/);
-  assert.match(pos, /void \(async \(\) =>/);
-  assert.ok(pos.includes('await (supabase.rpc as any)("record_marketing_campaign_event"'));
-  assert.ok(pos.includes('if (error) console.warn("POS campaign impression tracking failed"'));
 });

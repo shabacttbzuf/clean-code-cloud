@@ -35,7 +35,12 @@ function PromotionsPage() {
   const { tenantId, role, membership, isSuperOwner, hasPermission } = useActiveTenant();
   const qc = useQueryClient();
   const isTenantOwner = role === "owner" && !membership?.company_id;
-  const canManage = isSuperOwner || isTenantOwner || hasPermission("promotions.manage");
+  const canViewOffers = isSuperOwner || isTenantOwner || hasPermission("promotions.view") || hasPermission("promotions.manage");
+  const canCreateOffers = isSuperOwner || isTenantOwner || hasPermission("promotions.create") || hasPermission("promotions.manage");
+  const canEditOffers = isSuperOwner || isTenantOwner || hasPermission("promotions.edit") || hasPermission("promotions.manage");
+  const canApproveOffers = isSuperOwner || isTenantOwner || hasPermission("promotions.approve") || hasPermission("promotions.manage");
+  const canDeleteOffers = isSuperOwner || isTenantOwner || hasPermission("promotions.delete") || hasPermission("promotions.manage");
+  const canViewAnalytics = canViewOffers;
   const [form, setForm] = useState({ ...emptyForm, branch_id: membership?.branch_id && !membership?.company_id ? membership.branch_id : "" });
   const [editing, setEditing] = useState<string | null>(null);
   const [editingCompanyId, setEditingCompanyId] = useState<string | null>(null);
@@ -62,7 +67,7 @@ function PromotionsPage() {
       if (error) throw error;
       return (data ?? []) as Product[];
     },
-    enabled: !!tenantId && canManage,
+    enabled: !!tenantId && (canCreateOffers || canEditOffers),
   });
   const branches = useQuery({
     queryKey: ["promotion-branches", tenantId, membership?.company_id, membership?.branch_id],
@@ -74,7 +79,7 @@ function PromotionsPage() {
       if (error) throw error;
       return (data ?? []) as Branch[];
     },
-    enabled: !!tenantId && canManage,
+    enabled: !!tenantId && (canCreateOffers || canEditOffers),
   });
   const offers = useQuery({
     queryKey: ["promotional-offers", tenantId, membership?.company_id, membership?.branch_id],
@@ -87,7 +92,7 @@ function PromotionsPage() {
       if (error) throw error;
       return (data ?? []) as Offer[];
     },
-    enabled: !!tenantId && canManage,
+    enabled: !!tenantId && canViewOffers,
   });
   const redemptions = useQuery({
     queryKey: ["promotion-redemptions", tenantId, membership?.company_id, membership?.branch_id],
@@ -100,7 +105,7 @@ function PromotionsPage() {
       if (error) throw error;
       return (data ?? []) as Array<{promotion_id:string;discount_amount:number;created_at:string}>;
     },
-    enabled: !!tenantId && canManage,
+    enabled: !!tenantId && canViewAnalytics,
   });
 
   const stats = useMemo(() => {
@@ -116,6 +121,7 @@ function PromotionsPage() {
 
   const save = useMutation({
     mutationFn: async () => {
+      if (editing ? !canEditOffers : !canCreateOffers) throw new Error("لا تملك صلاحية إنشاء أو تعديل العروض.");
       if (!tenantId) throw new Error("لم يتم تحديد الشركة");
       const name = form.name.trim();
       if (name.length < 2 || name.length > 120) throw new Error("اسم العرض يجب أن يكون بين حرفين و120 حرفاً");
@@ -167,6 +173,7 @@ function PromotionsPage() {
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: {id:string;status:string}) => {
+      if (!canApproveOffers) throw new Error("لا تملك صلاحية اعتماد أو تغيير حالة العرض.");
       let query = (supabase.from("promotional_offers" as any) as any)
         .update({ status }).eq("id", id).eq("tenant_id", tenantId!);
       if (!isSuperOwner && !isTenantOwner) {
@@ -183,6 +190,7 @@ function PromotionsPage() {
   });
   const remove = useMutation({
     mutationFn: async (id: string) => {
+      if (!canDeleteOffers) throw new Error("لا تملك صلاحية حذف العروض.");
       let query = (supabase.from("promotional_offers" as any) as any)
         .delete().eq("id", id).eq("tenant_id", tenantId!);
       if (!isSuperOwner && !isTenantOwner) {
@@ -218,14 +226,14 @@ function PromotionsPage() {
     });
   }
 
-  if (!canManage) return <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">لا تملك صلاحية إدارة العروض الترويجية. تتطلب هذه الصفحة صلاحية مستقلة عن الإعلانات والإعدادات.</CardContent></Card>;
+  if (!canViewOffers) return <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">لا تملك صلاحية إدارة العروض الترويجية. تتطلب هذه الصفحة صلاحية مستقلة عن الإعلانات والإعدادات.</CardContent></Card>;
 
   const statusLabel = (status: string) => status === "active" ? "نشط" : status === "paused" ? "متوقف" : status === "archived" ? "مؤرشف" : "مسودة";
   const offerLabel = (offer: Offer) => offer.offer_type === "percentage" ? `خصم ${offer.discount_value}%` : offer.offer_type === "fixed" ? `خصم ثابت ${offer.discount_value}` : `اشترِ ${offer.buy_quantity} واحصل على ${offer.get_quantity}`;
 
   return <div className="space-y-5">
     <PageHeader title="العروض الترويجية" subtitle="إنشاء الخصومات وعروض اشترِ واحصل، وتحديد المنتجات والفروع والجدولة، ومتابعة الاستخدام من نقطة البيع." />
-    <Card>
+    {(canCreateOffers || (editing && canEditOffers)) && <Card>
       <CardHeader><CardTitle className="flex items-center gap-2"><Gift className="h-5 w-5 text-primary" />{editing ? "تعديل عرض ترويجي" : "إنشاء عرض ترويجي"}</CardTitle><CardDescription>يحفظ العرض كمسودة أولاً، ولا يُطبق في نقطة البيع إلا بعد تفعيله واستيفاء شروطه.</CardDescription></CardHeader>
       <CardContent className="space-y-4" onChangeCapture={() => setFormTouched(true)}>
         <div className="grid gap-3 md:grid-cols-2">
@@ -242,20 +250,20 @@ function PromotionsPage() {
           <div className="space-y-2"><Label>بداية العرض</Label><Input type="datetime-local" value={form.starts_at} onChange={e=>setForm(p=>({...p,starts_at:e.target.value}))} /></div>
           <div className="space-y-2"><Label>نهاية العرض</Label><Input type="datetime-local" value={form.ends_at} onChange={e=>setForm(p=>({...p,ends_at:e.target.value}))} /></div>
         </div>
-        <div className="flex flex-wrap gap-2"><Button onClick={()=>save.mutate()} disabled={save.isPending || !form.name.trim()}><Plus className="ml-1 h-4 w-4" />{save.isPending ? "جارٍ الحفظ..." : editing ? "حفظ التعديلات" : "حفظ كمسودة"}</Button>{editing && <Button variant="outline" onClick={resetForm}>إلغاء</Button>}</div>
+        <div className="flex flex-wrap gap-2"><Button onClick={()=>save.mutate()} disabled={save.isPending || !form.name.trim() || (editing ? !canEditOffers : !canCreateOffers)}><Plus className="ml-1 h-4 w-4" />{save.isPending ? "جارٍ الحفظ..." : editing ? "حفظ التعديلات" : "حفظ كمسودة"}</Button>{editing && <Button variant="outline" onClick={resetForm}>إلغاء</Button>}</div>
       </CardContent>
-    </Card>
+    </Card>}
     <Card>
       <CardHeader><CardTitle>العروض المحفوظة والأداء</CardTitle><CardDescription>عدد مرات الاستخدام وإجمالي الخصومات المسجلة من عمليات البيع المكتملة.</CardDescription></CardHeader>
       <CardContent className="space-y-3">
         {offers.isLoading ? <div className="flex justify-center p-6"><Loader2 className="h-5 w-5 animate-spin" /></div> : offers.isError ? <p className="text-sm text-destructive">تعذر تحميل العروض. <Button variant="link" onClick={()=>void offers.refetch()}>إعادة المحاولة</Button></p> : offers.data?.length ? offers.data.map(offer=>{
           const stat=stats.get(offer.id)??{count:0,discount:0};
-          const canDelete=stat.count===0;
+          const canDelete=canDeleteOffers && stat.count===0;
           return <div key={offer.id} className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
             <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2 font-semibold">{offer.name}<Badge variant={offer.status==="active"?"default":"secondary"}>{statusLabel(offer.status)}</Badge></div><div className="text-xs text-muted-foreground">{offerLabel(offer)} · استخدم {stat.count} مرة · إجمالي الخصم {stat.discount.toFixed(2)}{offer.usage_limit? ` · الحد ${offer.usage_limit}`:""}</div></div>
-            <Button size="sm" variant="ghost" onClick={()=>editOffer(offer)}>تعديل</Button>
-            <Button size="sm" variant="outline" disabled={updateStatus.isPending} onClick={()=>updateStatus.mutate({id:offer.id,status:offer.status==="active"?"paused":offer.status==="archived"?"draft":"active"})}>{offer.status==="active"?"إيقاف":offer.status==="archived"?"استعادة كمسودة":"تفعيل"}</Button>
-            {offer.status!=="archived" && <Button size="sm" variant="ghost" onClick={()=>{if(confirm("أرشفة هذا العرض؟")) updateStatus.mutate({id:offer.id,status:"archived"});}}><Archive className="ml-1 h-4 w-4" />أرشفة</Button>}
+            {canEditOffers && <Button size="sm" variant="ghost" onClick={()=>editOffer(offer)}>تعديل</Button>}
+            <Button size="sm" variant="outline" disabled={!canApproveOffers || updateStatus.isPending} onClick={()=>updateStatus.mutate({id:offer.id,status:offer.status==="active"?"paused":offer.status==="archived"?"draft":"active"})}>{offer.status==="active"?"إيقاف":offer.status==="archived"?"استعادة كمسودة":"تفعيل"}</Button>
+            {offer.status!=="archived" && canApproveOffers && <Button size="sm" variant="ghost" onClick={()=>{if(confirm("أرشفة هذا العرض؟")) updateStatus.mutate({id:offer.id,status:"archived"});}}><Archive className="ml-1 h-4 w-4" />أرشفة</Button>}
             <Button size="icon" variant="ghost" aria-label={"حذف "+offer.name} disabled={!canDelete || remove.isPending} onClick={()=>{if(canDelete && confirm("حذف هذا العرض نهائياً؟")) remove.mutate(offer.id);}}>{canDelete?<Trash2 className="h-4 w-4 text-destructive" />:<RotateCcw className="h-4 w-4 text-muted-foreground" />}</Button>
           </div>;
         }) : <p className="text-sm text-muted-foreground">لا توجد عروض ترويجية بعد.</p>}

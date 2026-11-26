@@ -75,7 +75,7 @@ const schema = z.object({
 });
 
 function SettingsPage() {
-  const { tenant, tenantId, role, membership } = useActiveTenant();
+  const { tenant, tenantId, hasPermission } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
   const { design, saveDesign, resetDesign } = useTheme();
   const qc = useQueryClient();
@@ -185,6 +185,7 @@ function SettingsPage() {
 
   const save = useMutation({
     mutationFn: async () => {
+      if (!canEdit) throw new Error("لا تملك صلاحية تعديل إعدادات النشاط التجاري.");
       if (!tenantId) throw new Error("لا توجد شركة نشطة لحفظ الإعدادات.");
       const v = schema.parse({ name, currency, tax_rate: tax, logo_url: logoUrl.trim() || null });
       const { data, error } = await supabase.from("tenants")
@@ -202,7 +203,7 @@ function SettingsPage() {
     },
   });
 
-  const canEdit = isSuperOwner || (role === "owner" && !membership?.company_id);
+  const canEdit = isSuperOwner || hasPermission("settings.manage");
 
   useEffect(() => {
     if (!tenant) return;

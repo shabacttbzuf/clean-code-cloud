@@ -47,8 +47,17 @@ test("marketing campaigns enforce company scope in RLS and on writes", () => {
 test("dedicated ads page creates campaigns for the active company and scopes company reads", () => {
   assert.match(ads, /membership\?\.company_id/);
   assert.match(ads, /company_id: selectedBranch\?\.company_id \?\? \(editingId \? editingCompanyId/);
+  assert.match(ads, /branch_id: branchId \|\| null/);
+  assert.match(ads, /advertising_space_id: adSpaceId \|\| null/);
   assert.match(ads, /query = query\.eq\("company_id", membership\.company_id\)/);
   assert.match(ads, /select\("id,company_id,branch_id,advertising_space_id,title/);
+  assert.match(ads, /supabase\.from\("marketing_ad_spaces"\)/);
+  assert.match(ads, /\.update\(\{ is_active: !active, updated_at: new Date\(\)\.toISOString\(\) \}\)/);
+  assert.match(ads, /toggleAdSpace\.mutate\(\{ id: space\.id, active: space\.is_active \}\)/);
+  assert.match(ads, /queryKey: \["marketing-campaigns", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(ads, /queryKey: \["marketing-campaign-analytics", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(ads, /queryKey: \["marketing-ad-spaces", tenantId, userId, membership\?\.company_id, membership\?\.branch_id \?\? "all", branchId\]/);
+  assert.match(ads, /private\.can_access_branch|branch_id/);
 });
 
 test("notification server function accepts only an explicit company scope that the database validates", () => {

@@ -28,21 +28,13 @@
 22. `supabase/migrations/20261111000001_payroll_atomic_rejection.sql`
 23. `supabase/migrations/20261111000002_user_role_atomicity.sql`
 24. `supabase/migrations/20261111000003_migrate_legacy_drizzle_visibility.sql`
-
 25. `supabase/migrations/20261111000004_atomic_pos_checkout.sql`
-
 26. `supabase/migrations/20261111000005_atomic_purchases_inventory_cash.sql`
-
 27. `supabase/migrations/20261111000006_audit_login_notification_security.sql`
-
 28. `supabase/migrations/20261111000007_atomic_tenant_onboarding.sql`
-
 29. `supabase/migrations/20261111000008_payroll_period_uniqueness.sql`
-
 30. `supabase/migrations/20261111000009_secure_custom_role_clone.sql`
-
 31. `supabase/migrations/20261111000010_minimize_client_write_privileges.sql`
-
 32. `supabase/migrations/20261111000011_restrict_security_definer_execution.sql`
 33. `supabase/migrations/20261111000012_secure_super_owner_status.sql`
 34. `supabase/migrations/20261111000013_protect_financial_ledger_writes.sql`
@@ -66,220 +58,81 @@
 52. `supabase/migrations/20261111000031_add_purchase_returned_status.sql`
 53. `supabase/migrations/20261111000032_mark_fully_returned_purchases.sql`
 54. `supabase/migrations/20261111000033_require_active_branch_for_sales_and_sessions.sql`
-
-
-
-## ترحيل Drizzle القديم
-
-يوجد ملف واحد قديم:
-`drizzle/migrations/0000_scope_permission_visibility.sql`
-
-تم نقل أثره الوظيفي إلى الترحيل رقم 24 في سلسلة Supabase. لا تشغّل الملف القديم منفرداً بعد تشغيل سلسلة Supabase حتى لا تعيد تطبيق تغييرات السياسات.
-
-## ملف SQL الشامل
-
-`supabase/COMPLETE_DATABASE.sql` يجمع محتويات جميع الترحيلات المتسلسلة بالترتيب، وهو Snapshot كامل لإعادة البناء من قاعدة فارغة.
-
-**المسار الموصى به:** `supabase db push` لأنه يحافظ على سجل الترحيلات. لا تشغّل Snapshot يدوياً ثم تشغّل `db push` على القاعدة نفسها؛ اختر طريقة واحدة فقط.
-
 55. `supabase/migrations/20261111000034_allow_super_owners_tenant_admin_rls.sql`
 56. `supabase/migrations/20261111030810_prevent_negative_inventory_bootstrap.sql`
 57. `supabase/migrations/20261111033000_enforce_role_permissions.sql`
 58. `supabase/migrations/20261111035000_get_my_permissions_invoker.sql`
 59. `supabase/migrations/20261111040000_fix_cashier_pos_checkout_permissions.sql`
-
 60. `supabase/migrations/20261111232801_restaurant_image_storage_foundation.sql`
-
 61. `supabase/migrations/20261111233538_marketing_campaigns_management.sql`
-
 62. `supabase/migrations/20261112002129_supplier_payment_ledger.sql`
-
 63. `supabase/migrations/20261112002432_supplier_ledger_fk_indexes_and_marketing_rls.sql`
-
 64. `supabase/migrations/20261112002832_restrict_supplier_payment_mutations.sql`
-
 65. `supabase/migrations/20261112003426_supplier_cash_session_integration.sql`
-
 66. `supabase/migrations/20261112003745_supplier_cash_session_fk_index.sql`
-
 67. `supabase/migrations/20261112004325_assignable_custom_roles.sql`
-
 68. `supabase/migrations/20261112005125_owner_only_custom_role_management.sql`
-
 69. `supabase/migrations/20261112005250_owner_only_custom_role_mutations.sql`
-
 70. `supabase/migrations/20261112005412_protect_tenant_owner_from_custom_role_demotion.sql`
-
-**الإجمالي: 70 ترحيلاً.**
-
 71. `supabase/migrations/20261114141029_fix_atomic_stock_decrement_for_pos_checkout.sql`
-
 72. `supabase/migrations/20261114141500_grant_authenticated_marketing_campaign_reads.sql`
-
-**الإجمالي: 72 ترحيلاً.**
-
 73. `supabase/migrations/20261115000001_customer_credit_accounts_and_collections.sql`
 74. `supabase/migrations/20261115000002_customer_credit_sale_rpc.sql`
 75. `supabase/migrations/20261115000003_customer_cash_collection_reconciliation.sql`
-
-**الإجمالي: 75 ترحيلاً.**
-
 76. `supabase/migrations/20261115000004_fix_customer_balance_aggregation.sql`
-
-**الإجمالي: 76 ترحيلاً.**
-
 77. `supabase/migrations/20261115000005_company_branch_creator_isolation.sql`
-
-**الإجمالي: 77 ترحيلاً.**
-
 78. `supabase/migrations/20261115000006_enforce_company_branch_rls.sql`
-
-**الإجمالي: 78 ترحيلاً.**
-
 79. `supabase/migrations/20261115000007_scope_cash_sessions_to_company.sql`
-
-**الإجمالي: 79 ترحيلاً.**
-
 80. `supabase/migrations/20261118000001_allow_company_members_to_read_assigned_company.sql`
-
-**الإجمالي: 80 ترحيلاً.**
-
 81. `supabase/migrations/20261118000002_company_creator_visibility_for_master_data.sql`
-
-**الإجمالي: 81 ترحيلاً.**
-
 82. `supabase/migrations/20261118000003_enforce_company_scope_across_operational_data.sql`
-
-**الإجمالي: 82 ترحيلاً.**
-
 83. `supabase/migrations/20261118000004_tighten_company_compound_scope_checks.sql`
-
-**الإجمالي: 83 ترحيلاً.**
-
 84. `supabase/migrations/20261118000005_index_company_creator_foreign_keys.sql`
-
-**الإجمالي: 84 ترحيلاً.**
-
 85. `supabase/migrations/20261118000006_platform_branding_and_notification_reads.sql`
-
 86. `supabase/migrations/20261119000001_customer_credit_sale_cost_snapshot.sql`
-
-**الإجمالي: 86 ترحيلاً.**
-
 87. `supabase/migrations/20261119000002_scope_customer_payment_idempotency.sql`
-
-**الإجمالي: 87 ترحيلاً.**
-
 88. `supabase/migrations/20261119000003_scope_cash_session_close_to_branch.sql`
-
 89. `supabase/migrations/20261119000004_deduplicate_notification_read_policies_and_index.sql`
-
 90. `supabase/migrations/20261119000005_index_platform_branding_updated_by.sql`
-
 91. `supabase/migrations/20261119000006_company_scope_marketing_notifications.sql`
-
-**الإجمالي: 91 ترحيلاً.**
 92. `supabase/migrations/20261119000007_user_role_company_scope.sql`
-
 93. `supabase/migrations/20261119000008_bind_branch_access_and_helper_actors.sql`
-
 94. `supabase/migrations/20261119000009_private_avatar_and_company_asset_scope.sql`
-
-**الإجمالي: 94 ترحيلاً.**
-
 95. `supabase/migrations/20261119010000_pre_sale_security_performance_hardening.sql`
-
-**الإجمالي: 95 ترحيلاً.**
-
 96. `supabase/migrations/20261120000000_move_authenticated_definers_to_private_wrappers.sql`
-
-**الإجمالي: 96 ترحيلاً.**
-
 97. `supabase/migrations/20261120010000_secure_leave_decisions_and_deletion.sql`
-
-**الإجمالي: 97 ترحيلاً.**
-
 98. `supabase/migrations/20261120020000_leave_rejection_actor_integrity.sql`
-
-**الإجمالي: 98 ترحيلاً.**
-
 99. `supabase/migrations/20261120030000_enforce_company_scope_marketing_reads.sql`
-
-**الإجمالي: 99 ترحيلاً.**
-
 100. `supabase/migrations/20261120040000_kitchen_order_workflow.sql`
-
-**الإجمالي: 100 ترحيلاً.**
-
 101. `supabase/migrations/20261120050000_restaurant_tables_pos_order_types.sql`
-
-**الإجمالي: 101 ترحيلاً.**
-
 102. `supabase/migrations/20261120060000_sale_table_name_receipt_snapshot.sql`
-
-**الإجمالي: 102 ترحيلاً.**
-
 103. `supabase/migrations/20261121010000_separate_ads_management_permission.sql`
-
-**الإجمالي: 103 ترحيلاً.**
-
 104. `supabase/migrations/20261121020000_promotional_offers_and_pos_redemptions.sql`
-
-**الإجمالي: 104 ترحيلاً.**
-
 105. `supabase/migrations/20261121025000_promotions_read_permission_scope.sql`
-
-**الإجمالي: 105 ترحيلاً.**
-
 106. `supabase/migrations/20261121030000_notification_deep_links.sql`
-
-**الإجمالي: 106 ترحيلاً.**
-
 107. `supabase/migrations/20261121040000_reconcile_ads_campaign_write_permissions.sql`
-
-**الإجمالي: 107 ترحيلاً.**
-
 108. `supabase/migrations/20261122010000_stage15_fk_index_and_security_regression_guards.sql`
-
-**الإجمالي: 108 ترحيلاً.**
-
 109. `supabase/migrations/20261122030000_pos_cashier_access_credentials.sql`
-
-**الإجمالي: 109 ترحيلاً.**
-
 110. `supabase/migrations/20261122040000_grant_promotions_api_access_and_fk_indexes.sql`
-
-**الإجمالي: 110 ترحيلاً.**
-
 111. `supabase/migrations/20261124010000_marketing_campaign_analytics.sql`
-
-**الإجمالي: 111 ترحيلاً.**
-
 112. `supabase/migrations/20261124020000_restore_marketing_campaign_write_grants.sql`
-
-**الإجمالي: 112 ترحيلاً.**
-
 113. `supabase/migrations/20261124021000_marketing_campaign_events_fk_indexes.sql`
-
-**الإجمالي: 113 ترحيلاً.**
-
 114. `supabase/migrations/20261124151227_move_marketing_analytics_to_private_wrappers.sql`
+115. `supabase/migrations/20261125000100_offline_sync_kitchen_idempotency.sql`
+116. `supabase/migrations/20261125010000_granular_section_action_permissions.sql`
+117. `supabase/migrations/20261125020000_granular_marketing_rls_alignment.sql`
+118. `supabase/migrations/20261125030000_section_crud_permissions.sql`
+119. `supabase/migrations/20261125060000_audit_history_permission_reads.sql`
+120. `supabase/migrations/20261125070000_private_purchase_rpc_wrappers.sql`
+121. `supabase/migrations/20261125080000_permission_override_write_gates.sql`
+122. `supabase/migrations/20261125090000_sensitive_action_audit_triggers.sql`
+123. `supabase/migrations/20261125100000_prevent_direct_expense_deletion.sql`
+124. `supabase/migrations/20261125110000_prevent_product_history_deletion.sql`
+125. `supabase/migrations/20261126190000_marketing_ad_spaces_and_branch_targeting.sql`
+126. `supabase/migrations/20261126200000_scope_marketing_analytics_to_branch.sql`
+127. `supabase/migrations/20261126210000_marketing_advertising_foreign_key_indexes.sql`
+128. `supabase/migrations/20261126220000_inventory_adjustment_permission_and_branch_guard.sql`
 
-**الإجمالي: 114 ترحيلاً.**
+ملاحظة: أُضيفت هذه الترحيلات بعد ترحيل مزامنة المطبخ غير المتصلة رقم 115 على فرع التكامل. لا تُطبّق على قاعدة الإنتاج قبل مصالحة سجل الترحيلات البعيد ومراجعة خطة الإصدار.
 
-115. `supabase/migrations/20261126190000_marketing_ad_spaces_and_branch_targeting.sql`
-
-**الإجمالي: 115 ترحيلاً.**
-
-116. `supabase/migrations/20261126200000_scope_marketing_analytics_to_branch.sql`
-
-**الإجمالي: 116 ترحيلاً.**
-117. `supabase/migrations/20261126210000_marketing_advertising_foreign_key_indexes.sql`
-
-**الإجمالي: 117 ترحيلاً.**
-
-
-
-ترحيل الفهارس رقم 117 يضيف فهارس جزئية ومركبة لمفاتيح الإعلانات الخارجية، ولا يغيّر بيانات الأعمال أو سياسات الوصول.
-
-ملاحظة ترتيب: يُنفّذ ترحيل الفهارس بعد إنشاء مساحات الإعلانات وإضافة نطاق الفرع إلى أحداث الحملات، لذلك يأتي بعد الترحيلين 115 و116 في ترتيب الملفات الزمني.
+**الإجمالي: 128 ترحيلاً.**

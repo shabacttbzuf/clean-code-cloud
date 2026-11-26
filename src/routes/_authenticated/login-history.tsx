@@ -11,9 +11,9 @@ import { Loader2 } from "lucide-react";
 export const Route = createFileRoute("/_authenticated/login-history")({ component: LoginHistoryPage });
 
 function LoginHistoryPage() {
-  const { tenantId, role, userId, loading } = useActiveTenant();
+  const { tenantId, userId, loading, hasPermission } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
-  const canSeeAll = role === "owner" || role === "manager" || isSuperOwner;
+  const canSeeAll = isSuperOwner || hasPermission("login_history.view");
 
   const q = useQuery({
     queryKey: ["login-history", tenantId, canSeeAll, userId],
