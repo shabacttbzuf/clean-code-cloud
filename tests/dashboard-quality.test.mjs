@@ -235,3 +235,13 @@ test("dashboard provides permission-scoped operations, notifications, and a trut
   assert.match(dashboard, /hasPermission\("kitchen.view"\)/);
   assert.match(dashboard, /hasPermission\("reports.view"\)/);
 });
+
+
+test("dashboard and POS campaign delivery honor branch targeting and safe event tracking", () => {
+  assert.match(dashboard, /membership\?\.branch_id/);
+  assert.match(dashboard, /branch_id\.is\.null,branch_id\.eq\.\$\{membership\.branch_id\}/);
+  assert.match(pos, /branch_id\.is\.null,branch_id\.eq\.\$\{branchId\}/);
+  assert.match(pos, /\["pos-marketing-campaigns", tenantId, membership\?\.company_id \?\? "tenant", branchId\]/);
+  assert.match(pos, /void \(async \(\) =>/);
+  assert.doesNotMatch(pos, /record_marketing_campaign_event[\s\S]{0,200}\.catch\(/);
+});
