@@ -42,3 +42,10 @@ test("branch-only memberships cannot select all companies or all branches even w
   assert.match(hook, /!membership\.branch_id && \["owner", "manager", "accountant"\]/);
   assert.match(route, /item\.company_id === null && item\.branch_id === null/);
 });
+
+
+test("branch-bound memberships cannot enumerate or switch to sibling branches", () => {
+  assert.match(hook, /if \(membership\.branch_id\) \{[\s\S]{0,260}query = query\.eq\("id", membership\.branch_id\)/);
+  assert.match(hook, /const nextBranchId = membership\.branch_id[\s\S]{0,180}\? membership\.branch_id/);
+  assert.match(hook, /if \(membership\?\.branch_id && id !== membership\.branch_id\) return/);
+});
