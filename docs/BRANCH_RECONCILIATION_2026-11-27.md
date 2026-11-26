@@ -112,3 +112,132 @@
 - فروع إصلاح الإجازات، وسياسات قراءة الإشعارات، وPOS passcode، وتفاصيل إيصال البيع، وprivate wrappers، وpre-sale hardening، وفهرس platform branding: migrations/الملفات الأساسية المقابلة موجودة في شجرة التكامل؛ لا تكرار أو دمج تاريخها القديم.
 - CI Run #2593 على SHA `356433a` وRun #2594 على SHA `a18a2da` نجحا. Run #2594 شمل TypeScript والاختبارات والبناء وChromium ومigrations النظيفة وpgTAP.
 - لم يحدث دمج إلى main أو تعديل لقاعدة الإنتاج. يبقى حل divergence/dirty state شرطاً قبل الدمج النهائي.
+
+## حصر الفروع التسعين — مقارنة موثقة عند SHA 5c39eb8
+
+أُجريت مقارنة GitHub لكل الفروع التسعين مع رأس التكامل `5c39eb89d2be006fb10d6044dfa01819b24df644`. بعد هذه اللقطة أضيف التزامان خاصان بإصلاح اختبار pgTAP فقط (`68d2ab7` و`7f34bc2`) دون تغيير ملفات التطبيق أو migrations؛ لذلك بقي تصنيف الفروع الوظيفي كما هو.
+
+- 80 فرعاً تحمل commits غير موجودة في تاريخ التكامل؛ 79 منها تُظهر اختلاف ملفات، وفرع واحد `feature/production-pos-responsive` يحتوي commit فارغاً بلا فروق ملفات.
+- 9 فروع لا تحمل commits فريدة وهي خلف التكامل؛ وفرع التكامل نفسه هو المرجع المطابق.
+- لا يعني ahead وجود ميزة جديدة قابلة للدمج: أرقام ahead/behind تاريخية، والاختلافات تشمل نسخاً قديمة ومكررة من ملفات أصبحت أحدث في التكامل.
+
+| الفرع | Ahead | Behind | Files |
+|---|---:|---:|---:|
+| `audit/prelaunch-security-and-release-hardening` | 0 | 395 | 0 |
+| `ci/validate-offline-sync-18-20261125` | 49 | 340 | 10 |
+| `docs/migration-reconciliation-evidence` | 1 | 373 | 1 |
+| `docs/update-production-audit-after-merges` | 0 | 378 | 0 |
+| `feat/ads-permission-separation-stage-8` | 8 | 353 | 8 |
+| `feat/kitchen-display-foundation` | 9 | 364 | 7 |
+| `feat/kitchen-display-workflow` | 8 | 363 | 8 |
+| `feat/kitchen-tables-pos-workflow` | 16 | 365 | 10 |
+| `feat/notification-deep-links-stage-10` | 32 | 351 | 12 |
+| `feat/pos-cashier-password-session-persistence` | 15 | 343 | 9 |
+| `feat/profile-completeness-stage-14` | 5 | 346 | 3 |
+| `feat/promotions-stage-9` | 15 | 352 | 11 |
+| `feat/reports-analytics-stage-11` | 9 | 350 | 3 |
+| `feat/restaurant-tables-pos-order-types` | 33 | 362 | 12 |
+| `feat/role-catalog-permission-tools` | 7 | 362 | 4 |
+| `feat/settings-hardening-stage-13` | 10 | 347 | 7 |
+| `feat/sidebar-free-workspace-pos-ads-fix` | 13 | 350 | 10 |
+| `feat/stage-15-security-branch-isolation-hardening` | 4 | 345 | 4 |
+| `feat/stage-16-responsive-brand-system` | 2 | 344 | 2 |
+| `feat/support-system-health-stage-12-rebased` | 6 | 348 | 6 |
+| `feat/support-system-health-stage-12` | 11 | 349 | 6 |
+| `feat/ui-ux-1-0-dashboard-reference` | 6 | 359 | 4 |
+| `feat/ui-ux-1-0-foundation` | 20 | 360 | 8 |
+| `feat/ui-ux-dashboard-reference-stage-5-7` | 8 | 356 | 2 |
+| `feat/ui-ux-independent-ad-management` | 27 | 357 | 14 |
+| `feat/ui-ux-stage-2-company-switcher` | 3 | 356 | 1 |
+| `feature/enterprise-multicompany-identity-notifications` | 0 | 401 | 0 |
+| `feature/offline-sync-ci-validation` | 44 | 340 | 11 |
+| `feature/offline-sync-ci-validation-2` | 45 | 340 | 11 |
+| `feature/offline-sync-ci-validation-3` | 46 | 340 | 11 |
+| `feature/prelaunch-hardening` | 0 | 394 | 0 |
+| `feature/production-pos-responsive` | 1 | 402 | 0 |
+| `feature/uiux-06-verify` | 10 | 130 | 5 |
+| `fix/ads-archive-lifecycle-stage-8` | 2 | 354 | 2 |
+| `fix/cash-session-company-scope` | 0 | 381 | 0 |
+| `fix/customer-payment-idempotency-scope` | 0 | 386 | 0 |
+| `fix/dashboard-auth-health-check` | 0 | 338 | 0 |
+| `fix/desktop-sidebar-visibility` | 9 | 365 | 7 |
+| `fix/hr-leave-approval-delete` | 11 | 368 | 7 |
+| `fix/live-leave-decision-migration` | 4 | 366 | 4 |
+| `fix/marketing-advertising-fk-indexes` | 12 | 340 | 56 |
+| `fix/marketing-company-read-isolation` | 16 | 364 | 6 |
+| `fix/migration-snapshot-sync` | 2 | 371 | 2 |
+| `fix/notification-read-policy-index-dedup` | 6 | 377 | 4 |
+| `fix/permissions-security-stage-15` | 6 | 345 | 5 |
+| `fix/pgtap-json-validation-assertions` | 2 | 370 | 1 |
+| `fix/pos-passcode-on-demand-any-length` | 6 | 341 | 4 |
+| `fix/promotion-api-grants-and-fk-indexes` | 2 | 342 | 2 |
+| `fix/promotion-same-sku-hardening` | 7 | 340 | 58 |
+| `fix/sales-receipt-order-details` | 35 | 360 | 8 |
+| `fix/security-definer-private-wrappers` | 2 | 372 | 2 |
+| `fix/security-phase-1` | 124 | 818 | 64 |
+| `hardening/pre-sale-five-priorities` | 11 | 374 | 8 |
+| `integration/task-15-permissions` | 121 | 82 | 79 |
+| `integration/task-18-offline-sync` | 0 | 84 | 0 |
+| `integration/ui-ux-1.0` | 0 | 0 | 0 |
+| `main` | 9 | 340 | 59 |
+| `perf/index-platform-branding-updated-by` | 4 | 376 | 4 |
+| `reconcile/main-fixes-into-integration` | 2 | 35 | 7 |
+| `reconcile/main-fixes-into-integration-v2` | 0 | 33 | 0 |
+| `reconcile/security-notifications-into-integration` | 4 | 32 | 20 |
+| `security/company-scope-notifications-marketing` | 122 | 375 | 24 |
+| `test/operational-transaction-regressions` | 3 | 368 | 1 |
+| `test/tenant-isolation-rls-regression` | 2 | 369 | 1 |
+| `validation/offline-sync-user-scope-20261125` | 47 | 340 | 10 |
+| `work/fix-uiux-18-typecheck` | 87 | 340 | 13 |
+| `work/fix-uiux-18-typecheck-clean` | 87 | 340 | 13 |
+| `work/ui-ux-1.0-complete` | 22 | 130 | 13 |
+| `work/uiux-01-design` | 15 | 130 | 8 |
+| `work/uiux-02-header` | 23 | 130 | 5 |
+| `work/uiux-03-tabs` | 123 | 130 | 30 |
+| `work/uiux-04-app-launcher` | 14 | 130 | 4 |
+| `work/uiux-05-home` | 36 | 130 | 7 |
+| `work/uiux-05-home-final` | 13 | 130 | 5 |
+| `work/uiux-05-home-rebased` | 1 | 130 | 1 |
+| `work/uiux-06-statistics` | 13 | 130 | 4 |
+| `work/uiux-07-orders-kitchen` | 12 | 130 | 4 |
+| `work/uiux-08-ads` | 17 | 130 | 13 |
+| `work/uiux-09-promotions` | 9 | 340 | 4 |
+| `work/uiux-10-notifications` | 66 | 340 | 24 |
+| `work/uiux-11-reports` | 40 | 130 | 1 |
+| `work/uiux-12-support-health` | 15 | 340 | 4 |
+| `work/uiux-13-settings` | 14 | 340 | 6 |
+| `work/uiux-14-profile` | 2 | 340 | 1 |
+| `work/uiux-15-permissions` | 180 | 340 | 67 |
+| `work/uiux-16-database-security` | 23 | 340 | 2 |
+| `work/uiux-17-offline-foundation` | 52 | 344 | 19 |
+| `work/uiux-18-offline-sync` | 88 | 340 | 13 |
+| `work/uiux-19-responsive` | 34 | 340 | 15 |
+| `work/uiux-20-performance` | 44 | 340 | 29 |
+
+## تصحيح مراجعة main وPR #84
+
+- PR #84 يحتوي 59 مساراً؛ عند مقارنة blobs بين شجرتي التكامل وmain كانت 26 نسخة متطابقة و33 مختلفة، ولا يوجد مسار من main مفقود في التكامل.
+- commit `735fb4b` وحده غيّر 55 ملفاً: 24 متطابقة و31 مختلفة؛ جميع مساراته موجودة في التكامل. الفروق المهمة في التكامل أكثر صرامة: لا cache offline لصلاحيات Super Owner/permissions، لا حذف مباشر للفروع أو المنتجات أو المصروفات، صلاحيات CRUD دقيقة، نطاق فرع في dashboard/POS، مطبخ offline idempotent، وتقارير محكومة بالصلاحيات.
+- تغييرات main الأخرى المفيدة موجودة: فحص `supabase.auth.getUser()` في health probe للوحة، فهارس marketing، تقرير Task 16، وحماية حذف المصروفات. اختبار Task 16 الآن يحافظ على 14 assertion ويقيس أسماء السياسات الثماني المقصودة تحديداً.
+- لم يُنقل `national_id` إلى الصفحة الذاتية. لم تُنسخ ملفات manifest/snapshot الأقدم من main.
+- تصحيح توثيقي: PR #86 كان لتحديد الحملات حسب الفرع وتحديث لوحة التحكم، وليس PR دمج تاريخ main. PR #84 يظل طلباً متقادماً؛ لا يُدمج بالجملة.
+
+## تسوية PR #79 / المهمة 15
+
+- فرع `integration/task-15-permissions` يحمل 121 commit فريداً و79 مساراً مختلفاً عند المقارنة مع لقطة التكامل؛ لا يُدمج بالجملة.
+- التحديثات الأساسية للصفحات والمساعدات موجودة في التكامل: `hasPermission` للعمليات، منع حذف المنتجات/الفروع، أرشفة المنتج، وإغلاق جلسات النقدية وفق الصلاحية والنطاق.
+- `20261125070000_private_purchase_rpc_wrappers.sql` في التكامل يضم منطق `purchases.create` و`purchases.returns.create` في private SECURITY DEFINER functions مع أغلفة public SECURITY INVOKER وفحوص نطاق/مورد أقوى؛ لذلك `20261125040000` و`20261125050000` من PR #79 قديمان ومكرران وظيفياً.
+- `20261126220000_inventory_adjustment_permission_and_branch_guard.sql` يستبدل `20261125120000_inventory_balance_rpc_only.sql` بحماية أشمل تشمل `inventory.adjust`، نطاق الفرع، منع INSERT/UPDATE/DELETE/TRUNCATE المباشر، وسجل الحركة.
+- أُضيفت مصفوفة تغطية الصلاحيات إلى وثائق التكامل، وتظل الفجوات المسجلة فيها مفتوحة حتى تغطية كل انتقال حالة واختبارات سلبية لكل دور. لا يُدمج تاريخ PR #79.
+
+## توحيد migrations والتحقق
+
+- عند SHA `5c39eb8`: 128 ملف migration، 128 إدخالاً في `MIGRATION_MANIFEST.md`، و128 marker في `COMPLETE_DATABASE.sql`؛ لم يظهر أي اسم ناقص أو زائد.
+- أضيف اختبار Node يقارن أسماء الملفات مع manifest وsnapshot ويتحقق من تضمين محتوى كل migration داخل كتلة snapshot المقابلة.
+- CI Run #2602 / `45905522571` على SHA `7f34bc247c9be72cfffe607c80baa8c9945804c6`: **SUCCESS**؛ نجح TypeScript والاختبارات والبناء وChromium، وتطبيق جميع migrations على قاعدة Supabase محلية نظيفة، وجميع اختبارات pgTAP.
+- لا تغيير في قاعدة الإنتاج. لم يحدث الدمج إلى main بعد.
+
+## خطة حسم PR #72
+
+- بعد مراجعة commits main التسعة والاحتفاظ بنسخ التكامل الأحدث، سيُسجل main كأصل ثانٍ في merge commit على فرع التكامل مع الإبقاء على شجرة التكامل الحالية.
+- سيعاد تشغيل CI كاملاً على SHA merge commit نفسه. بعدها فقط يعاد فحص mergeability وPR reviews، ثم يجهز PR #72 للدمج ويُدمج إذا ظل CI أخضر ولم تظهر تعارضات أو حماية فرع تمنع ذلك.
