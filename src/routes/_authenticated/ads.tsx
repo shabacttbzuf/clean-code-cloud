@@ -381,7 +381,7 @@ export function AdsPage() {
                 {availableAdSpaces.filter((space) => space.space_key === placement).map((space) => <option key={space.id} value={space.id}>{space.name}{space.branch_id ? " · فرع محدد" : " · عامة"}</option>)}
               </select>
             </div>
-            <div className="space-y-2"><Label>المساحة الإعلانية"
+            <div className="space-y-2"><Label>نوع المساحة الإعلانية</Label>
               <select value={placement} onChange={(event) => { setPlacement(event.target.value); setFormTouched(true); }} className="h-10 w-full rounded-md border bg-background px-3 text-sm">
                 <option value="dashboard_banner">الشريط الرئيسي في لوحة التحكم</option>
                 <option value="dashboard_card">بطاقة إعلانية في لوحة التحكم</option>
