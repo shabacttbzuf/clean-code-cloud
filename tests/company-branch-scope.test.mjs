@@ -15,7 +15,7 @@ test("company and branch options are derived from authenticated RLS queries and 
 test("company and branch selections are validated against authorized option lists", () => {
   assert.match(hook, /companyOptions\.some\(\(item\) => item\.id === companyId\)/);
   assert.match(hook, /branchOptions\.some\(\(item\) => item\.id === id\)/);
-  assert.match(hook, /canSelectAll = isSuperOwner \|\| \(!membership\?\.branch_id && \["owner", "manager", "accountant"\]/);
+  assert.match(hook, /canSelectAll = !membership\?\.branch_id && \(isSuperOwner \|\| \["owner", "manager", "accountant"\]/);
 });
 
 test("authorization fails closed and never grants cached offline super-owner or permissions state", () => {
