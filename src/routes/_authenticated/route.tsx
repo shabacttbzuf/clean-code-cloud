@@ -460,31 +460,31 @@ function TopBar() {
         <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#174b91] to-[#102f5c] text-[#f5c65b] shadow-sm"><Building2 className="h-5 w-5" /></div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button type="button" className="min-w-0 rounded-lg px-1 text-right outline-none transition hover:bg-blue-50 focus-visible:ring-2 focus-visible:ring-[#174b91]" aria-label="اختيار الشركة">
+            <button type="button" className="min-w-0 rounded-lg px-1 text-right outline-none transition hover:bg-blue-50 focus-visible:ring-2 focus-visible:ring-[#174b91]" aria-label="اختيار المؤسسة">
               <span className="block truncate text-sm font-extrabold text-[#102f5c] sm:text-base">{tenant?.name || "نظام إدارة المطاعم"}</span>
               <span className="block max-w-44 truncate text-[10px] text-slate-500">{memberships.length > 1 ? `تبديل الشركة · ${activeBranchLabel}` : activeBranchLabel}</span>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-64">
-            <DropdownMenuLabel>الشركات المتاحة لحسابك</DropdownMenuLabel>
+            <DropdownMenuLabel>المؤسسات المرتبطة بحسابك</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {memberships.map((item) => (
-              <DropdownMenuItem key={item.tenant_id} onSelect={() => {
-                if (item.tenant_id !== tenantId) {
-                  switchTenant(item.tenant_id);
-                  toast.success("تم تبديل الشركة بنجاح");
+            {(tenantOptionsQuery.data ?? []).map((item) => (
+              <DropdownMenuItem key={item.id} onSelect={() => {
+                if (item.id !== tenantId) {
+                  switchTenant(item.id);
+                  toast.success("تم تبديل المؤسسة بنجاح");
                 }
               }} className="cursor-pointer">
                 <Building2 className="ml-2 h-4 w-4" />
-                <span className="min-w-0 flex-1 truncate">{tenantOptionsQuery.data?.find((option) => option.id === item.tenant_id)?.name || (item.tenant_id === tenantId ? tenant?.name : "شركة") || "شركة"}</span>
-                {item.tenant_id === tenantId ? <span className="text-xs text-emerald-600">الحالية</span> : null}
+                <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                {item.id === tenantId ? <span className="text-xs text-emerald-600">الحالية</span> : null}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
         {companyOptions.length > 0 ? (
           <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button type="button" variant="outline" size="icon" className="h-9 w-9 shrink-0 rounded-full border-border bg-background sm:h-10 sm:w-auto sm:gap-2 sm:px-3" aria-label="اختيار الشركة" disabled={companyLoading}><Building2 className="h-4 w-4" /><span className="hidden max-w-32 truncate sm:inline">{companyOptions.find((item) => item.id === activeCompanyId)?.name || "كل الشركات"}</span></Button></DropdownMenuTrigger>
+            <DropdownMenuTrigger asChild><Button type="button" variant="outline" size="icon" className="h-9 w-9 shrink-0 rounded-full border-border bg-background sm:h-10 sm:w-auto sm:gap-2 sm:px-3" aria-label="اختيار المؤسسة" disabled={companyLoading}><Building2 className="h-4 w-4" /><span className="hidden max-w-32 truncate sm:inline">{companyOptions.find((item) => item.id === activeCompanyId)?.name || "كل الشركات"}</span></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-64">
               <DropdownMenuLabel>نطاق الشركة</DropdownMenuLabel><DropdownMenuSeparator />
               {companyError ? <DropdownMenuItem disabled>تعذر تحميل الشركات المتاحة</DropdownMenuItem> : companyLoading ? <DropdownMenuItem disabled>جارٍ تحميل الشركات...</DropdownMenuItem> : null}
