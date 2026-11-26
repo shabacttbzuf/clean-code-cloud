@@ -26,3 +26,13 @@
 ### Execution boundary
 - Tasks 02–21 were not started because Task 01 is not safely integrated, and the prompt does not include the detailed specifications for tasks 03–20.
 - No production merge, force-push, destructive operation, database mutation, or test weakening was performed.
+
+
+## متابعة إصلاح Cloudflare Quick Tunnel — 26 نوفمبر 2026
+
+- نُفذ إصلاح محدود في `vite.config.ts` على فرع `integration/ui-ux-1.0` للسماح بنطاقات Quick Tunnel فقط عبر `server.allowedHosts: [".trycloudflare.com"]` بدلاً من السماح العام بكل المضيفين.
+- Commit: `4f1274a107bd16da35a4a6973adb0150468c117c`.
+- فحص PR #72 بعد التعديل يؤكد أن رأسه يطابق هذا الالتزام. GitHub يعرض `mergeable=false` حالياً؛ لا دمج.
+- فحص واجهة CI المتاحة لم يُظهر حتى الآن Workflow Run أو Status check مرتبطاً بهذا الالتزام؛ لذلك لا يُدّعى نجاح CI لهذا التعديل.
+- لم تُجرَ أي تغييرات على قاعدة البيانات أو الأسرار أو `main`.
+- مشكلة الصفحة البيضاء لم تُثبت أنها حُلّت بمجرد إصلاح Host allowlist؛ يلزم إعادة تشغيل Vite محلياً بعد تعديل الإعداد، ثم فحص Console/Network وتأكيد متغيرات Supabase في بيئة التشغيل. ملف `.env.example` يحدد المتغيرين المطلوبين للمتصفح: `VITE_SUPABASE_URL` و`VITE_SUPABASE_PUBLISHABLE_KEY`، لكن لا يمكن قراءة ملف `.env` المحلي عبر GitHub.
