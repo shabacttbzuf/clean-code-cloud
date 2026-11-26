@@ -270,3 +270,18 @@
 115. `supabase/migrations/20261125000100_offline_sync_kitchen_idempotency.sql`
 
 **الإجمالي: 115 ترحيلاً.**
+
+
+116. `supabase/migrations/20261126190000_marketing_ad_spaces_and_branch_targeting.sql`
+
+**الإجمالي: 116 ترحيلاً.**
+
+117. `supabase/migrations/20261126200000_scope_marketing_analytics_to_branch.sql`
+
+**الإجمالي: 117 ترحيلاً.**
+
+118. `supabase/migrations/20261126210000_marketing_advertising_foreign_key_indexes.sql`
+
+**الإجمالي: 118 ترحيلاً.**
+
+ملاحظة: أُضيفت هذه الترحيلات بعد ترحيل مزامنة المطبخ غير المتصلة رقم 115 على فرع التكامل. لا تُطبّق على قاعدة الإنتاج قبل مصالحة سجل الترحيلات البعيد ومراجعة خطة الإصدار.
