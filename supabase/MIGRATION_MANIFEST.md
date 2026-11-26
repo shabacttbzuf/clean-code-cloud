@@ -267,19 +267,19 @@
 
 **الإجمالي: 114 ترحيلاً.**
 
-116. `supabase/migrations/20261126190000_marketing_ad_spaces_and_branch_targeting.sql`
+115. `supabase/migrations/20261126190000_marketing_ad_spaces_and_branch_targeting.sql`
+
+**الإجمالي: 115 ترحيلاً.**
+
+116. `supabase/migrations/20261126200000_scope_marketing_analytics_to_branch.sql`
 
 **الإجمالي: 116 ترحيلاً.**
-
-117. `supabase/migrations/20261126200000_scope_marketing_analytics_to_branch.sql`
+117. `supabase/migrations/20261126210000_marketing_advertising_foreign_key_indexes.sql`
 
 **الإجمالي: 117 ترحيلاً.**
-118. `supabase/migrations/20261126210000_marketing_advertising_foreign_key_indexes.sql`
-
-**الإجمالي: 118 ترحيلاً.**
 
 
 
-ترحيل الفهارس رقم 115 يضيف فهارس جزئية ومركبة لمفاتيح الإعلانات الخارجية، ولا يغيّر بيانات الأعمال أو سياسات الوصول.
+ترحيل الفهارس رقم 117 يضيف فهارس جزئية ومركبة لمفاتيح الإعلانات الخارجية، ولا يغيّر بيانات الأعمال أو سياسات الوصول.
 
 ملاحظة ترتيب: يُنفّذ ترحيل الفهارس بعد إنشاء مساحات الإعلانات وإضافة نطاق الفرع إلى أحداث الحملات، لذلك يأتي بعد الترحيلين 116 و117 في ترتيب الملفات الزمني.
