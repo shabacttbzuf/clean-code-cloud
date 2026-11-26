@@ -9,7 +9,7 @@ ON public.products AS PERMISSIVE
 FOR SELECT TO authenticated
 USING (
   public.is_super_owner((SELECT auth.uid()))
-  OR public.is_tenant_member((SELECT auth.uid()), tenant_id)
+  OR private.is_tenant_member((SELECT auth.uid()), tenant_id)
 );
 
 CREATE POLICY products_create_permission
@@ -18,7 +18,7 @@ FOR INSERT TO authenticated
 WITH CHECK (
   public.is_super_owner((SELECT auth.uid()))
   OR (
-    public.is_tenant_member((SELECT auth.uid()), tenant_id)
+    private.is_tenant_member((SELECT auth.uid()), tenant_id)
     AND (
       public.has_permission((SELECT auth.uid()), tenant_id, 'products.create')
       OR public.has_permission((SELECT auth.uid()), tenant_id, 'products.manage')
@@ -32,7 +32,7 @@ FOR UPDATE TO authenticated
 USING (
   public.is_super_owner((SELECT auth.uid()))
   OR (
-    public.is_tenant_member((SELECT auth.uid()), tenant_id)
+    private.is_tenant_member((SELECT auth.uid()), tenant_id)
     AND (
       public.has_permission((SELECT auth.uid()), tenant_id, 'products.edit')
       OR public.has_permission((SELECT auth.uid()), tenant_id, 'products.manage')
@@ -42,7 +42,7 @@ USING (
 WITH CHECK (
   public.is_super_owner((SELECT auth.uid()))
   OR (
-    public.is_tenant_member((SELECT auth.uid()), tenant_id)
+    private.is_tenant_member((SELECT auth.uid()), tenant_id)
     AND (
       public.has_permission((SELECT auth.uid()), tenant_id, 'products.edit')
       OR public.has_permission((SELECT auth.uid()), tenant_id, 'products.manage')
