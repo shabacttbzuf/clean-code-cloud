@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
-import { Loader2, Plus, DollarSign, Trash2 } from "lucide-react";
+import { Loader2, Plus, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { formatMoney, formatDate } from "@/lib/format";
@@ -20,7 +20,8 @@ export const Route = createFileRoute("/_authenticated/expenses")({ component: Pa
 type Expense = { id: string; amount: number; description: string | null; paid_at: string; category_id: string | null; branch_id: string | null };
 
 function Page() {
-  const { tenantId, userId, tenant, isAdmin, membership, isSuperOwner } = useActiveTenant();
+  const { tenantId, userId, tenant, membership, isSuperOwner, hasPermission } = useActiveTenant();
+  const canCreateExpense = isSuperOwner || hasPermission("expenses.create") || hasPermission("expenses.manage");
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
 
@@ -78,6 +79,7 @@ function Page() {
 
   const create = useMutation({
     mutationFn: async () => {
+      if (!canCreateExpense) throw new Error("لا تملك صلاحية إضافة المصروفات.");
       const amt = Number(amount);
       if (!Number.isFinite(amt) || amt <= 0) throw new Error("مبلغ غير صالح");
       const { error } = await supabase.from("expenses").insert({
@@ -99,14 +101,9 @@ function Page() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشل"),
   });
 
-  const del = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("expenses").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["expenses"] }); toast.success("تم الحذف"); },
-  });
-
   return (
     <div className="space-y-6">
-      <PageHeader title="المصروفات" subtitle={`إجمالي ${formatMoney(total)} ${tenant?.currency ?? ""}`} action={
+      <PageHeader title="المصروفات" subtitle={`إجمالي ${formatMoney(total)} ${tenant?.currency ?? ""} · لا تُحذف السجلات المالية مباشرة؛ يلزم إلغاء محاسبي موثق`} action={canCreateExpense && (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild><Button><Plus className="ml-2 h-4 w-4" />مصروف جديد</Button></DialogTrigger>
           <DialogContent>
@@ -137,11 +134,11 @@ function Page() {
                 </div>
               </div>
               <div className="space-y-2"><Label>الوصف</Label><Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} /></div>
-              <DialogFooter><Button type="submit" disabled={create.isPending}>{create.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}حفظ</Button></DialogFooter>
+              <DialogFooter><Button type="submit" disabled={!canCreateExpense || create.isPending}>{create.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}حفظ</Button></DialogFooter>
             </form>
           </DialogContent>
         </Dialog>
-      } />
+      )} />
 
       {q.isLoading ? <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
       : !q.data || q.data.length === 0 ? (
@@ -169,9 +166,7 @@ function Page() {
                     <td className="p-3 text-muted-foreground">{e.branch_id ? (brMap.get(e.branch_id) ?? "—") : "عام"}</td>
                     <td className="p-3">{e.description ?? "—"}</td>
                     <td className="p-3 num font-bold text-destructive">{formatMoney(e.amount)}</td>
-                    <td className="p-3">{isAdmin && (
-                      <Button size="icon" variant="ghost" className="text-destructive" onClick={() => { if (confirm("حذف؟")) del.mutate(e.id); }}><Trash2 className="h-3 w-3" /></Button>
-                    )}</td>
+                    <td className="p-3 text-xs text-muted-foreground">يتطلب إلغاءً محاسبياً موثقاً</td>
                   </tr>
                 );
               })}

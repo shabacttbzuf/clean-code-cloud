@@ -21,10 +21,13 @@ type Cat = { id: string; name: string; icon: string | null; color: string | null
 const schema = z.object({ name: z.string().trim().min(2).max(60), icon: z.string().max(20).optional().or(z.literal("")), color: z.string().max(20).optional().or(z.literal("")) });
 
 function Page() {
-  const { tenantId, isAdmin } = useActiveTenant();
+  const { tenantId, isSuperOwner, hasPermission } = useActiveTenant();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Cat | null>(null);
+  const canCreateCategory = isSuperOwner || hasPermission("expense_categories.create") || hasPermission("expense_categories.manage");
+  const canEditCategory = isSuperOwner || hasPermission("expense_categories.edit") || hasPermission("expense_categories.manage");
+  const canDeleteCategory = isSuperOwner || hasPermission("expense_categories.delete") || hasPermission("expense_categories.manage");
 
   const q = useQuery({
     queryKey: ["expense-categories", tenantId],
@@ -38,6 +41,7 @@ function Page() {
 
   const upsert = useMutation({
     mutationFn: async (v: z.infer<typeof schema>) => {
+      if (editing ? !canEditCategory : !canCreateCategory) throw new Error("لا تملك صلاحية إنشاء أو تعديل تصنيفات المصروفات.");
       const payload = { name: v.name, icon: v.icon || null, color: v.color || null, tenant_id: tenantId! };
       if (editing) { const { error } = await supabase.from("expense_categories").update(payload).eq("id", editing.id); if (error) throw error; }
       else { const { error } = await supabase.from("expense_categories").insert(payload); if (error) throw error; }
@@ -47,13 +51,13 @@ function Page() {
   });
 
   const del = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("expense_categories").delete().eq("id", id); if (error) throw error; },
+    mutationFn: async (id: string) => { if (!canDeleteCategory) throw new Error("لا تملك صلاحية حذف تصنيفات المصروفات."); const { error } = await supabase.from("expense_categories").delete().eq("id", id); if (error) throw error; },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["expense-categories"] }); toast.success("تم الحذف"); },
   });
 
   return (
     <div className="space-y-6">
-      <PageHeader title="تصنيفات المصروفات" action={isAdmin && (
+      <PageHeader title="تصنيفات المصروفات" action={canCreateCategory && (
         <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditing(null); }}>
           <DialogTrigger asChild><Button><Plus className="ml-2 h-4 w-4" />جديد</Button></DialogTrigger>
           <CatDialog initial={editing} onSubmit={(v) => upsert.mutate(v)} pending={upsert.isPending} />
@@ -72,10 +76,10 @@ function Page() {
                 <div className="grid h-10 w-10 place-items-center rounded-lg bg-accent/20 text-lg">{c.icon ?? "💰"}</div>
                 <div className="font-medium">{c.name}</div>
               </div>
-              {isAdmin && (
+              {(canEditCategory || canDeleteCategory) && (
                 <div className="flex gap-1">
-                  <Button size="icon" variant="ghost" onClick={() => { setEditing(c); setOpen(true); }}><Edit className="h-3 w-3" /></Button>
-                  <Button size="icon" variant="ghost" className="text-destructive" onClick={() => { if (confirm(`حذف "${c.name}"؟`)) del.mutate(c.id); }}><Trash2 className="h-3 w-3" /></Button>
+                  {canEditCategory && <Button size="icon" variant="ghost" onClick={() => { setEditing(c); setOpen(true); }}><Edit className="h-3 w-3" /></Button>}
+                  {canDeleteCategory && <Button size="icon" variant="ghost" className="text-destructive" onClick={() => { if (confirm(`حذف "${c.name}"؟`)) del.mutate(c.id); }}><Trash2 className="h-3 w-3" /></Button>}
                 </div>
               )}
             </CardContent></Card>
