@@ -51,6 +51,7 @@ function ReportsPage() {
   const canManageAds = isSuperOwner || permissionsQuery.data?.has("ads.manage") === true;
   const canViewFinancialReports = canViewExpenses && canViewSalesReports;
   const canExportReports = isSuperOwner || permissionsQuery.data?.has("reports.export") === true;
+  const canPrintReports = isSuperOwner || permissionsQuery.data?.has("reports.print") === true;
   const canFilterReports = isSuperOwner || permissionsQuery.data?.has("reports.filter") === true;
   const permissionFingerprint = [...(permissionsQuery.data ?? [])].sort().join("|");
   const [from, setFrom] = useState(() => {
@@ -627,7 +628,7 @@ function ReportsPage() {
       <PageHeader
         title="التقارير"
         subtitle="تقارير مبيعات، مصروفات، مخزون وموظفين"
-        action={canExportReports ? <Button variant="outline" className="print:hidden" onClick={() => window.print()}><Printer className="ml-2 h-4 w-4" />طباعة التقرير</Button> : undefined}
+        action={canPrintReports ? <Button variant="outline" className="print:hidden" onClick={() => window.print()}><Printer className="ml-2 h-4 w-4" />طباعة التقرير</Button> : undefined}
       />
 
       <Card>
