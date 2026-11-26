@@ -17430,7 +17430,7 @@ FOR INSERT
 TO authenticated
 WITH CHECK (
   bucket_id = 'restaurant-assets'
-  AND split_part(name, '/', 1) ~* '^[0-9a-f-]{36}$'
+  AND split_part(name, '/', 1) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
   AND (
     (
       split_part(name, '/', 2) = 'dashboard'
@@ -17443,7 +17443,7 @@ WITH CHECK (
     OR
     (
       split_part(name, '/', 2) = 'companies'
-      AND split_part(name, '/', 3) ~* '^[0-9a-f-]{36}$'
+      AND split_part(name, '/', 3) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       AND split_part(name, '/', 4) = 'dashboard'
       AND split_part(name, '/', 5) = auth.uid()::text
       AND EXISTS (
