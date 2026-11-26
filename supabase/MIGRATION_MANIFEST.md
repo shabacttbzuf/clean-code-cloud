@@ -266,3 +266,7 @@
 114. `supabase/migrations/20261124151227_move_marketing_analytics_to_private_wrappers.sql`
 
 **الإجمالي: 114 ترحيلاً.**
+
+115. `supabase/migrations/20261126190000_marketing_ad_spaces_and_branch_targeting.sql`
+
+**الإجمالي: 115 ترحيلاً.**
