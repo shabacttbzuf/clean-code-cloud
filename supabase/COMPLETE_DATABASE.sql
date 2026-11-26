@@ -14283,6 +14283,9 @@ BEGIN
      OR jsonb_array_length(_items)=0 OR jsonb_array_length(_items)>300 THEN
     RAISE EXCEPTION 'Sale must contain between 1 and 300 items' USING ERRCODE='22023';
   END IF;
+  IF coalesce(_discount,0)<0 THEN
+    RAISE EXCEPTION 'Manual discount cannot be negative' USING ERRCODE='22023';
+  END IF;
 
   SELECT b.company_id INTO v_branch_company
   FROM public.branches b
@@ -14328,19 +14331,32 @@ BEGIN
   IF v_subtotal < v_offer.minimum_subtotal THEN
     RAISE EXCEPTION 'Cart does not meet the promotion minimum subtotal' USING ERRCODE='22023';
   END IF;
+  IF coalesce(_discount,0)<0 OR coalesce(_discount,0)>v_subtotal THEN
+    RAISE EXCEPTION 'Manual discount is outside the cart subtotal' USING ERRCODE='22023';
+  END IF;
 
   IF v_offer.offer_type='percentage' THEN
     v_promo_discount := round(v_eligible_subtotal * v_offer.discount_value / 100, 2);
   ELSIF v_offer.offer_type='fixed' THEN
     v_promo_discount := least(v_eligible_subtotal, v_offer.discount_value);
   ELSE
+    IF coalesce(v_offer.buy_quantity,0) <= 0 OR coalesce(v_offer.get_quantity,0) <= 0 OR v_offer.product_id IS NULL THEN
+      RAISE EXCEPTION 'Buy X Get Y promotion quantities are invalid' USING ERRCODE='22023';
+    END IF;
     SELECT coalesce(sum((item->>'quantity')::integer),0) INTO v_buy_qty
     FROM jsonb_array_elements(_items) item
     WHERE (item->>'product_id')::uuid=v_offer.product_id;
+
     SELECT coalesce(sum((item->>'quantity')::integer),0) INTO v_reward_qty
     FROM jsonb_array_elements(_items) item
     WHERE (item->>'product_id')::uuid=coalesce(v_offer.reward_product_id,v_offer.product_id);
-    v_free_qty := least(v_reward_qty, (v_buy_qty / v_offer.buy_quantity) * v_offer.get_quantity);
+
+    IF coalesce(v_offer.reward_product_id,v_offer.product_id)=v_offer.product_id THEN
+      -- Same-SKU bundles: buy X + get Y are fulfilled in complete (X+Y) bundles.
+      v_free_qty := (v_reward_qty / (v_offer.buy_quantity + v_offer.get_quantity)) * v_offer.get_quantity;
+    ELSE
+      v_free_qty := least(v_reward_qty, (v_buy_qty / v_offer.buy_quantity) * v_offer.get_quantity);
+    END IF;
     SELECT p.sale_price INTO v_reward_price
     FROM public.products p
     WHERE p.id=coalesce(v_offer.reward_product_id,v_offer.product_id)
@@ -14351,6 +14367,8 @@ BEGIN
   IF v_offer.max_discount IS NOT NULL THEN
     v_promo_discount := least(v_promo_discount, v_offer.max_discount);
   END IF;
+  -- Manual and promotional discounts are separate; cap the promotion to the remaining balance.
+  v_promo_discount := least(v_promo_discount, greatest(0, v_subtotal - coalesce(_discount,0)));
   v_total_discount := coalesce(_discount,0) + v_promo_discount;
   IF v_promo_discount<=0 OR v_total_discount>v_subtotal THEN
     RAISE EXCEPTION 'Promotion discount is invalid for this cart' USING ERRCODE='22023';
