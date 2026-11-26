@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 const dashboard = readFileSync(new URL("../src/routes/_authenticated/dashboard.tsx", import.meta.url), "utf8");
 const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
+const heroStorageMigration = readFileSync(new URL("../supabase/migrations/20261127020000_dashboard_hero_user_upload_scope.sql", import.meta.url), "utf8");
 const layout = readFileSync(new URL("../src/routes/_authenticated/route.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 
@@ -292,4 +293,25 @@ test("latest sales and kitchen operations are fail-closed and cache-isolated by 
   assert.match(dashboard, /assignedBranch \? \[assignedBranch\.id\] : \[\]/);
   assert.match(dashboard, /dashboard-kitchen-counts-v2:/);
   assert.match(dashboard, /hasPermission\("kitchen\.view"\)/);
+});
+
+
+test("dashboard hero preferences are isolated per user and active company/branch", () => {
+  assert.match(dashboard, /restaurant-dashboard-hero:/);
+  assert.match(dashboard, /membership\?\.company_id/);
+  assert.match(dashboard, /membership\?\.branch_id/);
+  assert.match(dashboard, /user\?\.id/);
+  assert.match(dashboard, /url\.protocol === "https:"/);
+  assert.match(dashboard, /file\.size > 5 \* 1024 \* 1024/);
+  assert.match(dashboard, /async function uploadHeroImage/);
+  assert.match(dashboard, /hasPermission\("sales\.create"\) && <Link to="\/pos"/);
+});
+
+test("dashboard hero storage policy permits only a tenant/company member's own user folder", () => {
+  assert.match(heroStorageMigration, /ON storage\.objects[\s\S]*FOR INSERT TO authenticated/);
+  assert.match(heroStorageMigration, /bucket_id = 'restaurant-assets'/);
+  assert.match(heroStorageMigration, /split_part\(name, '\/', 5\) = auth\.uid\(\)::text/);
+  assert.match(heroStorageMigration, /private\.is_company_member/);
+  assert.match(heroStorageMigration, /private\.is_tenant_member/);
+  assert.match(heroStorageMigration, /public\.is_super_owner/);
 });
