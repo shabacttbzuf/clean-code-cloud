@@ -12,6 +12,7 @@ const tabs = readFileSync(new URL("../src/components/workspace-tabs.tsx", import
 const guard = readFileSync(new URL("../src/routes/_authenticated/route.tsx", import.meta.url), "utf8");
 const routeTree = readFileSync(new URL("../src/routeTree.gen.ts", import.meta.url), "utf8");
 const granularRls = readFileSync(new URL("../supabase/migrations/20261125020000_granular_marketing_rls_alignment.sql", import.meta.url), "utf8");
+const promotionFix = readFileSync(new URL("../supabase/migrations/20261127010000_fix_same_sku_promotion_redemption.sql", import.meta.url), "utf8");
 
 test("promotional offers have a dedicated schema and independent permission", () => {
   assert.ok(migration.includes("'promotions.manage'"));
@@ -66,4 +67,12 @@ test("complete database snapshot includes both granular permission migrations ex
     assert.equal(snapshot.split("SOURCE MIGRATION: " + name).length - 1, 1);
     assert.ok(snapshot.includes("END MIGRATION: " + name));
   }
+});
+
+
+test("same-SKU Buy X Get Y preview and server redemption use complete bundles", () => {
+  assert.match(pos, /rewardId === offer\.product_id[\s\S]{0,240}rewardQty \/ \(Math\.max\(1, Number\(offer\.buy_quantity\)\) \+ Math\.max\(1, Number\(offer\.get_quantity\)\)\)/);
+  assert.match(promotionFix, /v_free_qty := \(v_reward_qty \/ \(v_offer\.buy_quantity \+ v_offer.get_quantity\)\) \* v_offer.get_quantity;/);
+  assert.match(promotionFix, /v_offer\.buy_quantity,0\) <= 0 OR coalesce\(v_offer\.get_quantity,0\) <= 0/);
+  assert.match(snapshot, /v_free_qty := \(v_reward_qty \/ \(v_offer\.buy_quantity \+ v_offer.get_quantity\)\) \* v_offer.get_quantity;/);
 });
