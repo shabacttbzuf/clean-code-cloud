@@ -132,7 +132,8 @@
 126. `supabase/migrations/20261126200000_scope_marketing_analytics_to_branch.sql`
 127. `supabase/migrations/20261126210000_marketing_advertising_foreign_key_indexes.sql`
 128. `supabase/migrations/20261126220000_inventory_adjustment_permission_and_branch_guard.sql`
+129. `supabase/migrations/20261127010000_fix_same_sku_promotion_redemption.sql`
 
 ملاحظة: أُضيفت هذه الترحيلات بعد ترحيل مزامنة المطبخ غير المتصلة رقم 115 على فرع التكامل. لا تُطبّق على قاعدة الإنتاج قبل مصالحة سجل الترحيلات البعيد ومراجعة خطة الإصدار.
 
-**الإجمالي: 128 ترحيلاً.**
+**الإجمالي: 129 ترحيلاً.**
