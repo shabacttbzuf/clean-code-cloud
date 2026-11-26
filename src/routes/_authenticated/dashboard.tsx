@@ -333,9 +333,8 @@ function Dashboard() {
         const refundCosts = refundCostGroups.flat();
         const categories = hasPermission("expenses.view") || hasPermission("reports.view")
           ? await fetchAllRows((from, to) => supabase.from("expense_categories").select("id,name,color").eq("tenant_id", tenantId).order("id").range(from, to))
-          : { data: [], error: null };
-        if (categories.error) throw categories.error;
-        const categoryMap = new Map((categories.data ?? []).map((row) => [row.id, row]));
+          : [];
+        const categoryMap = new Map(categories.map((row) => [row.id, row]));
 
         const todayTotal = salesToday.reduce((sum, row) => sum + Number(row.total), 0) - refundsToday.reduce((sum, row) => sum + Number(row.total), 0);
         const yesterdayTotal = salesYesterday.reduce((sum, row) => sum + Number(row.total), 0) - refundsYesterday.reduce((sum, row) => sum + Number(row.total), 0);
