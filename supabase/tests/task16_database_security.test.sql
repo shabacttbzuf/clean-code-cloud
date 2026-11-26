@@ -211,8 +211,8 @@ SELECT is(
      AND tablename='marketing_campaigns'
      AND permissive='RESTRICTIVE'
      AND cmd IN ('SELECT','INSERT','UPDATE','DELETE')),
-  4,
-  'Marketing campaigns retain restrictive company-scope gates for all CRUD operations'
+  8,
+  'Marketing campaigns retain four company-scope and four branch-scope restrictive CRUD gates'
 );
 
 SELECT * FROM finish();
