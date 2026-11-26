@@ -18,14 +18,27 @@ test("migration manifest and complete database snapshot list every migration exa
   assert.deepEqual([...snapshotFiles].sort(), migrationFiles, "snapshot markers must match supabase/migrations filenames");
 });
 
-test("complete database snapshot contains the exact source text of every migration", () => {
+function normalizeExecutableSql(source) {
+  return source
+    .split(/\r?\n/)
+    .filter((line) => !line.trimStart().startsWith("--"))
+    .join("\n")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+test("complete database snapshot preserves every migration's executable SQL", () => {
   for (const filename of migrationFiles) {
-    const source = readFileSync(new URL(`../supabase/migrations/${filename}`, import.meta.url), "utf8").trim();
+    const source = readFileSync(new URL(`../supabase/migrations/${filename}`, import.meta.url), "utf8");
     const marker = `-- SOURCE MIGRATION: ${filename}`;
     const start = snapshot.indexOf(marker);
+    assert.ok(start >= 0, `snapshot is missing marker for ${filename}`);
     const nextMarker = snapshot.indexOf("\n-- SOURCE MIGRATION:", start + marker.length);
     const block = snapshot.slice(start + marker.length, nextMarker < 0 ? snapshot.length : nextMarker);
-    assert.ok(start >= 0, `snapshot is missing marker for ${filename}`);
-    assert.ok(block.includes(source), `snapshot content differs from source migration ${filename}`);
+    assert.equal(
+      normalizeExecutableSql(block),
+      normalizeExecutableSql(source),
+      `snapshot executable SQL differs from source migration ${filename}`,
+    );
   }
 });
