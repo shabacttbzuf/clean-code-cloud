@@ -40,7 +40,7 @@ const DEFAULT_DASHBOARD_HERO_IMAGE_URL = "https://images.unsplash.com/photo-1555
 
 function safeDashboardHeroImageUrl(value: string | null): string | null {
   if (!value) return null;
-  try { const url = new URL(value); return url.protocol === "https:" ? url.toString() : null; }
+  try { const url = new URL(value); return url.protocol === "https:" && !url.username && !url.password ? url.toString() : null; }
   catch { return null; }
 }
 
