@@ -488,7 +488,7 @@ function TopBar() {
             <DropdownMenuContent align="start" className="w-64">
               <DropdownMenuLabel>نطاق الشركة</DropdownMenuLabel><DropdownMenuSeparator />
               {companyError ? <DropdownMenuItem disabled>تعذر تحميل الشركات المتاحة</DropdownMenuItem> : companyLoading ? <DropdownMenuItem disabled>جارٍ تحميل الشركات...</DropdownMenuItem> : null}
-              {companyOptions.length > 1 && memberships.some((item) => item.tenant_id === tenantId && item.company_id === null) ? <DropdownMenuItem onSelect={() => { switchCompany(null); toast.success("تم اختيار جميع الشركات"); }}>جميع الشركات{!activeCompanyId ? <span className="mr-auto text-xs text-emerald-600">الحالي</span> : null}</DropdownMenuItem> : null}
+              {companyOptions.length > 1 && memberships.some((item) => item.tenant_id === tenantId && item.company_id === null && item.branch_id === null) ? <DropdownMenuItem onSelect={() => { switchCompany(null); toast.success("تم اختيار جميع الشركات"); }}>جميع الشركات{!activeCompanyId ? <span className="mr-auto text-xs text-emerald-600">الحالي</span> : null}</DropdownMenuItem> : null}
               {companyOptions.map((item) => <DropdownMenuItem key={item.id} onSelect={() => { if (item.id !== activeCompanyId) { switchCompany(item.id); toast.success("تم التبديل إلى " + item.name); } }}><Building2 className="ml-2 h-4 w-4" /><span className="min-w-0 flex-1 truncate">{item.name}</span>{item.id === activeCompanyId ? <span className="text-xs text-emerald-600">الحالية</span> : null}</DropdownMenuItem>)}
             </DropdownMenuContent>
           </DropdownMenu>
