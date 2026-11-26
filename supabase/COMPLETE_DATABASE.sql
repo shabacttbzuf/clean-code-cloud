@@ -15108,7 +15108,7 @@ COMMIT;
 -- END MIGRATION: 20261124151227_move_marketing_analytics_to_private_wrappers.sql
 
 -- =====================================================================
--- SOURCE MIGRATION: 20261126020000_marketing_advertising_foreign_key_indexes.sql
+-- SOURCE MIGRATION: 20261126210000_marketing_advertising_foreign_key_indexes.sql
 -- Add covering indexes for the foreign keys introduced by advertising-space
 -- and branch-scoped campaign analytics migrations.
 BEGIN;
@@ -15134,7 +15134,7 @@ CREATE INDEX IF NOT EXISTS marketing_campaigns_advertising_space_tenant_idx
   WHERE advertising_space_id IS NOT NULL;
 
 COMMIT;
--- END MIGRATION: 20261126020000_marketing_advertising_foreign_key_indexes.sql
+-- END MIGRATION: 20261126210000_marketing_advertising_foreign_key_indexes.sql
 
 -- SOURCE MIGRATION: 20261126190000_marketing_ad_spaces_and_branch_targeting.sql
 -- =====================================================================
