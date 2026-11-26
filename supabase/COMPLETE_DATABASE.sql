@@ -15268,7 +15268,7 @@ $function$;
 REVOKE ALL ON FUNCTION public.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid) TO authenticated;
 
--- BEGIN MIGRATION: 20261126190000_marketing_ad_spaces_and_branch_targeting.sql
+-- SOURCE MIGRATION: 20261126190000_marketing_ad_spaces_and_branch_targeting.sql
 -- Add branch-level targeting and a first-class catalog of advertising spaces.
 -- Existing campaign data and placement keys remain backward compatible.
 BEGIN;
@@ -15639,9 +15639,9 @@ USING (
 );
 
 COMMIT;
--- END MIGRATION: 20261126190000_marketing_ad_spaces_and_branch_targeting.sql
 
--- BEGIN MIGRATION: 20261126200000_scope_marketing_analytics_to_branch.sql
+
+-- SOURCE MIGRATION: 20261126200000_scope_marketing_analytics_to_branch.sql
 -- Keep engagement recording and analytics inside the campaign's branch boundary.
 BEGIN;
 
@@ -15827,9 +15827,9 @@ REVOKE ALL ON FUNCTION private.get_marketing_campaign_analytics(uuid) FROM PUBLI
 GRANT EXECUTE ON FUNCTION private.get_marketing_campaign_analytics(uuid) TO authenticated, service_role;
 
 COMMIT;
--- END MIGRATION: 20261126200000_scope_marketing_analytics_to_branch.sql
 
--- BEGIN MIGRATION: 20261126210000_marketing_advertising_foreign_key_indexes.sql
+
+-- SOURCE MIGRATION: 20261126210000_marketing_advertising_foreign_key_indexes.sql
 -- Add covering indexes for the foreign keys introduced by advertising-space
 -- and branch-scoped campaign analytics migrations.
 BEGIN;
@@ -15855,4 +15855,3 @@ CREATE INDEX IF NOT EXISTS marketing_campaigns_advertising_space_tenant_idx
   WHERE advertising_space_id IS NOT NULL;
 
 COMMIT;
--- END MIGRATION: 20261126210000_marketing_advertising_foreign_key_indexes.sql
