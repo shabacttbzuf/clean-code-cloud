@@ -46,9 +46,9 @@ test("marketing campaigns enforce company scope in RLS and on writes", () => {
 
 test("dedicated ads page creates campaigns for the active company and scopes company reads", () => {
   assert.match(ads, /membership\?\.company_id/);
-  assert.match(ads, /company_id: editingId \? editingCompanyId/);
+  assert.match(ads, /company_id: selectedBranch\?\.company_id \?\? \(editingId \? editingCompanyId/);
   assert.match(ads, /query = query\.eq\("company_id", membership\.company_id\)/);
-  assert.match(ads, /select\("id,company_id,title/);
+  assert.match(ads, /select\("id,company_id,branch_id,advertising_space_id,title/);
 });
 
 test("notification server function accepts only an explicit company scope that the database validates", () => {
