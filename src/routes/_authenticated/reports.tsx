@@ -68,7 +68,7 @@ function ReportsPage() {
       if (!tenantId) return [];
       let query = supabase.from("companies").select("id,name").eq("tenant_id", tenantId).order("name");
       if (!isSuperOwner && membership?.company_id) query = query.eq("id", membership.company_id);
-      else if (!isSuperOwner) return Promise.resolve({ data: [], error: null });
+      else if (!isSuperOwner) return [];
       const { data, error } = await query;
       if (error) throw error;
       return data ?? [];
