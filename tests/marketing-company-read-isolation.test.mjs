@@ -49,6 +49,10 @@ test("dashboard and POS promotions are filtered to the active company and expose
   assert.match(posPage, /posPromos\.refetch\(\)/);
 });
 
-test("marketing management controls match the owner/manager role gate enforced by RLS", () => {
-  assert.match(adsPage, /\(\(role === "owner" \|\| role === "manager"\) && !!membership\?\.company_id &&\s*permissions\.data\?\.includes\("ads\.manage"\) === true\)/);
+test("marketing management action controls use granular permissions and retain company scope", () => {
+  for (const key of ["ads.view", "ads.create", "ads.edit", "ads.approve", "ads.delete"]) {
+    assert.ok(adsPage.includes('hasPermission("' + key + '")'));
+  }
+  assert.ok(adsPage.includes("campaign.company_id === membership.company_id"));
+  assert.ok(adsPage.includes("canManageAnalytics"));
 });

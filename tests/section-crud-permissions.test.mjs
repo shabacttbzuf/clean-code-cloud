@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 
 const migration = readFileSync(new URL("../supabase/migrations/20261125030000_section_crud_permissions.sql", import.meta.url), "utf8");
 const purchaseRpc = readFileSync(new URL("../supabase/migrations/20261125070000_private_purchase_rpc_wrappers.sql", import.meta.url), "utf8");
-const purchaseReturnRpc = readFileSync(new URL("../supabase/migrations/20261125070000_private_purchase_rpc_wrappers.sql", import.meta.url), "utf8");
+const purchaseReturnRpc = purchaseRpc;
 const historyReadMigration = readFileSync(new URL("../supabase/migrations/20261125060000_audit_history_permission_reads.sql", import.meta.url), "utf8");
 const snapshot = readFileSync(new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url), "utf8");
 
@@ -60,7 +60,13 @@ test("purchase receiving and return RPCs enforce action permissions and branch m
   assert.ok(purchaseRpc.includes("private.can_access_branch"));
   assert.ok(!purchaseRpc.includes("role = 'warehouse'"));
   assert.ok(purchaseRpc.includes("INSERT INTO public.purchase_items"));
+  assert.ok(purchaseRpc.includes("CREATE OR REPLACE FUNCTION private.create_purchase_with_items"));
+  assert.ok(purchaseRpc.includes("CREATE OR REPLACE FUNCTION public.create_purchase_with_items"));
+  assert.ok(purchaseRpc.includes("SECURITY INVOKER"));
+  assert.ok(purchaseRpc.includes("_items IS NULL"));
+  assert.ok(purchaseRpc.includes("v_cost_price = 'NaN'::numeric"));
   assert.ok(purchaseReturnRpc.includes("'purchases.returns.create'"));
+  assert.ok(purchaseReturnRpc.includes("CREATE OR REPLACE FUNCTION private.create_purchase_return"));
   assert.ok(purchaseReturnRpc.includes("'purchases.manage'"));
   assert.ok(purchaseReturnRpc.includes("private.can_access_branch"));
   assert.ok(purchaseReturnRpc.includes("INSERT INTO public.purchase_return_items"));
@@ -113,7 +119,18 @@ test("complete database snapshot includes the section CRUD migration exactly onc
   assert.ok(historyReadMigration.includes("'login_history.view'"));
   assert.ok(historyReadMigration.includes("audit_logs_permission_read"));
   assert.ok(historyReadMigration.includes("login_history_permission_read"));
-  for (const name of ["20261125030000_section_crud_permissions.sql", "20261125070000_private_purchase_rpc_wrappers.sql", "20261125070000_private_purchase_rpc_wrappers.sql", "20261125060000_audit_history_permission_reads.sql"]) {
+  for (const name of [
+    "20261125010000_granular_section_action_permissions.sql",
+    "20261125020000_granular_marketing_rls_alignment.sql",
+    "20261125030000_section_crud_permissions.sql",
+    "20261125060000_audit_history_permission_reads.sql",
+    "20261125070000_private_purchase_rpc_wrappers.sql",
+    "20261125080000_permission_override_write_gates.sql",
+    "20261125090000_sensitive_action_audit_triggers.sql",
+    "20261125100000_prevent_direct_expense_deletion.sql",
+    "20261125110000_prevent_product_history_deletion.sql",
+    "20261126220000_inventory_adjustment_permission_and_branch_guard.sql"
+  ]) {
     assert.equal(snapshot.split("SOURCE MIGRATION: " + name).length - 1, 1);
     assert.ok(snapshot.includes("END MIGRATION: " + name));
   }
