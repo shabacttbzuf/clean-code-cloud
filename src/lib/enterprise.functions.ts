@@ -37,7 +37,7 @@ async function assertTenantOwnerOrSuperOwner(supabase: any, userId: string, tena
   if (isSuperOwner) return;
   const { data, error } = await supabase.from("user_roles").select("id")
     .eq("user_id", userId).eq("tenant_id", tenantId).eq("role", "owner")
-    .is("company_id", null).limit(1);
+    .is("company_id", null).is("branch_id", null).limit(1);
   if (error) throw new Error(error.message);
   if (!data?.length) throw new Error("إدارة الأدوار المخصصة متاحة لمالك المؤسسة فقط.");
 }

@@ -49,6 +49,10 @@ test("user permission mutations verify actor, target membership and protect supe
   assert.ok(action.includes("row.hired_by !== context.userId"));
   assert.ok(action.includes("get_my_permissions"));
   assert.ok(action.includes("لا يمكنك منح صلاحية لا تملكها بنفسك"));
+  const seedDemo = permissionActions.slice(0, permissionActions.indexOf("export const setUserPermission"));
+  assert.ok(seedDemo.includes("superOwnerStatusError"));
+  assert.ok(seedDemo.includes("row.role === \"owner\" && row.company_id == null && row.branch_id == null"));
+  assert.ok(seedDemo.includes("تهيئة البيانات التجريبية متاحة للمالك الرئيسي للمؤسسة فقط"));
   assert.ok(action.includes('row.role === "owner" && row.company_id == null && row.branch_id == null'));
   assert.ok(action.includes("const scopedAdmins = actorRows.filter"));
   assert.ok(action.includes("if (!scopedAdmins.length)"));
@@ -68,7 +72,7 @@ test("enterprise user administration blocks self-targeting and enforces tenant/c
   assert.ok(helper.includes("targetRoles.some((row: any) => row.hired_by !== actorId)"));
   assert.ok(helper.includes("targetBranchIds.some((id) => !actorBranchIds.includes(id))"));
   assert.ok(helper.includes("targetCompanyIds.has(actorCompanyId)"));
-  assert.ok(enterprise.includes('.is("company_id", null).limit(1)'));
+  assert.ok(enterprise.includes('.is("company_id", null).is("branch_id", null).limit(1)'));
   const patchGuard = enterprise.slice(enterprise.indexOf("async function assertEnterpriseProfilePatchScope"), enterprise.indexOf("/* -------------------- Enterprise user actions"));
   assert.ok(patchGuard.includes('from("companies")'));
   assert.ok(patchGuard.includes('from("departments")'));

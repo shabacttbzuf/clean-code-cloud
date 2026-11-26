@@ -12,12 +12,19 @@ export const seedDemoData = createServerFn({ method: "POST" })
   .inputValidator((data) => z.object({ tenant_id: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
     // Authorize
-    const { data: isSO } = await context.supabase.rpc("is_super_owner", { _user_id: context.userId });
+    const { data: isSO, error: superOwnerStatusError } = await context.supabase.rpc("is_super_owner", { _user_id: context.userId });
+    if (superOwnerStatusError) throw new Error(superOwnerStatusError.message);
     if (!isSO) {
-      const { data: rows } = await context.supabase
-        .from("user_roles").select("role").eq("user_id", context.userId).eq("tenant_id", data.tenant_id);
-      const roles = (rows ?? []).map((r: { role: string }) => r.role);
-      if (!roles.includes("owner")) throw new Error("غير مصرح: للمالك فقط.");
+      const { data: rows, error: rolesError } = await context.supabase
+        .from("user_roles")
+        .select("role, company_id, branch_id")
+        .eq("user_id", context.userId)
+        .eq("tenant_id", data.tenant_id);
+      if (rolesError) throw new Error(rolesError.message);
+      const isTenantOwner = (rows ?? []).some((row: any) =>
+        row.role === "owner" && row.company_id == null && row.branch_id == null,
+      );
+      if (!isTenantOwner) throw new Error("غير مصرح: تهيئة البيانات التجريبية متاحة للمالك الرئيسي للمؤسسة فقط.");
     }
 
     const tenantId = data.tenant_id;
