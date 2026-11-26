@@ -52,6 +52,8 @@ test("dedicated ads page creates campaigns for the active company and scopes com
   assert.match(ads, /query = query\.eq\("company_id", membership\.company_id\)/);
   assert.match(ads, /select\("id,company_id,branch_id,advertising_space_id,title/);
   assert.match(ads, /supabase\.from\("marketing_ad_spaces"\)/);
+  assert.match(ads, /\.update\(\{ is_active: !active, updated_at: new Date\(\)\.toISOString\(\) \}\)/);
+  assert.match(ads, /toggleAdSpace\.mutate\(\{ id: space\.id, active: space\.is_active \}\)/);
   assert.match(ads, /queryKey: \["marketing-campaigns", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
   assert.match(ads, /queryKey: \["marketing-campaign-analytics", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
   assert.match(ads, /queryKey: \["marketing-ad-spaces", tenantId, userId, membership\?\.company_id, membership\?\.branch_id \?\? "all", branchId\]/);
