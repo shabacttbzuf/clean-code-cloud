@@ -118,11 +118,11 @@ const ROUTE_PERMISSIONS: Array<[string, string]> = [
   ["/cash-sessions", "cash.view"], ["/expenses", "expenses.view"], ["/reports", "reports.view"],
   ["/hr/employees", "hr.employees.view"], ["/hr/attendance", "hr.attendance.view"], ["/hr/leaves", "hr.leaves.view"],
   ["/hr/payroll", "hr.payroll.view"], ["/hr/compensation", "hr.compensation.view"], ["/branches", "branches.view"],
-  ["/companies", "companies.view"], ["/users", "users.view"], ["/users-admin", "users.manage"],
+  ["/companies", "companies.view"], ["/users", "users.view"], ["/users-admin", "users.view"],
   ["/team-permissions", "permissions.view"], ["/roles", "roles.view"], ["/departments", "departments.view"],
   ["/job-titles", "job_titles.view"], ["/employment-types", "employment_types.view"],
-  ["/notifications", "notifications.view"], ["/settings", "settings.view"], ["/ads", "ads.manage"],
-  ["/promotions", "promotions.manage"], ["/audit-logs", "audit.view"], ["/login-history", "login_history.view"],
+  ["/notifications", "notifications.view"], ["/settings", "settings.view"], ["/ads", "ads.view"],
+  ["/promotions", "promotions.view"], ["/audit-logs", "audit.view"], ["/login-history", "login_history.view"],
   ["/expense-categories", "expense_categories.manage"],
 ];
 function requiredPermission(path: string): string | null {
