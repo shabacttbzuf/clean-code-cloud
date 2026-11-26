@@ -270,3 +270,7 @@
 115. `supabase/migrations/20261126190000_marketing_ad_spaces_and_branch_targeting.sql`
 
 **الإجمالي: 115 ترحيلاً.**
+
+116. `supabase/migrations/20261126200000_scope_marketing_analytics_to_branch.sql`
+
+**الإجمالي: 116 ترحيلاً.**
