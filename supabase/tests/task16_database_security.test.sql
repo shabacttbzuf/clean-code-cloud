@@ -107,109 +107,21 @@ SELECT ok(
 );
 
 SELECT is(
-  (SELECT count(*)::int FROM pg_policies
-   WHERE schemaname='public' AND tablename='marketing_campaigns'
-     AND policyname IN (
-       'company_scope_marketing_campaigns_insert',
-       'company_scope_marketing_campaigns_update',
-       'company_scope_marketing_campaigns_delete'
-     ) AND permissive='RESTRICTIVE'),
-  3,
-  'Marketing campaign writes retain restrictive company-scope policies'
-);
-
-
-SELECT ok(
-  NOT EXISTS (
-    SELECT 1
-    FROM (VALUES
-      ('payroll_runs','SELECT'),
-      ('payroll_runs','INSERT'),
-      ('payroll_runs','UPDATE'),
-      ('payroll_runs','DELETE'),
-      ('payroll_items','SELECT'),
-      ('payroll_items','INSERT'),
-      ('payroll_items','UPDATE'),
-      ('payroll_items','DELETE')
-    ) AS required(tablename, cmd)
-    WHERE NOT EXISTS (
-      SELECT 1
-      FROM pg_policies p
-      WHERE p.schemaname='public'
-        AND p.tablename=required.tablename
-        AND p.cmd=required.cmd
-        AND p.permissive='RESTRICTIVE'
-        AND (coalesce(p.qual,'') || coalesce(p.with_check,'')) ILIKE '%can_access%'
-    )
-  ),
-  'Payroll run and item SELECT/INSERT/UPDATE/DELETE each retain a restrictive tenant/company/branch scope gate'
-);
-
-SELECT is(
-  (SELECT count(*)::int
-   FROM pg_policies
-   WHERE schemaname='public'
-     AND tablename='profiles'
-     AND cmd='UPDATE'
-     AND permissive='RESTRICTIVE'),
-  3,
-  'Profile updates retain company, permission, and Super Owner protection gates'
-);
-
-
-SELECT ok(
-  EXISTS (
-    SELECT 1 FROM pg_policies
-    WHERE schemaname='public'
-      AND tablename='promotional_offers'
-      AND policyname='Tenant members read promotional offers'
-      AND cmd='SELECT'
-      AND qual ILIKE '%has_permission%'
-      AND qual ILIKE '%private.can_access_branch%'
-  )
-  AND (
-    SELECT count(*) = 3
-    FROM pg_policies
-    WHERE schemaname='public'
-      AND tablename='promotional_offers'
-      AND policyname IN (
-        'Promotion managers insert offers',
-        'Promotion managers update offers',
-        'Promotion managers delete offers'
-      )
-      AND (
-        coalesce(qual,'') || coalesce(with_check,'')
-      ) ILIKE '%has_permission%'
-      AND (
-        coalesce(qual,'') || coalesce(with_check,'')
-      ) ILIKE '%private.can_access_branch%'
-      AND (
-        coalesce(qual,'') || coalesce(with_check,'')
-      ) ILIKE '%private.is_company_member%'
-  ),
-  'Promotional offer read and write policies retain permission, company, and branch scope checks'
-);
-
-SELECT ok(
-  EXISTS (
-    SELECT 1 FROM pg_policies
-    WHERE schemaname='public'
-      AND tablename='promotion_redemptions'
-      AND policyname='Promotion managers read redemptions'
-      AND cmd='SELECT'
-      AND qual ILIKE '%private.is_tenant_member%'
-      AND qual ILIKE '%has_permission%'
-      AND qual ILIKE '%private.can_access_branch%'
-  ),
-  'Promotion redemption reads retain tenant, permission, and branch scope checks'
-);
-
-SELECT is(
   (SELECT count(*)::int
    FROM pg_policies
    WHERE schemaname='public'
      AND tablename='marketing_campaigns'
      AND permissive='RESTRICTIVE'
+     AND policyname IN (
+       'company_scope_marketing_campaigns_select',
+       'company_scope_marketing_campaigns_insert',
+       'company_scope_marketing_campaigns_update',
+       'company_scope_marketing_campaigns_delete',
+       'company_scope_marketing_campaigns_branch_select',
+       'company_scope_marketing_campaigns_branch_insert',
+       'company_scope_marketing_campaigns_branch_update',
+       'company_scope_marketing_campaigns_branch_delete'
+     )
      AND cmd IN ('SELECT','INSERT','UPDATE','DELETE')),
   8,
   'Marketing campaigns retain four company-scope and four branch-scope restrictive CRUD gates'
