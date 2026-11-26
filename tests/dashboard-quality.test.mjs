@@ -8,9 +8,10 @@ const layout = readFileSync(new URL("../src/routes/_authenticated/route.tsx", im
 const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 
 test("dashboard rejects partial query failures instead of presenting misleading totals", () => {
-  assert.match(dashboard, /for \(const result of \[salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount\]\)/);
-  assert.match(dashboard, /if \(result\.error\) throw result\.error/);
-  assert.match(dashboard, /if \(catsRes\.error\) throw catsRes\.error/);
+  for (const query of ["salesCount", "salesYesterdayCount", "customersCount", "categories"]) {
+    assert.match(dashboard, new RegExp("if \\(" + query + "\\.error\\) throw " + query + "\\.error"));
+  }
+  assert.match(dashboard, /fetchAllRows/);
   assert.match(dashboard, /لم يتم عرض أرقام جزئية أو مضللة/);
 });
 
@@ -138,6 +139,7 @@ const theme = readFileSync(new URL("../src/lib/theme.tsx", import.meta.url), "ut
 const appSidebar = readFileSync(new URL("../src/components/app-sidebar.tsx", import.meta.url), "utf8");
 const appLauncher = readFileSync(new URL("../src/components/app-launcher.tsx", import.meta.url), "utf8");
 const workspaceTabs = readFileSync(new URL("../src/components/workspace-tabs.tsx", import.meta.url), "utf8");
+const workspaceTabLogic = readFileSync(new URL("../src/lib/workspace-tabs-logic.mjs", import.meta.url), "utf8");
 const campaignMigration = readFileSync(new URL("../supabase/migrations/20261111233538_marketing_campaigns_management.sql", import.meta.url), "utf8");
 
 test("owner design studio customizes workspace colors and background with a safe reset", () => {
@@ -159,12 +161,16 @@ test("app launcher mirrors enterprise, system, and owner-only custom navigation 
   assert.match(appLauncher, /permissions\.data\.has\(item\.permission\)/);
 });
 
-test("workspace tabs preserve pinned pages and enforce a stable maximum", () => {
-  assert.match(workspaceTabs, /MAX_TABS = 12/);
-  assert.match(workspaceTabs, /function limitTabs/);
-  assert.match(workspaceTabs, /function togglePinned/);
+test("workspace tabs preserve pinned pages, dirty-state guards, route permissions and bounded storage", () => {
+  assert.match(workspaceTabs, /limitWorkspaceTabs/);
+  assert.match(workspaceTabs, /toggleWorkspaceTabPin/);
+  assert.match(workspaceTabs, /requiredPermission/);
+  assert.match(workspaceTabs, /permissions\.has\(permission\)/);
   assert.match(workspaceTabs, /PinOff/);
-  assert.match(workspaceTabs, /tab\.pinned/);
+  assert.match(workspaceTabs, /dirtyPaths/);
+  assert.match(workspaceTabLogic, /MAX_WORKSPACE_TABS = 12/);
+  assert.match(workspaceTabLogic, /MAX_PINNED_WORKSPACE_TABS = 6/);
+  assert.match(workspaceTabLogic, /createWorkspaceTabScope/);
 });
 
 test("custom sidebar tabs are owner-only shortcuts to an allowlisted existing route", () => {
@@ -249,4 +255,30 @@ test("dashboard provides permission-scoped operations, notifications, and a trut
   assert.match(dashboard, /hasPermission\("sales.create"\)/);
   assert.match(dashboard, /hasPermission\("kitchen.view"\)/);
   assert.match(dashboard, /hasPermission\("reports.view"\)/);
+});
+
+
+test("dashboard statistics are paginated, permission-gated, scope-safe and comparable", () => {
+  assert.match(dashboard, /salesYesterdayCount/);
+  assert.match(dashboard, /count: "exact"/);
+  assert.match(dashboard, /calculatePercentChange/);
+  assert.match(dashboard, /tenantWideDataScope/);
+  assert.match(dashboard, /scopedBranchIds = \[\]/);
+  assert.match(dashboard, /dashboard-statistics-v3:/);
+  assert.match(dashboard, /status === 401 \|\| value\?\.status === 403/);
+  assert.match(dashboard, /stats\.data\.source === "offline"/);
+  assert.match(dashboard, /stats\.data\.salesChange/);
+  assert.match(dashboard, /stats\.data\.ordersChange/);
+  assert.match(dashboard, /to="\/reports"/);
+  assert.match(dashboard, /to="\/sales"/);
+});
+
+test("dashboard hides branch-ambiguous customer totals and gates sensitive KPI cards", () => {
+  assert.match(dashboard, /tenantWideDataScope && hasPermission\("customers\.view"\)/);
+  assert.match(dashboard, /customersCount: tenantWideDataScope/);
+  assert.match(dashboard, /hasPermission\("reports\.view"\) && grossProfit !== null/);
+  assert.match(dashboard, /hasPermission\("cash\.view"\) \? sessions\.length : null/);
+  assert.match(dashboard, /hasPermission\("inventory\.view"\) \? lowStockCount : null/);
+  assert.match(dashboard, /hasPermission\("expenses\.view"\) && <Kpi/);
+  assert.match(dashboard, /hasPermission\("reports\.view"\) && <Kpi label="الربح التقديري"/);
 });
