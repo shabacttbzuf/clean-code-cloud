@@ -19,12 +19,74 @@ test("migration manifest and complete database snapshot list every migration exa
 });
 
 function normalizeExecutableSql(source) {
-  return source
+  const withoutLineComments = source
     .split(/\r?\n/)
     .filter((line) => !line.trimStart().startsWith("--"))
-    .join("\n")
-    .replace(/\s+/g, " ")
-    .trim();
+    .join("\n");
+  let output = "";
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let pendingSpace = false;
+
+  for (let i = 0; i < withoutLineComments.length; i += 1) {
+    const char = withoutLineComments[i];
+    const next = withoutLineComments[i + 1];
+
+    if (inSingleQuote) {
+      output += char;
+      if (char === "\\" && next) {
+        output += next;
+        i += 1;
+      } else if (char === "'" && next === "'") {
+        output += next;
+        i += 1;
+      } else if (char === "'") {
+        inSingleQuote = false;
+      }
+      continue;
+    }
+
+    if (inDoubleQuote) {
+      output += char;
+      if (char === '"' && next === '"') {
+        output += next;
+        i += 1;
+      } else if (char === '"') {
+        inDoubleQuote = false;
+      }
+      continue;
+    }
+
+    if (char === "'") {
+      if (pendingSpace && output && !output.endsWith("(") && !output.endsWith(",")) output += " ";
+      pendingSpace = false;
+      output += char;
+      inSingleQuote = true;
+      continue;
+    }
+    if (char === '"') {
+      if (pendingSpace && output && !output.endsWith("(") && !output.endsWith(",")) output += " ";
+      pendingSpace = false;
+      output += char;
+      inDoubleQuote = true;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      pendingSpace = true;
+      continue;
+    }
+    if (char === "(" || char === ")" || char === ",") {
+      output = output.replace(/\s+$/, "");
+      output += char;
+      pendingSpace = false;
+      continue;
+    }
+    if (pendingSpace && output && !output.endsWith("(") && !output.endsWith(",")) output += " ";
+    output += char;
+    pendingSpace = false;
+  }
+
+  return output.trim();
 }
 
 test("complete database snapshot preserves every migration's executable SQL", () => {
