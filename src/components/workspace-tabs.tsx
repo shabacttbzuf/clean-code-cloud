@@ -174,7 +174,7 @@ export function WorkspaceTabs() {
         ...restored.filter((tab) => tab.path !== "/dashboard"),
       ]),
     });
-  }, [storageKey, sessionScope, isSuperOwner, permissionQuery.data, permissionQuery.isLoading, permissionQuery.isError]);
+  }, [storageKey, sessionScope, isSuperOwner, permissions, permissionsLoading, permissionsError]);
 
   useEffect(() => {
     if (!storageKey || tabState.scope !== storageKey) return;
