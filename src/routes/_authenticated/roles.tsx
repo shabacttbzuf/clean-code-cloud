@@ -32,7 +32,7 @@ const BUILTIN_LABELS: Record<string, string> = {
 };
 
 function RolesPage() {
-  const { tenantId, role, loading } = useActiveTenant();
+  const { tenantId, loading, hasPermission } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
   const qc = useQueryClient();
   const createFn = useServerFn(createCustomRole);
@@ -45,8 +45,8 @@ function RolesPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [roleSearch, setRoleSearch] = useState("");
   const [permissionSearch, setPermissionSearch] = useState("");
-  const canAccess = role === "owner" || role === "manager" || isSuperOwner;
-  const canManage = role === "owner" || isSuperOwner;
+  const canAccess = isSuperOwner || hasPermission("roles.view");
+  const canManage = isSuperOwner || hasPermission("roles.manage");
 
   const customRolesQ = useQuery({
     queryKey: ["custom-roles", tenantId],
@@ -146,7 +146,7 @@ function RolesPage() {
         <PageHeader title="إدارة الأدوار" />
         <Card>
           <CardContent className="flex items-center gap-3 p-8 text-muted-foreground">
-            <ShieldAlert className="h-5 w-5 text-destructive" /> هذه الصفحة للمالك فقط.
+            <ShieldAlert className="h-5 w-5 text-destructive" /> لا تملك صلاحية عرض الأدوار أو إدارتها.
           </CardContent>
         </Card>
       </div>
