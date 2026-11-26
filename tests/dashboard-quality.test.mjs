@@ -167,6 +167,9 @@ test("workspace tabs preserve pinned pages and enforce a stable maximum", () => 
   assert.match(workspaceTabs, /PinOff/);
   assert.match(workspaceTabs, /tab\.pinned/);
   assert.match(workspaceTabLogic, /tab\.dirty \? \{ dirty: true \}/);
+  assert.match(workspaceTabs, /\["\/users-admin", "users\.view"\]/);
+  assert.match(workspaceTabs, /\["\/ads", "ads\.view"\]/);
+  assert.match(workspaceTabs, /\["\/promotions", "promotions\.view"\]/);
 });
 
 test("custom sidebar tabs are owner-only shortcuts to an allowlisted existing route", () => {
