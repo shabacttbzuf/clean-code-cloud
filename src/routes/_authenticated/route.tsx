@@ -446,7 +446,7 @@ function TopBar() {
       return permitted && searchQuery.length > 0 && item.title.toLocaleLowerCase("ar").includes(searchQuery);
     }).slice(0, 10);
 
-  const canSelectAllBranches = isSuperOwner || ["owner", "manager", "accountant"].includes(membership?.role ?? "");
+  const canSelectAllBranches = !membership?.branch_id && (isSuperOwner || ["owner", "manager", "accountant"].includes(membership?.role ?? ""));
   const activeBranchLabel = activeBranchId
     ? branchOptions.find((item) => item.id === activeBranchId)?.name || "الفرع المحدد"
     : canSelectAllBranches ? "جميع الفروع" : branchOptions[0]?.name || "لم يحدد فرع";
@@ -474,7 +474,7 @@ function TopBar() {
             <DropdownMenuLabel>نطاق الشركة</DropdownMenuLabel>
             <DropdownMenuSeparator />
             {companyError ? <DropdownMenuItem disabled>تعذر تحميل الشركات المتاحة</DropdownMenuItem> : companyLoading ? <DropdownMenuItem disabled>جارٍ تحميل الشركات...</DropdownMenuItem> : null}
-            {companyOptions.length > 1 && memberships.some((item) => item.tenant_id === tenantId && item.company_id === null) && (
+            {companyOptions.length > 1 && memberships.some((item) => item.tenant_id === tenantId && item.company_id === null && item.branch_id === null) && (
               <DropdownMenuItem onSelect={() => { switchCompany(null); toast.success("تم اختيار جميع الشركات"); }}>
                 <Building2 className="ml-2 h-4 w-4" />جميع الشركات
                 {!activeCompanyId && <span className="mr-auto text-xs text-emerald-600">الحالي</span>}
@@ -520,7 +520,7 @@ function TopBar() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-60">
-              <DropdownMenuLabel>الفروع المتاحة لحسابك</DropdownMenuLabel>
+              <DropdownMenuLabel>نطاق الفرع</DropdownMenuLabel><DropdownMenuSeparator /><DropdownMenuLabel>الفروع المتاحة لحسابك</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {canSelectAllBranches && (
                 <DropdownMenuItem onSelect={() => { switchBranch(null); toast.success("تم اختيار جميع الفروع"); }}>
