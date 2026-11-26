@@ -16,9 +16,9 @@ test("brand identity and semantic design tokens stay centralized", () => {
   assert.match(styles, /--primary:/);
   assert.match(styles, /--accent:/);
   assert.match(styles, /--radius:/);
-  assert.match(styles, /--brand-navy:\\s*#102b4e/i);
-  assert.match(styles, /--brand-gold:\\s*#d6ad55/i);
-  assert.match(styles, /--brand-white:\\s*#ffffff/i);
+  assert.match(styles, /--brand-navy:\s*#102b4e/i);
+  assert.match(styles, /--brand-gold:\s*#d6ad55/i);
+  assert.match(styles, /--brand-white:\s*#ffffff/i);
   for (const token of ["--radius-control", "--radius-card", "--radius-dialog", "--shadow-soft", "--shadow-card", "--shadow-elevated"]) {
     assert.ok(styles.includes(token), `missing CSS token: ${token}`);
   }
@@ -27,7 +27,7 @@ test("brand identity and semantic design tokens stay centralized", () => {
 test("Arabic typography and RTL are provided locally at the application root", () => {
   assert.match(fonts, /@fontsource\/cairo/);
   assert.match(fonts, /@fontsource\/inter/);
-  assert.match(styles, /--font-arabic:\\s*"Cairo"/);
+  assert.match(styles, /--font-arabic:\s*"Cairo"/);
   assert.match(root, /<html lang="ar" dir="rtl">/);
 });
 
