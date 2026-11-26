@@ -52,6 +52,9 @@ test("dedicated ads page creates campaigns for the active company and scopes com
   assert.match(ads, /query = query\.eq\("company_id", membership\.company_id\)/);
   assert.match(ads, /select\("id,company_id,branch_id,advertising_space_id,title/);
   assert.match(ads, /supabase\.from\("marketing_ad_spaces"\)/);
+  assert.match(ads, /queryKey: \["marketing-campaigns", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(ads, /queryKey: \["marketing-campaign-analytics", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
+  assert.match(ads, /queryKey: \["marketing-ad-spaces", tenantId, userId, membership\?\.company_id, membership\?\.branch_id \?\? "all", branchId\]/);
   assert.match(ads, /private\.can_access_branch|branch_id/);
 });
 
