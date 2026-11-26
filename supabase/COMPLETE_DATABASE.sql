@@ -335,6 +335,7 @@ FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20260708094827_ba868018-6233-4a11-b86d-ec87b34d165f.sql
 -- =====================================================================
 
@@ -346,6 +347,7 @@ REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authentic
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20260708094855_2d42d4d3-974b-41f1-a822-d4af29ba3fa4.sql
 -- =====================================================================
 
@@ -383,6 +385,7 @@ USING (
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20260708095952_8c2590f8-b111-43db-9c5b-240523fb0b88.sql
 -- =====================================================================
 
@@ -403,6 +406,7 @@ GRANT ALL ON public.products TO service_role;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20260708100059_a041ad16-4ef9-4902-9c28-f630f405cf7b.sql
 -- =====================================================================
 
@@ -413,6 +417,7 @@ GRANT EXECUTE ON FUNCTION public.is_tenant_admin(UUID, UUID) TO authenticated;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20260708102607_a2feee88-17b2-4756-ac03-25ea6a398c4f.sql
 -- =====================================================================
 
@@ -692,6 +697,7 @@ CREATE POLICY "Admins manage payments" ON public.payments
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20260708102622_4a6a58b6-aaf2-4cc7-81c1-7ed10d9f7d49.sql
 -- =====================================================================
 
@@ -702,6 +708,7 @@ REVOKE EXECUTE ON FUNCTION public.assign_invoice_no() FROM PUBLIC, anon, authent
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20260708103031_793d9cf8-044c-4a1c-b9c4-3552cfb05eb5.sql
 -- =====================================================================
 
@@ -988,6 +995,7 @@ FOR EACH ROW EXECUTE FUNCTION public.on_sale_item_insert();
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20260708103319_4726725b-f908-4f4d-b4a9-483be8635d1c.sql
 -- =====================================================================
 
@@ -1068,6 +1076,7 @@ CREATE POLICY "Admins delete expenses" ON public.expenses
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20260708114937_16c34a95-ccdb-437c-a98a-430f2b57fed2.sql
 -- =====================================================================
 
@@ -1121,6 +1130,7 @@ REVOKE EXECUTE ON FUNCTION public.set_updated_at() FROM PUBLIC, anon, authentica
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20260708115005_d3758a2a-cb16-420a-8b5b-434296fffdee.sql
 -- =====================================================================
 
@@ -1165,12 +1175,14 @@ GRANT EXECUTE ON FUNCTION private.user_branch_id(uuid, uuid) TO authenticated;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20260708121532_63109e4a-4999-48fa-ba26-c9c6968a0477.sql
 -- =====================================================================
 
 ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'kitchen';
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20260708121621_9e9eb7c7-2705-4c85-9804-140bbf71e04d.sql
 -- =====================================================================
 
@@ -1375,6 +1387,7 @@ ON CONFLICT DO NOTHING;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20260708122804_4488bafc-2277-466d-8627-9a82d5e82e32.sql
 -- =====================================================================
 
@@ -1450,6 +1463,7 @@ $$;
 GRANT EXECUTE ON FUNCTION public.touch_last_login() TO authenticated;
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20260708132855_24cda317-e651-4e4d-96e6-aa91149d44c8.sql
 -- =====================================================================
 
@@ -1524,6 +1538,7 @@ CREATE INDEX IF NOT EXISTS idx_customers_phone ON public.customers(phone);
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20260708141902_50aeceea-6624-4c01-9c18-59b23a39f358.sql
 -- =====================================================================
 
@@ -1618,6 +1633,7 @@ END $$;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20260708142949_ceaaa981-625e-4dcc-a9ae-70db885a420d.sql
 -- =====================================================================
 
@@ -1784,6 +1800,7 @@ $$;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20260708154516_12f5c89f-0f7d-4cb2-a3e5-89ac8612169c.sql
 -- =====================================================================
 
@@ -2148,6 +2165,7 @@ ON CONFLICT DO NOTHING;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20260713042737_a94617b9-318b-412a-85c3-7a9fad166275.sql
 -- =====================================================================
 
@@ -2192,6 +2210,7 @@ ALTER TABLE public.payroll_runs
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20260713052537_47658ce2-66b0-4b5a-8503-949464409d3c.sql
 -- =====================================================================
 
@@ -2648,6 +2667,7 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000000_security_phase_1_hardening.sql
 -- =====================================================================
 
@@ -2763,7 +2783,6 @@ GRANT EXECUTE ON FUNCTION public.bootstrap_first_super_owner(uuid) TO service_ro
 
 COMMIT;
 
-
 -- SOURCE MIGRATION: 20261111000001_payroll_atomic_rejection.sql
 -- =====================================================================
 
@@ -2873,6 +2892,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000002_user_role_atomicity.sql
 -- =====================================================================
 
@@ -2990,6 +3010,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000003_migrate_legacy_drizzle_visibility.sql
 -- =====================================================================
 
@@ -3063,6 +3084,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000004_atomic_pos_checkout.sql
 -- =====================================================================
 
@@ -3277,7 +3299,6 @@ GRANT EXECUTE ON FUNCTION public.create_sale_with_items(
 ) TO authenticated;
 
 COMMIT;
-
 
 -- SOURCE MIGRATION: 20261111000005_atomic_purchases_inventory_cash.sql
 -- =====================================================================
@@ -3623,6 +3644,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000006_audit_login_notification_security.sql
 -- =====================================================================
 
@@ -3739,6 +3761,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000007_atomic_tenant_onboarding.sql
 -- =====================================================================
 
@@ -3819,6 +3842,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000008_payroll_period_uniqueness.sql
 -- =====================================================================
 
@@ -3839,6 +3863,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000009_secure_custom_role_clone.sql
 -- =====================================================================
 
@@ -3927,6 +3952,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000010_minimize_client_write_privileges.sql
 -- =====================================================================
 
@@ -3980,9 +4006,6 @@ REVOKE INSERT, UPDATE, DELETE ON TABLE public.role_permissions FROM authenticate
 
 COMMIT;
 
-
-
-
 -- SOURCE MIGRATION: 20261111000011_restrict_security_definer_execution.sql
 -- =====================================================
 -- Migration 32: restrict SECURITY DEFINER execution
@@ -3995,7 +4018,6 @@ REVOKE EXECUTE ON FUNCTION public.user_has_role_in_tenant(uuid, uuid, text[]) FR
 GRANT EXECUTE ON FUNCTION public.user_has_role_in_tenant(uuid, uuid, text[]) TO authenticated;
 REVOKE EXECUTE ON FUNCTION public.was_hired_by(uuid, uuid, uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.was_hired_by(uuid, uuid, uuid) TO authenticated;
-
 
 -- SOURCE MIGRATION: 20261111000012_secure_super_owner_status.sql
 -- Migration 20261111000012_secure_super_owner_status.sql
@@ -4021,7 +4043,6 @@ $$;
 REVOKE ALL ON FUNCTION public.get_super_owner_status() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.get_super_owner_status() TO authenticated;
 
-
 -- SOURCE MIGRATION: 20261111000013_protect_financial_ledger_writes.sql
 -- Protect financial and stock ledgers from direct authenticated/anonymous DML.
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE public.sales, public.sale_items, public.payments, public.cash_sessions, public.purchases, public.purchase_items, public.inventory_transactions, public.tenants, public.profiles, public.super_owners FROM anon;
@@ -4032,6 +4053,7 @@ REVOKE INSERT, DELETE, TRUNCATE ON TABLE public.tenants FROM authenticated;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000014_sale_cost_snapshots_profitability.sql
 -- =====================================================================
 
@@ -4251,6 +4273,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000015_security_stock_consistency.sql
 -- =====================================================================
 
@@ -4683,6 +4706,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000016_auditable_returns_and_refunds.sql
 -- =====================================================================
 
@@ -5199,6 +5223,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000017_index_uncovered_foreign_keys.sql
 -- =====================================================================
 
@@ -5260,6 +5285,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000018_optimize_rls_auth_uid_initplans.sql
 -- =====================================================================
 
@@ -5310,6 +5336,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000019_harden_definer_paths_and_inventory_branch_scope.sql
 -- =====================================================================
 
@@ -5420,6 +5447,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000020_super_owner_return_visibility.sql
 -- =====================================================================
 
@@ -5467,6 +5495,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000021_enforce_tenant_scoped_foreign_keys.sql
 -- =====================================================================
 
@@ -5557,6 +5586,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000022_grant_private_tenant_trigger_execute.sql
 -- =====================================================================
 
@@ -5568,6 +5598,7 @@ GRANT EXECUTE ON FUNCTION private.enforce_same_tenant_foreign_key() TO authentic
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000023_least_privilege_return_api_and_defaults.sql
 -- =====================================================================
 
@@ -5605,6 +5636,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000024_read_only_profitability_view.sql
 -- =====================================================================
 
@@ -5617,6 +5649,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000025_immutable_tenant_scope_and_branch_memberships.sql
 -- =====================================================================
 
@@ -5689,6 +5722,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000026_strict_tenant_immutability.sql
 -- =====================================================================
 
@@ -5740,6 +5774,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000027_validate_unconstrained_tenant_references.sql
 -- =====================================================================
 
@@ -5928,6 +5963,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000028_validate_notification_receipts.sql
 -- =====================================================================
 
@@ -5980,6 +6016,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000029_validate_role_notification_audiences.sql
 -- =====================================================================
 
@@ -6034,6 +6071,7 @@ GRANT EXECUTE ON FUNCTION private.enforce_notification_audience_tenant() TO auth
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000030_prevent_cash_refund_overdraw.sql
 -- =====================================================================
 
@@ -6117,6 +6155,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000031_add_purchase_returned_status.sql
 -- =====================================================================
 
@@ -6125,6 +6164,7 @@ ALTER TYPE public.purchase_status ADD VALUE IF NOT EXISTS 'returned';
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000032_mark_fully_returned_purchases.sql
 -- =====================================================================
 
@@ -6185,6 +6225,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000033_require_active_branch_for_sales_and_sessions.sql
 -- =====================================================================
 
@@ -6232,6 +6273,7 @@ FOR EACH ROW EXECUTE FUNCTION private.enforce_active_branch_for_operation();
 COMMIT;
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111000034_allow_super_owners_tenant_admin_rls.sql
 -- =====================================================================
 
@@ -6258,6 +6300,7 @@ AS $function$
 $function$;
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111030810_prevent_negative_inventory_bootstrap.sql
 -- =====================================================================
 
@@ -7244,6 +7287,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111232801_restaurant_image_storage_foundation.sql
 -- =====================================================================
 
@@ -7278,6 +7322,7 @@ create policy "Restaurant assets tenant delete" on storage.objects for delete to
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261111233538_marketing_campaigns_management.sql
 -- =====================================================================
 
@@ -7307,7 +7352,6 @@ drop policy if exists "Tenant admins manage marketing campaigns" on public.marke
 create policy "Tenant admins manage marketing campaigns" on public.marketing_campaigns for all to authenticated using (private.is_tenant_admin(auth.uid(), tenant_id) or public.is_super_owner(auth.uid())) with check (private.is_tenant_admin(auth.uid(), tenant_id) or public.is_super_owner(auth.uid()));
 drop trigger if exists set_marketing_campaigns_updated_at on public.marketing_campaigns;
 create trigger set_marketing_campaigns_updated_at before update on public.marketing_campaigns for each row execute function public.set_updated_at();
-
 
 -- SOURCE MIGRATION: 20261112002129_supplier_payment_ledger.sql
 -- Supplier payment ledger: immutable, tenant- and branch-scoped records.
@@ -7369,7 +7413,6 @@ comment on table public.supplier_payments is
 
 commit;
 
-
 -- SOURCE MIGRATION: 20261112002432_supplier_ledger_fk_indexes_and_marketing_rls.sql
 -- Cover all supplier ledger foreign keys and avoid per-row auth function evaluation in marketing RLS.
 begin;
@@ -7405,14 +7448,12 @@ create policy "Tenant admins manage marketing campaigns"
 
 commit;
 
-
 -- SOURCE MIGRATION: 20261112002832_restrict_supplier_payment_mutations.sql
 -- Supplier payment ledger is append-only at the SQL privilege layer as well as by RLS.
 begin;
 revoke all on table public.supplier_payments from anon, authenticated;
 grant select, insert on table public.supplier_payments to authenticated;
 commit;
-
 
 -- SOURCE MIGRATION: 20261112003426_supplier_cash_session_integration.sql
 -- Link supplier cash payouts to open cashier sessions and include them in closing balances.
@@ -7535,7 +7576,6 @@ grant execute on function public.close_cash_session(uuid, numeric) to authentica
 
 commit;
 
-
 -- SOURCE MIGRATION: 20261112003745_supplier_cash_session_fk_index.sql
 -- Cover the complete composite supplier-payment to cash-session foreign key.
 begin;
@@ -7543,7 +7583,6 @@ drop index if exists public.supplier_payments_cash_session_idx;
 create index supplier_payments_cash_session_fk_idx
   on public.supplier_payments (cash_session_id, tenant_id, branch_id);
 commit;
-
 
 -- SOURCE MIGRATION: 20261112004325_assignable_custom_roles.sql
 -- Make tenant custom roles assignable to team members without inheriting builtin-role grants.
@@ -7687,7 +7726,6 @@ create policy user_roles_custom_role_update_guard
 
 commit;
 
-
 -- SOURCE MIGRATION: 20261112005125_owner_only_custom_role_management.sql
 -- Enforce tenant-owner-only custom role assignment even when permission overrides exist.
 begin;
@@ -7759,7 +7797,6 @@ $function$;
 
 commit;
 
-
 -- SOURCE MIGRATION: 20261112005250_owner_only_custom_role_mutations.sql
 -- Ensure permission overrides cannot turn managers or staff into custom-role administrators.
 begin;
@@ -7821,7 +7858,6 @@ create policy role_permissions_owner_only_delete_guard
   );
 
 commit;
-
 
 -- SOURCE MIGRATION: 20261112005412_protect_tenant_owner_from_custom_role_demotion.sql
 -- Prevent a custom staff role from ever replacing the tenant owner's owner role.
@@ -7898,6 +7934,7 @@ commit;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261114141029_fix_atomic_stock_decrement_for_pos_checkout.sql
 -- =====================================================================
 
@@ -7969,6 +8006,7 @@ $function$;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261114141500_grant_authenticated_marketing_campaign_reads.sql
 -- =====================================================================
 
@@ -7977,6 +8015,7 @@ GRANT SELECT ON TABLE public.marketing_campaigns TO authenticated;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261115000001_customer_credit_accounts_and_collections.sql
 -- =====================================================================
 
@@ -8176,6 +8215,7 @@ commit;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261115000002_customer_credit_sale_rpc.sql
 -- =====================================================================
 
@@ -8330,6 +8370,7 @@ commit;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261115000003_customer_cash_collection_reconciliation.sql
 -- =====================================================================
 
@@ -8394,6 +8435,7 @@ commit;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261115000004_fix_customer_balance_aggregation.sql
 -- =====================================================================
 
@@ -8417,6 +8459,7 @@ commit;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261115000005_company_branch_creator_isolation.sql
 -- =====================================================================
 
@@ -8602,6 +8645,7 @@ commit;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261115000006_enforce_company_branch_rls.sql
 -- =====================================================================
 
@@ -8706,6 +8750,7 @@ commit;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261115000007_scope_cash_sessions_to_company.sql
 -- =====================================================================
 
@@ -8725,6 +8770,7 @@ commit;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261118000001_allow_company_members_to_read_assigned_company.sql
 -- =====================================================================
 
@@ -8760,6 +8806,7 @@ commit;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261118000002_company_creator_visibility_for_master_data.sql
 -- =====================================================================
 
@@ -8862,6 +8909,7 @@ commit;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261118000003_enforce_company_scope_across_operational_data.sql
 -- =====================================================================
 
@@ -9309,6 +9357,7 @@ commit;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261118000004_tighten_company_compound_scope_checks.sql
 -- =====================================================================
 
@@ -9403,6 +9452,7 @@ commit;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261118000005_index_company_creator_foreign_keys.sql
 -- =====================================================================
 
@@ -9443,6 +9493,7 @@ commit;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261118000006_platform_branding_and_notification_reads.sql
 -- =====================================================================
 
@@ -9510,6 +9561,7 @@ grant select, insert, update, delete on public.notification_reads to authenticat
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261119000001_customer_credit_sale_cost_snapshot.sql
 -- =====================================================================
 
@@ -9670,6 +9722,7 @@ commit;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261119000002_scope_customer_payment_idempotency.sql
 -- =====================================================================
 
@@ -9778,6 +9831,7 @@ commit;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261119000003_scope_cash_session_close_to_branch.sql
 -- =====================================================================
 
@@ -9851,6 +9905,7 @@ commit;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261119000004_deduplicate_notification_read_policies_and_index.sql
 -- =====================================================================
 
@@ -9866,6 +9921,7 @@ commit;
 
  
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261119000005_index_platform_branding_updated_by.sql
 -- =====================================================================
 
@@ -10419,6 +10475,7 @@ using (
 
 commit;
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261119000006_company_scope_marketing_notifications.sql
 
 -- Enforce company boundaries for marketing campaigns and notifications.
@@ -11193,6 +11250,7 @@ commit;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261119000007_user_role_company_scope.sql
 
 -- Scope role assignments and permission overrides to the employee's company.
@@ -12018,6 +12076,7 @@ commit;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261119000008_bind_branch_access_and_helper_actors.sql
 
 -- Bind SECURITY DEFINER authorization helpers to the authenticated actor and
@@ -12229,6 +12288,7 @@ commit;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261119000009_private_avatar_and_company_asset_scope.sql
 
 -- Separate private user avatars from public catalog/marketing images and
@@ -12494,8 +12554,6 @@ using (
 
 commit;
 
-
-
 -- SOURCE MIGRATION: 20261119010000_pre_sale_security_performance_hardening.sql
 -- BEGIN MIGRATION: 20261119010000_pre_sale_security_performance_hardening.sql
 -- Reject NULL, non-array, and empty customer-credit POS item payloads.
@@ -12758,6 +12816,7 @@ COMMIT;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261120010000_secure_leave_decisions_and_deletion.sql
 -- =====================================================================
 
@@ -12915,6 +12974,7 @@ commit;
 
 
 -- =====================================================================
+
 -- SOURCE MIGRATION: 20261120020000_leave_rejection_actor_integrity.sql
 -- =====================================================================
 -- Preserve tenant-bound identity for the user rejecting a leave request.
@@ -12987,7 +13047,6 @@ commit;
 
 -- END MIGRATION: 20261120020000_leave_rejection_actor_integrity.sql
 
-
 -- SOURCE MIGRATION: 20261120030000_enforce_company_scope_marketing_reads.sql
 -- Remove the legacy tenant-wide SELECT policy. It was permissive and therefore
 -- OR-combined with company_scope_marketing_campaigns_select, exposing every
@@ -13012,7 +13071,6 @@ CREATE POLICY "Tenant members read scoped marketing campaigns"
 COMMIT;
 
 -- END MIGRATION: 20261120030000_enforce_company_scope_marketing_reads.sql
-
 
 -- SOURCE MIGRATION: 20261120040000_kitchen_order_workflow.sql
 -- Kitchen display foundation: immutable sales remain the financial source of truth;
@@ -13272,7 +13330,6 @@ END $$;
 COMMIT;
 
 -- END MIGRATION: 20261120040000_kitchen_order_workflow.sql
-
 
 -- SOURCE MIGRATION: 20261120050000_restaurant_tables_pos_order_types.sql
 -- Restaurant table management and POS order-type foundation.
@@ -13720,7 +13777,6 @@ COMMIT;
 
 -- END MIGRATION: 20261120050000_restaurant_tables_pos_order_types.sql
 
-
 -- SOURCE MIGRATION: 20261120060000_sale_table_name_receipt_snapshot.sql
 -- Preserve the table name on the sale as an immutable receipt snapshot.
 BEGIN;
@@ -13813,7 +13869,6 @@ FOR EACH ROW EXECUTE FUNCTION private.capture_sale_table_name_snapshot();
 COMMIT;
 
 -- END MIGRATION: 20261120060000_sale_table_name_receipt_snapshot.sql
-
 
 -- SOURCE MIGRATION: 20261121010000_separate_ads_management_permission.sql
 -- Separate advertising management from general system settings.
@@ -14524,7 +14579,6 @@ COMMIT;
 
 -- END MIGRATION: 20261121025000_promotions_read_permission_scope.sql
 
-
 -- SOURCE MIGRATION: 20261121030000_notification_deep_links.sql
 -- Stage 10: safe internal notification deep links and actionable kitchen alerts.
 BEGIN;
@@ -14611,7 +14665,6 @@ REVOKE ALL ON FUNCTION private.notify_branch_when_kitchen_ready() FROM PUBLIC,an
 
 COMMIT;
 -- END MIGRATION: 20261121030000_notification_deep_links.sql
-
 
 -- SOURCE MIGRATION: 20261121040000_reconcile_ads_campaign_write_permissions.sql
 -- Reconcile campaign write permissions with the dedicated ads.manage capability.
@@ -14745,7 +14798,6 @@ USING (
 COMMIT;
 -- END MIGRATION: 20261121040000_reconcile_ads_campaign_write_permissions.sql
 
-
 -- SOURCE MIGRATION: 20261122010000_stage15_fk_index_and_security_regression_guards.sql
 -- Stage 15: cover the remaining foreign-key lookup paths reported by
 -- Supabase's performance advisor. These indexes do not alter data or access
@@ -14769,7 +14821,6 @@ CREATE INDEX IF NOT EXISTS idx_sales_table_id_fk
 
 COMMIT;
 -- END MIGRATION: 20261122010000_stage15_fk_index_and_security_regression_guards.sql
-
 
 -- SOURCE MIGRATION: 20261122030000_pos_cashier_access_credentials.sql
 -- Per-user POS passphrase storage. Credentials are accessible only to trusted server-side service-role code.
@@ -15268,6 +15319,759 @@ $function$;
 REVOKE ALL ON FUNCTION public.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.set_kitchen_order_status_idempotent(uuid,uuid,uuid,uuid,text,text,uuid) TO authenticated;
 
+-- SOURCE MIGRATION: 20261125010000_granular_section_action_permissions.sql
+-- Granular permissions for marketing actions and HR print operations.
+-- Existing manage/view grants are copied so current built-in and custom roles
+-- retain their effective access. No account, role, or business data is deleted.
+BEGIN;
+
+INSERT INTO public.permissions (key, label_ar, label_en, category)
+VALUES
+  ('ads.view', 'عرض الإعلانات', 'View advertising campaigns', 'marketing'),
+  ('ads.create', 'إضافة إعلان', 'Create advertising campaigns', 'marketing'),
+  ('ads.edit', 'تعديل إعلان', 'Edit advertising campaigns', 'marketing'),
+  ('ads.delete', 'حذف إعلان', 'Delete advertising campaigns', 'marketing'),
+  ('ads.approve', 'اعتماد وتفعيل إعلان', 'Approve advertising campaigns', 'marketing'),
+  ('promotions.view', 'عرض العروض الترويجية', 'View promotional offers', 'marketing'),
+  ('promotions.create', 'إضافة عرض ترويجي', 'Create promotional offers', 'marketing'),
+  ('promotions.edit', 'تعديل عرض ترويجي', 'Edit promotional offers', 'marketing'),
+  ('promotions.delete', 'حذف عرض ترويجي', 'Delete promotional offers', 'marketing'),
+  ('promotions.approve', 'اعتماد وتفعيل عرض', 'Approve promotional offers', 'marketing'),
+  ('hr.attendance.print', 'طباعة كشف الحضور', 'Print attendance reports', 'operations'),
+  ('hr.leaves.print', 'طباعة كشف الإجازات', 'Print leave reports', 'operations'),
+  ('hr.payroll.print', 'طباعة كشف الرواتب', 'Print payroll reports', 'operations')
+ON CONFLICT (key) DO NOTHING;
+
+-- Preserve existing marketing management grants. HR print permissions are deliberately
+-- not derived from view permissions because viewing sensitive HR data must not imply
+-- permission to produce printable copies.
+WITH permission_map(new_key, legacy_key) AS (
+  VALUES
+    ('ads.view', 'ads.manage'),
+    ('ads.create', 'ads.manage'),
+    ('ads.edit', 'ads.manage'),
+    ('ads.delete', 'ads.manage'),
+    ('ads.approve', 'ads.manage'),
+    ('promotions.view', 'promotions.manage'),
+    ('promotions.create', 'promotions.manage'),
+    ('promotions.edit', 'promotions.manage'),
+    ('promotions.delete', 'promotions.manage'),
+    ('promotions.approve', 'promotions.manage')
+)
+INSERT INTO public.role_permissions
+  (tenant_id, role_kind, builtin_role, custom_role_id, permission_key)
+SELECT rp.tenant_id, rp.role_kind, rp.builtin_role, rp.custom_role_id, pm.new_key
+FROM public.role_permissions rp
+JOIN permission_map pm ON pm.legacy_key = rp.permission_key
+ON CONFLICT DO NOTHING;
+
+-- Campaign read/write permissions are restrictive, so existing tenant/company
+-- scope policies remain in force and cannot be widened by these action grants.
+DROP POLICY IF EXISTS permission_gate_marketing_campaigns_select ON public.marketing_campaigns;
+CREATE POLICY permission_gate_marketing_campaigns_select
+ON public.marketing_campaigns AS RESTRICTIVE FOR SELECT TO authenticated
+USING (public.has_permission((select auth.uid()), tenant_id, 'ads.view'));
+
+DROP POLICY IF EXISTS permission_gate_marketing_campaigns_insert ON public.marketing_campaigns;
+CREATE POLICY permission_gate_marketing_campaigns_insert
+ON public.marketing_campaigns AS RESTRICTIVE FOR INSERT TO authenticated
+WITH CHECK (public.has_permission((select auth.uid()), tenant_id, 'ads.create'));
+
+DROP POLICY IF EXISTS permission_gate_marketing_campaigns_update ON public.marketing_campaigns;
+CREATE POLICY permission_gate_marketing_campaigns_update
+ON public.marketing_campaigns AS RESTRICTIVE FOR UPDATE TO authenticated
+USING (
+  public.has_permission((select auth.uid()), tenant_id, 'ads.edit')
+  OR public.has_permission((select auth.uid()), tenant_id, 'ads.approve')
+)
+WITH CHECK (
+  public.has_permission((select auth.uid()), tenant_id, 'ads.edit')
+  OR public.has_permission((select auth.uid()), tenant_id, 'ads.approve')
+);
+
+DROP POLICY IF EXISTS permission_gate_marketing_campaigns_delete ON public.marketing_campaigns;
+CREATE POLICY permission_gate_marketing_campaigns_delete
+ON public.marketing_campaigns AS RESTRICTIVE FOR DELETE TO authenticated
+USING (public.has_permission((select auth.uid()), tenant_id, 'ads.delete'));
+
+DROP POLICY IF EXISTS permission_gate_promotional_offers_select ON public.promotional_offers;
+CREATE POLICY permission_gate_promotional_offers_select
+ON public.promotional_offers AS RESTRICTIVE FOR SELECT TO authenticated
+USING (public.has_permission((select auth.uid()), tenant_id, 'promotions.view'));
+
+DROP POLICY IF EXISTS permission_gate_promotional_offers_insert ON public.promotional_offers;
+CREATE POLICY permission_gate_promotional_offers_insert
+ON public.promotional_offers AS RESTRICTIVE FOR INSERT TO authenticated
+WITH CHECK (public.has_permission((select auth.uid()), tenant_id, 'promotions.create'));
+
+DROP POLICY IF EXISTS permission_gate_promotional_offers_update ON public.promotional_offers;
+CREATE POLICY permission_gate_promotional_offers_update
+ON public.promotional_offers AS RESTRICTIVE FOR UPDATE TO authenticated
+USING (
+  public.has_permission((select auth.uid()), tenant_id, 'promotions.edit')
+  OR public.has_permission((select auth.uid()), tenant_id, 'promotions.approve')
+)
+WITH CHECK (
+  public.has_permission((select auth.uid()), tenant_id, 'promotions.edit')
+  OR public.has_permission((select auth.uid()), tenant_id, 'promotions.approve')
+);
+
+DROP POLICY IF EXISTS permission_gate_promotional_offers_delete ON public.promotional_offers;
+CREATE POLICY permission_gate_promotional_offers_delete
+ON public.promotional_offers AS RESTRICTIVE FOR DELETE TO authenticated
+USING (public.has_permission((select auth.uid()), tenant_id, 'promotions.delete'));
+
+-- RLS UPDATE policies cannot distinguish a status transition from a content
+-- edit. These invoker triggers enforce the matching capability as a second
+-- database-side check without using SECURITY DEFINER or bypassing RLS.
+CREATE OR REPLACE FUNCTION private.enforce_marketing_campaign_action_permission()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $function$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    IF NOT (public.has_permission(auth.uid(), NEW.tenant_id, 'ads.create') OR public.has_permission(auth.uid(), NEW.tenant_id, 'ads.manage')) THEN
+      RAISE EXCEPTION 'Permission denied: ads.create' USING ERRCODE = '42501';
+    END IF;
+    RETURN NEW;
+  ELSIF TG_OP = 'UPDATE' THEN
+    IF (to_jsonb(NEW) - 'status' - 'updated_at') IS DISTINCT FROM (to_jsonb(OLD) - 'status' - 'updated_at')
+       AND NOT (public.has_permission(auth.uid(), NEW.tenant_id, 'ads.edit') OR public.has_permission(auth.uid(), NEW.tenant_id, 'ads.manage')) THEN
+      RAISE EXCEPTION 'Permission denied: ads.edit' USING ERRCODE = '42501';
+    END IF;
+    IF NEW.status IS DISTINCT FROM OLD.status
+       AND NOT (public.has_permission(auth.uid(), NEW.tenant_id, 'ads.approve') OR public.has_permission(auth.uid(), NEW.tenant_id, 'ads.manage')) THEN
+      RAISE EXCEPTION 'Permission denied: ads.approve' USING ERRCODE = '42501';
+    END IF;
+    RETURN NEW;
+  ELSIF TG_OP = 'DELETE' THEN
+    IF NOT (public.has_permission(auth.uid(), OLD.tenant_id, 'ads.delete') OR public.has_permission(auth.uid(), OLD.tenant_id, 'ads.manage')) THEN
+      RAISE EXCEPTION 'Permission denied: ads.delete' USING ERRCODE = '42501';
+    END IF;
+    RETURN OLD;
+  END IF;
+  RETURN NULL;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION private.enforce_promotional_offer_action_permission()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $function$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    IF NOT (public.has_permission(auth.uid(), NEW.tenant_id, 'promotions.create') OR public.has_permission(auth.uid(), NEW.tenant_id, 'promotions.manage')) THEN
+      RAISE EXCEPTION 'Permission denied: promotions.create' USING ERRCODE = '42501';
+    END IF;
+    RETURN NEW;
+  ELSIF TG_OP = 'UPDATE' THEN
+    IF (to_jsonb(NEW) - 'status' - 'updated_at') IS DISTINCT FROM (to_jsonb(OLD) - 'status' - 'updated_at')
+       AND NOT (public.has_permission(auth.uid(), NEW.tenant_id, 'promotions.edit') OR public.has_permission(auth.uid(), NEW.tenant_id, 'promotions.manage')) THEN
+      RAISE EXCEPTION 'Permission denied: promotions.edit' USING ERRCODE = '42501';
+    END IF;
+    IF NEW.status IS DISTINCT FROM OLD.status
+       AND NOT (public.has_permission(auth.uid(), NEW.tenant_id, 'promotions.approve') OR public.has_permission(auth.uid(), NEW.tenant_id, 'promotions.manage')) THEN
+      RAISE EXCEPTION 'Permission denied: promotions.approve' USING ERRCODE = '42501';
+    END IF;
+    RETURN NEW;
+  ELSIF TG_OP = 'DELETE' THEN
+    IF NOT (public.has_permission(auth.uid(), OLD.tenant_id, 'promotions.delete') OR public.has_permission(auth.uid(), OLD.tenant_id, 'promotions.manage')) THEN
+      RAISE EXCEPTION 'Permission denied: promotions.delete' USING ERRCODE = '42501';
+    END IF;
+    RETURN OLD;
+  END IF;
+  RETURN NULL;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION private.enforce_marketing_campaign_action_permission() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION private.enforce_promotional_offer_action_permission() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION private.enforce_marketing_campaign_action_permission() TO authenticated;
+GRANT EXECUTE ON FUNCTION private.enforce_promotional_offer_action_permission() TO authenticated;
+
+DROP TRIGGER IF EXISTS trg_marketing_campaign_action_permission ON public.marketing_campaigns;
+CREATE TRIGGER trg_marketing_campaign_action_permission
+BEFORE INSERT OR UPDATE OR DELETE ON public.marketing_campaigns
+FOR EACH ROW EXECUTE FUNCTION private.enforce_marketing_campaign_action_permission();
+
+DROP TRIGGER IF EXISTS trg_promotional_offer_action_permission ON public.promotional_offers;
+CREATE TRIGGER trg_promotional_offer_action_permission
+BEFORE INSERT OR UPDATE OR DELETE ON public.promotional_offers
+FOR EACH ROW EXECUTE FUNCTION private.enforce_promotional_offer_action_permission();
+
+COMMIT;
+-- END MIGRATION: 20261125010000_granular_section_action_permissions.sql
+
+-- SOURCE MIGRATION: 20261125020000_granular_marketing_rls_alignment.sql
+-- Complete action-level authorization for marketing data.
+-- Legacy manage permissions remain valid; company/branch scope is not widened.
+BEGIN;
+
+-- Campaigns remain readable to eligible dashboard/POS users under the existing
+-- tenant/company SELECT policies. ads.view controls the management route, not
+-- visibility of active campaigns used by the rest of the application.
+DROP POLICY IF EXISTS permission_gate_marketing_campaigns_select ON public.marketing_campaigns;
+
+DROP POLICY IF EXISTS permission_gate_marketing_campaigns_insert ON public.marketing_campaigns;
+CREATE POLICY permission_gate_marketing_campaigns_insert
+ON public.marketing_campaigns AS RESTRICTIVE FOR INSERT TO authenticated
+WITH CHECK (
+  public.has_permission((select auth.uid()), tenant_id, 'ads.create')
+  OR public.has_permission((select auth.uid()), tenant_id, 'ads.manage')
+);
+
+DROP POLICY IF EXISTS permission_gate_marketing_campaigns_update ON public.marketing_campaigns;
+CREATE POLICY permission_gate_marketing_campaigns_update
+ON public.marketing_campaigns AS RESTRICTIVE FOR UPDATE TO authenticated
+USING (
+  public.has_permission((select auth.uid()), tenant_id, 'ads.edit')
+  OR public.has_permission((select auth.uid()), tenant_id, 'ads.approve')
+  OR public.has_permission((select auth.uid()), tenant_id, 'ads.manage')
+)
+WITH CHECK (
+  public.has_permission((select auth.uid()), tenant_id, 'ads.edit')
+  OR public.has_permission((select auth.uid()), tenant_id, 'ads.approve')
+  OR public.has_permission((select auth.uid()), tenant_id, 'ads.manage')
+);
+
+DROP POLICY IF EXISTS permission_gate_marketing_campaigns_delete ON public.marketing_campaigns;
+CREATE POLICY permission_gate_marketing_campaigns_delete
+ON public.marketing_campaigns AS RESTRICTIVE FOR DELETE TO authenticated
+USING (
+  public.has_permission((select auth.uid()), tenant_id, 'ads.delete')
+  OR public.has_permission((select auth.uid()), tenant_id, 'ads.manage')
+);
+
+-- Company/branch row boundary remains restrictive and independent of action grants.
+DROP POLICY IF EXISTS company_scope_marketing_campaigns_insert ON public.marketing_campaigns;
+CREATE POLICY company_scope_marketing_campaigns_insert
+ON public.marketing_campaigns AS RESTRICTIVE FOR INSERT TO authenticated
+WITH CHECK (
+  public.is_super_owner((select auth.uid()))
+  OR EXISTS (
+    SELECT 1 FROM public.user_roles ur
+    WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=marketing_campaigns.tenant_id
+      AND ur.role='owner' AND ur.company_id IS NULL
+  )
+  OR (company_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM public.user_roles ur
+    WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=marketing_campaigns.tenant_id
+      AND ur.company_id=marketing_campaigns.company_id AND ur.role IN ('owner','manager')
+      AND (public.has_permission((select auth.uid()), marketing_campaigns.tenant_id, 'ads.create')
+        OR public.has_permission((select auth.uid()), marketing_campaigns.tenant_id, 'ads.manage'))
+  ))
+);
+
+DROP POLICY IF EXISTS company_scope_marketing_campaigns_update ON public.marketing_campaigns;
+CREATE POLICY company_scope_marketing_campaigns_update
+ON public.marketing_campaigns AS RESTRICTIVE FOR UPDATE TO authenticated
+USING (
+  public.is_super_owner((select auth.uid()))
+  OR EXISTS (
+    SELECT 1 FROM public.user_roles ur
+    WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=marketing_campaigns.tenant_id
+      AND ur.role='owner' AND ur.company_id IS NULL
+  )
+  OR (company_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM public.user_roles ur
+    WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=marketing_campaigns.tenant_id
+      AND ur.company_id=marketing_campaigns.company_id AND ur.role IN ('owner','manager')
+      AND (public.has_permission((select auth.uid()), marketing_campaigns.tenant_id, 'ads.edit')
+        OR public.has_permission((select auth.uid()), marketing_campaigns.tenant_id, 'ads.approve')
+        OR public.has_permission((select auth.uid()), marketing_campaigns.tenant_id, 'ads.manage'))
+  ))
+)
+WITH CHECK (
+  public.is_super_owner((select auth.uid()))
+  OR EXISTS (
+    SELECT 1 FROM public.user_roles ur
+    WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=marketing_campaigns.tenant_id
+      AND ur.role='owner' AND ur.company_id IS NULL
+  )
+  OR (company_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM public.user_roles ur
+    WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=marketing_campaigns.tenant_id
+      AND ur.company_id=marketing_campaigns.company_id AND ur.role IN ('owner','manager')
+      AND (public.has_permission((select auth.uid()), marketing_campaigns.tenant_id, 'ads.edit')
+        OR public.has_permission((select auth.uid()), marketing_campaigns.tenant_id, 'ads.approve')
+        OR public.has_permission((select auth.uid()), marketing_campaigns.tenant_id, 'ads.manage'))
+  ))
+);
+
+DROP POLICY IF EXISTS company_scope_marketing_campaigns_delete ON public.marketing_campaigns;
+CREATE POLICY company_scope_marketing_campaigns_delete
+ON public.marketing_campaigns AS RESTRICTIVE FOR DELETE TO authenticated
+USING (
+  public.is_super_owner((select auth.uid()))
+  OR EXISTS (
+    SELECT 1 FROM public.user_roles ur
+    WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=marketing_campaigns.tenant_id
+      AND ur.role='owner' AND ur.company_id IS NULL
+  )
+  OR (company_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM public.user_roles ur
+    WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=marketing_campaigns.tenant_id
+      AND ur.company_id=marketing_campaigns.company_id AND ur.role IN ('owner','manager')
+      AND (public.has_permission((select auth.uid()), marketing_campaigns.tenant_id, 'ads.delete')
+        OR public.has_permission((select auth.uid()), marketing_campaigns.tenant_id, 'ads.manage'))
+  ))
+);
+
+-- Additive permissive policies let granular custom roles perform the exact
+-- action while preserving the existing manage/owner policies as compatibility.
+DROP POLICY IF EXISTS granular_ads_create ON public.marketing_campaigns;
+CREATE POLICY granular_ads_create ON public.marketing_campaigns
+FOR INSERT TO authenticated
+WITH CHECK (public.has_permission((select auth.uid()), tenant_id, 'ads.create'));
+
+DROP POLICY IF EXISTS granular_ads_edit_approve ON public.marketing_campaigns;
+CREATE POLICY granular_ads_edit_approve ON public.marketing_campaigns
+FOR UPDATE TO authenticated
+USING (
+  public.has_permission((select auth.uid()), tenant_id, 'ads.edit')
+  OR public.has_permission((select auth.uid()), tenant_id, 'ads.approve')
+)
+WITH CHECK (
+  public.has_permission((select auth.uid()), tenant_id, 'ads.edit')
+  OR public.has_permission((select auth.uid()), tenant_id, 'ads.approve')
+);
+
+DROP POLICY IF EXISTS granular_ads_delete ON public.marketing_campaigns;
+CREATE POLICY granular_ads_delete ON public.marketing_campaigns
+FOR DELETE TO authenticated
+USING (public.has_permission((select auth.uid()), tenant_id, 'ads.delete'));
+
+-- Keep active scheduled offers available to POS users. Management viewers can
+-- additionally read draft/archived offers within their existing scope.
+DROP POLICY IF EXISTS permission_gate_promotional_offers_select ON public.promotional_offers;
+
+DROP POLICY IF EXISTS permission_gate_promotional_offers_insert ON public.promotional_offers;
+CREATE POLICY permission_gate_promotional_offers_insert
+ON public.promotional_offers AS RESTRICTIVE FOR INSERT TO authenticated
+WITH CHECK (
+  public.has_permission((select auth.uid()), tenant_id, 'promotions.create')
+  OR public.has_permission((select auth.uid()), tenant_id, 'promotions.manage')
+);
+
+DROP POLICY IF EXISTS permission_gate_promotional_offers_update ON public.promotional_offers;
+CREATE POLICY permission_gate_promotional_offers_update
+ON public.promotional_offers AS RESTRICTIVE FOR UPDATE TO authenticated
+USING (
+  public.has_permission((select auth.uid()), tenant_id, 'promotions.edit')
+  OR public.has_permission((select auth.uid()), tenant_id, 'promotions.approve')
+  OR public.has_permission((select auth.uid()), tenant_id, 'promotions.manage')
+)
+WITH CHECK (
+  public.has_permission((select auth.uid()), tenant_id, 'promotions.edit')
+  OR public.has_permission((select auth.uid()), tenant_id, 'promotions.approve')
+  OR public.has_permission((select auth.uid()), tenant_id, 'promotions.manage')
+);
+
+DROP POLICY IF EXISTS permission_gate_promotional_offers_delete ON public.promotional_offers;
+CREATE POLICY permission_gate_promotional_offers_delete
+ON public.promotional_offers AS RESTRICTIVE FOR DELETE TO authenticated
+USING (
+  public.has_permission((select auth.uid()), tenant_id, 'promotions.delete')
+  OR public.has_permission((select auth.uid()), tenant_id, 'promotions.manage')
+);
+
+DROP POLICY IF EXISTS granular_promotions_view ON public.promotional_offers;
+CREATE POLICY granular_promotions_view ON public.promotional_offers
+FOR SELECT TO authenticated
+USING (
+  public.has_permission((select auth.uid()), tenant_id, 'promotions.view')
+);
+
+DROP POLICY IF EXISTS granular_promotions_create ON public.promotional_offers;
+CREATE POLICY granular_promotions_create ON public.promotional_offers
+FOR INSERT TO authenticated
+WITH CHECK (public.has_permission((select auth.uid()), tenant_id, 'promotions.create'));
+
+DROP POLICY IF EXISTS granular_promotions_edit_approve ON public.promotional_offers;
+CREATE POLICY granular_promotions_edit_approve ON public.promotional_offers
+FOR UPDATE TO authenticated
+USING (
+  public.has_permission((select auth.uid()), tenant_id, 'promotions.edit')
+  OR public.has_permission((select auth.uid()), tenant_id, 'promotions.approve')
+)
+WITH CHECK (
+  public.has_permission((select auth.uid()), tenant_id, 'promotions.edit')
+  OR public.has_permission((select auth.uid()), tenant_id, 'promotions.approve')
+);
+
+DROP POLICY IF EXISTS granular_promotions_delete ON public.promotional_offers;
+CREATE POLICY granular_promotions_delete ON public.promotional_offers
+FOR DELETE TO authenticated
+USING (public.has_permission((select auth.uid()), tenant_id, 'promotions.delete'));
+
+-- Redemptions remain branch/company scoped; view permission unlocks analytics.
+DROP POLICY IF EXISTS granular_promotions_read_redemptions ON public.promotion_redemptions;
+CREATE POLICY granular_promotions_read_redemptions ON public.promotion_redemptions
+FOR SELECT TO authenticated
+USING (
+  public.has_permission((select auth.uid()), tenant_id, 'promotions.view')
+  AND private.is_tenant_member((select auth.uid()), tenant_id)
+  AND (
+    company_id IS NULL
+    OR private.is_company_member(tenant_id, company_id)
+    OR private.can_access_branch((select auth.uid()), tenant_id, branch_id)
+  )
+  AND private.can_access_branch((select auth.uid()), tenant_id, branch_id)
+);
+
+-- The action-only permissive policies below must never become a tenant-wide
+-- bypass. Add independent restrictive row-scope checks before using them.
+DROP POLICY IF EXISTS promotional_offers_granular_scope_select ON public.promotional_offers;
+CREATE POLICY promotional_offers_granular_scope_select
+ON public.promotional_offers AS RESTRICTIVE FOR SELECT TO authenticated
+USING (
+  public.is_super_owner((select auth.uid()))
+  OR (
+    private.is_tenant_member((select auth.uid()), tenant_id)
+    AND (
+      (company_id IS NULL AND branch_id IS NULL AND EXISTS (
+        SELECT 1 FROM public.user_roles ur
+        WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=promotional_offers.tenant_id
+          AND ur.company_id IS NULL
+      ))
+      OR (company_id IS NULL AND branch_id IS NOT NULL
+        AND private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+      OR (
+        company_id IS NOT NULL
+        AND (private.is_company_member(tenant_id, company_id)
+          OR (branch_id IS NOT NULL AND private.can_access_branch((select auth.uid()), tenant_id, branch_id)))
+        AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+      )
+    )
+  )
+);
+
+DROP POLICY IF EXISTS promotional_offers_granular_scope_insert ON public.promotional_offers;
+CREATE POLICY promotional_offers_granular_scope_insert
+ON public.promotional_offers AS RESTRICTIVE FOR INSERT TO authenticated
+WITH CHECK (
+  public.is_super_owner((select auth.uid()))
+  OR (
+    private.is_tenant_member((select auth.uid()), tenant_id)
+    AND (
+      (company_id IS NULL AND branch_id IS NULL AND EXISTS (
+        SELECT 1 FROM public.user_roles ur
+        WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=promotional_offers.tenant_id
+          AND ur.company_id IS NULL
+      ))
+      OR (company_id IS NULL AND branch_id IS NOT NULL
+        AND private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+      OR (
+        company_id IS NOT NULL
+        AND (private.is_company_member(tenant_id, company_id)
+          OR (branch_id IS NOT NULL AND private.can_access_branch((select auth.uid()), tenant_id, branch_id)))
+        AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+      )
+    )
+  )
+);
+
+DROP POLICY IF EXISTS promotional_offers_granular_scope_update ON public.promotional_offers;
+CREATE POLICY promotional_offers_granular_scope_update
+ON public.promotional_offers AS RESTRICTIVE FOR UPDATE TO authenticated
+USING (
+  public.is_super_owner((select auth.uid()))
+  OR (
+    private.is_tenant_member((select auth.uid()), tenant_id)
+    AND (
+      (company_id IS NULL AND branch_id IS NULL AND EXISTS (
+        SELECT 1 FROM public.user_roles ur
+        WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=promotional_offers.tenant_id
+          AND ur.company_id IS NULL
+      ))
+      OR (company_id IS NULL AND branch_id IS NOT NULL
+        AND private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+      OR (
+        company_id IS NOT NULL
+        AND (private.is_company_member(tenant_id, company_id)
+          OR (branch_id IS NOT NULL AND private.can_access_branch((select auth.uid()), tenant_id, branch_id)))
+        AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+      )
+    )
+  )
+)
+WITH CHECK (
+  public.is_super_owner((select auth.uid()))
+  OR (
+    private.is_tenant_member((select auth.uid()), tenant_id)
+    AND (
+      (company_id IS NULL AND branch_id IS NULL AND EXISTS (
+        SELECT 1 FROM public.user_roles ur
+        WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=promotional_offers.tenant_id
+          AND ur.company_id IS NULL
+      ))
+      OR (company_id IS NULL AND branch_id IS NOT NULL
+        AND private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+      OR (
+        company_id IS NOT NULL
+        AND (private.is_company_member(tenant_id, company_id)
+          OR (branch_id IS NOT NULL AND private.can_access_branch((select auth.uid()), tenant_id, branch_id)))
+        AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+      )
+    )
+  )
+);
+
+DROP POLICY IF EXISTS promotional_offers_granular_scope_delete ON public.promotional_offers;
+CREATE POLICY promotional_offers_granular_scope_delete
+ON public.promotional_offers AS RESTRICTIVE FOR DELETE TO authenticated
+USING (
+  public.is_super_owner((select auth.uid()))
+  OR (
+    private.is_tenant_member((select auth.uid()), tenant_id)
+    AND (
+      (company_id IS NULL AND branch_id IS NULL AND EXISTS (
+        SELECT 1 FROM public.user_roles ur
+        WHERE ur.user_id=(select auth.uid()) AND ur.tenant_id=promotional_offers.tenant_id
+          AND ur.company_id IS NULL
+      ))
+      OR (company_id IS NULL AND branch_id IS NOT NULL
+        AND private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+      OR (
+        company_id IS NOT NULL
+        AND (private.is_company_member(tenant_id, company_id)
+          OR (branch_id IS NOT NULL AND private.can_access_branch((select auth.uid()), tenant_id, branch_id)))
+        AND (branch_id IS NULL OR private.can_access_branch((select auth.uid()), tenant_id, branch_id))
+      )
+    )
+  )
+);
+
+COMMIT;
+-- END MIGRATION: 20261125020000_granular_marketing_rls_alignment.sql
+
+-- SOURCE MIGRATION: 20261125030000_section_crud_permissions.sql
+-- Expand action-level permissions for operational and enterprise master-data sections.
+-- Existing *.manage grants remain compatible and are mirrored into the new keys.
+BEGIN;
+
+INSERT INTO public.permissions (key, label_ar, label_en, category)
+VALUES
+  ('reports.print','طباعة التقارير','Print reports','reports'),
+  ('ads.print','طباعة الإعلانات','Print advertising campaigns','marketing'),
+  ('ads.export','تصدير الإعلانات','Export advertising campaigns','marketing'),
+  ('promotions.print','طباعة العروض','Print promotional offers','marketing'),
+  ('promotions.export','تصدير العروض','Export promotional offers','marketing'),
+  ('categories.create','إضافة التصنيفات','Create categories','catalog'),
+  ('categories.edit','تعديل التصنيفات','Edit categories','catalog'),
+  ('categories.delete','حذف التصنيفات','Delete categories','catalog'),
+  ('categories.print','طباعة التصنيفات','Print categories','catalog'),
+  ('categories.export','تصدير التصنيفات','Export categories','catalog'),
+  ('customers.create','إضافة العملاء','Create customers','crm'),
+  ('customers.edit','تعديل العملاء','Edit customers','crm'),
+  ('customers.delete','إيقاف العملاء','Deactivate customers','crm'),
+  ('customers.print','طباعة العملاء','Print customers','crm'),
+  ('customers.export','تصدير العملاء','Export customers','crm'),
+  ('expenses.create','إضافة المصروفات','Create expenses','finance'),
+  ('expenses.edit','تعديل المصروفات','Edit expenses','finance'),
+  ('expenses.delete','حذف المصروفات','Delete expenses','finance'),
+  ('expenses.print','طباعة المصروفات','Print expenses','finance'),
+  ('expenses.export','تصدير المصروفات','Export expenses','finance'),
+  ('expense_categories.create','إضافة تصنيفات المصروفات','Create expense categories','finance'),
+  ('expense_categories.edit','تعديل تصنيفات المصروفات','Edit expense categories','finance'),
+  ('expense_categories.delete','حذف تصنيفات المصروفات','Delete expense categories','finance'),
+  ('suppliers.create','إضافة الموردين','Create suppliers','purchasing'),
+  ('suppliers.edit','تعديل الموردين','Edit suppliers','purchasing'),
+  ('suppliers.delete','إيقاف الموردين','Deactivate suppliers','purchasing'),
+  ('suppliers.print','طباعة الموردين','Print suppliers','purchasing'),
+  ('suppliers.export','تصدير الموردين','Export suppliers','purchasing'),
+  ('departments.create','إضافة الأقسام','Create departments','hr'),
+  ('departments.edit','تعديل الأقسام','Edit departments','hr'),
+  ('departments.delete','حذف الأقسام','Delete departments','hr'),
+  ('departments.print','طباعة الأقسام','Print departments','hr'),
+  ('departments.export','تصدير الأقسام','Export departments','hr'),
+  ('job_titles.create','إضافة المسميات الوظيفية','Create job titles','hr'),
+  ('job_titles.edit','تعديل المسميات الوظيفية','Edit job titles','hr'),
+  ('job_titles.delete','حذف المسميات الوظيفية','Delete job titles','hr'),
+  ('job_titles.print','طباعة المسميات الوظيفية','Print job titles','hr'),
+  ('job_titles.export','تصدير المسميات الوظيفية','Export job titles','hr'),
+  ('employment_types.create','إضافة أنواع التوظيف','Create employment types','hr'),
+  ('employment_types.edit','تعديل أنواع التوظيف','Edit employment types','hr'),
+  ('employment_types.delete','حذف أنواع التوظيف','Delete employment types','hr'),
+  ('employment_types.print','طباعة أنواع التوظيف','Print employment types','hr'),
+  ('employment_types.export','تصدير أنواع التوظيف','Export employment types','hr'),
+  ('companies.create','إضافة الشركات','Create companies','system'),
+  ('companies.edit','تعديل الشركات','Edit companies','system'),
+  ('companies.delete','حذف الشركات','Delete companies','system'),
+  ('companies.print','طباعة الشركات','Print companies','system'),
+  ('companies.export','تصدير الشركات','Export companies','system'),
+  ('hr.employees.create','إضافة الموظفين','Create employees','hr'),
+  ('hr.employees.edit','تعديل الموظفين','Edit employees','hr'),
+  ('hr.employees.delete','حذف الموظفين','Delete employees','hr'),
+  ('hr.employees.print','طباعة الموظفين','Print employees','hr'),
+  ('hr.employees.export','تصدير الموظفين','Export employees','hr'),
+  ('hr.attendance.create','تسجيل الحضور','Create attendance records','hr'),
+  ('hr.attendance.edit','تعديل الحضور','Edit attendance records','hr'),
+  ('hr.attendance.delete','حذف سجلات الحضور','Delete attendance records','hr'),
+  ('hr.attendance.export','تصدير الحضور','Export attendance','hr'),
+  ('hr.compensation.create','إضافة المستحقات والاستقطاعات','Create compensation records','hr'),
+  ('hr.compensation.edit','تعديل المستحقات والاستقطاعات','Edit compensation records','hr'),
+  ('hr.compensation.delete','حذف المستحقات والاستقطاعات','Delete compensation records','hr'),
+  ('hr.compensation.print','طباعة المستحقات والاستقطاعات','Print compensation','hr'),
+  ('hr.compensation.export','تصدير المستحقات والاستقطاعات','Export compensation','hr'),
+  ('hr.leaves.create','إنشاء طلبات الإجازة','Create leave requests','hr'),
+  ('hr.leaves.edit','تعديل طلبات الإجازة','Edit leave requests','hr'),
+  ('hr.leaves.delete','حذف طلبات الإجازة','Delete leave requests','hr'),
+  ('hr.leaves.export','تصدير الإجازات','Export leave requests','hr'),
+  ('hr.payroll.export','تصدير الرواتب','Export payroll','hr'),
+  ('notifications.create','إنشاء الإشعارات','Create notifications','system'),
+  ('notifications.edit','تعديل الإشعارات','Edit notifications','system'),
+  ('notifications.delete','حذف الإشعارات','Delete notifications','system'),
+  ('branches.print','طباعة الفروع','Print branches','branches'),
+  ('branches.export','تصدير الفروع','Export branches','branches'),
+  ('products.print','طباعة المنتجات','Print products','catalog'),
+  ('products.export','تصدير المنتجات','Export products','catalog'),
+  ('purchases.returns.create','إنشاء مرتجعات المشتريات','Create purchase returns','purchasing'),
+  ('purchases.returns.edit','تعديل مرتجعات المشتريات','Edit purchase returns','purchasing'),
+  ('purchases.returns.delete','حذف مرتجعات المشتريات','Delete purchase returns','purchasing'),
+  ('purchases.print','طباعة المشتريات','Print purchases','purchasing'),
+  ('purchases.export','تصدير المشتريات','Export purchases','purchasing'),
+  ('inventory.print','طباعة المخزون','Print inventory','inventory'),
+  ('inventory.export','تصدير المخزون','Export inventory','inventory'),
+  ('cash.print','طباعة الورديات','Print cash sessions','finance'),
+  ('cash.export','تصدير الورديات','Export cash sessions','finance')
+ON CONFLICT (key) DO NOTHING;
+
+-- Mirror legacy management grants into CRUD actions for built-in and custom roles.
+-- Read-only access never implies permission to print or export sensitive records.
+-- Do not derive print/export from view: reading data must not imply permission to
+-- print or extract it. Those action keys are granted explicitly to authorized roles.
+WITH permission_map(legacy_key, new_key) AS (VALUES
+  ('categories.manage','categories.create'),('categories.manage','categories.edit'),('categories.manage','categories.delete'),
+  ('customers.manage','customers.create'),('customers.manage','customers.edit'),('customers.manage','customers.delete'),
+  ('expenses.manage','expenses.create'),('expenses.manage','expenses.edit'),('expenses.manage','expenses.delete'),
+  ('expense_categories.manage','expense_categories.create'),('expense_categories.manage','expense_categories.edit'),('expense_categories.manage','expense_categories.delete'),
+  ('suppliers.manage','suppliers.create'),('suppliers.manage','suppliers.edit'),('suppliers.manage','suppliers.delete'),
+  ('departments.manage','departments.create'),('departments.manage','departments.edit'),('departments.manage','departments.delete'),
+  ('job_titles.manage','job_titles.create'),('job_titles.manage','job_titles.edit'),('job_titles.manage','job_titles.delete'),
+  ('employment_types.manage','employment_types.create'),('employment_types.manage','employment_types.edit'),('employment_types.manage','employment_types.delete'),
+  ('companies.manage','companies.create'),('companies.manage','companies.edit'),('companies.manage','companies.delete'),
+  ('hr.employees.manage','hr.employees.create'),('hr.employees.manage','hr.employees.edit'),('hr.employees.manage','hr.employees.delete'),
+  ('hr.attendance.manage','hr.attendance.create'),('hr.attendance.manage','hr.attendance.edit'),('hr.attendance.manage','hr.attendance.delete'),
+  ('hr.compensation.manage','hr.compensation.create'),('hr.compensation.manage','hr.compensation.edit'),('hr.compensation.manage','hr.compensation.delete'),
+  ('hr.manage','hr.leaves.create'),('hr.manage','hr.leaves.edit'),('hr.manage','hr.leaves.delete'),
+  ('notifications.manage','notifications.create'),('notifications.manage','notifications.edit'),('notifications.manage','notifications.delete'),
+  ('cash.open_close','cash.open'),('cash.open_close','cash.close')
+)
+INSERT INTO public.role_permissions (tenant_id, role_kind, builtin_role, custom_role_id, permission_key)
+SELECT rp.tenant_id, rp.role_kind, rp.builtin_role, rp.custom_role_id, pm.new_key
+FROM public.role_permissions rp
+JOIN permission_map pm ON pm.legacy_key=rp.permission_key
+WHERE rp.role_kind='builtin'
+   OR (rp.role_kind='custom' AND rp.tenant_id IS NOT NULL AND rp.custom_role_id IS NOT NULL)
+ON CONFLICT DO NOTHING;
+
+-- Replace the action gates for these tables. Existing tenant/company/branch
+-- scope policies remain in force; legacy manage keys remain valid fallbacks.
+DO $section_crud_gates$
+DECLARE
+  r record;
+  v_table text;
+  v_insert text;
+  v_update text;
+  v_delete text;
+  v_legacy text;
+BEGIN
+  FOR r IN SELECT * FROM (VALUES
+    ('categories','categories.create','categories.edit','categories.delete','categories.manage'),
+    ('customers','customers.create','customers.edit','customers.delete','customers.manage'),
+    ('expenses','expenses.create','expenses.edit','expenses.delete','expenses.manage'),
+    ('expense_categories','expense_categories.create','expense_categories.edit','expense_categories.delete','expense_categories.manage'),
+    ('suppliers','suppliers.create','suppliers.edit','suppliers.delete','suppliers.manage'),
+    ('departments','departments.create','departments.edit','departments.delete','departments.manage'),
+    ('job_titles','job_titles.create','job_titles.edit','job_titles.delete','job_titles.manage'),
+    ('employment_types','employment_types.create','employment_types.edit','employment_types.delete','employment_types.manage'),
+    ('companies','companies.create','companies.edit','companies.delete','companies.manage'),
+    ('employees','hr.employees.create','hr.employees.edit','hr.employees.delete','hr.employees.manage'),
+    ('attendance','hr.attendance.create','hr.attendance.edit','hr.attendance.delete','hr.attendance.manage'),
+    ('bonuses','hr.compensation.create','hr.compensation.edit','hr.compensation.delete','hr.compensation.manage'),
+    ('deductions','hr.compensation.create','hr.compensation.edit','hr.compensation.delete','hr.compensation.manage'),
+    ('leave_types','hr.leaves.create','hr.leaves.edit','hr.leaves.delete','hr.manage'),
+    ('notifications','notifications.create','notifications.edit','notifications.delete','notifications.manage'),
+    ('purchase_returns','purchases.returns.create','purchases.returns.edit','purchases.returns.delete','purchases.manage'),
+    ('purchase_return_items','purchases.returns.create','purchases.returns.edit','purchases.returns.delete','purchases.manage')
+  ) AS m(table_name, insert_key, update_key, delete_key, legacy_key)
+  LOOP
+    v_table := r.table_name;
+    IF to_regclass(format('public.%I', v_table)) IS NULL THEN CONTINUE; END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+      WHERE table_schema='public' AND table_name=v_table AND column_name='tenant_id') THEN CONTINUE; END IF;
+
+    EXECUTE format('DROP POLICY IF EXISTS permission_gate_%I_insert ON public.%I',v_table,v_table);
+    EXECUTE format('CREATE POLICY permission_gate_%I_insert ON public.%I AS RESTRICTIVE FOR INSERT TO authenticated WITH CHECK (public.has_permission((select auth.uid()), tenant_id, %L) OR public.has_permission((select auth.uid()), tenant_id, %L))',v_table,v_table,r.insert_key,r.legacy_key);
+
+    EXECUTE format('DROP POLICY IF EXISTS permission_gate_%I_update ON public.%I',v_table,v_table);
+    EXECUTE format('CREATE POLICY permission_gate_%I_update ON public.%I AS RESTRICTIVE FOR UPDATE TO authenticated USING (public.has_permission((select auth.uid()), tenant_id, %L) OR public.has_permission((select auth.uid()), tenant_id, %L)) WITH CHECK (public.has_permission((select auth.uid()), tenant_id, %L) OR public.has_permission((select auth.uid()), tenant_id, %L))',v_table,v_table,r.update_key,r.legacy_key,r.update_key,r.legacy_key);
+
+    EXECUTE format('DROP POLICY IF EXISTS permission_gate_%I_delete ON public.%I',v_table,v_table);
+    EXECUTE format('CREATE POLICY permission_gate_%I_delete ON public.%I AS RESTRICTIVE FOR DELETE TO authenticated USING (public.has_permission((select auth.uid()), tenant_id, %L) OR public.has_permission((select auth.uid()), tenant_id, %L))',v_table,v_table,r.delete_key,r.legacy_key);
+  END LOOP;
+END
+$section_crud_gates$;
+
+-- Leave requests retain employee self-service INSERT and approval UPDATE rules.
+-- Only administrative deletion is action-gated and branch-scoped here.
+DROP POLICY IF EXISTS permission_gate_leave_requests_delete_action ON public.leave_requests;
+CREATE POLICY permission_gate_leave_requests_delete_action
+ON public.leave_requests AS RESTRICTIVE FOR DELETE TO authenticated
+USING (
+  (
+    public.has_permission((select auth.uid()), tenant_id, 'hr.leaves.delete')
+    OR public.has_permission((select auth.uid()), tenant_id, 'hr.manage')
+  )
+  AND EXISTS (
+    SELECT 1 FROM public.employees e
+    WHERE e.id=leave_requests.employee_id
+      AND e.tenant_id=leave_requests.tenant_id
+      AND (e.branch_id IS NULL OR private.can_access_branch((select auth.uid()), e.tenant_id, e.branch_id))
+  )
+);
+
+COMMIT;
+-- END MIGRATION: 20261125030000_section_crud_permissions.sql
+
+-- SOURCE MIGRATION: 20261125060000_audit_history_permission_reads.sql
+-- Allow explicitly authorized custom roles to read audit and login history.
+-- Existing restrictive company/branch boundaries and action gates remain active.
+BEGIN;
+
+DROP POLICY IF EXISTS audit_logs_permission_read ON public.audit_logs;
+CREATE POLICY audit_logs_permission_read
+ON public.audit_logs
+FOR SELECT TO authenticated
+USING (
+  public.has_permission((select auth.uid()), tenant_id, 'audit.view')
+);
+
+DROP POLICY IF EXISTS login_history_permission_read ON public.login_history;
+CREATE POLICY login_history_permission_read
+ON public.login_history
+FOR SELECT TO authenticated
+USING (
+  tenant_id IS NOT NULL
+  AND public.has_permission((select auth.uid()), tenant_id, 'login_history.view')
+);
+
+COMMIT;
+-- END MIGRATION: 20261125060000_audit_history_permission_reads.sql
+
 -- SOURCE MIGRATION: 20261126190000_marketing_ad_spaces_and_branch_targeting.sql
 -- Add branch-level targeting and a first-class catalog of advertising spaces.
 -- Existing campaign data and placement keys remain backward compatible.
@@ -15640,7 +16444,6 @@ USING (
 
 COMMIT;
 
-
 -- SOURCE MIGRATION: 20261126200000_scope_marketing_analytics_to_branch.sql
 -- Keep engagement recording and analytics inside the campaign's branch boundary.
 BEGIN;
@@ -15828,7 +16631,6 @@ GRANT EXECUTE ON FUNCTION private.get_marketing_campaign_analytics(uuid) TO auth
 
 COMMIT;
 
-
 -- SOURCE MIGRATION: 20261126210000_marketing_advertising_foreign_key_indexes.sql
 -- Add covering indexes for the foreign keys introduced by advertising-space
 -- and branch-scoped campaign analytics migrations.
@@ -15970,3 +16772,4 @@ REVOKE ALL ON FUNCTION public.adjust_inventory_balance(uuid, uuid, uuid, numeric
 GRANT EXECUTE ON FUNCTION public.adjust_inventory_balance(uuid, uuid, uuid, numeric, text) TO authenticated, service_role;
 
 COMMIT;
+
