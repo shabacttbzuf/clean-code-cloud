@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(16);
+SELECT plan(26);
 
 SELECT has_table('public', 'marketing_ad_spaces',
   'A first-class advertising spaces table exists');
@@ -83,6 +83,73 @@ SELECT ok(
 SELECT ok(
   NOT has_table_privilege('anon', 'public.marketing_ad_spaces', 'SELECT'),
   'Anonymous users cannot read advertising-space metadata'
+);
+
+
+SELECT ok(
+  EXISTS (
+    SELECT 1 FROM pg_policy
+    WHERE polrelid = 'public.marketing_ad_spaces'::regclass
+      AND polname = 'marketing_ad_spaces_scope_update'
+      AND NOT polpermissive
+  ),
+  'Advertising-space updates retain a restrictive company and branch boundary'
+);
+SELECT ok(
+  EXISTS (
+    SELECT 1 FROM pg_policy
+    WHERE polrelid = 'public.marketing_ad_spaces'::regclass
+      AND polname = 'marketing_ad_spaces_scope_delete'
+      AND NOT polpermissive
+  ),
+  'Advertising-space deletes retain a restrictive company and branch boundary'
+);
+SELECT ok(
+  EXISTS (
+    SELECT 1 FROM pg_policy
+    WHERE polrelid = 'public.marketing_campaigns'::regclass
+      AND polname = 'company_scope_marketing_campaigns_branch_insert'
+      AND NOT polpermissive
+  ),
+  'Branch-targeted campaign inserts enforce branch access'
+);
+SELECT ok(
+  EXISTS (
+    SELECT 1 FROM pg_policy
+    WHERE polrelid = 'public.marketing_campaigns'::regclass
+      AND polname = 'company_scope_marketing_campaigns_branch_update'
+      AND NOT polpermissive
+  ),
+  'Branch-targeted campaign updates enforce branch access'
+);
+SELECT ok(
+  EXISTS (
+    SELECT 1 FROM pg_policy
+    WHERE polrelid = 'public.marketing_campaigns'::regclass
+      AND polname = 'company_scope_marketing_campaigns_branch_delete'
+      AND NOT polpermissive
+  ),
+  'Branch-targeted campaign deletes enforce branch access'
+);
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='marketing_ad_spaces_company_id_idx'),
+  'Advertising-space company foreign key has a supporting index'
+);
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='marketing_ad_spaces_branch_id_idx'),
+  'Advertising-space branch foreign key has a supporting index'
+);
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='marketing_ad_spaces_created_by_idx'),
+  'Advertising-space creator foreign key has a supporting index'
+);
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='marketing_campaign_events_branch_id_idx'),
+  'Campaign-event branch foreign key has a supporting index'
+);
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='marketing_campaigns_advertising_space_tenant_idx'),
+  'Campaign advertising-space composite foreign key has a supporting index'
 );
 
 SELECT * FROM finish();
