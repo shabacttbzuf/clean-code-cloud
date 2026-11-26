@@ -212,5 +212,18 @@ SELECT ok(
   'Promotion redemption reads retain tenant, permission, and branch scope checks'
 );
 
+SELECT is(
+  (SELECT count(*)::int FROM pg_policies
+   WHERE schemaname='public' AND tablename='marketing_campaigns'
+     AND policyname IN (
+       'company_scope_marketing_campaigns_insert',
+       'company_scope_marketing_campaigns_update',
+       'company_scope_marketing_campaigns_delete'
+     ) AND permissive='RESTRICTIVE'),
+  3,
+  'Marketing campaign writes retain restrictive company-scope policies'
+);
+
+
 SELECT * FROM finish();
 ROLLBACK;
