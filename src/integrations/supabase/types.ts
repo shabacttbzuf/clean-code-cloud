@@ -19,6 +19,8 @@ export type Database = {
           created_at: string
           created_by: string | null
           company_id: string | null
+          branch_id: string | null
+          advertising_space_id: string | null
           description: string
           ends_at: string | null
           id: string
@@ -36,6 +38,8 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           company_id?: string | null
+          branch_id?: string | null
+          advertising_space_id?: string | null
           description?: string
           ends_at?: string | null
           id?: string
@@ -53,6 +57,8 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           company_id?: string | null
+          branch_id?: string | null
+          advertising_space_id?: string | null
           description?: string
           ends_at?: string | null
           id?: string
@@ -83,6 +89,90 @@ export type Database = {
           },
         ]
       },
+      marketing_ad_spaces: {
+        Row: {
+          id: string
+          tenant_id: string
+          company_id: string | null
+          branch_id: string | null
+          space_key: string
+          name: string
+          description: string
+          format: string
+          is_active: boolean
+          sort_order: number
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          company_id?: string | null
+          branch_id?: string | null
+          space_key: string
+          name: string
+          description?: string
+          format?: string
+          is_active?: boolean
+          sort_order?: number
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          company_id?: string | null
+          branch_id?: string | null
+          space_key?: string
+          name?: string
+          description?: string
+          format?: string
+          is_active?: boolean
+          sort_order?: number
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      marketing_campaign_events: {
+        Row: {
+          id: string
+          tenant_id: string
+          company_id: string | null
+          branch_id: string | null
+          campaign_id: string
+          actor_id: string
+          event_type: string
+          event_day: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          company_id?: string | null
+          branch_id?: string | null
+          campaign_id: string
+          actor_id: string
+          event_type: string
+          event_day?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          company_id?: string | null
+          branch_id?: string | null
+          campaign_id?: string
+          actor_id?: string
+          event_type?: string
+          event_day?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       attendance: {
         Row: {
           biometric_ref: string | null
