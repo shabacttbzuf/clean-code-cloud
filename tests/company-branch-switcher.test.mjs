@@ -22,9 +22,7 @@ test("branch choices are constrained by active tenant, company, and RLS", () => 
 test("scope changes clear cached records and validate every selected company or branch", () => {
   assert.match(hook, /companyOptions\.some\(\(item\) => item\.id === companyId\)/);
   assert.match(hook, /branchOptions\.some\(\(item\) => item\.id === id\)/);
-  assert.match(hook, /function switchCompany[\s\S]{0,700}queryClient\.clear\(\)/);
-  assert.match(hook, /function switchBranch[\s\S]{0,700}queryClient\.clear\(\)/);
-  assert.match(hook, /function switchTenant[\s\S]{0,700}queryClient\.clear\(\)/);
+  assert.match(hook, /function switchCompany[\\s\\S]{0,900}removeActiveScopeQueries\\(\\)/);\n  assert.match(hook, /function switchBranch[\\s\\S]{0,900}removeActiveScopeQueries\\(\\)/);\n  assert.match(hook, /function switchTenant[\\s\\S]{0,900}removeActiveScopeQueries\\(\\)/);
 });
 
 test("authenticated top bar exposes company and branch scope selectors", () => {
