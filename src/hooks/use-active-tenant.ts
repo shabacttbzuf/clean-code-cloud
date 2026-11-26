@@ -102,17 +102,70 @@ export function useActiveTenant() {
     enabled: !!activeId,
   });
 
-  const membership = useMemo(
-    () => memQuery.data?.find((m) => m.tenant_id === activeId) ?? null,
+  const tenantMemberships = useMemo(
+    () => (memQuery.data ?? []).filter((item) => item.tenant_id === activeId),
     [memQuery.data, activeId],
   );
+  const hasTenantWideMembership = tenantMemberships.some((item) => item.company_id === null);
+  const companyMembershipIds = useMemo(
+    () => tenantMemberships.map((item) => item.company_id).filter((id): id is string => !!id),
+    [tenantMemberships],
+  );
+  const companyScopeStorageKey = user?.id && activeId ? "ras-active-company:" + user.id + ":" + activeId : null;
+  const [companySelection, setCompanySelection] = useState<{ scope: string | null; companyId: string | null; ready: boolean }>({
+    scope: null, companyId: null, ready: false,
+  });
 
-  const role = membership?.role ?? null;
+  const companyOptionsQuery = useQuery({
+    queryKey: ["authorized-companies", user?.id, activeId, hasTenantWideMembership ? "tenant-wide" : companyMembershipIds.slice().sort().join(":")],
+    queryFn: async () => {
+      if (!activeId) return [];
+      let query = supabase.from("companies").select("id,name").eq("tenant_id", activeId).eq("is_active", true).order("name");
+      if (!hasTenantWideMembership && companyMembershipIds.length) query = query.in("id", companyMembershipIds);
+      else if (!hasTenantWideMembership) return [];
+      const { data, error } = await query;
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!user?.id && !!activeId && (hasTenantWideMembership || companyMembershipIds.length > 0),
+    staleTime: 30_000,
+  });
+  const companyOptions = useMemo(() => companyOptionsQuery.data ?? [], [companyOptionsQuery.data]);
+
+  useEffect(() => {
+    if (!companyScopeStorageKey || !tenantMemberships.length || companyOptionsQuery.isLoading || companyOptionsQuery.isError) return;
+    let stored: string | null = null;
+    try { stored = window.localStorage.getItem(companyScopeStorageKey); } catch { stored = null; }
+    const allowedIds = new Set(companyOptions.map((item) => item.id));
+    const nextCompanyId =
+      stored === "__all__" && hasTenantWideMembership ? null :
+      stored && allowedIds.has(stored) ? stored :
+      hasTenantWideMembership ? null :
+      companyMembershipIds.find((id) => allowedIds.has(id)) ?? companyMembershipIds[0] ?? null;
+    setCompanySelection({ scope: companyScopeStorageKey, companyId: nextCompanyId, ready: true });
+    try {
+      if (nextCompanyId) window.localStorage.setItem(companyScopeStorageKey, nextCompanyId);
+      else if (hasTenantWideMembership) window.localStorage.setItem(companyScopeStorageKey, "__all__");
+      else window.localStorage.removeItem(companyScopeStorageKey);
+    } catch { /* storage may be unavailable */ }
+  }, [companyScopeStorageKey, tenantMemberships, companyMembershipIds, companyOptions, companyOptionsQuery.isLoading, companyOptionsQuery.isError, hasTenantWideMembership]);
+
+  const activeCompanyId = companySelection.scope === companyScopeStorageKey && companySelection.ready
+    ? companySelection.companyId
+    : hasTenantWideMembership ? null : tenantMemberships[0]?.company_id ?? null;
+  const companyMembership = useMemo(
+    () => tenantMemberships.find((item) => item.company_id === activeCompanyId) ??
+      tenantMemberships.find((item) => item.company_id === null) ??
+      tenantMemberships[0] ?? null,
+    [tenantMemberships, activeCompanyId],
+  );
+
+  const role = companyMembership?.role ?? null;
   const isAdmin = role === "owner" || role === "manager";
   const isSuperOwner = !superOwnerQuery.isError && superOwnerQuery.data === true;
 
   const permissionsQuery = useQuery({
-    queryKey: ["effective-permissions", user?.id, activeId, membership?.role, membership?.company_id, membership?.branch_id, membership?.custom_role_id],
+    queryKey: ["effective-permissions", user?.id, activeId, activeCompanyId, companyMembership?.role, companyMembership?.custom_role_id],
     // Authorization decisions fail closed; cached offline permissions are not grants.
     queryFn: async (): Promise<string[]> => {
       const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: activeId! });
@@ -151,15 +204,110 @@ export function useActiveTenant() {
     [permissionsQuery.data, permissionsQuery.isError],
   );
   const hasPermission = (permission: string) => isSuperOwner || permissions.has(permission);
+  // Branch options are read through the authenticated user's RLS context.
+  const branchOptionsQuery = useQuery({
+    queryKey: ["authorized-branches", user?.id, activeId, activeCompanyId, companyMembership?.branch_id],
+    queryFn: async () => {
+      if (!activeId) return [];
+      let query = supabase.from("branches").select("id,name,company_id").eq("tenant_id", activeId).eq("is_active", true);
+      if (activeCompanyId) query = query.eq("company_id", activeCompanyId);
+      const { data, error } = await query.order("name");
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!user?.id && !!activeId && !!companyMembership &&
+      (!!companyMembership.branch_id || ["owner", "manager", "accountant"].includes(companyMembership.role) || hasPermission("branches.view") || isSuperOwner),
+    staleTime: 30_000,
+  });
+  const branchOptions = useMemo(() => branchOptionsQuery.data ?? [], [branchOptionsQuery.data]);
+  const branchScopeKey = user?.id && activeId ? user.id + ":" + activeId + ":" + (activeCompanyId ?? "all-companies") : null;
+  const [branchSelection, setBranchSelection] = useState<{ scope: string | null; branchId: string | null; ready: boolean }>({
+    scope: null, branchId: null, ready: false,
+  });
+
+  useEffect(() => {
+    if (!branchScopeKey || !companyMembership || branchOptionsQuery.isLoading || branchOptionsQuery.isError) return;
+    const canSelectAll = isSuperOwner || ["owner", "manager", "accountant"].includes(companyMembership.role);
+    const storageKey = "ras-active-branch:" + branchScopeKey;
+    let stored: string | null = null;
+    try { stored = window.localStorage.getItem(storageKey); } catch { stored = null; }
+    const allowedIds = new Set(branchOptions.map((item) => item.id));
+    const nextBranchId =
+      stored === "__all__" && canSelectAll ? null :
+      stored && allowedIds.has(stored) ? stored :
+      companyMembership.branch_id && allowedIds.has(companyMembership.branch_id) ? companyMembership.branch_id :
+      canSelectAll ? null :
+      branchOptions[0]?.id ?? companyMembership.branch_id ?? null;
+    setBranchSelection({ scope: branchScopeKey, branchId: nextBranchId, ready: true });
+    try {
+      if (nextBranchId) window.localStorage.setItem(storageKey, nextBranchId);
+      else if (canSelectAll) window.localStorage.setItem(storageKey, "__all__");
+      else window.localStorage.removeItem(storageKey);
+    } catch { /* storage may be unavailable */ }
+  }, [branchScopeKey, companyMembership, branchOptions, branchOptionsQuery.isLoading, branchOptionsQuery.isError, isSuperOwner]);
+
+  const activeBranchId = branchSelection.scope === branchScopeKey && branchSelection.ready
+    ? branchSelection.branchId
+    : companyMembership?.branch_id ?? null;
+  const membership = useMemo(
+    () => companyMembership ? { ...companyMembership, company_id: activeCompanyId, branch_id: activeBranchId } : null,
+    [companyMembership, activeCompanyId, activeBranchId],
+  );
+
+  function removeActiveScopeQueries() {
+    if (!activeId) return;
+    queryClient.removeQueries({
+      predicate: (query) => query.queryKey.includes(activeId) &&
+        !["tenant", "memberships", "is-super-owner", "effective-permissions"].includes(String(query.queryKey[0])),
+    });
+  }
+
+  function switchCompany(companyId: string | null) {
+    if (companyId === null && !hasTenantWideMembership) return;
+    if (companyId !== null && !companyOptions.some((item) => item.id === companyId)) return;
+    if (!companyScopeStorageKey) return;
+    setCompanySelection({ scope: companyScopeStorageKey, companyId, ready: true });
+    try {
+      if (companyId) window.localStorage.setItem(companyScopeStorageKey, companyId);
+      else window.localStorage.setItem(companyScopeStorageKey, "__all__");
+    } catch { /* storage may be unavailable */ }
+    setBranchSelection({ scope: null, branchId: null, ready: false });
+    removeActiveScopeQueries();
+  }
+
+  function switchBranch(branchId: string | null) {
+    const canSelectAll = isSuperOwner || ["owner", "manager", "accountant"].includes(companyMembership?.role ?? "");
+    if (branchId === null && !canSelectAll) return;
+    if (branchId !== null && !branchOptions.some((item) => item.id === branchId)) return;
+    if (!branchScopeKey) return;
+    const storageKey = "ras-active-branch:" + branchScopeKey;
+    setBranchSelection({ scope: branchScopeKey, branchId, ready: true });
+    try {
+      if (branchId) window.localStorage.setItem(storageKey, branchId);
+      else window.localStorage.setItem(storageKey, "__all__");
+    } catch { /* storage may be unavailable */ }
+    removeActiveScopeQueries();
+  }
+
 
   return {
     user,
     userId: user?.id ?? null,
-    loading: sessionLoading || memQuery.isLoading || tenantQuery.isLoading || superOwnerQuery.isLoading || permissionsQuery.isLoading,
+    loading: sessionLoading || memQuery.isLoading || tenantQuery.isLoading || superOwnerQuery.isLoading || permissionsQuery.isLoading || companyOptionsQuery.isLoading || branchOptionsQuery.isLoading,
     tenantId: activeId,
     tenant: tenantQuery.data ?? null,
     memberships: memQuery.data ?? [],
     membership,
+    companyOptions,
+    companyLoading: companyOptionsQuery.isLoading,
+    companyError: companyOptionsQuery.error,
+    activeCompanyId,
+    switchCompany,
+    branchOptions,
+    activeBranchId,
+    branchLoading: branchOptionsQuery.isLoading,
+    branchError: branchOptionsQuery.error,
+    switchBranch,
     role,
     isAdmin,
     isSuperOwner,
@@ -168,8 +316,12 @@ export function useActiveTenant() {
     permissionsLoading: permissionsQuery.isLoading,
     permissionsError: permissionsQuery.error,
     switchTenant: (id: string) => {
+      if (!memQuery.data?.some((item) => item.tenant_id === id) || id === activeId) return;
       setActiveId(id);
-      if (typeof window !== "undefined") window.localStorage.setItem(ACTIVE_TENANT_KEY, id);
+      setCompanySelection({ scope: null, companyId: null, ready: false });
+      setBranchSelection({ scope: null, branchId: null, ready: false });
+      try { window.localStorage.setItem(ACTIVE_TENANT_KEY, id); } catch { /* storage may be unavailable */ }
+      removeActiveScopeQueries();
     },
   };
 }
