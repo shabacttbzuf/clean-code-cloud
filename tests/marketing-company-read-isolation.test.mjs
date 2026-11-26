@@ -34,7 +34,7 @@ test("marketing campaign reads no longer have a permissive tenant-wide SELECT po
 });
 
 test("company-scoped administrators only query their own campaigns in the management UI", () => {
-  assert.match(adsPage, /queryKey: \["marketing-campaigns", tenantId, membership\?\.company_id \?\? "tenant"\]/);
+  assert.match(adsPage, /queryKey: \["marketing-campaigns", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
   assert.match(adsPage, /if \(!isSuperOwner && !isTenantOwner\)\s*\{\s*if \(!membership\?\.company_id\) return \[\];\s*query = query\.eq\("company_id", membership\.company_id\);/);
 });
 
