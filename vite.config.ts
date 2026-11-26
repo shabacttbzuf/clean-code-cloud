@@ -5,6 +5,10 @@ import tailwindcss from "@tailwindcss/vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
+  server: {
+    // Quick Tunnels use a new subdomain on each run; keep the allowlist scoped to Cloudflare Tunnel hosts.
+    allowedHosts: [".trycloudflare.com"],
+  },
   plugins: [
     tanstackStart({
       server: { entry: "server" },
