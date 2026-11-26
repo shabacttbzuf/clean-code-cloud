@@ -29,24 +29,7 @@ jobs:
           set -euo pipefail
           supabase migration new --help >/tmp/supabase-migration-help.txt
           names=(
-            granular_section_action_permissions
-            granular_marketing_rls_alignment
-            section_crud_permissions
-            purchase_rpc_action_permissions
-            purchase_return_rpc_action_permission
-            audit_history_permission_reads
-            private_purchase_rpc_wrappers
-            permission_override_write_gates
-            sensitive_action_audit_triggers
-            prevent_direct_expense_deletion
-            prevent_product_history_deletion
-            inventory_balance_rpc_only
-            notification_realtime_publication
-            low_stock_event_notifications
-            hr_leave_event_notifications
-            overdue_kitchen_order_notifications
-            customer_invoice_event_notifications
-            notification_scope_archive_and_missing_sources
+            fix_promotion_gift_and_eligibility_calculation
           )
           for name in "${names[@]}"; do
             supabase migration new "$name"
