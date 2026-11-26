@@ -554,7 +554,7 @@ function Dashboard() {
         </Card>
       )}
 
-      {stats.isLoading ? (
+      {(hasPermission("sales.view") || hasPermission("reports.view")) && (stats.isLoading ? (
         <div className="flex justify-center py-12" role="status" aria-live="polite"><Loader2 className="h-6 w-6 animate-spin text-primary" /><span className="sr-only">جارٍ تحميل مؤشرات لوحة التحكم</span></div>
       ) : stats.error ? (
         <Card role="alert" className="border-destructive/40">
@@ -573,15 +573,24 @@ function Dashboard() {
         <Card><CardContent className="p-6 text-center text-sm text-muted-foreground">لا توجد مؤسسة نشطة مرتبطة بهذا الحساب لعرض المؤشرات.</CardContent></Card>
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Kpi label="مبيعات اليوم" value={`${formatMoney(stats.data.totalToday)} ${currency}`} sub={`${stats.data.salesTodayCount} فاتورة`} icon={<Receipt className="h-5 w-5" />} tone="primary" />
-            <Kpi label="مبيعات الشهر" value={`${formatMoney(stats.data.totalMonth)} ${currency}`} icon={<TrendingUp className="h-5 w-5" />} tone="success" />
-            <Kpi label="مصروفات الشهر" value={`${formatMoney(stats.data.totalExpMonth)} ${currency}`} icon={<TrendingDown className="h-5 w-5" />} tone="destructive" />
-            <Kpi label="الربح التقديري" value={stats.data.profit === null ? "غير مكتمل" : `${formatMoney(stats.data.profit)} ${currency}`} sub={stats.data.unknownCostItems > 0 ? `${stats.data.unknownCostItems} صنفاً بلا تكلفة محفوظة` : "بعد تكلفة البضاعة والمصروفات المسجلة"} icon={<Wallet className="h-5 w-5" />} tone={stats.data.profit !== null && stats.data.profit >= 0 ? "success" : "destructive"} />
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span className={stats.data.source === "offline" ? "inline-flex items-center gap-1 text-amber-700" : "inline-flex items-center gap-1 text-emerald-700"}>
+              {stats.data.source === "offline" ? <WifiOff className="h-3.5 w-3.5" /> : <Wifi className="h-3.5 w-3.5" />}
+              {stats.data.source === "offline" ? "بيانات مخزنة محلياً — قد لا تشمل آخر التغييرات" : "بيانات مباشرة من قاعدة البيانات"}
+            </span>
+            <span>آخر تحديث: {new Date(stats.data.source === "offline" ? stats.data.cachedAt : stats.data.updatedAt).toLocaleString("ar", { dateStyle: "short", timeStyle: "short" })}</span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            {hasPermission("sales.view") && <Kpi label="إجمالي مبيعات اليوم" value={`${formatMoney(stats.data.totalToday)} ${currency}`} sub={`${stats.data.salesTodayCount} طلباً`} change={stats.data.salesChange} sparkline={stats.data.trend.slice(-7)} icon={<Receipt className="h-5 w-5" />} tone="primary" to="/reports" />}
+            {hasPermission("sales.view") && <Kpi label="عدد الطلبات" value={String(stats.data.salesTodayCount)} sub="طلبات اليوم غير الملغاة" change={stats.data.ordersChange} sparkline={stats.data.trend.slice(-7)} icon={<ClipboardList className="h-5 w-5" />} tone="success" to="/sales" />}
+
+            {hasPermission("reports.view") && <Kpi label="صافي مبيعات الشهر" value={`${formatMoney(stats.data.totalMonth)} ${currency}`} sub="بعد خصم المرتجعات المسجلة" icon={<TrendingUp className="h-5 w-5" />} tone="success" to="/reports" />}
+            {hasPermission("expenses.view") && <Kpi label="مصروفات الشهر" value={`${formatMoney(stats.data.totalExpMonth ?? 0)} ${currency}`} icon={<TrendingDown className="h-5 w-5" />} tone="destructive" to="/reports" />}
+            {hasPermission("reports.view") && <Kpi label="الربح التقديري" value={stats.data.profit === null ? "غير مكتمل" : `${formatMoney(stats.data.profit)} ${currency}`} sub={stats.data.unknownCostItems > 0 ? `${stats.data.unknownCostItems} صنفاً بلا تكلفة محفوظة` : "بعد تكلفة البضاعة والمصروفات المسجلة"} icon={<Wallet className="h-5 w-5" />} tone={stats.data.profit !== null && stats.data.profit >= 0 ? "success" : "destructive"} to="/reports" />}
           </div>
 
           <div className="grid gap-4 lg:grid-cols-3">
-            <Card className="lg:col-span-2">
+            {(hasPermission("sales.view") || hasPermission("reports.view")) && <Card className="lg:col-span-2">
               <CardContent className="p-4">
                 <div className="mb-3 text-sm font-semibold">مبيعات آخر 30 يوم</div>
                 <div className="h-64">
@@ -596,8 +605,8 @@ function Dashboard() {
                   </ResponsiveContainer>
                 </div>
               </CardContent>
-            </Card>
-            <Card>
+            </Card>}
+            {hasPermission("expenses.view") && <Card>
               <CardContent className="p-4">
                 <div className="mb-3 text-sm font-semibold">توزيع المصروفات</div>
                 {stats.data.byCat.length === 0 ? (
@@ -607,7 +616,7 @@ function Dashboard() {
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie data={stats.data.byCat} dataKey="value" nameKey="name" outerRadius={80} label>
-                          {stats.data.byCat.map((e, i) => <Cell key={i} fill={e.color ?? "hsl(var(--primary))"} />)}
+                          {stats.data.byCat.map((entry: { name: string; value: number; color: string | null }, index: number) => <Cell key={index} fill={entry.color ?? "hsl(var(--primary))"} />)}
                         </Pie>
                         <Tooltip />
                         <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -616,17 +625,18 @@ function Dashboard() {
                   </div>
                 )}
               </CardContent>
-            </Card>
+            </Card>}
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <MiniStat label="ورديات مفتوحة" value={stats.data.openSessions} icon={<Wallet className="h-4 w-4" />} />
-            <MiniStat label="نفاد مخزون" value={stats.data.lowStockCount} icon={<Package className="h-4 w-4" />} />
-            <MiniStat label="فواتير اليوم" value={stats.data.salesTodayCount} icon={<Receipt className="h-4 w-4" />} />
-            <MiniStat label="إجمالي العملاء" value={stats.data.customersCount} icon={<UsersIcon className="h-4 w-4" />} />
+            {hasPermission("cash.view") && <MiniStat label="ورديات مفتوحة" value={stats.data.openSessions} icon={<Wallet className="h-4 w-4" />} />}
+            {hasPermission("inventory.view") && <MiniStat label="نفاد مخزون" value={stats.data.lowStockCount} icon={<Package className="h-4 w-4" />} />}
+            {hasPermission("sales.view") && <MiniStat label="طلبات اليوم" value={stats.data.salesTodayCount} icon={<Receipt className="h-4 w-4" />} />}
+            {hasPermission("customers.view") && stats.data.customersCount !== null && <MiniStat label="إجمالي العملاء" value={stats.data.customersCount} icon={<UsersIcon className="h-4 w-4" />} />}
+
           </div>
         </>
-      )}
+      ))}
       {(hasPermission("sales.view") || hasPermission("kitchen.view")) && (
         <section className="grid gap-4 xl:grid-cols-2" aria-label="متابعة الطلبات والتشغيل">
           {hasPermission("sales.view") && <Card className="overflow-hidden border-[#dce5f3] shadow-sm"><CardContent className="p-0">
@@ -715,18 +725,25 @@ function Dashboard() {
   );
 }
 
-function Kpi({ label, value, sub, icon, tone }: { label: string; value: string; sub?: string; icon: React.ReactNode; tone: "primary" | "success" | "destructive" }) {
+function Kpi({ label, value, sub, icon, tone, change, to, sparkline }: { label: string; value: string; sub?: string; icon: React.ReactNode; tone: "primary" | "success" | "destructive"; change?: number | null; to?: "/reports" | "/sales" | "/customers" | "/kitchen"; sparkline?: Array<{ total: number }> }) {
   const bg = tone === "success" ? "bg-success/15 text-success" : tone === "destructive" ? "bg-destructive/15 text-destructive" : "bg-primary/15 text-primary";
-  return (
-    <Card><CardContent className="flex items-center justify-between p-4">
-      <div>
-        <div className="text-xs text-muted-foreground">{label}</div>
-        <div className="mt-1 text-2xl font-bold num">{value}</div>
-        {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
-      </div>
-      <div className={`grid h-11 w-11 place-items-center rounded-xl ${bg}`}>{icon}</div>
-    </CardContent></Card>
+  const content = (
+    <Card className={to ? "h-full transition hover:-translate-y-0.5 hover:shadow-md" : "h-full"}>
+      <CardContent className="flex h-full items-start justify-between gap-3 p-4">
+        <div className="min-w-0">
+          <div className="text-xs text-muted-foreground">{label}</div>
+          <div className="mt-1 text-xl font-extrabold num sm:text-2xl">{value}</div>
+          {sub && <div className="mt-1 text-xs text-muted-foreground">{sub}</div>}
+          {change !== undefined && <div className={`mt-2 inline-flex items-center gap-1 text-xs font-bold ${change === null ? "text-muted-foreground" : change >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+            {change === null ? "لا تتوفر مقارنة" : <>{change >= 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}{change > 0 ? "+" : ""}{change.toFixed(1)}% مقارنة بالأمس</>}
+          </div>}
+          {sparkline && sparkline.length > 1 && <div className="mt-2 h-8 w-24" aria-hidden="true"><ResponsiveContainer width="100%" height="100%"><LineChart data={sparkline}><Line type="monotone" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} /></LineChart></ResponsiveContainer></div>}
+        </div>
+        <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${bg}`}>{icon}</div>
+      </CardContent>
+    </Card>
   );
+  return to ? <Link to={to} className="block h-full rounded-xl focus-visible:outline-none">{content}</Link> : content;
 }
 function MiniStat({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
   return (
