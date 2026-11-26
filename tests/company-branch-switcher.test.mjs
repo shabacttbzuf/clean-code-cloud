@@ -22,7 +22,9 @@ test("branch choices are constrained by active tenant, company, and RLS", () => 
 test("scope changes clear cached records and validate every selected company or branch", () => {
   assert.match(hook, /companyOptions\.some\(\(item\) => item\.id === companyId\)/);
   assert.match(hook, /branchOptions\.some\(\(item\) => item\.id === id\)/);
-  assert.match(hook, /function switchCompany[\\s\\S]{0,900}removeActiveScopeQueries\\(\\)/);\n  assert.match(hook, /function switchBranch[\\s\\S]{0,900}removeActiveScopeQueries\\(\\)/);\n  assert.match(hook, /function switchTenant[\\s\\S]{0,900}removeActiveScopeQueries\\(\\)/);
+  assert.match(hook, /function switchCompany[\s\S]{0,900}queryClient\.clear\(\)/);
+  assert.match(hook, /function switchBranch[\s\S]{0,900}queryClient\.clear\(\)/);
+  assert.match(hook, /function switchTenant[\s\S]{0,900}queryClient\.clear\(\)/);
 });
 
 test("authenticated top bar exposes company and branch scope selectors", () => {
@@ -34,13 +36,11 @@ test("authenticated top bar exposes company and branch scope selectors", () => {
   assert.match(route, /branchOptions\.map/);
 });
 
-
 test("branch-only memberships cannot select all companies or all branches even with owner-like roles", () => {
   assert.match(hook, /item\.company_id === null && item\.branch_id === null/);
   assert.match(hook, /!membership\.branch_id && \["owner", "manager", "accountant"\]/);
   assert.match(route, /item\.company_id === null && item\.branch_id === null/);
 });
-
 
 test("branch-bound memberships cannot enumerate or switch to sibling branches", () => {
   assert.match(hook, /if \(membership\.branch_id\) \{[\s\S]{0,260}query = query\.eq\("id", membership\.branch_id\)/);
