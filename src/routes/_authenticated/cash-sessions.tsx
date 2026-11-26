@@ -33,7 +33,8 @@ type ProfileMap = Record<string, string>;
 type BranchMap = Record<string, string>;
 
 function CashSessionsPage() {
-  const { tenantId, userId, isAdmin, membership, isSuperOwner } = useActiveTenant();
+  const { tenantId, userId, isAdmin, membership, isSuperOwner, hasPermission } = useActiveTenant();
+  const canCloseCash = isSuperOwner || hasPermission("cash.close") || hasPermission("cash.open_close");
   const qc = useQueryClient();
   const [closingId, setClosingId] = useState<Session | null>(null);
   const [closingCash, setClosingCash] = useState("0");
@@ -112,6 +113,7 @@ function CashSessionsPage() {
   const closeSess = useMutation({
     mutationFn: async () => {
       if (!closingId) throw new Error("No session");
+      if (closingId.cashier_id !== userId && !(canCloseCash && (isSuperOwner || isAdmin))) throw new Error("لا تملك صلاحية إغلاق وردية مستخدم آخر.");
       const cb = Number(closingCash);
       if (!Number.isFinite(cb) || cb < 0) throw new Error("رصيد الإغلاق غير صالح");
       const { error } = await supabase.rpc("close_cash_session", {
@@ -173,7 +175,7 @@ function CashSessionsPage() {
                 </thead>
                 <tbody>
                   {list.map((s) => {
-                    const canClose = s.status === "open" && (s.cashier_id === userId || isAdmin);
+                    const canClose = s.status === "open" && (s.cashier_id === userId || (canCloseCash && (isSuperOwner || isAdmin)));
                     return (
                       <tr key={s.id} className="border-t hover:bg-muted/30">
                         <td className="p-3">
