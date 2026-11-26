@@ -138,6 +138,7 @@ const theme = readFileSync(new URL("../src/lib/theme.tsx", import.meta.url), "ut
 const appSidebar = readFileSync(new URL("../src/components/app-sidebar.tsx", import.meta.url), "utf8");
 const appLauncher = readFileSync(new URL("../src/components/app-launcher.tsx", import.meta.url), "utf8");
 const workspaceTabs = readFileSync(new URL("../src/components/workspace-tabs.tsx", import.meta.url), "utf8");
+const workspaceTabLogic = readFileSync(new URL("../src/lib/workspace-tabs-logic.mjs", import.meta.url), "utf8");
 const campaignMigration = readFileSync(new URL("../supabase/migrations/20261111233538_marketing_campaigns_management.sql", import.meta.url), "utf8");
 
 test("owner design studio customizes workspace colors and background with a safe reset", () => {
@@ -160,11 +161,12 @@ test("app launcher mirrors enterprise, system, and owner-only custom navigation 
 });
 
 test("workspace tabs preserve pinned pages and enforce a stable maximum", () => {
-  assert.match(workspaceTabs, /MAX_TABS = 12/);
-  assert.match(workspaceTabs, /function limitTabs/);
+  assert.match(workspaceTabLogic, /MAX_WORKSPACE_TABS = 12/);
+  assert.match(workspaceTabLogic, /function limitWorkspaceTabs/);
   assert.match(workspaceTabs, /function togglePinned/);
   assert.match(workspaceTabs, /PinOff/);
   assert.match(workspaceTabs, /tab\.pinned/);
+  assert.match(workspaceTabLogic, /tab\.dirty \? \{ dirty: true \}/);
 });
 
 test("custom sidebar tabs are owner-only shortcuts to an allowlisted existing route", () => {
