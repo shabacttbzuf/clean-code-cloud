@@ -6,9 +6,10 @@ import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { useSuperOwner } from "@/hooks/use-super-owner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
+
 import { Loader2, TrendingUp, TrendingDown, Receipt, Wallet, Package, Crown, Building2, Users as UsersIcon, Bell, Wifi, WifiOff, CircleHelp, ClipboardList, ChefHat } from "lucide-react";
 import { formatMoney } from "@/lib/format";
+import { DeferredDashboardCharts } from "@/components/deferred-dashboard-charts";
 import { Link } from "@tanstack/react-router";
 import { Sparkles, ShoppingBag, ArrowLeft, ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 
@@ -573,44 +574,7 @@ function Dashboard() {
             <Kpi label="الربح التقديري" value={stats.data.profit === null ? "غير مكتمل" : `${formatMoney(stats.data.profit)} ${currency}`} sub={stats.data.unknownCostItems > 0 ? `${stats.data.unknownCostItems} صنفاً بلا تكلفة محفوظة` : "بعد تكلفة البضاعة والمصروفات المسجلة"} icon={<Wallet className="h-5 w-5" />} tone={stats.data.profit !== null && stats.data.profit >= 0 ? "success" : "destructive"} />
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-3">
-            <Card className="lg:col-span-2">
-              <CardContent className="p-4">
-                <div className="mb-3 text-sm font-semibold">مبيعات آخر 30 يوم</div>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={stats.data.trend}>
-                      <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                      <XAxis dataKey="day" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} />
-                      <Tooltip />
-                      <Line type="monotone" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="mb-3 text-sm font-semibold">توزيع المصروفات</div>
-                {stats.data.byCat.length === 0 ? (
-                  <div className="grid h-64 place-items-center text-sm text-muted-foreground">لا توجد مصروفات</div>
-                ) : (
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={stats.data.byCat} dataKey="value" nameKey="name" outerRadius={80} label>
-                          {stats.data.byCat.map((e, i) => <Cell key={i} fill={e.color ?? "hsl(var(--primary))"} />)}
-                        </Pie>
-                        <Tooltip />
-                        <Legend wrapperStyle={{ fontSize: 11 }} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+          <DeferredDashboardCharts trend={stats.data.trend} byCategory={stats.data.byCat} />
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <MiniStat label="ورديات مفتوحة" value={stats.data.openSessions} icon={<Wallet className="h-4 w-4" />} />
