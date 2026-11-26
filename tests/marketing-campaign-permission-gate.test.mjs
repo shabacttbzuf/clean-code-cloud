@@ -49,3 +49,15 @@ test("follow-up migration reconciles ads.manage writes without weakening company
   assert.match(source, /select\("id"\)\.single\(\)/);
   assert.match(source, /Marketing campaign RLS failure/);
 });
+
+
+test("campaigns are branch-targeted and linked to managed advertising spaces", () => {
+  assert.match(source, /branch_id: string \| null/);
+  assert.match(source, /advertising_space_id: string \| null/);
+  assert.match(source, /from\("marketing_ad_spaces"\)/);
+  assert.match(source, /from\("branches"\)/);
+  assert.match(source, /branch_id: branchId \|\| null/);
+  assert.match(source, /advertising_space_id: adSpaceId \|\| null/);
+  assert.match(source, /إدارة المساحات الإعلانية/);
+  assert.match(source, /إنشاء مساحة حسب نوع الإعلان والفرع المحدد/);
+});
