@@ -402,7 +402,7 @@ function POSWorkspace() {
   });
 
   const posPromos = useQuery({
-    queryKey: ["pos-marketing-campaigns", tenantId, membership?.company_id ?? "tenant"],
+    queryKey: ["pos-marketing-campaigns", tenantId, membership?.company_id ?? "tenant", branchId],
     queryFn: async () => {
       const now = new Date().toISOString();
       let query = supabase.from("marketing_campaigns")
@@ -420,6 +420,9 @@ function POSWorkspace() {
         // Do not expose company-specific campaigns to branch-only or regular tenant members.
         query = query.is("company_id", null);
       }
+      if (branchId) {
+        query = query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
+      }
       const { data, error } = await query;
       if (error) throw error;
       const nowMs = Date.now();
@@ -433,10 +436,17 @@ function POSWorkspace() {
   });
   useEffect(() => {
     for (const promo of posPromos.data ?? []) {
-      void (supabase.rpc as any)("record_marketing_campaign_event", {
-        _campaign_id: promo.id,
-        _event_type: "impression",
-      }).catch((error: unknown) => console.warn("POS campaign impression tracking failed", error));
+      void (async () => {
+        try {
+          const { error } = await (supabase.rpc as any)("record_marketing_campaign_event", {
+            _campaign_id: promo.id,
+            _event_type: "impression",
+          });
+          if (error) console.warn("POS campaign impression tracking failed", error);
+        } catch (error) {
+          console.warn("POS campaign impression tracking failed", error);
+        }
+      })();
     }
   }, [posPromos.data]);
 
