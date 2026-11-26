@@ -186,7 +186,13 @@ export function useActiveTenant() {
     queryFn: async () => {
       if (!activeId) return [];
       let query = supabase.from("branches").select("id,name,company_id").eq("tenant_id", activeId).eq("is_active", true);
-      if (activeCompanyId) query = query.eq("company_id", activeCompanyId);
+      if (membership.branch_id) {
+        // A branch-bound membership must never enumerate or switch to sibling branches,
+        // even if the RLS policy permits reading other branches in the same company.
+        query = query.eq("id", membership.branch_id);
+      } else if (activeCompanyId) {
+        query = query.eq("company_id", activeCompanyId);
+      }
       const { data, error } = await query.order("name");
       if (error) throw error;
       return data ?? [];
@@ -203,7 +209,15 @@ export function useActiveTenant() {
     const storageKey = "ras-active-branch:" + branchScopeKey;
     const stored = typeof window !== "undefined" ? window.localStorage.getItem(storageKey) : null;
     const allowedIds = new Set(branchOptions.map((item) => item.id));
-    const nextBranchId = stored === "__all__" && canSelectAll ? null : stored && allowedIds.has(stored) ? stored : membership.branch_id && allowedIds.has(membership.branch_id) ? membership.branch_id : canSelectAll ? null : branchOptions[0]?.id ?? membership.branch_id ?? null;
+    const nextBranchId = membership.branch_id
+      ? membership.branch_id
+      : stored === "__all__" && canSelectAll
+        ? null
+        : stored && allowedIds.has(stored)
+          ? stored
+          : canSelectAll
+            ? null
+            : branchOptions[0]?.id ?? null;
     setBranchSelection({ scope: branchScopeKey, branchId: nextBranchId, ready: true });
     if (typeof window !== "undefined") {
       if (nextBranchId) window.localStorage.setItem(storageKey, nextBranchId);
@@ -225,6 +239,7 @@ export function useActiveTenant() {
   function switchBranch(id: string | null) {
     const canSelectAll = isSuperOwner || (!membership?.branch_id && ["owner", "manager", "accountant"].includes(membership?.role ?? ""));
     if (id === null && !canSelectAll) return;
+    if (membership?.branch_id && id !== membership.branch_id) return;
     if (id !== null && !branchOptions.some((item) => item.id === id)) return;
     if (!branchScopeKey) return;
     const storageKey = "ras-active-branch:" + branchScopeKey;
