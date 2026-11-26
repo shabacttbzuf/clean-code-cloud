@@ -83,3 +83,11 @@ test("tab storage scopes differ across users, companies and branches", () => {
   assert.notEqual(a, createWorkspaceTabScope("user-a", "tenant-a", "company-a", "branch-b"));
   assert.equal(createWorkspaceTabScope(null, "tenant-a", "company-a", "branch-a"), null);
 });
+
+
+test("tab capacity normalization preserves dirty state until explicit confirmation", () => {
+  const tabs = addWorkspaceTab(base, { path: "/sales", title: "المبيعات", dirty: true });
+  assert.equal(tabs.find((tab) => tab.path === "/sales").dirty, true);
+  assert.equal(closeWorkspaceTab(tabs, "/sales").length, 2);
+  assert.equal(closeWorkspaceTab(tabs, "/sales", { allowDirty: true }).length, 1);
+});
