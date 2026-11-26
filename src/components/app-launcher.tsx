@@ -78,7 +78,7 @@ export function AppLauncher() {
   const [navOverrides, setNavOverrides] = useState<Record<string, NavOverride>>({});
   const [favoriteUrls, setFavoriteUrls] = useState<string[]>([]);
   const [usageCounts, setUsageCounts] = useState<Record<string, number>>({});
-  const { tenantId, userId, permissions, permissionsError, isSuperOwner } = useActiveTenant();
+  const { tenantId, userId, permissions, permissionsError, permissionsLoading, isSuperOwner } = useActiveTenant();
   const { totalCount } = useSuperOwner();
 
   useEffect(() => {
