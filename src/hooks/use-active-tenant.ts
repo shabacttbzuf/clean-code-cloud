@@ -134,8 +134,8 @@ export function useActiveTenant() {
       else window.localStorage.removeItem(companyScopeStorageKey);
     }
   }, [companyScopeStorageKey, tenantMemberships, companyMembershipIds, companyOptions, companyOptionsQuery.isLoading, companyOptionsQuery.isError, hasTenantWideMembership]);
-  const activeCompanyId = companySelection.scope === companyScopeStorageKey && companySelection.ready ? companySelection.companyId : hasTenantWideMembership ? null : tenantMemberships[0]?.company_id ?? null;
-  const membership = useMemo(() => tenantMemberships.find((item) => item.company_id === activeCompanyId) ?? tenantMemberships.find((item) => item.company_id === null) ?? tenantMemberships[0] ?? null, [tenantMemberships, activeCompanyId]);
+  const activeCompanyId = companySelection.scope === companyScopeStorageKey && companySelection.ready ? companySelection.companyId : hasTenantWideMembership ? null : companyMembershipIds[0] ?? tenantMemberships[0]?.company_id ?? null;
+  const membership = useMemo(() => (activeCompanyId ? tenantMemberships.find((item) => item.company_id === activeCompanyId) : null) ?? tenantMemberships.find((item) => item.company_id === null && item.branch_id === null) ?? tenantMemberships.find((item) => item.company_id === null) ?? tenantMemberships[0] ?? null, [tenantMemberships, activeCompanyId]);
 
   const role = membership?.role ?? null;
   const isAdmin = role === "owner" || role === "manager";
