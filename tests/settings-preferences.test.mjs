@@ -6,7 +6,7 @@ const settings = await readFile(new URL("../src/routes/_authenticated/settings.t
 
 test("settings keeps company tax and invoice configuration separate from print preferences", () => {
   assert.match(settings, /tax_rate: z\.coerce\.number\(\)\.min\(0\)\.max\(100\)/);
-  assert.match(settings, /لا تغير هذه الخيارات الضرائب أو تسلسل أرقام الفواتير أو آلية إصدارها/);
+  assert.match(settings, /تفضيلات شخصية فقط؛ لا تغير الضرائب أو تسلسل أرقام الفواتير أو آلية إصدارها/);
   assert.match(settings, /supabase\.from\("tenants"\)[\s\S]*?\.update\(v\)/);
 });
 
