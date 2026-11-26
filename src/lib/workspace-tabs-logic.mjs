@@ -30,7 +30,7 @@ export function limitWorkspaceTabs(tabs) {
     const path = normalizeWorkspacePath(tab?.path);
     if (!path || seen.has(path) || typeof tab.title !== "string") continue;
     seen.add(path);
-    unique.push({ path, title: tab.title.slice(0, 100), ...(tab.pinned ? { pinned: true } : {}) });
+    unique.push({ path, title: tab.title.slice(0, 100), ...(tab.pinned ? { pinned: true } : {}), ...(tab.dirty ? { dirty: true } : {}) });
   }
   const pinned = unique.filter(tab => tab.pinned).slice(0, MAX_PINNED_WORKSPACE_TABS);
   const unpinned = unique.filter(tab => !tab.pinned);
