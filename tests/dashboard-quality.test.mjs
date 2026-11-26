@@ -282,3 +282,14 @@ test("dashboard hides branch-ambiguous customer totals and gates sensitive KPI c
   assert.match(dashboard, /hasPermission\("expenses\.view"\) && <Kpi/);
   assert.match(dashboard, /hasPermission\("reports\.view"\) && <Kpi label="الربح التقديري"/);
 });
+
+
+test("latest sales and kitchen operations are fail-closed and cache-isolated by user and scope", () => {
+  assert.match(dashboard, /dashboard-latest-orders", tenantId, user\?\.id, role/);
+  assert.match(dashboard, /dashboard-kitchen-overview", tenantId, user\?\.id, role/);
+  assert.match(dashboard, /dashboard-kitchen-counts", tenantId, user\?\.id, role/);
+  assert.match(dashboard, /if \(!membership\) scopedBranchIds = \[\]/);
+  assert.match(dashboard, /assignedBranch \? \[assignedBranch\.id\] : \[\]/);
+  assert.match(dashboard, /dashboard-kitchen-counts-v2:/);
+  assert.match(dashboard, /hasPermission\("kitchen\.view"\)/);
+});
