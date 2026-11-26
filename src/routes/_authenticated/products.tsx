@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Edit, Trash2, Package, Loader2, Search, Upload } from "lucide-react";
+import { Plus, Edit, Archive, RotateCcw, Package, Loader2, Search, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { PageHeader } from "@/components/page-header";
@@ -48,12 +48,14 @@ const schema = z.object({
 });
 
 function ProductsPage() {
-  const { tenantId, isAdmin, tenant, membership } = useActiveTenant();
+  const { tenantId, tenant, membership, isSuperOwner, hasPermission } = useActiveTenant();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState<string>("all");
+  const canCreateProduct = isSuperOwner || hasPermission("products.create") || hasPermission("products.manage");
+  const canEditProduct = isSuperOwner || hasPermission("products.edit") || hasPermission("products.manage");
 
   const cats = useQuery({
     queryKey: ["categories-min", tenantId],
@@ -89,6 +91,7 @@ function ProductsPage() {
 
   const upsert = useMutation({
     mutationFn: async (v: z.infer<typeof schema>) => {
+      if (editing ? !canEditProduct : !canCreateProduct) throw new Error("لا تملك صلاحية إنشاء المنتجات أو تعديلها.");
       const payload = { ...v, sku: v.sku || null, tenant_id: tenantId! };
       if (editing) {
         const { error } = await supabase.from("products").update(payload).eq("id", editing.id);
@@ -106,16 +109,17 @@ function ProductsPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشل"),
   });
 
-  const del = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("products").delete().eq("id", id);
+  const setProductActive = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      if (!canEditProduct) throw new Error("لا تملك صلاحية أرشفة المنتجات أو إعادة تفعيلها.");
+      const { error } = await supabase.from("products").update({ is_active: isActive }).eq("id", id).eq("tenant_id", tenantId!);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ["products", tenantId] });
-      toast.success("تم الحذف");
+      toast.success(variables.isActive ? "تمت إعادة تفعيل المنتج" : "تمت أرشفة المنتج مع الاحتفاظ بسجل المخزون والمبيعات");
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "فشل الحذف"),
+    onError: (e) => toast.error(e instanceof Error ? e.message : "فشل تحديث حالة المنتج"),
   });
 
   return (
@@ -124,7 +128,7 @@ function ProductsPage() {
         title="المنتجات"
         subtitle="أدر منتجات مطعمك مع الأسعار والصور والحد الأدنى للمخزون."
         action={
-          isAdmin && (
+          canCreateProduct && (
             <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditing(null); }}>
               <DialogTrigger asChild>
                 <Button><Plus className="ml-2 h-4 w-4" />منتج جديد</Button>
@@ -194,15 +198,19 @@ function ProductsPage() {
                   </span>
                   <span className="text-xs text-muted-foreground">/{p.unit}</span>
                 </div>
-                {isAdmin && (
+                {canEditProduct && (
                   <div className="mt-3 flex gap-1 border-t pt-3">
                     <Button size="sm" variant="ghost" className="flex-1" onClick={() => { setEditing(p); setOpen(true); }}>
                       <Edit className="ml-2 h-3 w-3" />تعديل
                     </Button>
-                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => {
-                      if (confirm(`حذف "${p.name}"؟`)) del.mutate(p.id);
+                    <Button size="sm" variant="ghost" className={p.is_active ? "text-amber-600" : "text-emerald-600"} disabled={setProductActive.isPending} onClick={() => {
+                      const next = !p.is_active;
+                      if (confirm(next ? `إعادة تفعيل "${p.name}"؟` : `أرشفة "${p.name}"؟ سيبقى سجل المخزون والمشتريات والمبيعات محفوظاً.`)) {
+                        setProductActive.mutate({ id: p.id, isActive: next });
+                      }
                     }}>
-                      <Trash2 className="h-3 w-3" />
+                      {p.is_active ? <Archive className="ml-2 h-3 w-3" /> : <RotateCcw className="ml-2 h-3 w-3" />}
+                      {p.is_active ? "أرشفة" : "إعادة تفعيل"}
                     </Button>
                   </div>
                 )}
