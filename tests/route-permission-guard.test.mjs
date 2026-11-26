@@ -8,6 +8,7 @@ const requiredRoutes = [
   ["/dashboard", "dashboard.view"],
   ["/reports", "reports.view"],
   ["/pos", "pos.use"],
+  ["/kitchen", "kitchen.view"],
   ["/sales", "sales.view"],
   ["/cash-sessions", "cash.view"],
   ["/customers", "customers.view"],
@@ -26,7 +27,7 @@ const requiredRoutes = [
   ["/products", "products.view"],
   ["/categories", "categories.view"],
   ["/users", "users.view"],
-  ["/users-admin", "users.manage"],
+  ["/users-admin", "users.view"],
   ["/team-permissions", "permissions.view"],
   ["/roles", "roles.view"],
   ["/companies", "companies.view"],
@@ -36,6 +37,8 @@ const requiredRoutes = [
   ["/notifications", "notifications.view"],
   ["/login-history", "login_history.view"],
   ["/audit-logs", "audit.view"],
+  ["/ads", "ads.view"],
+  ["/promotions", "promotions.view"],
   ["/settings", "settings.view"],
 ];
 
@@ -53,7 +56,12 @@ test("direct URL access is guarded and denied when permission lookup fails", () 
   assert.match(source, /return <Outlet \/>/);
   assert.match(source, /permissionsQuery\.isError/);
   assert.match(source, /ليس لديك صلاحية الوصول إلى هذه الصفحة/);
-  assert.match(source, /pathname === "\/owner-center" \|\| \(pathname === "\/admin" && totalCount > 0\)/);
+  assert.match(source, /normalizedPath === "\/owner-center"/);
+  assert.match(source, /tenant\?\.owner_id !== userId/);
+});
+
+test("route normalization safely strips trailing slashes", () => {
+  assert.ok(source.includes(String.raw`pathname.replace(/\/+$/, "")`));
 });
 
 test("nested routes use the most specific permission mapping", () => {
@@ -62,6 +70,16 @@ test("nested routes use the most specific permission mapping", () => {
 });
 
 test("first-owner bootstrap remains reachable only while no Super Owner exists", () => {
-  assert.match(source, /pathname === "\/admin" && totalCount > 0/);
-  assert.match(source, /const \{ isSuperOwner, totalCount, loading: ownerLoading \} = useSuperOwner\(\)/);
+  assert.match(source, /const isFirstOwnerBootstrap = normalizedPath === "\/admin" && superOwnerStatusKnown && totalCount === 0 && tenant\?\.owner_id === userId/);
+  assert.match(source, /isKnownRoute = !!requiredPermission \|\| ownerOnly \|\| isExplicitlyPublic \|\| isFirstOwnerBootstrap/);
+  assert.match(source, /normalizedPath === "\/admin" && \(!superOwnerStatusKnown \|\| totalCount > 0 \|\| tenant\?\.owner_id !== userId\)/);
+  assert.match(source, /statusKnown: superOwnerStatusKnown/);
+  assert.match(source, /statusError: superOwnerStatusError/);
+});
+
+
+test("profile and support are explicit authenticated open routes while unknown paths fail closed", () => {
+  assert.match(source, /AUTHENTICATED_OPEN_PATHS = new Set\(\["\/profile", "\/support"\]\)/);
+  assert.match(source, /if \(!isKnownRoute\)/);
+  assert.match(source, /لم يتم ربط هذا المسار بصلاحية معتمدة/);
 });
