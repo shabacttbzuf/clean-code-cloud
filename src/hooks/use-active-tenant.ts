@@ -205,7 +205,7 @@ export function useActiveTenant() {
   const [branchSelection, setBranchSelection] = useState<{ scope: string | null; branchId: string | null; ready: boolean }>({ scope: null, branchId: null, ready: false });
   useEffect(() => {
     if (!branchScopeKey || !membership || branchOptionsQuery.isLoading || branchOptionsQuery.isError) return;
-    const canSelectAll = isSuperOwner || (!membership.branch_id && ["owner", "manager", "accountant"].includes(membership.role));
+    const canSelectAll = !membership.branch_id && (isSuperOwner || ["owner", "manager", "accountant"].includes(membership.role));
     const storageKey = "ras-active-branch:" + branchScopeKey;
     const stored = typeof window !== "undefined" ? window.localStorage.getItem(storageKey) : null;
     const allowedIds = new Set(branchOptions.map((item) => item.id));
@@ -237,7 +237,7 @@ export function useActiveTenant() {
     queryClient.clear();
   }
   function switchBranch(id: string | null) {
-    const canSelectAll = isSuperOwner || (!membership?.branch_id && ["owner", "manager", "accountant"].includes(membership?.role ?? ""));
+    const canSelectAll = !membership?.branch_id && (isSuperOwner || ["owner", "manager", "accountant"].includes(membership?.role ?? ""));
     if (id === null && !canSelectAll) return;
     if (membership?.branch_id && id !== membership.branch_id) return;
     if (id !== null && !branchOptions.some((item) => item.id === id)) return;
