@@ -13,6 +13,7 @@ import { z } from "zod";
 import { PageHeader } from "@/components/page-header";
 import { useTheme, DEFAULT_DESIGN, type DesignSettings } from "@/lib/theme";
 import { useSuperOwner } from "@/hooks/use-super-owner";
+import { getUserSettingsPreferences } from "@/lib/settings-preferences";
 import { isAllowedCustomShortcutRoute, normalizeCustomShortcuts } from "@/lib/navigation-shortcuts";
 import { Palette, RotateCcw, Plus, Trash2, MonitorCog, Image, Building2 } from "lucide-react";
 
@@ -75,7 +76,7 @@ const schema = z.object({
 });
 
 function SettingsPage() {
-  const { tenant, tenantId, hasPermission } = useActiveTenant();
+  const { tenant, tenantId, hasPermission, userId } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
   const { design, saveDesign, resetDesign } = useTheme();
   const qc = useQueryClient();
@@ -91,6 +92,27 @@ function SettingsPage() {
   const [newTabTitle, setNewTabTitle] = useState("");
   const [newTabUrl, setNewTabUrl] = useState("/dashboard");
   const [platformBrand, setPlatformBrand] = useState({ brand_name: "إدارة الوتيري بلس", phone: "", promotional_text: "", website_url: "", logo_url: "", enabled: true, placement: "footer" });
+  const preferencesKey = `ras-settings-preferences-v1:${userId ?? "guest"}`;
+  const [preferences, setPreferences] = useState({
+    language: "ar", dateFormat: "YYYY-MM-DD", timeFormat: "24", timeZone: "Asia/Aden",
+    paperSize: "80mm", copies: "1", autoPrint: true,
+    notifyLowStock: true, notifyDelayedOrders: true, notifyInvoices: true,
+    notifyAdministration: true, notifyHr: true,
+  });
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
+  useEffect(() => {
+    setPreferencesLoaded(false);
+    try { setPreferences(getUserSettingsPreferences(userId)); }
+    catch { toast.error("تعذر قراءة تفضيلاتك؛ تم الإبقاء على القيم الافتراضية."); }
+    finally { setPreferencesLoaded(true); }
+  }, [preferencesKey, userId]);
+  function savePreferences() {
+    try {
+      window.localStorage.setItem(preferencesKey, JSON.stringify(preferences));
+      window.dispatchEvent(new Event("ras-settings-preferences-updated"));
+      toast.success("تم حفظ تفضيلات المستخدم على هذا الجهاز");
+    } catch { toast.error("تعذر حفظ التفضيلات على هذا الجهاز"); }
+  }
   const platformBrandQuery = useQuery({
     queryKey: ["platform-branding"],
     queryFn: async () => {
@@ -512,6 +534,36 @@ function SettingsPage() {
           </CardContent>
         </Card>
       )}
+      <Card>
+        <CardHeader><CardTitle>إعدادات الطباعة والفواتير</CardTitle><CardDescription>تفضيلات شخصية فقط؛ لا تغير الضرائب أو تسلسل أرقام الفواتير أو آلية إصدارها.</CardDescription></CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <label className="space-y-2 text-sm"><span>حجم الورق الافتراضي</span><select className="h-10 w-full rounded-md border bg-background px-3" value={preferences.paperSize} onChange={(e) => setPreferences((p) => ({ ...p, paperSize: e.target.value }))}><option value="80mm">حراري 80 مم</option><option value="58mm">حراري 58 مم</option><option value="A4">A4</option></select></label>
+          <label className="space-y-2 text-sm"><span>عدد النسخ</span><select className="h-10 w-full rounded-md border bg-background px-3" value={preferences.copies} onChange={(e) => setPreferences((p) => ({ ...p, copies: e.target.value }))}><option value="1">نسخة واحدة</option><option value="2">نسختان</option><option value="3">3 نسخ</option></select></label>
+          <label className="flex items-center gap-2 self-end rounded-lg border p-3 text-sm"><input type="checkbox" checked={preferences.autoPrint} onChange={(e) => setPreferences((p) => ({ ...p, autoPrint: e.target.checked }))} /> تفعيل الطباعة التلقائية</label>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>الإشعارات والتنبيهات</CardTitle><CardDescription>إيقاف نوع هنا لا يحذف الإشعارات السابقة، والتنبيهات الحرجة تبقى ظاهرة.</CardDescription></CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2">
+          {([
+            ["notifyLowStock", "انخفاض المخزون"], ["notifyDelayedOrders", "الطلبات المتأخرة"],
+            ["notifyInvoices", "الفواتير"], ["notifyAdministration", "التنبيهات الإدارية"], ["notifyHr", "الموارد البشرية"],
+          ] as const).map(([key, label]) => <label key={key} className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm"><span>{label}</span><input type="checkbox" checked={preferences[key]} onChange={(e) => setPreferences((p) => ({ ...p, [key]: e.target.checked }))} /></label>)}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>اللغة والتاريخ والوقت</CardTitle><CardDescription>الواجهة الحالية باللغة العربية؛ لا نعرض لغات غير مكتملة الترجمة.</CardDescription></CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="space-y-2 text-sm"><span>لغة الواجهة</span><select className="h-10 w-full rounded-md border bg-background px-3" value={preferences.language} onChange={(e) => setPreferences((p) => ({ ...p, language: e.target.value }))}><option value="ar">العربية</option></select></label>
+          <label className="space-y-2 text-sm"><span>تنسيق التاريخ</span><select className="h-10 w-full rounded-md border bg-background px-3" value={preferences.dateFormat} onChange={(e) => setPreferences((p) => ({ ...p, dateFormat: e.target.value }))}><option value="YYYY-MM-DD">2026-11-25</option><option value="DD/MM/YYYY">25/11/2026</option><option value="DD-MM-YYYY">25-11-2026</option></select></label>
+          <label className="space-y-2 text-sm"><span>تنسيق الوقت</span><select className="h-10 w-full rounded-md border bg-background px-3" value={preferences.timeFormat} onChange={(e) => setPreferences((p) => ({ ...p, timeFormat: e.target.value }))}><option value="24">24 ساعة</option><option value="12">12 ساعة</option></select></label>
+          <label className="space-y-2 text-sm"><span>المنطقة الزمنية</span><select className="h-10 w-full rounded-md border bg-background px-3" value={preferences.timeZone} onChange={(e) => setPreferences((p) => ({ ...p, timeZone: e.target.value }))}><option value="Asia/Aden">عدن / اليمن</option><option value="Asia/Riyadh">الرياض</option><option value="UTC">UTC</option><option value="local">حسب الجهاز</option></select></label>
+        </CardContent>
+      </Card>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4">
+        <div><h2 className="font-semibold">التفضيلات الشخصية</h2><p className="text-xs text-muted-foreground">تُحفظ بشكل مستقل لكل مستخدم على الجهاز الحالي.</p></div>
+        <Button type="button" onClick={savePreferences} disabled={!preferencesLoaded}>حفظ تفضيلاتي</Button>
+      </div>
     </div>
   );
 }

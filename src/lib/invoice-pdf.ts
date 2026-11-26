@@ -178,10 +178,13 @@ export function printInvoiceHTML(
     platform_website_url?: string | null;
     platform_brand_placement?: "header" | "footer" | "both" | null;
     platform_brand_enabled?: boolean;
+    formatted_created_at?: string;
   },
   paper: "58mm" | "80mm" | "A4" = "80mm",
   targetWindow?: Window | null,
+  copies = 1,
 ): boolean {
+  const safeCopies = Math.max(1, Math.min(3, Math.floor(Number(copies) || 1)));
   const pageCss =
     paper === "A4"
       ? "@page { size: A4; margin: 12mm; }"
@@ -255,7 +258,7 @@ export function printInvoiceHTML(
   <div class="divider"></div>
   <div class="meta">
     <div>فاتورة #<b>${data.invoice_no}</b></div>
-    <div>${formatDateTime(data.created_at)}</div>
+    <div>${escapeHtml(data.formatted_created_at || formatDateTime(data.created_at))}</div>
   </div>
   <div class="meta">
     <div>الكاشير: ${escapeHtml(data.cashier_name || "-")}</div>
@@ -292,7 +295,7 @@ export function printInvoiceHTML(
   <div class="center thanks">شكراً لزيارتكم — نتشرف بخدمتكم مجدداً</div>
   ${platformFooter}
 </div>
-<script>window.onload = function(){ setTimeout(function(){ window.print(); }, 150); };</script>
+<script>window.onload = function(){ var receipt=document.querySelector(".receipt"); var count=${safeCopies}; for(var i=1;i<count;i++){ var clone=receipt.cloneNode(true); clone.style.pageBreakBefore="always"; document.body.appendChild(clone); } setTimeout(function(){ window.print(); }, 150); };</script>
 </body>
 </html>`;
   const w = targetWindow === undefined

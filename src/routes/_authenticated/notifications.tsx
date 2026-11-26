@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { useAuthSession } from "@/hooks/use-auth-session";
 import { safeInternalNotificationPath, notificationPathPermission } from "@/lib/notification-links";
+import { getUserSettingsPreferences, isNotificationEnabled, formatUserDateTime } from "@/lib/settings-preferences";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +18,7 @@ function NotificationsPage() {
   const { tenantId, loading, hasPermission, isSuperOwner } = useActiveTenant();
   const navigate = useNavigate();
   const { user } = useAuthSession();
+  const preferences = getUserSettingsPreferences(user?.id);
   const qc = useQueryClient();
   const q = useQuery({
     queryKey: ["notifications-list", tenantId, user?.id],
@@ -67,7 +69,8 @@ function NotificationsPage() {
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر تحديث الإشعار"),
   });
-  const unread = (q.data?.items ?? []).filter((n: any) => !q.data?.readIds.has(n.id));
+  const visibleItems = (q.data?.items ?? []).filter((n: any) => isNotificationEnabled(n, preferences));
+  const unread = visibleItems.filter((n: any) => !q.data?.readIds.has(n.id));
   async function openNotification(notification: any) {
     const target = safeInternalNotificationPath(notification.action_path);
     if (!target) {
@@ -102,11 +105,11 @@ function NotificationsPage() {
             <p role="alert" className="text-sm text-destructive">تعذر تحميل الإشعارات. لم يتم تغيير حالة القراءة.</p>
             <Button variant="outline" onClick={() => void q.refetch()} disabled={q.isFetching}>إعادة المحاولة</Button>
           </div>
-        ) : q.isLoading ? <Loader2 className="mx-auto my-8 h-5 w-5 animate-spin" /> : (q.data?.items ?? []).length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground"><Bell className="h-8 w-8 opacity-40" /><div>لا توجد إشعارات بعد.</div></div>
+        ) : q.isLoading ? <Loader2 className="mx-auto my-8 h-5 w-5 animate-spin" /> : visibleItems.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground"><Bell className="h-8 w-8 opacity-40" /><div>لا توجد إشعارات تطابق تفضيلات العرض الحالية.</div></div>
         ) : (
           <div className="space-y-2">
-            {(q.data?.items ?? []).map((n: any) => {
+            {visibleItems.map((n: any) => {
               const isRead = q.data?.readIds.has(n.id);
               return <div key={n.id} className={`rounded-md border p-3 ${isRead ? "opacity-75" : "border-primary/40 bg-primary/[0.03]"}`}>
                 <div className="flex items-start justify-between gap-3">
@@ -118,7 +121,7 @@ function NotificationsPage() {
                 </div>
                 {n.body && <p className="mt-2 text-sm text-muted-foreground">{n.body}</p>}
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-[10px] text-muted-foreground">{new Date(n.created_at).toLocaleString("ar-YE")} — {n.audience_type}</div>
+                  <div className="text-[10px] text-muted-foreground">{formatUserDateTime(n.created_at, preferences)} — {n.audience_type}</div>
                   {n.action_path && (() => {
                     const target = safeInternalNotificationPath(n.action_path);
                     const requiredPermission = target ? notificationPathPermission(target) : null;
