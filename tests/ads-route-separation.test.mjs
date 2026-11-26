@@ -10,13 +10,13 @@ const authLayout = readFileSync(new URL("../src/routes/_authenticated/route.tsx"
 
 test("advertising management is a dedicated authenticated route", () => {
   assert.match(ads, /createFileRoute\("\/_authenticated\/ads"\)/);
-  assert.match(sidebar, /title: "الإعلانات", url: "\/ads", icon: Megaphone, permission: "ads.manage"/);
+  assert.match(sidebar, /title: "الإعلانات", url: "\/ads", icon: Megaphone, permission: "ads.view"/);
   assert.match(workspaceTabs, /\["\/ads", "الإعلانات"\]/);
-  assert.match(authLayout, /prefix: "\/ads", permission: "ads.manage"/);
+  assert.match(authLayout, /prefix: "\/ads", permission: "ads.view"/);
 });
 
 test("advertising management preserves tenant and company scope and permission checks", () => {
-  assert.match(ads, /get_my_permissions/);
+  assert.match(ads, /hasPermission\("ads\.view"\)/);
   assert.match(ads, /ads\.manage/);
   assert.match(ads, /\.eq\("tenant_id", tenantId!\)/);
   assert.match(ads, /\.eq\("company_id", membership\.company_id\)/);
