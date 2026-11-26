@@ -80,3 +80,16 @@
 - صُحح التصميم: التنفيذ الحساس أصبح `private.adjust_inventory_balance` كدالة SECURITY DEFINER مع صلاحية `inventory.adjust` ونطاق الفرع و`search_path` ثابت؛ أما `public.adjust_inventory_balance` فأصبح غلافاً SECURITY INVOKER فقط.
 - حُدث pgTAP ليتحقق من أن الغلاف العام ليس SECURITY DEFINER، وأن التنفيذ الخاص فقط يحمل الامتيازات، وأن كلاهما يمنع anon، مع استمرار اختبار DML المباشر وسجل حركة المخزون.
 - فشل Run #2583 كان في pgTAP فقط؛ TypeScript والاختبارات والبناء وChromium وتطبيق migrations نجحت. يلزم نجاح CI جديد قبل اعتماد الإصلاح.
+
+## 2026-11-27 — حصر الفروع ومصالحة تغييرات main
+
+- حُصر المستودع: 90 فرعاً و18 PR مفتوحاً وقت الفحص. تمت مقارنة جميع الفروع الـ89 الأخرى مع `integration/ui-ux-1.0`، وليس الاعتماد على أسماء الفروع وحدها.
+- `main` يحتوي 9 commits غير موجودة في تاريخ التكامل، بينما التكامل يحتوي 308 commits بعد نقطة الالتقاء. فُحصت commits التسعة وملفاتها، وقورنت أشجار الملفات: كل مسارات `main` الـ377 موجودة في التكامل (لا توجد ملفات main مفقودة). نسخ التكامل أحدث/أكثر تقييداً في غالبية الملفات المتباينة، لذلك لا يُستبدل بها.
+- التسعة: إضافة اختبار حذف مصروف ثم التراجع عنه (لا أثر نهائي)، اكتمال UI/UX 1.0، فهارس مفاتيح الإعلانات، commit فارغ لفحص صحة المصادقة، تدقيق Task 16، تعزيز اختبارات RLS، تحديث tracker، وسجل CI. وثيقة التدقيق واختبارات Task 16 وفهارس الإعلانات موجودة في التكامل بالفعل.
+- فُحصت الفروق الحساسة: نسخة التكامل من POS تحتاج إضافة ترشيح branch_id ومفتاح cache يشمل الفرع؛ نُفذ ذلك الآن مع قصر جلسة الشركة/المؤسسة بلا فرع على الحملات العامة فقط. نسخة التكامل من المطبخ تحتفظ بمزامنة offline idempotent، واختبارات RLS فيها أقوى من نظيرتها في main. لم تُنقل بيانات الهوية الحساسة (national_id/IP/device/password metadata) إلى صفحة الملف الذاتي؛ اختبار الخصوصية الحالي يمنع كشفها هناك.
+- لا حاجة إلى migration جديدة لتعديل POS؛ لم يتغير schema. لا تعديل لملف snapshot أو manifest في هذه الدفعة.
+- فرع `reconcile/security-notifications-into-integration` متقدم 4 commits ولا يتأخر عن التكامل، لكنه يضيف 19 ملف SQL فارغاً (0 bytes، جميعها SHA `e69de29...`) وworkflow مؤقتاً بصلاحية `contents: write` يولّد ملفات ترحيل فارغة تلقائياً. رُفض دمجه؛ نجاح workflow لا يثبت صلاحية migrations.
+- الفروع التي تاريخها مدمج/سلف للتكامل (ahead=0): `audit/prelaunch-security-and-release-hardening`, `docs/update-production-audit-after-merges`, `feature/enterprise-multicompany-identity-notifications`, `feature/prelaunch-hardening`, `fix/cash-session-company-scope`, `fix/customer-payment-idempotency-scope`, `fix/dashboard-auth-health-check`, `integration/task-18-offline-sync`, `reconcile/main-fixes-into-integration-v2`.
+- فروع تحتاج مراجعة انتقائية ولا تُدمج كتلة واحدة: `integration/task-15-permissions` (121 commits ahead/50 behind و79 ملفاً؛ فشل pgTAP في نسخته السابقة)، فروع offline validation المتعددة، `fix/security-phase-1` (تاريخ قديم متباعد)، وفروع UI/UX 01–20. بعض إصلاحات هذه الفروع نُقلت انتقائياً بالفعل؛ انظر تقرير المصالحة.
+- أحدث CI قبل هذه الدفعة: Run #2587 / `45893413771` على SHA `f492564d300eabc72a75302710e553ed2fd38646`: SUCCESS، بما في ذلك TypeScript والاختبارات والبناء وChromium وmigrations على قاعدة محلية نظيفة وpgTAP.
+- لم يحدث merge إلى `main` أو تعديل على قاعدة الإنتاج.

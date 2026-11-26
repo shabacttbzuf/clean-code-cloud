@@ -72,6 +72,12 @@ test("POS loads the full product catalogue and branch stock in deterministic pag
   assert.match(pos, /\.order\("product_id"\)/);
 });
 
+test("POS campaign delivery is isolated by the active branch and cache scope", () => {
+  assert.match(pos, /queryKey: \["pos-marketing-campaigns", tenantId, userId, membership\?\.company_id \?\? "tenant", branchId \?\? "all"\]/);
+  assert.match(pos, /query = query\.or\(`branch_id\.is\.null,branch_id\.eq\.\$\{branchId\}`\)/);
+  assert.match(pos, /query = query\.is\("branch_id", null\)/);
+});
+
 test("purchasing loads the full history and batches supplier, branch, and return lookups", () => {
   assert.match(purchases, /async function fetchAllRows<T>/);
   assert.match(purchases, /\.range\(from, from \+ pageSize - 1\)/);

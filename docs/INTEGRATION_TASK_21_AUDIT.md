@@ -489,3 +489,11 @@
 
 - فشل CI Run #2583 على SHA `280348ac7f02628ef8bc992721114791d8c0cb7f` في ثلاثة اختبارات pgTAP لأن الإصلاح الأول جعل RPC العام SECURITY DEFINER قابلاً للاستدعاء من authenticated، مخالفاً معيار نقل التنفيذ الحساس إلى `private`.
 - أُعيد تصميمه إلى `private.adjust_inventory_balance` SECURITY DEFINER وغلاف عام SECURITY INVOKER. لم تُقبل النسخة الأولى، ويظل الإصلاح بانتظار إعادة تحقق CI كاملة.
+
+## 2026-11-27 — مراجعة تاريخ main والفروع المتأخرة
+
+- مقارنة `main` مع `integration/ui-ux-1.0`: main متقدم 9 commits، والتكامل متقدم 308 commits عن merge base. فُحصت commits التسعة، وتبين أن كل مسارات main موجودة في التكامل؛ لا توجد ملفات مفقودة من main.
+- لم يُستبدل أي ملف متقدم بنسخة أقدم من main. نسخة التكامل تحتفظ بحماية خصوصية الملف الشخصي، واختبارات RLS الأشد، وتصميم offline idempotency، ومفاتيح cache المعزولة.
+- عولج فرق حقيقي واحد في POS: إعلانات POS أصبحت مفلترة على branch_id، وتُعرض الإعلانات العامة وحملات الفرع النشط فقط، ومفتاح React Query يتضمن المستخدم والشركة والفرع.
+- رُفض فرع `reconcile/security-notifications-into-integration` مؤقتاً لاحتوائه على 19 migration فارغاً وworkflow مؤقتاً بصلاحية كتابة المستودع.
+- لا يُعتبر PR #84 صالحاً للدمج لمجرد أنه يحتوي commits main التسعة؛ يظل التحقق من تكافؤ الشيفرة والـ CI شرطاً قبل إنشاء merge ancestry.

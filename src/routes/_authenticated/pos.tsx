@@ -402,7 +402,7 @@ function POSWorkspace() {
   });
 
   const posPromos = useQuery({
-    queryKey: ["pos-marketing-campaigns", tenantId, membership?.company_id ?? "tenant"],
+    queryKey: ["pos-marketing-campaigns", tenantId, userId, membership?.company_id ?? "tenant", branchId ?? "all"],
     queryFn: async () => {
       const now = new Date().toISOString();
       let query = supabase.from("marketing_campaigns")
