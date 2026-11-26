@@ -243,5 +243,6 @@ test("dashboard and POS campaign delivery honor branch targeting and safe event 
   assert.match(pos, /branch_id\.is\.null,branch_id\.eq\.\$\{branchId\}/);
   assert.match(pos, /\["pos-marketing-campaigns", tenantId, membership\?\.company_id \?\? "tenant", branchId\]/);
   assert.match(pos, /void \(async \(\) =>/);
-  assert.doesNotMatch(pos, /record_marketing_campaign_event[\s\S]{0,200}\.catch\(/);
+  assert.match(pos, /await \\(supabase\\.rpc as any\\)\\("record_marketing_campaign_event"/);
+  assert.match(pos, /if \\(error\\) console\\.warn\\("POS campaign impression tracking failed"/);
 });
