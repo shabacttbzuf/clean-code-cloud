@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatMoney } from "@/lib/format";
+import { calculatePromotionDiscount } from "@/lib/promotion-calculation.mjs";
 import { printInvoiceHTML, type InvoiceData } from "@/lib/invoice-pdf";
 import { PageHeader } from "@/components/page-header";
 import { getMyPosAccessStatus, verifyMyPosPasscode } from "@/lib/pos-access.functions";
@@ -538,26 +539,12 @@ function POSWorkspace() {
   const totalQty = useMemo(() => cart.reduce((s, i) => s + i.quantity, 0), [cart]);
   const subtotal = useMemo(() => cart.reduce((s, i) => s + i.unit_price * i.quantity, 0), [cart]);
   const manualDiscount = Math.max(0, Number(discount) || 0);
-  const promotionDiscount = useMemo(() => {
-    const offer = selectedPromotion;
-    if (!offer || subtotal < Number(offer.minimum_subtotal)) return 0;
-    const eligible = cart.filter((item) => !offer.product_id || item.product_id === offer.product_id);
-    const eligibleSubtotal = eligible.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
-    if (eligibleSubtotal <= 0) return 0;
-    let amount = 0;
-    if (offer.offer_type === "percentage") amount = eligibleSubtotal * Number(offer.discount_value) / 100;
-    else if (offer.offer_type === "fixed") amount = Math.min(eligibleSubtotal, Number(offer.discount_value));
-    else {
-      const rewardId = offer.reward_product_id || offer.product_id;
-      const buyQty = cart.filter((item) => item.product_id === offer.product_id).reduce((sum, item) => sum + item.quantity, 0);
-      const reward = cart.find((item) => item.product_id === rewardId);
-      const rewardQty = cart.filter((item) => item.product_id === rewardId).reduce((sum, item) => sum + item.quantity, 0);
-      const freeQty = Math.min(rewardQty, Math.floor(buyQty / Math.max(1, Number(offer.buy_quantity))) * Number(offer.get_quantity));
-      amount = freeQty * (reward?.unit_price ?? 0);
-    }
-    if (offer.max_discount !== null) amount = Math.min(amount, Number(offer.max_discount));
-    return Math.max(0, Math.min(amount, subtotal - manualDiscount));
-  }, [selectedPromotion, cart, subtotal, manualDiscount]);
+  const promotionDiscount = useMemo(() => calculatePromotionDiscount({
+    offer: selectedPromotion,
+    cart,
+    subtotal,
+    manualDiscount,
+  }), [selectedPromotion, cart, subtotal, manualDiscount]);
   const disc = Math.min(subtotal, manualDiscount + promotionDiscount);
   const taxable = Math.max(0, subtotal - disc);
   const taxRate = Number(tenant?.tax_rate ?? 0);
