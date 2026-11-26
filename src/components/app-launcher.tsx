@@ -2,10 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   Search, LayoutGrid, Crown, Building, Briefcase, BadgeCheck,
-  KeyRound, History, UsersRound, ShieldCheck, ScrollText, Palette, Bookmark,
+  KeyRound, History, UsersRound, ShieldCheck, ScrollText, Palette, Bookmark, Star, X, Clock, UserRound,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { normalizeCustomShortcuts } from "@/lib/navigation-shortcuts";
 import { useSuperOwner } from "@/hooks/use-super-owner";
@@ -16,14 +14,72 @@ import { Input } from "@/components/ui/input";
 type CustomShortcut = { title: string; url: string };
 type NavOverride = { title?: string; hidden?: boolean };
 
+// Base routes verified against src/routeTree.gen.ts. Parameterized detail routes
+// intentionally remain reachable from their parent application, not as launcher tiles.
+const APP_LAUNCHER_ROUTE_PATHS = new Set([
+  "/admin", "/audit-logs", "/branches", "/cash-sessions", "/categories",
+  "/companies", "/customers", "/dashboard", "/departments", "/employment-types",
+  "/expense-categories", "/expenses", "/job-titles", "/tables", "/kitchen",
+  "/login-history", "/notifications", "/support", "/owner-center", "/pos",
+  "/products", "/profile", "/purchases", "/reports", "/roles", "/settings",
+  "/ads", "/promotions", "/suppliers", "/team-permissions", "/users",
+  "/users-admin", "/hr/attendance", "/hr/compensation", "/hr/employees",
+  "/hr/leaves", "/hr/payroll", "/inventory", "/inventory/movements", "/sales",
+]);
+
+const APP_DESCRIPTIONS: Record<string, string> = {
+  "/dashboard": "ملخص الأداء ومؤشرات العمل",
+  "/reports": "التقارير والتحليلات التشغيلية",
+  "/pos": "إنشاء المبيعات وإدارة نقطة البيع",
+  "/tables": "حالة الطاولات والطلبات",
+  "/sales": "الفواتير وسجل المبيعات",
+  "/cash-sessions": "فتح وإغلاق الورديات النقدية",
+  "/customers": "ملفات العملاء وحركتهم",
+  "/notifications": "التنبيهات ومتابعة المستجدات",
+  "/kitchen": "متابعة وتجهيز طلبات المطبخ",
+  "/inventory": "الأرصدة ومتابعة المخزون",
+  "/inventory/movements": "حركة الأصناف وسجل التغييرات",
+  "/suppliers": "بيانات الموردين",
+  "/purchases": "طلبات وفواتير المشتريات",
+  "/expenses": "تسجيل ومراجعة المصروفات",
+  "/expense-categories": "تنظيم تصنيفات المصروفات",
+  "/hr/employees": "ملفات الموظفين",
+  "/hr/attendance": "الحضور والانصراف",
+  "/hr/leaves": "طلبات الإجازات",
+  "/hr/compensation": "المكافآت والحسميات",
+  "/hr/payroll": "إدارة الرواتب",
+  "/support": "المساعدة والإبلاغ عن المشكلات",
+  "/branches": "إدارة الفروع",
+  "/products": "كتالوج المنتجات",
+  "/categories": "تصنيفات المنتجات",
+  "/users": "حسابات الموظفين",
+  "/team-permissions": "صلاحيات أعضاء الفريق",
+  "/settings": "إعدادات الشركة والنظام",
+  "/ads": "إدارة الإعلانات",
+  "/promotions": "العروض والخصومات",
+  "/users-admin": "إدارة المستخدمين المؤسسية",
+  "/companies": "الشركات التابعة",
+  "/departments": "الهيكل الإداري",
+  "/job-titles": "المسميات الوظيفية",
+  "/employment-types": "أنواع التوظيف",
+  "/roles": "الأدوار الوظيفية",
+  "/login-history": "سجل جلسات الدخول",
+  "/owner-center": "إدارة المالك الرئيسي",
+  "/admin": "إدارة وتهيئة النظام",
+  "/audit-logs": "سجل العمليات والتدقيق",
+  "/profile": "بيانات حسابك وتفضيلاته",
+};
+
 export function AppLauncher() {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const launcherRef = useRef<HTMLDivElement>(null);
   const [customItems, setCustomItems] = useState<CustomShortcut[]>([]);
   const [navOverrides, setNavOverrides] = useState<Record<string, NavOverride>>({});
-  const { tenantId, userId } = useActiveTenant();
-  const { isSuperOwner, totalCount } = useSuperOwner();
+  const [favoriteUrls, setFavoriteUrls] = useState<string[]>([]);
+  const [usageCounts, setUsageCounts] = useState<Record<string, number>>({});
+  const { tenantId, userId, permissions, permissionsError, isSuperOwner } = useActiveTenant();
+  const { totalCount } = useSuperOwner();
 
   useEffect(() => {
     if (!open) return;
@@ -65,21 +121,36 @@ export function AppLauncher() {
     };
   }, []);
 
-  const permissions = useQuery({
-    queryKey: ["app-launcher-permissions", tenantId, userId],
-    queryFn: async () => {
-      if (!tenantId) return new Set<string>();
-      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId });
-      if (error) throw error;
-      return new Set<string>((data ?? []) as string[]);
-    },
-    enabled: !!tenantId && !!userId && !isSuperOwner,
-    staleTime: 30_000,
-  });
+  useEffect(() => {
+    try {
+      const favorites = JSON.parse(window.localStorage.getItem("ras-app-launcher-favorites-v1") || "[]");
+      setFavoriteUrls(Array.isArray(favorites) ? favorites.filter((value): value is string => typeof value === "string") : []);
+    } catch { setFavoriteUrls([]); }
+    try {
+      const usage = JSON.parse(window.localStorage.getItem("ras-app-launcher-usage-v1") || "{}");
+      setUsageCounts(usage && typeof usage === "object" && !Array.isArray(usage) ? usage : {});
+    } catch { setUsageCounts({}); }
+  }, []);
+
+  const toggleFavorite = (url: string) => {
+    setFavoriteUrls((current) => {
+      const next = current.includes(url) ? current.filter((item) => item !== url) : [...current, url];
+      try { window.localStorage.setItem("ras-app-launcher-favorites-v1", JSON.stringify(next)); } catch { /* storage may be unavailable */ }
+      return next;
+    });
+  };
+
+  const recordUsage = (url: string) => {
+    setUsageCounts((current) => {
+      const next = { ...current, [url]: (current[url] ?? 0) + 1 };
+      try { window.localStorage.setItem("ras-app-launcher-usage-v1", JSON.stringify(next)); } catch { /* storage may be unavailable */ }
+      return next;
+    });
+  };
 
   const groups = useMemo(() => {
     const allowed = (item: { permission?: string }) =>
-      isSuperOwner || (!!permissions.data && (!item.permission || permissions.data.has(item.permission)));
+      !item.permission || isSuperOwner || (!permissionsError && permissions.has(item.permission));
     const enterpriseGroup: AppNavigationGroup = {
       label: "المؤسسة",
       items: [
@@ -102,6 +173,7 @@ export function AppLauncher() {
       ...appNavigationGroups,
       enterpriseGroup,
       { label: "النظام", items: systemItems },
+      { label: "الحساب", items: [{ title: "ملفي الشخصي", url: "/profile", icon: UserRound }] },
       ...(isSuperOwner && customItems.length ? [{
         label: "اختصارات مخصصة",
         items: customItems.map((item) => ({ title: item.title, url: item.url, icon: Bookmark })),
@@ -115,15 +187,32 @@ export function AppLauncher() {
         .filter((item) => {
           const basePath = item.url.split("#")[0];
           const effectiveTitle = navOverrides[basePath]?.title?.trim() || item.title;
-          return !navOverrides[basePath]?.hidden && allowed(item) &&
-            (effectiveTitle.toLocaleLowerCase("ar").includes(needle) || group.label.toLocaleLowerCase("ar").includes(needle));
+          const searchableNames = [item.title, effectiveTitle].map((title) => title.toLocaleLowerCase("ar"));
+          return APP_LAUNCHER_ROUTE_PATHS.has(basePath) &&
+            !navOverrides[basePath]?.hidden && allowed(item) &&
+            (searchableNames.some((title) => title.includes(needle)) || group.label.toLocaleLowerCase("ar").includes(needle));
         })
         .map((item) => ({
           ...item,
           title: navOverrides[item.url.split("#")[0]]?.title?.trim() || item.title,
         })),
     })).filter((group) => group.items.length);
-  }, [isSuperOwner, totalCount, permissions.data, customItems, navOverrides, search]);
+  }, [isSuperOwner, totalCount, permissions, permissionsError, customItems, navOverrides, search]);
+
+  // Build shortcuts only from the currently visible, permission-filtered navigation.
+  // This prevents stale local favorites/usage entries from exposing inaccessible routes.
+  const visibleItems = useMemo(() => groups.flatMap((group) => group.items), [groups]);
+  const favorites = useMemo(
+    () => visibleItems.filter((item) => favoriteUrls.includes(item.url)),
+    [visibleItems, favoriteUrls],
+  );
+  const mostUsed = useMemo(
+    () => visibleItems
+      .filter((item) => (usageCounts[item.url] ?? 0) > 0)
+      .sort((a, b) => (usageCounts[b.url] ?? 0) - (usageCounts[a.url] ?? 0))
+      .slice(0, 6),
+    [visibleItems, usageCounts],
+  );
 
   return (
     <div className="relative" ref={launcherRef}>
@@ -131,11 +220,48 @@ export function AppLauncher() {
         <LayoutGrid className="h-[18px] w-[18px]" />
       </Button>
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 max-h-[min(78vh,680px)] w-[min(92vw,460px)] overflow-y-auto rounded-2xl border bg-popover p-3 text-popover-foreground shadow-2xl ring-1 ring-black/5" dir="rtl">
+        <div className="absolute right-0 top-full z-50 mt-2 max-h-[min(78vh,680px)] w-[min(94vw,520px)] overflow-y-auto rounded-2xl border border-slate-200 bg-popover p-3 text-popover-foreground shadow-2xl ring-1 ring-black/5 sm:p-4" dir="rtl">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-bold text-[#173b67]">التطبيقات والأقسام</h2>
+              <p className="text-[11px] text-muted-foreground">وصول سريع إلى وحدات النظام المتاحة لك</p>
+            </div>
+            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-full" aria-label="إغلاق لوحة التطبيقات" onClick={() => { setOpen(false); setSearch(""); }}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
           <div className="mb-3 flex items-center gap-2">
             <Search className="h-4 w-4 text-muted-foreground" />
             <Input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ابحث عن تطبيق..." aria-label="البحث عن تطبيق" />
           </div>
+          {!search.trim() && (favorites.length > 0 || mostUsed.length > 0) && (
+            <div className="mb-4 grid gap-3 sm:grid-cols-2">
+              {favorites.length > 0 && (
+                <section className="rounded-xl border border-amber-200/80 bg-amber-50/50 p-3">
+                  <h3 className="mb-2 flex items-center gap-2 text-xs font-bold text-amber-800"><Star className="h-3.5 w-3.5 fill-current" /> المفضلة</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {favorites.slice(0, 6).map((item) => (
+                      <Link key={item.url} to={item.url as any} onClick={() => { recordUsage(item.url); setOpen(false); }} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-xs font-semibold hover:border-amber-400">
+                        <item.icon className="h-4 w-4 text-amber-700" />{item.title}
+                      </Link>
+                    ))}
+                  </div>
+                </section>
+              )}
+              {mostUsed.length > 0 && (
+                <section className="rounded-xl border border-blue-100 bg-blue-50/50 p-3">
+                  <h3 className="mb-2 flex items-center gap-2 text-xs font-bold text-[#174b91]"><Clock className="h-3.5 w-3.5" /> الأكثر استخداماً</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {mostUsed.map((item) => (
+                      <Link key={item.url} to={item.url as any} onClick={() => { recordUsage(item.url); setOpen(false); }} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-100 bg-white px-2.5 py-2 text-xs font-semibold hover:border-blue-300">
+                        <item.icon className="h-4 w-4 text-[#174b91]" />{item.title}
+                      </Link>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </div>
+          )}
           {permissions.isError ? <p role="alert" className="p-3 text-sm text-destructive">تعذر تحميل صلاحيات التطبيقات.</p> :
             permissions.isLoading && !isSuperOwner ? <p className="p-3 text-sm text-muted-foreground">جارٍ التحقق من الصلاحيات...</p> :
             groups.length ? groups.map((group) => (
@@ -143,14 +269,22 @@ export function AppLauncher() {
                 <h3 className="mb-2 text-xs font-semibold text-muted-foreground">{group.label}</h3>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {group.items.map((item) => (
-                    <Link key={item.url} to={item.url as any} onClick={() => { setOpen(false); setSearch(""); }} className="flex min-h-[76px] items-center gap-3 rounded-2xl border border-slate-200/80 bg-white p-3 text-sm font-semibold shadow-sm transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md">
-                      <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ring-1 ${navigationIconTone(item.url)}`}><item.icon className="h-5 w-5" /></span>
-                      <span>{item.title}</span>
-                    </Link>
+                    <div key={item.url} className="group relative">
+                      <Link to={item.url as any} onClick={() => { recordUsage(item.url); setOpen(false); setSearch(""); }} className="flex min-h-[76px] items-center gap-3 rounded-2xl border border-slate-200/80 bg-white p-3 pe-9 text-sm font-semibold shadow-sm transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                        <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ring-1 ${navigationIconTone(item.url)}`}><item.icon className="h-5 w-5" /></span>
+                        <span className="min-w-0 text-right">
+                          <span className="block truncate">{item.title}</span>
+                          <span className="mt-0.5 block truncate text-[10px] font-normal text-slate-500">{APP_DESCRIPTIONS[item.url.split("#")[0]] || "فتح هذه الوحدة من النظام"}</span>
+                        </span>
+                      </Link>
+                      <button type="button" aria-label={favoriteUrls.includes(item.url) ? `إزالة ${item.title} من المفضلة` : `إضافة ${item.title} إلى المفضلة`} aria-pressed={favoriteUrls.includes(item.url)} onClick={() => toggleFavorite(item.url)} className="absolute right-2 top-1/2 z-10 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-lg text-amber-500 transition hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
+                        <Star className={`h-4 w-4 ${favoriteUrls.includes(item.url) ? "fill-current" : ""}`} />
+                      </button>
+                    </div>
                   ))}
                 </div>
               </section>
-            )) : <p className="p-4 text-center text-sm text-muted-foreground">لا توجد تطبيقات مطابقة أو متاحة.</p>}
+            )) : <p className="p-4 text-center text-sm text-muted-foreground">{search.trim() ? "لا توجد نتائج مطابقة لبحثك." : "لا توجد تطبيقات متاحة لحسابك حالياً."}</p>}
         </div>
       )}
     </div>
