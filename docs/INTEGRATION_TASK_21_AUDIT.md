@@ -484,3 +484,8 @@
 - السبب الوظيفي الحقيقي: الدالة `public.adjust_inventory_balance` أعيد تعريفها في migration `20261111000019` بحيث تعتمد على دور `warehouse` أو `is_tenant_admin` ولا تفرض `inventory.adjust` ولا `private.can_access_branch`؛ لذلك لا تتطابق مع نظام الصلاحيات الدقيقة ولا مع فرع المستخدم.
 - أسباب اختبارات إضافية غير دقيقة: اختبارات المصروفات والمنتجات اعتبرت السياسات التقييدية (RESTRICTIVE) سياسات منح (PERMISSIVE)، واختبار قراءة المخزون طلب سياسة قديمة أزيلت عمداً في `20261119010000_pre_sale_security_performance_hardening.sql`. اختبار عدد سياسات الحملات كان يتوقع 4 رغم وجود سياسات نطاق إضافية.
 - أُصلح الخلل الفعلي على فرع التكامل بترحيل متابعة `20261126220000_inventory_adjustment_permission_and_branch_guard.sql`، وتعديل صفحة المخزون لاستخدام `hasPermission("inventory.adjust")`، وإضافة اختبارات Node وpgTAP. لا يُنقل PR #79 كاملاً حتى تصحيح اختبارات RLS المتقادمة ومراجعة بقية تغييرات الصلاحيات.
+
+### تصحيح لاحق لخلل RPC المخزون
+
+- فشل CI Run #2583 على SHA `280348ac7f02628ef8bc992721114791d8c0cb7f` في ثلاثة اختبارات pgTAP لأن الإصلاح الأول جعل RPC العام SECURITY DEFINER قابلاً للاستدعاء من authenticated، مخالفاً معيار نقل التنفيذ الحساس إلى `private`.
+- أُعيد تصميمه إلى `private.adjust_inventory_balance` SECURITY DEFINER وغلاف عام SECURITY INVOKER. لم تُقبل النسخة الأولى، ويظل الإصلاح بانتظار إعادة تحقق CI كاملة.

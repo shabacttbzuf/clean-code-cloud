@@ -6,7 +6,7 @@ DROP POLICY IF EXISTS "Warehouse and admins manage inventory" ON public.inventor
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE public.inventory FROM PUBLIC, anon, authenticated;
 GRANT ALL ON TABLE public.inventory TO service_role;
 
-CREATE OR REPLACE FUNCTION public.adjust_inventory_balance(
+CREATE OR REPLACE FUNCTION private.adjust_inventory_balance(
   _tenant_id uuid,
   _product_id uuid,
   _branch_id uuid,
@@ -86,6 +86,26 @@ BEGIN
   END IF;
 END;
 $function$;
+
+CREATE OR REPLACE FUNCTION public.adjust_inventory_balance(
+  _tenant_id uuid,
+  _product_id uuid,
+  _branch_id uuid,
+  _target_quantity numeric,
+  _reason text
+)
+RETURNS void
+LANGUAGE sql
+SECURITY INVOKER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $function$
+  SELECT private.adjust_inventory_balance(
+    _tenant_id, _product_id, _branch_id, _target_quantity, _reason
+  );
+$function$;
+
+REVOKE ALL ON FUNCTION private.adjust_inventory_balance(uuid, uuid, uuid, numeric, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION private.adjust_inventory_balance(uuid, uuid, uuid, numeric, text) TO authenticated, service_role;
 
 REVOKE ALL ON FUNCTION public.adjust_inventory_balance(uuid, uuid, uuid, numeric, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.adjust_inventory_balance(uuid, uuid, uuid, numeric, text) TO authenticated, service_role;

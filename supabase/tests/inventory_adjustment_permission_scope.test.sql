@@ -40,25 +40,29 @@ SELECT ok(
   'Legacy broad inventory management policy is removed'
 );
 SELECT ok(
-  (SELECT prosecdef FROM pg_proc WHERE oid='public.adjust_inventory_balance(uuid,uuid,uuid,numeric,text)'::regprocedure)
+  NOT (SELECT prosecdef FROM pg_proc WHERE oid='public.adjust_inventory_balance(uuid,uuid,uuid,numeric,text)'::regprocedure)
   AND has_function_privilege('authenticated', 'public.adjust_inventory_balance(uuid,uuid,uuid,numeric,text)'::regprocedure, 'EXECUTE')
   AND NOT has_function_privilege('anon', 'public.adjust_inventory_balance(uuid,uuid,uuid,numeric,text)'::regprocedure, 'EXECUTE'),
-  'Authenticated stock adjustment remains available only through the SECURITY DEFINER RPC'
+  'Public stock adjustment RPC is an invoker wrapper callable by authenticated users only'
 );
 SELECT ok(
-  EXISTS (
+  (SELECT prosecdef FROM pg_proc WHERE oid='private.adjust_inventory_balance(uuid,uuid,uuid,numeric,text)'::regprocedure)
+  AND has_function_privilege('authenticated', 'private.adjust_inventory_balance(uuid,uuid,uuid,numeric,text)'::regprocedure, 'EXECUTE')
+  AND NOT has_function_privilege('anon', 'private.adjust_inventory_balance(uuid,uuid,uuid,numeric,text)'::regprocedure, 'EXECUTE')
+  AND EXISTS (
     SELECT 1 FROM pg_proc p
     CROSS JOIN LATERAL unnest(coalesce(p.proconfig, ARRAY[]::text[])) AS setting(value)
-    WHERE p.oid='public.adjust_inventory_balance(uuid,uuid,uuid,numeric,text)'::regprocedure
+    WHERE p.oid='private.adjust_inventory_balance(uuid,uuid,uuid,numeric,text)'::regprocedure
       AND setting.value='search_path=pg_catalog, public, private, pg_temp'
   ),
-  'Stock adjustment RPC pins a safe search_path'
+  'Private stock adjustment implementation is SECURITY DEFINER with a pinned search_path'
 );
 SELECT ok(
-  pg_get_functiondef('public.adjust_inventory_balance(uuid,uuid,uuid,numeric,text)'::regprocedure) ILIKE '%inventory.adjust%'
-  AND pg_get_functiondef('public.adjust_inventory_balance(uuid,uuid,uuid,numeric,text)'::regprocedure) ILIKE '%private.can_access_branch%'
-  AND pg_get_functiondef('public.adjust_inventory_balance(uuid,uuid,uuid,numeric,text)'::regprocedure) ILIKE '%inventory_transactions%',
-  'Stock adjustment RPC enforces granular permission, branch access, and movement history'
+  pg_get_functiondef('private.adjust_inventory_balance(uuid,uuid,uuid,numeric,text)'::regprocedure) ILIKE '%inventory.adjust%'
+  AND pg_get_functiondef('private.adjust_inventory_balance(uuid,uuid,uuid,numeric,text)'::regprocedure) ILIKE '%private.can_access_branch%'
+  AND pg_get_functiondef('private.adjust_inventory_balance(uuid,uuid,uuid,numeric,text)'::regprocedure) ILIKE '%inventory_transactions%'
+  AND pg_get_functiondef('public.adjust_inventory_balance(uuid,uuid,uuid,numeric,text)'::regprocedure) ILIKE '%private.adjust_inventory_balance%',
+  'Private RPC enforces granular permission, branch access, movement history, and is called by the public invoker wrapper'
 );
 
 SELECT * FROM finish();

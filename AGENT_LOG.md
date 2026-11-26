@@ -73,3 +73,10 @@
 - أضيف اختبار Node واختبار pgTAP للتحقق من الصلاحية، الفرع، سجل الحركة، وعدم منح DML المباشر.
 - ملاحظة تدقيق PR #79: CI على SHA `861ded99c862bf2840cec13897b40dc0f1c7615a` نجح في TypeScript والاختبارات والبناء وتطبيق migrations، لكنه فشل في pgTAP. فشل RPC inventory حقيقي بسبب غياب فحص `inventory.adjust` و`private.can_access_branch` في النسخة المستبدلة؛ بعض اختبارات الحذف وسياسة قراءة المخزون كانت تتحقق من أسماء/أنواع سياسات قديمة أو لا تميز permissive عن restrictive. لم يُدمج PR #79.
 - لم تُطبق أي تغييرات على Supabase الإنتاجي.
+
+## تصحيح فشل pgTAP في المرحلة 15 — تغليف RPC المخزون — 26 نوفمبر 2026
+
+- كشف CI Run #2583 على SHA `280348ac7f02628ef8bc992721114791d8c0cb7f` أن إضافة `adjust_inventory_balance` كدالة SECURITY DEFINER في المخطط العام خالفت اختبارات العزل التي تمنع الدوال العامة ذات الامتيازات من أن تكون قابلة للاستدعاء مباشرة.
+- صُحح التصميم: التنفيذ الحساس أصبح `private.adjust_inventory_balance` كدالة SECURITY DEFINER مع صلاحية `inventory.adjust` ونطاق الفرع و`search_path` ثابت؛ أما `public.adjust_inventory_balance` فأصبح غلافاً SECURITY INVOKER فقط.
+- حُدث pgTAP ليتحقق من أن الغلاف العام ليس SECURITY DEFINER، وأن التنفيذ الخاص فقط يحمل الامتيازات، وأن كلاهما يمنع anon، مع استمرار اختبار DML المباشر وسجل حركة المخزون.
+- فشل Run #2583 كان في pgTAP فقط؛ TypeScript والاختبارات والبناء وChromium وتطبيق migrations نجحت. يلزم نجاح CI جديد قبل اعتماد الإصلاح.
