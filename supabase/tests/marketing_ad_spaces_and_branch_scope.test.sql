@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(15);
+SELECT plan(16);
 
 SELECT has_table('public', 'marketing_ad_spaces',
   'A first-class advertising spaces table exists');
