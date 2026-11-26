@@ -48,15 +48,17 @@ BEGIN
 
   IF _supplier_id IS NOT NULL AND NOT EXISTS (
     SELECT 1 FROM public.suppliers
-     WHERE id = _supplier_id AND tenant_id = _tenant_id
+     WHERE id = _supplier_id AND tenant_id = _tenant_id AND is_active = true
   ) THEN
-    RAISE EXCEPTION 'Supplier does not belong to the requested tenant'
+    RAISE EXCEPTION 'Supplier does not belong to the requested tenant or is inactive'
       USING ERRCODE = '23503';
   END IF;
 
-  IF jsonb_typeof(_items) <> 'array'
-     OR jsonb_array_length(_items) = 0
-     OR jsonb_array_length(_items) > 300 THEN
+  IF _items IS NULL OR jsonb_typeof(_items) IS DISTINCT FROM 'array' THEN
+    RAISE EXCEPTION 'Purchase items must be a JSON array'
+      USING ERRCODE = '22023';
+  END IF;
+  IF jsonb_array_length(_items) = 0 OR jsonb_array_length(_items) > 300 THEN
     RAISE EXCEPTION 'Purchase must contain between 1 and 300 items'
       USING ERRCODE = '22023';
   END IF;
@@ -71,7 +73,7 @@ BEGIN
     v_cost_price := (v_item->>'cost_price')::numeric;
 
     IF v_quantity IS NULL OR v_quantity <= 0 OR v_quantity > 999999.999
-       OR v_cost_price IS NULL OR v_cost_price < 0
+       OR v_cost_price IS NULL OR v_cost_price = 'NaN'::numeric OR v_cost_price < 0
     THEN
       RAISE EXCEPTION 'Invalid purchase quantity or cost price'
         USING ERRCODE = '22023';
