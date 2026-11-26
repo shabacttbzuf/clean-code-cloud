@@ -10,11 +10,11 @@ test("settings keeps company tax and invoice configuration separate from print p
   assert.match(settings, /supabase\.from\("tenants"\)[\s\S]*?\.update\(v\)/);
 });
 
-test("branch and user administration remain in their dedicated modules", () => {
-  assert.match(settings, /to="\/branches"/);
-  assert.match(settings, /to="\/profile"/);
-  assert.match(settings, /to="\/users-admin"/);
-  assert.match(settings, /to="\/team-permissions"/);
+test("branch and user administration remain configurable as dedicated navigation modules", () => {
+  for (const path of ["/branches", "/profile", "/users-admin", "/team-permissions"]) {
+    assert.match(settings, new RegExp(`url: "\\${path}"`));
+  }
+  assert.match(settings, /MANAGEABLE_NAV_ITEMS\.map/);
 });
 
 test("personal preferences are namespaced per authenticated user and persisted locally", () => {
