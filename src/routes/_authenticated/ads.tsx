@@ -142,6 +142,27 @@ export function AdsPage() {
     onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر إنشاء المساحة الإعلانية"),
   });
 
+  const toggleAdSpace = useMutation({
+    mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
+      let query = supabase.from("marketing_ad_spaces")
+        .update({ is_active: !active, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .eq("tenant_id", tenantId!);
+      if (!isSuperOwner && !isTenantOwner) {
+        if (!membership?.company_id) throw new Error("لا يوجد نطاق شركة مصرح به لإدارة هذه المساحة.");
+        query = query.eq("company_id", membership.company_id);
+      }
+      const { data, error } = await query.select("id").maybeSingle();
+      if (error) throw error;
+      if (!data?.id) throw new Error("لم يتم العثور على المساحة ضمن نطاق الشركة والفرع المصرح به.");
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["marketing-ad-spaces", tenantId] });
+      toast.success("تم تحديث حالة المساحة الإعلانية");
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر تحديث حالة المساحة الإعلانية"),
+  });
+
   const campaigns = useQuery({
     queryKey: ["marketing-campaigns", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async (): Promise<Campaign[]> => {
@@ -357,7 +378,21 @@ export function AdsPage() {
             </Button>
           </div>
           <div className="flex flex-wrap gap-2">
-            {(adSpaces.data ?? []).map((space) => <span key={space.id} className="rounded-full border px-3 py-1 text-xs">{space.name} · {space.branch_id ? "فرعي" : "عام"} · {space.is_active ? "نشط" : "متوقف"}</span>)}
+            {(adSpaces.data ?? []).map((space) => (
+              <div key={space.id} className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs">
+                <span>{space.name} · {space.branch_id ? "فرعي" : "عام"} · {space.is_active ? "نشط" : "متوقف"}</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs"
+                  disabled={toggleAdSpace.isPending}
+                  onClick={() => toggleAdSpace.mutate({ id: space.id, active: space.is_active })}
+                >
+                  {space.is_active ? "إيقاف" : "تفعيل"}
+                </Button>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
