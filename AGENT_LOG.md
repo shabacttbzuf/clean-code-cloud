@@ -63,3 +63,13 @@
 - حدود الإنجاز: لا تزال المساحات لا تدعم إعادة التسمية أو الحذف من الواجهة، ويلزم اختبار يدوي على Android/HTTPS والتحقق من ظهور الحملات لكل نطاق مستخدم. لذلك تبقى المهمة 08 جزئية ولا تُعلن مكتملة.
 - PR #72 ما زال مفتوحاً ومسودة و`mergeable=false` / `dirty`. آخر مقارنة مع `main`: فرع التكامل متقدم بـ300 commit ومتأخر بـ9 commits. لا دمج أو rebase أو force-push.
 - لم تُطبق أي Migration على Supabase الإنتاجي، ولم تتغير بيانات الإنتاج أو الأسرار، ولم يحدث دمج إلى `main`.
+
+## المرحلة 15 — ضبط صلاحية تعديل المخزون — 26 نوفمبر 2026
+
+- كشف فحص فرع `integration/task-15-permissions` أن migration `20261111000019_harden_definer_paths_and_inventory_branch_scope.sql` أعادت دالة `adjust_inventory_balance` إلى فحص دور `warehouse` أو مدير المؤسسة، متجاوزة `inventory.adjust` رغم أن ترحيلاً أسبق كان قد أضاف الفحص الدقيق.
+- أُضيف ترحيل متابعة `20261126220000_inventory_adjustment_permission_and_branch_guard.sql`: يفرض `inventory.adjust` مع نطاق الفرع، يثبت `search_path`، ويحتفظ بقفل المنتج والتحديث الذري وسجل `inventory_transactions`.
+- أُلغيت صلاحيات DML المباشر للمستخدمين الموثقين على `public.inventory` مع إبقاء SELECT وامتيازات `service_role`، وأزيلت سياسة الإدارة الواسعة؛ جميع تغييرات الرصيد تمر عبر RPC الذي يسجل الحركة.
+- حُدثت صفحة المخزون لاستخدام `hasPermission("inventory.adjust")` بدلاً من استنتاج السماح من اسم الدور، مع إعادة التحقق قبل تنفيذ mutation.
+- أضيف اختبار Node واختبار pgTAP للتحقق من الصلاحية، الفرع، سجل الحركة، وعدم منح DML المباشر.
+- ملاحظة تدقيق PR #79: CI على SHA `861ded99c862bf2840cec13897b40dc0f1c7615a` نجح في TypeScript والاختبارات والبناء وتطبيق migrations، لكنه فشل في pgTAP. فشل RPC inventory حقيقي بسبب غياب فحص `inventory.adjust` و`private.can_access_branch` في النسخة المستبدلة؛ بعض اختبارات الحذف وسياسة قراءة المخزون كانت تتحقق من أسماء/أنواع سياسات قديمة أو لا تميز permissive عن restrictive. لم يُدمج PR #79.
+- لم تُطبق أي تغييرات على Supabase الإنتاجي.
