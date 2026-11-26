@@ -339,3 +339,62 @@
   min-width: 0;
   font-family: inherit;
 }
+
+
+/* Task 01 — shared interaction, table and overlay safeguards (additive). */
+html {
+  font-family: var(--font-arabic);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:where(button, [role="button"]) {
+  touch-action: manipulation;
+}
+
+[data-design-table-container] table {
+  min-width: 36rem;
+}
+
+[data-design-table-container] thead {
+  background: color-mix(in oklch, var(--color-muted) 72%, var(--color-card));
+}
+
+[data-design-table-container] th {
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+:where(input, select, textarea, button, [role="button"], a):focus-visible {
+  outline-color: var(--color-ring);
+}
+
+:where([role="dialog"], [data-radix-dialog-content]) :where(h1, h2, h3) {
+  text-wrap: pretty;
+}
+
+:where(button, [role="button"]) :where(svg) {
+  flex: none;
+}
+
+:where(table) {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+:where(th, td) {
+  vertical-align: middle;
+}
+
+@media (max-width: 640px) {
+  [data-design-table-container] table {
+    min-width: 32rem;
+  }
+
+  :where([role="dialog"], [data-radix-dialog-content]) {
+    max-width: calc(100vw - 1rem);
+    max-height: calc(100dvh - 1rem);
+    overflow-y: auto;
+  }
+}
