@@ -39,5 +39,5 @@ test("branch-scoped report queries fail closed when the member has no accessible
 test("report export and filters require their dedicated permissions", () => {
   assert.ok(reports.includes('const canExportReports = isSuperOwner || permissionsQuery.data?.has("reports.export") === true;'));
   assert.ok(reports.includes('const canFilterReports = isSuperOwner || permissionsQuery.data?.has("reports.filter") === true;'));
-  assert.ok(reports.includes("action={canExportReports ?"));
+  assert.ok(reports.includes("action={canPrintReports ?"));
 });

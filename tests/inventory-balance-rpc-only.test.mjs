@@ -12,5 +12,5 @@ test("inventory UI changes balances only through the audited RPC", () => {
 
 test("database denies direct balance writes while retaining branch-scoped reads", () => {
   assert.match(migration, /DROP POLICY IF EXISTS "Warehouse and admins manage inventory"/);
-  assert.match(migration, /REVOKE INSERT, UPDATE, DELETE ON TABLE public\.inventory/);
+  assert.match(migration, /REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE public\\.inventory/);
 });
