@@ -81,7 +81,7 @@ export function AdsPage() {
   }, [membership?.branch_id]);
 
   const branches = useQuery({
-    queryKey: ["marketing-branches", tenantId, membership?.company_id, membership?.branch_id],
+    queryKey: ["marketing-branches", tenantId, userId, membership?.company_id, membership?.branch_id],
     queryFn: async () => {
       let query = supabase.from("branches").select("id,name,company_id")
         .eq("tenant_id", tenantId!).eq("is_active", true).order("name");
@@ -97,7 +97,7 @@ export function AdsPage() {
   });
 
   const adSpaces = useQuery({
-    queryKey: ["marketing-ad-spaces", tenantId, membership?.company_id, branchId],
+    queryKey: ["marketing-ad-spaces", tenantId, userId, membership?.company_id, membership?.branch_id ?? "all", branchId],
     queryFn: async () => {
       let query = supabase.from("marketing_ad_spaces")
         .select("id,tenant_id,company_id,branch_id,space_key,name,format,is_active,sort_order")
@@ -143,7 +143,7 @@ export function AdsPage() {
   });
 
   const campaigns = useQuery({
-    queryKey: ["marketing-campaigns", tenantId, membership?.company_id ?? "tenant"],
+    queryKey: ["marketing-campaigns", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async (): Promise<Campaign[]> => {
       let query = supabase.from("marketing_campaigns")
         .select("id,company_id,branch_id,advertising_space_id,title,description,image_url,target_url,placement,status,starts_at,ends_at,sort_order")
@@ -162,7 +162,7 @@ export function AdsPage() {
   });
 
   const analytics = useQuery({
-    queryKey: ["marketing-campaign-analytics", tenantId, membership?.company_id ?? "tenant"],
+    queryKey: ["marketing-campaign-analytics", tenantId, userId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async (): Promise<Array<{ campaign_id: string; impressions: number; clicks: number }>> => {
       const { data, error } = await (supabase.rpc as any)("get_marketing_campaign_analytics", { _tenant_id: tenantId! });
       if (error) throw error;
