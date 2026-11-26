@@ -43,7 +43,7 @@ export function addWorkspaceTab(tabs, tab) {
   const existing = tabs.find(item => normalizeWorkspacePath(item.path) === path);
   const next = existing
     ? tabs.map(item => normalizeWorkspacePath(item.path) === path ? { ...item, title: tab.title } : item)
-    : [...tabs, { path, title: tab.title }];
+    : [...tabs, { path, title: tab.title, ...(tab.pinned ? { pinned: true } : {}), ...(tab.dirty ? { dirty: true } : {}) }];
   return limitWorkspaceTabs(next);
 }
 
