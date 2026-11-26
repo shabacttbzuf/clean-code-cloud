@@ -14,8 +14,8 @@ test("company and branch options are derived from authenticated RLS queries and 
 
 test("company and branch selections are validated against authorized option lists", () => {
   assert.match(hook, /companyOptions\.some\(\(item\) => item\.id === companyId\)/);
-  assert.match(hook, /branchOptions\.some\(\(item\) => item\.id === branchId\)/);
-  assert.match(hook, /canSelectAll = isSuperOwner \|\| \["owner", "manager", "accountant"\]/);
+  assert.match(hook, /branchOptions\.some\(\(item\) => item\.id === id\)/);
+  assert.match(hook, /canSelectAll = isSuperOwner \|\| \(!membership\?\.branch_id && \["owner", "manager", "accountant"\]/);
 });
 
 test("authorization fails closed and never grants cached offline super-owner or permissions state", () => {
@@ -26,7 +26,7 @@ test("authorization fails closed and never grants cached offline super-owner or 
 });
 
 test("switching company, branch or tenant removes tenant-scoped cached records", () => {
-  assert.match(hook, /removeActiveScopeQueries/);
+  assert.match(hook, /queryClient\.clear\(\)/);
   assert.match(hook, /queryClient\.removeQueries/);
   assert.match(hook, /setCompanySelection\(\{ scope: null/);
   assert.match(hook, /setBranchSelection\(\{ scope: null/);
