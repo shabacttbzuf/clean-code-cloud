@@ -22,6 +22,7 @@ function normalizeExecutableSql(source) {
   const withoutLineComments = source
     .split(/\r?\n/)
     .filter((line) => !line.trimStart().startsWith("--"))
+    .filter((line) => !/^\s*(BEGIN|COMMIT)\s*;\s*$/i.test(line))
     .join("\n");
   let output = "";
   let inSingleQuote = false;
