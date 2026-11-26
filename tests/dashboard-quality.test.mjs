@@ -14,6 +14,12 @@ test("dashboard rejects partial query failures instead of presenting misleading 
   assert.match(dashboard, /لم يتم عرض أرقام جزئية أو مضللة/);
 });
 
+test("dashboard campaign cache and results are isolated by the active branch", () => {
+  assert.ok(dashboard.includes('membership?.branch_id ?? "all"'));
+  assert.ok(dashboard.includes('query = query.or(`branch_id.is.null,branch_id.eq.${membership.branch_id}`)'));
+  assert.ok(dashboard.includes('}, [tenantId, membership?.company_id, membership?.branch_id]);'));
+});
+
 test("CI runs on the active feature branch and supports a manual verification run", () => {
   const pushBranches = workflow.match(/push:\s*\n\s*branches:\s*\[([^\]]+)\]/)?.[1] ?? "";
   for (const branch of ["main", "feature/**", "feat/**", "work/**", "integration/**"]) {
