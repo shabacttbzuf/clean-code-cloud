@@ -420,6 +420,13 @@ function POSWorkspace() {
         // Do not expose company-specific campaigns to branch-only or regular tenant members.
         query = query.is("company_id", null);
       }
+      // Branch-targeted POS campaigns are visible only in their assigned branch.
+      // A tenant-wide session without an active branch receives only global campaigns.
+      if (branchId) {
+        query = query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
+      } else {
+        query = query.is("branch_id", null);
+      }
       const { data, error } = await query;
       if (error) throw error;
       const nowMs = Date.now();

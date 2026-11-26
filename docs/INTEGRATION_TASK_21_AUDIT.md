@@ -497,3 +497,7 @@
 - عولج فرق حقيقي واحد في POS: إعلانات POS أصبحت مفلترة على branch_id، وتُعرض الإعلانات العامة وحملات الفرع النشط فقط، ومفتاح React Query يتضمن المستخدم والشركة والفرع.
 - رُفض فرع `reconcile/security-notifications-into-integration` مؤقتاً لاحتوائه على 19 migration فارغاً وworkflow مؤقتاً بصلاحية كتابة المستودع.
 - لا يُعتبر PR #84 صالحاً للدمج لمجرد أنه يحتوي commits main التسعة؛ يظل التحقق من تكافؤ الشيفرة والـ CI شرطاً قبل إنشاء merge ancestry.
+
+### تصحيح عزل حملات POS
+
+- CI Run #2588 كشف أن التعديل الأول أضاف branch إلى cache key فقط ولم يطبق branch filter. أُصلح الاستعلام ليقصر النتائج على `branch_id IS NULL OR branch_id = activeBranch`، ويستخدم `branch_id IS NULL` عند غياب فرع نشط. اختبارات المصدر تستخدم مطابقة نصية مباشرة لتفادي خطأ regex.
