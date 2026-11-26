@@ -1,5 +1,5 @@
 import { createFileRoute, Link, Outlet, redirect, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { appNavigationGroups } from "@/components/app-sidebar";
 import { AppLauncher } from "@/components/app-launcher";
@@ -214,26 +214,29 @@ function PermissionRouteGuard() {
 
 function TopBar() {
   const { theme, toggle } = useTheme();
-  const { tenantId, tenant, membership, memberships, switchTenant, companyOptions, activeCompanyId, switchCompany, companyLoading, companyError, branchOptions, activeBranchId, switchBranch, branchLoading } = useActiveTenant();
+  const { tenantId, tenant, membership, memberships, switchTenant, companyOptions, activeCompanyId, switchCompany, companyLoading, companyError, permissions, permissionsLoading, permissionsError, branchOptions, activeBranchId, switchBranch, branchLoading } = useActiveTenant();
   const { user } = useAuthSession();
   const { isSuperOwner } = useSuperOwner();
   const [globalSearch, setGlobalSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
-  const searchPermissions = useQuery({
-    queryKey: ["topbar-search-permissions", tenantId, user?.id, membership?.role, membership?.company_id, membership?.branch_id, membership?.custom_role_id],
-    queryFn: async () => {
-      if (!tenantId) return new Set<string>();
-      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId });
-      if (error) throw error;
-      return new Set<string>((data ?? []) as string[]);
-    },
-    enabled: !!tenantId && !!user?.id && !isSuperOwner,
-    staleTime: 15_000,
-    refetchInterval: 30_000,
-    refetchIntervalInBackground: false,
-  });
-
+  const mobileSearchPanelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!mobileSearchOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (mobileSearchPanelRef.current?.contains(target) || target.closest('[aria-label="فتح البحث الشامل"]')) return;
+      setMobileSearchOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") setMobileSearchOpen(false); };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [mobileSearchOpen]);
   const tenantOptionsQuery = useQuery({
     queryKey: ["topbar-tenant-options", user?.id, memberships.map((item) => item.tenant_id).sort().join(":")],
     queryFn: async () => {
@@ -378,7 +381,7 @@ function TopBar() {
     const targetPath = target.split(/[?#]/, 1)[0];
     const requiredPermission = permissionForPath(targetPath);
     const allowed = isSuperOwner || (requiredPermission
-      ? searchPermissions.data?.has(requiredPermission) === true
+      ? permissions.has(requiredPermission) === true
       : targetPath === "/profile" || targetPath === "/notifications");
     if (!allowed) {
       toast.error("لا تملك صلاحية فتح وجهة هذا الإشعار.");
@@ -438,18 +441,20 @@ function TopBar() {
     .filter((item, index, all) => all.findIndex((candidate) => candidate.url === item.url) === index)
     .filter((item) => {
       const permitted = isSuperOwner || (item.permission
-        ? !!searchPermissions.data?.has(item.permission)
+        ? !!permissions.has(item.permission)
         : item.url === "/profile" || item.url === "/support");
       return permitted && searchQuery.length > 0 && item.title.toLocaleLowerCase("ar").includes(searchQuery);
     }).slice(0, 10);
 
   const canSelectAllBranches = isSuperOwner || ["owner", "manager", "accountant"].includes(membership?.role ?? "");
-  const activeBranchLabel = activeBranchId ? branchOptions.find((item) => item.id === activeBranchId)?.name || "الفرع المحدد" : canSelectAllBranches ? "جميع الفروع" : branchOptions[0]?.name || "لم يحدد فرع";
+  const activeBranchLabel = activeBranchId
+    ? branchOptions.find((item) => item.id === activeBranchId)?.name || "الفرع المحدد"
+    : canSelectAllBranches ? "جميع الفروع" : branchOptions[0]?.name || "لم يحدد فرع";
 
   const initial = displayName.charAt(0) || "?";
 
   return (
-    <header className="sticky top-0 z-30 flex min-h-[68px] items-center justify-between gap-3 border-b border-[#dbe5f4] bg-[rgba(248,250,255,.96)] px-3 py-2 shadow-[0_3px_14px_rgba(16,47,92,.06)] backdrop-blur-xl sm:px-5" dir="rtl">
+    <header className="sticky top-0 z-40 flex min-h-[64px] w-full items-center justify-between gap-2 border-b border-border bg-background/95 px-2 py-2 shadow-sm backdrop-blur-xl sm:min-h-[68px] sm:gap-3 sm:px-4 lg:px-5" dir="rtl">
       <div className="flex min-w-0 items-center gap-2 sm:gap-3">
         <Link to="/support" aria-label="مركز المساعدة والدعم" title="مركز المساعدة والدعم">
           <Button variant="outline" size="icon" className="rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm">
@@ -457,59 +462,95 @@ function TopBar() {
           </Button>
         </Link>
         <AppLauncher />
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#174b91] to-[#102f5c] text-[#f5c65b] shadow-sm"><Building2 className="h-5 w-5" /></div>
+        <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br from-[#174b91] to-[#102f5c] text-[#f5c65b] shadow-sm" aria-label="شعار النظام">{tenant?.logo_url ? <img src={tenant.logo_url} alt={`شعار ${tenant.name || "الشركة"}`} className="h-full w-full object-contain" loading="lazy" /> : <Building2 className="h-5 w-5" />}</div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button type="button" className="min-w-0 rounded-lg px-1 text-right outline-none transition hover:bg-blue-50 focus-visible:ring-2 focus-visible:ring-[#174b91]" aria-label="اختيار المؤسسة">
+            <button type="button" className="min-w-0 rounded-lg px-1 text-right outline-none transition hover:bg-blue-50 focus-visible:ring-2 focus-visible:ring-[#174b91]" aria-label="اختيار الشركة">
               <span className="block truncate text-sm font-extrabold text-[#102f5c] sm:text-base">{tenant?.name || "نظام إدارة المطاعم"}</span>
-              <span className="block max-w-44 truncate text-[10px] text-slate-500">{memberships.length > 1 ? `تبديل الشركة · ${activeBranchLabel}` : activeBranchLabel}</span>
+              <span className="block max-w-44 truncate text-[10px] text-slate-500">{(companyOptions.length > 0 ? companyOptions.find((item) => item.id === activeCompanyId)?.name || "كل الشركات" : tenant?.name) ? `${companyOptions.find((item) => item.id === activeCompanyId)?.name || (companyOptions.length > 1 ? "كل الشركات" : "")}${companyOptions.length > 0 ? " · " : ""}${activeBranchLabel}` : activeBranchLabel}</span>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-64">
-            <DropdownMenuLabel>المؤسسات المرتبطة بحسابك</DropdownMenuLabel>
+            <DropdownMenuLabel>نطاق الشركة</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {(tenantOptionsQuery.data ?? []).map((item) => (
+            {companyError ? <DropdownMenuItem disabled>تعذر تحميل الشركات المتاحة</DropdownMenuItem> : companyLoading ? <DropdownMenuItem disabled>جارٍ تحميل الشركات...</DropdownMenuItem> : null}
+            {companyOptions.length > 1 && memberships.some((item) => item.tenant_id === tenantId && item.company_id === null) && (
+              <DropdownMenuItem onSelect={() => { switchCompany(null); toast.success("تم اختيار جميع الشركات"); }}>
+                <Building2 className="ml-2 h-4 w-4" />جميع الشركات
+                {!activeCompanyId && <span className="mr-auto text-xs text-emerald-600">الحالي</span>}
+              </DropdownMenuItem>
+            )}
+            {companyOptions.map((item) => (
               <DropdownMenuItem key={item.id} onSelect={() => {
-                if (item.id !== tenantId) {
-                  switchTenant(item.id);
-                  toast.success("تم تبديل المؤسسة بنجاح");
+                if (item.id !== activeCompanyId) {
+                  switchCompany(item.id);
+                  toast.success(`تم التبديل إلى ${item.name}`);
                 }
               }} className="cursor-pointer">
                 <Building2 className="ml-2 h-4 w-4" />
                 <span className="min-w-0 flex-1 truncate">{item.name}</span>
-                {item.id === tenantId ? <span className="text-xs text-emerald-600">الحالية</span> : null}
+                {item.id === activeCompanyId ? <span className="text-xs text-emerald-600">الحالية</span> : null}
               </DropdownMenuItem>
             ))}
+            {memberships.length > 1 && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>المؤسسات المرتبطة بحسابك</DropdownMenuLabel>
+                {[...new Set(memberships.map((item) => item.tenant_id))].map((id) => (
+                  <DropdownMenuItem key={id} onSelect={() => {
+                    if (id !== tenantId) {
+                      switchTenant(id);
+                      toast.success("تم تبديل المؤسسة بنجاح");
+                    }
+                  }} className="cursor-pointer">
+                    <Building2 className="ml-2 h-4 w-4" />
+                    <span className="min-w-0 flex-1 truncate">{tenantOptionsQuery.data?.find((option) => option.id === id)?.name || (id === tenantId ? tenant?.name : "مؤسسة") || "مؤسسة"}</span>
+                    {id === tenantId ? <span className="text-xs text-emerald-600">الحالية</span> : null}
+                  </DropdownMenuItem>
+                ))}
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
-        {companyOptions.length > 0 ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button type="button" variant="outline" size="icon" className="h-9 w-9 shrink-0 rounded-full border-border bg-background sm:h-10 sm:w-auto sm:gap-2 sm:px-3" aria-label="اختيار المؤسسة" disabled={companyLoading}><Building2 className="h-4 w-4" /><span className="hidden max-w-32 truncate sm:inline">{companyOptions.find((item) => item.id === activeCompanyId)?.name || "كل الشركات"}</span></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-64">
-              <DropdownMenuLabel>نطاق الشركة</DropdownMenuLabel><DropdownMenuSeparator />
-              {companyError ? <DropdownMenuItem disabled>تعذر تحميل الشركات المتاحة</DropdownMenuItem> : companyLoading ? <DropdownMenuItem disabled>جارٍ تحميل الشركات...</DropdownMenuItem> : null}
-              {companyOptions.length > 1 && memberships.some((item) => item.tenant_id === tenantId && item.company_id === null && item.branch_id === null) ? <DropdownMenuItem onSelect={() => { switchCompany(null); toast.success("تم اختيار جميع الشركات"); }}>جميع الشركات{!activeCompanyId ? <span className="mr-auto text-xs text-emerald-600">الحالي</span> : null}</DropdownMenuItem> : null}
-              {companyOptions.map((item) => <DropdownMenuItem key={item.id} onSelect={() => { if (item.id !== activeCompanyId) { switchCompany(item.id); toast.success("تم التبديل إلى " + item.name); } }}><Building2 className="ml-2 h-4 w-4" /><span className="min-w-0 flex-1 truncate">{item.name}</span>{item.id === activeCompanyId ? <span className="text-xs text-emerald-600">الحالية</span> : null}</DropdownMenuItem>)}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
         {branchOptions.length > 0 && (branchOptions.length > 1 || canSelectAllBranches) ? (
           <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button type="button" variant="outline" size="icon" className="h-9 w-9 shrink-0 rounded-full border-border bg-background sm:h-10 sm:w-auto sm:gap-2 sm:px-3" aria-label="اختيار الفرع" disabled={branchLoading}><Building2 className="h-4 w-4" /><span className="hidden max-w-32 truncate sm:inline">{branchLoading ? "جارٍ تحميل الفروع..." : activeBranchLabel}</span></Button></DropdownMenuTrigger>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-border bg-background px-0 text-xs font-bold sm:h-10 sm:w-auto sm:max-w-44 sm:gap-2 sm:px-3" aria-label="اختيار الفرع" disabled={branchLoading}>
+                <Building2 className="h-4 w-4 shrink-0" /><span className="hidden truncate sm:inline">{branchLoading ? "جارٍ تحميل الفروع..." : activeBranchLabel}</span>
+              </Button>
+            </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-60">
-              <DropdownMenuLabel>نطاق الفرع</DropdownMenuLabel><DropdownMenuSeparator />
-              {canSelectAllBranches ? <DropdownMenuItem onSelect={() => { switchBranch(null); toast.success("تم اختيار جميع الفروع"); }}>جميع الفروع{!activeBranchId ? <span className="mr-auto text-xs text-emerald-600">الحالي</span> : null}</DropdownMenuItem> : null}
-              {branchOptions.map((item) => <DropdownMenuItem key={item.id} onSelect={() => { if (item.id !== activeBranchId) { switchBranch(item.id); toast.success("تم التبديل إلى " + item.name); } }}><Building2 className="ml-2 h-4 w-4" /><span className="min-w-0 flex-1 truncate">{item.name}</span>{item.id === activeBranchId ? <span className="text-xs text-emerald-600">الحالي</span> : null}</DropdownMenuItem>)}
+              <DropdownMenuLabel>الفروع المتاحة لحسابك</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {canSelectAllBranches && (
+                <DropdownMenuItem onSelect={() => { switchBranch(null); toast.success("تم اختيار جميع الفروع"); }}>
+                  <Building2 className="ml-2 h-4 w-4" />جميع الفروع
+                  {!activeBranchId && <span className="mr-auto text-xs text-emerald-600">الحالي</span>}
+                </DropdownMenuItem>
+              )}
+              {branchOptions.map((item) => (
+                <DropdownMenuItem key={item.id} onSelect={() => {
+                  if (item.id !== activeBranchId) {
+                    switchBranch(item.id);
+                    toast.success(`تم التبديل إلى ${item.name}`);
+                  }
+                }}>
+                  <Building2 className="ml-2 h-4 w-4" /><span className="min-w-0 flex-1 truncate">{item.name}</span>
+                  {item.id === activeBranchId && <span className="text-xs text-emerald-600">الحالي</span>}
+                </DropdownMenuItem>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
-        ) : null}
+        ) : (
+          <div className="hidden items-center gap-2 rounded-full border border-border bg-background px-3 py-2 text-xs font-bold text-foreground lg:flex"><Building2 className="h-4 w-4" />{activeBranchLabel}</div>
+        )}
       </div>
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
         <div className="hidden items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 text-[11px] font-semibold text-[#425b7d] shadow-sm md:flex" aria-label={clock.toLocaleString("ar-YE")}><CalendarDays className="h-4 w-4 text-[#174b91]" /><span>{clock.toLocaleDateString("ar-YE",{weekday:"long",day:"numeric",month:"long"})}</span><span aria-hidden="true" className="text-slate-300">•</span><time dateTime={clock.toISOString()}>{clock.toLocaleTimeString("ar-YE",{hour:"2-digit",minute:"2-digit"})}</time></div>
         <Button type="button" variant="outline" size="icon" className="rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm lg:hidden" aria-label="فتح البحث الشامل" aria-expanded={mobileSearchOpen} onClick={() => setMobileSearchOpen((value) => !value)}><Search className="h-4 w-4" /></Button>
-        {mobileSearchOpen && <div className="absolute right-2 left-2 top-full z-50 mt-2 rounded-2xl border bg-white p-3 text-slate-800 shadow-xl lg:hidden" dir="rtl">
+        {mobileSearchOpen && <div ref={mobileSearchPanelRef} className="absolute right-2 left-2 top-full z-50 mt-2 rounded-2xl border bg-white p-3 text-slate-800 shadow-xl lg:hidden" dir="rtl">
           <div className="flex items-center gap-2 rounded-xl border px-3 py-2"><Search className="h-4 w-4 shrink-0 text-primary" /><input autoFocus value={globalSearch} onChange={(event) => setGlobalSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { setMobileSearchOpen(false); setGlobalSearch(""); } if (event.key === "Enter" && searchItems[0]) { navigate({ to: searchItems[0].url as any }); setGlobalSearch(""); setMobileSearchOpen(false); } }} placeholder="ابحث عن صفحة أو قسم..." aria-label="البحث الشامل داخل النظام" className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></div>
-          {globalSearch.trim() && <div className="mt-2 max-h-60 overflow-y-auto">{searchPermissions.isError ? <p role="alert" className="p-3 text-xs text-destructive">تعذر التحقق من صلاحيات البحث.</p> : searchPermissions.isLoading && !isSuperOwner ? <p className="p-3 text-xs text-muted-foreground">جارٍ التحقق من الصلاحيات...</p> : searchItems.length ? searchItems.map((item) => <button key={item.url} type="button" onClick={() => { navigate({ to: item.url as any }); setGlobalSearch(""); setMobileSearchOpen(false); }} className="flex w-full items-center rounded-lg px-3 py-3 text-right text-sm hover:bg-blue-50">{item.title}</button>) : <p className="p-3 text-xs text-muted-foreground">لا توجد نتائج متاحة.</p>}</div>}
+          {globalSearch.trim() && <div className="mt-2 max-h-60 overflow-y-auto">{permissionsError ? <p role="alert" className="p-3 text-xs text-destructive">تعذر التحقق من صلاحيات البحث.</p> : permissionsLoading && !isSuperOwner ? <p className="p-3 text-xs text-muted-foreground">جارٍ التحقق من الصلاحيات...</p> : searchItems.length ? searchItems.map((item) => <button key={item.url} type="button" onClick={() => { navigate({ to: item.url as any }); setGlobalSearch(""); setMobileSearchOpen(false); }} className="flex w-full items-center rounded-lg px-3 py-3 text-right text-sm hover:bg-blue-50">{item.title}</button>) : <p className="p-3 text-xs text-muted-foreground">لا توجد نتائج متاحة.</p>}</div>}
         </div>}
         <div className="relative hidden w-[min(28vw,300px)] lg:block">
           <div className="flex items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 shadow-sm focus-within:border-primary/50">
@@ -517,20 +558,20 @@ function TopBar() {
             <input value={globalSearch} onChange={(event) => setGlobalSearch(event.target.value)} onFocus={() => setSearchOpen(true)} onBlur={() => window.setTimeout(() => setSearchOpen(false), 150)} onKeyDown={(event) => { if (event.key === "Escape") { setGlobalSearch(""); setSearchOpen(false); } if (event.key === "Enter" && searchItems[0]) { navigate({ to: searchItems[0].url as any }); setGlobalSearch(""); setSearchOpen(false); } }} placeholder="البحث في النظام..." aria-label="البحث الشامل داخل النظام" className="min-w-0 flex-1 bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400" />
           </div>
           {searchOpen && globalSearch.trim() && <div className="absolute right-0 top-full z-50 mt-2 max-h-80 w-full overflow-y-auto rounded-xl border bg-white p-2 text-slate-800 shadow-xl" dir="rtl">
-            {searchPermissions.isError ? <p role="alert" className="p-3 text-xs text-destructive">تعذر التحقق من صلاحيات البحث.</p> : searchPermissions.isLoading && !isSuperOwner ? <p className="p-3 text-xs text-slate-500">جارٍ التحقق من الصلاحيات...</p> : searchItems.length ? searchItems.map((item) => <button key={item.url} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { navigate({ to: item.url as any }); setGlobalSearch(""); setSearchOpen(false); }} className="flex w-full items-center rounded-lg px-3 py-2 text-right text-sm hover:bg-blue-50">{item.title}</button>) : <p className="p-3 text-xs text-slate-500">لا توجد نتائج متاحة.</p>}
+            {permissionsError ? <p role="alert" className="p-3 text-xs text-destructive">تعذر التحقق من صلاحيات البحث.</p> : permissionsLoading && !isSuperOwner ? <p className="p-3 text-xs text-slate-500">جارٍ التحقق من الصلاحيات...</p> : searchItems.length ? searchItems.map((item) => <button key={item.url} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { navigate({ to: item.url as any }); setGlobalSearch(""); setSearchOpen(false); }} className="flex w-full items-center rounded-lg px-3 py-2 text-right text-sm hover:bg-blue-50">{item.title}</button>) : <p className="p-3 text-xs text-slate-500">لا توجد نتائج متاحة.</p>}
           </div>}
         </div>
-        <Button type="button" variant="outline" size="icon" onClick={toggleFullscreen} aria-label={fullscreen ? "الخروج من ملء الشاشة" : "ملء الشاشة"} className="hidden rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm sm:inline-flex">{fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</Button>
+        <Button type="button" variant="outline" size="icon" onClick={toggleFullscreen} aria-label={fullscreen ? "الخروج من ملء الشاشة" : "ملء الشاشة"} title={fullscreen ? "الخروج من ملء الشاشة" : "ملء الشاشة"} className="h-9 w-9 shrink-0 rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm sm:h-10 sm:w-10">{fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</Button>
         <Button variant="outline" size="icon" onClick={toggle} aria-label="تبديل الوضع" className="hidden rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm sm:inline-flex">{theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild><Button variant="outline" size="icon" className="relative rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm" aria-label="الإشعارات"><Bell className="h-5 w-5" />{unreadCount > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full border-2 border-white bg-red-500 px-1 text-[10px] font-bold text-white">{unreadCount > 9 ? "9+" : unreadCount}</span>}</Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-[min(92vw,360px)]">
             <div className="flex items-center justify-between px-2 py-1.5"><DropdownMenuLabel className="p-0">الإشعارات {unreadCount > 0 ? "(" + unreadCount + ")" : ""}</DropdownMenuLabel><Button size="sm" variant="ghost" className="h-7 text-xs" onClick={markAllNotificationsRead}>قراءة الكل</Button></div><DropdownMenuSeparator />
-            {(notificationsQuery.data?.items ?? []).length === 0 ? <div className="px-3 py-6 text-center text-sm text-muted-foreground">لا توجد إشعارات جديدة</div> : (notificationsQuery.data?.items ?? []).map((n: any) => { const isRead = notificationsQuery.data?.readIds.has(n.id); return <DropdownMenuItem key={n.id} className="block cursor-pointer whitespace-normal py-2" onSelect={() => { void openNotification(n); }}><div className="flex items-start gap-2">{!isRead && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-500" />}<div className="min-w-0 flex-1"><div className={isRead ? "text-sm font-normal" : "text-sm font-semibold"}>{n.title}</div>{n.body && <div className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{n.body}</div>}<div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-muted-foreground"><span>{new Date(n.created_at).toLocaleString("ar-YE")}</span>{n.action_path && <span className="font-semibold text-primary">{n.action_label || "فتح"}</span>}</div></div></div></DropdownMenuItem>; })}
+            {notificationsQuery.isLoading ? <div className="px-3 py-6 text-center text-sm text-muted-foreground" role="status">جارٍ تحميل الإشعارات...</div> : notificationsQuery.isError ? <div className="px-3 py-6 text-center text-sm text-destructive" role="alert">تعذر تحميل الإشعارات. تحقق من الاتصال والصلاحيات.</div> : (notificationsQuery.data?.items ?? []).length === 0 ? <div className="px-3 py-6 text-center text-sm text-muted-foreground">لا توجد إشعارات</div> : (notificationsQuery.data?.items ?? []).map((n: any) => { const isRead = notificationsQuery.data?.readIds.has(n.id); return <DropdownMenuItem key={n.id} className="block cursor-pointer whitespace-normal py-2" onSelect={() => { void openNotification(n); }}><div className="flex items-start gap-2">{!isRead && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-500" />}<div className="min-w-0 flex-1"><div className={isRead ? "text-sm font-normal" : "text-sm font-semibold"}>{n.title}</div>{n.body && <div className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{n.body}</div>}<div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-muted-foreground"><span>{new Date(n.created_at).toLocaleString("ar-YE")}</span>{n.action_path && <span className="font-semibold text-primary">{n.action_label || "فتح"}</span>}</div></div></div></DropdownMenuItem>; })}
             <DropdownMenuSeparator /><DropdownMenuItem onSelect={() => navigate({ to: "/notifications" })} className="justify-center text-primary">عرض كل الإشعارات</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" className="h-11 gap-2 rounded-full px-1.5 sm:px-2"><Avatar className="h-9 w-9 border-2 border-[#dce5f3]"><AvatarImage src={avatarUrl ?? undefined} alt="" /><AvatarFallback className="bg-[#e8effb] font-bold text-[#174b91]">{initial}</AvatarFallback></Avatar><span className="hidden min-w-0 text-right sm:block"><span className="block max-w-28 truncate text-xs font-extrabold text-[#102f5c]">{displayName}</span><span className="block max-w-28 truncate text-[10px] text-slate-500">{currentProfile?.job_title?.trim() || "حساب المستخدم"}</span></span></Button></DropdownMenuTrigger>
+        <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" className="h-10 max-w-[44px] gap-2 rounded-full px-1.5 sm:h-11 sm:max-w-none sm:px-2" aria-label={`الملف الشخصي: ${displayName}`}><Avatar className="h-9 w-9 border-2 border-[#dce5f3]"><AvatarImage src={avatarUrl ?? undefined} alt="" /><AvatarFallback className="bg-[#e8effb] font-bold text-[#174b91]">{initial}</AvatarFallback></Avatar><span className="hidden min-w-0 text-right sm:block"><span className="block max-w-28 truncate text-xs font-extrabold text-[#102f5c]">{displayName}</span><span className="block max-w-28 truncate text-[10px] text-slate-500">{currentProfile?.job_title?.trim() || "حساب المستخدم"}</span></span></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end"><DropdownMenuLabel className="text-sm font-semibold">{displayName}</DropdownMenuLabel><DropdownMenuSeparator /><DropdownMenuItem onClick={() => navigate({ to: "/profile" })}><UserIcon className="ml-2 h-4 w-4" />ملفي الشخصي</DropdownMenuItem><DropdownMenuItem onClick={() => navigate({ to: "/settings" })}><UserIcon className="ml-2 h-4 w-4" />الإعدادات</DropdownMenuItem><DropdownMenuItem onClick={handleSignOut} disabled={signingOut}><LogOut className="ml-2 h-4 w-4" />تسجيل الخروج</DropdownMenuItem></DropdownMenuContent>
         </DropdownMenu>
       </div>
