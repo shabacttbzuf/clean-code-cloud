@@ -144,8 +144,8 @@ export const appNavigationGroups: AppNavigationGroup[] = [
       { title: "الموظفون", url: "/users", icon: Users, permission: "users.view" },
       { title: "صلاحيات الفريق", url: "/team-permissions", icon: KeyRound, permission: "permissions.view" },
       { title: "الإعدادات", url: "/settings", icon: Settings, permission: "settings.view" },
-      { title: "الإعلانات", url: "/ads", icon: Megaphone, permission: "ads.manage" },
-      { title: "العروض الترويجية", url: "/promotions", icon: Gift, permission: "promotions.manage" },
+      { title: "الإعلانات", url: "/ads", icon: Megaphone, permission: "ads.view" },
+      { title: "العروض الترويجية", url: "/promotions", icon: Gift, permission: "promotions.view" },
     ],
   },
 ];
