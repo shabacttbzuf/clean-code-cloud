@@ -1,6 +1,6 @@
 -- SECURITY DEFINER implementations must not remain callable from exposed public schema.
 BEGIN;
-SELECT plan(11);
+SELECT plan(14);
 
 SELECT ok(
   NOT EXISTS (
@@ -63,6 +63,21 @@ SELECT ok(
 SELECT ok(
   (SELECT prosecdef FROM pg_proc WHERE oid = 'private.get_marketing_campaign_analytics(uuid)'::regprocedure),
   'Campaign analytics privileged implementation remains in private schema'
+);
+
+SELECT ok(
+  has_function_privilege('authenticated', 'public.adjust_inventory_balance(uuid,uuid,uuid,numeric,text)'::regprocedure, 'EXECUTE'),
+  'Inventory adjustment RPC remains callable through the public invoker wrapper'
+);
+
+SELECT ok(
+  NOT (SELECT prosecdef FROM pg_proc WHERE oid = 'public.adjust_inventory_balance(uuid,uuid,uuid,numeric,text)'::regprocedure),
+  'Inventory adjustment public wrapper executes as invoker'
+);
+
+SELECT ok(
+  (SELECT prosecdef FROM pg_proc WHERE oid = 'private.adjust_inventory_balance(uuid,uuid,uuid,numeric,text)'::regprocedure),
+  'Inventory adjustment privileged implementation remains in the private schema'
 );
 
 SELECT * FROM finish();
