@@ -3,6 +3,9 @@
 BEGIN;
 
 DROP POLICY IF EXISTS "Warehouse and admins manage inventory" ON public.inventory;
+DROP POLICY IF EXISTS permission_scope_inventory_insert ON public.inventory;
+DROP POLICY IF EXISTS permission_scope_inventory_update ON public.inventory;
+DROP POLICY IF EXISTS permission_scope_inventory_delete ON public.inventory;
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE public.inventory FROM PUBLIC, anon, authenticated;
 GRANT ALL ON TABLE public.inventory TO service_role;
 
