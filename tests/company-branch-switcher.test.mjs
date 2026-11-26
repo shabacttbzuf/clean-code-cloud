@@ -35,3 +35,10 @@ test("authenticated top bar exposes company and branch scope selectors", () => {
   assert.match(route, /companyOptions\.map/);
   assert.match(route, /branchOptions\.map/);
 });
+
+
+test("branch-only memberships cannot select all companies or all branches even with owner-like roles", () => {
+  assert.match(hook, /item\.company_id === null && item\.branch_id === null/);
+  assert.match(hook, /!membership\.branch_id && \["owner", "manager", "accountant"\]/);
+  assert.match(route, /item\.company_id === null && item\.branch_id === null/);
+});
