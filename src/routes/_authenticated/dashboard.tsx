@@ -455,33 +455,61 @@ function Dashboard() {
   });
 
   const kitchenStatusCounts = useQuery({
-    queryKey: ["dashboard-kitchen-counts", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryKey: ["dashboard-kitchen-counts", tenantId, user?.id, role, membership?.company_id, membership?.branch_id, isSuperOwner, hasPermission("kitchen.view")],
     queryFn: async () => {
-      if (!tenantId) return { new: 0, preparing: 0, ready: 0 };
-      let scopedBranchIds: string[] | null = null;
-      if (!isSuperOwner && membership?.branch_id) {
-        scopedBranchIds = [membership.branch_id];
-      } else if (!isSuperOwner && membership?.company_id) {
-        const { data: branches, error } = await supabase.from("branches").select("id")
-          .eq("tenant_id", tenantId).eq("company_id", membership.company_id);
-        if (error) throw error;
-        scopedBranchIds = (branches ?? []).map((branch) => branch.id);
+      if (!tenantId || !user?.id) return { new: 0, preparing: 0, ready: 0, source: "live" as const, updatedAt: new Date().toISOString() };
+      const cacheKey = offlineCacheKey(
+        { tenantId, userId: user.id, companyId: membership?.company_id, branchId: membership?.branch_id },
+        "dashboard-kitchen-counts-v2:" + role + ":" + String(hasPermission("kitchen.view")),
+      );
+      const loadLiveCounts = async () => {
+        let scopedBranchIds: string[] | null = null;
+        if (!isSuperOwner) {
+          if (!membership) {
+            scopedBranchIds = [];
+          } else if (membership.branch_id) {
+            const { data: assignedBranch, error } = await supabase.from("branches").select("id")
+              .eq("tenant_id", tenantId).eq("id", membership.branch_id).maybeSingle();
+            if (error) throw error;
+            scopedBranchIds = assignedBranch ? [assignedBranch.id] : [];
+          } else if (membership.company_id) {
+            const branches = await fetchAllRows((from, to) => supabase.from("branches").select("id")
+              .eq("tenant_id", tenantId).eq("company_id", membership.company_id).order("id").range(from, to));
+            scopedBranchIds = branches.map((branch) => branch.id);
+          } else if (!["owner", "manager", "accountant"].includes(role ?? "")) {
+            scopedBranchIds = [];
+          }
+        }
+        const statuses = ["new", "preparing", "ready"] as const;
+        const entries = await Promise.all(statuses.map(async (status) => {
+          let query = (supabase.from("kitchen_orders" as any) as any)
+            .select("id", { count: "exact", head: true })
+            .eq("tenant_id", tenantId).eq("status", status);
+          if (scopedBranchIds !== null) query = query.in("branch_id", scopedBranchIds);
+          const result = await query;
+          if (result.error) throw result.error;
+          return [status, result.count ?? 0] as const;
+        }));
+        return { ...Object.fromEntries(entries), source: "live" as const, updatedAt: new Date().toISOString() } as {
+          new: number; preparing: number; ready: number; source: "live"; updatedAt: string;
+        };
+      };
+      try {
+        const fresh = await loadLiveCounts();
+        await writeOfflineCache(cacheKey, fresh);
+        return fresh;
+      } catch (error) {
+        const value = error as { status?: number; code?: string };
+        if (value?.status === 401 || value?.status === 403 || ["42501", "PGRST301"].includes(value?.code ?? "")) throw error;
+        const cached = await readOfflineCache<{ new: number; preparing: number; ready: number; updatedAt: string }>(cacheKey, 12 * 60 * 60 * 1000);
+        if (!cached) throw error;
+        return { ...cached.data, source: "offline" as const, cachedAt: new Date(cached.savedAt).toISOString() };
       }
-      const statuses = ["new", "preparing", "ready"] as const;
-      const entries = await Promise.all(statuses.map(async (status) => {
-        let query = (supabase.from("kitchen_orders" as any) as any)
-          .select("id", { count: "exact", head: true })
-          .eq("tenant_id", tenantId).eq("status", status);
-        if (scopedBranchIds !== null) query = query.in("branch_id", scopedBranchIds);
-        const result = await query;
-        if (result.error) throw result.error;
-        return [status, result.count ?? 0] as const;
-      }));
-      return Object.fromEntries(entries) as Record<typeof statuses[number], number>;
     },
-    enabled: !!tenantId && hasPermission("kitchen.view"),
+    enabled: !!tenantId && !!user?.id && hasPermission("kitchen.view"),
     refetchInterval: 15_000,
     staleTime: 5_000,
+    retry: 1,
   });
 
   const currency = tenant?.currency ?? "";
