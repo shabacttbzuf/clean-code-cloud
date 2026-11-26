@@ -62,7 +62,7 @@ function ReportsPage() {
   const [groupBy, setGroupBy] = useState<"day" | "month" | "year">("day");
   const [companyId, setCompanyId] = useState(membership?.company_id ?? "all");
   const [branchId, setBranchId] = useState("all");
-  const companiesQuery = useQuery({
+  const companiesQuery = useQuery<Array<{ id: string; name: string }>>({
     queryKey: ["report-companies", tenantId, userId, isSuperOwner, membership?.company_id],
     queryFn: async () => {
       if (!tenantId) return [];
@@ -78,7 +78,7 @@ function ReportsPage() {
   useEffect(() => {
     if (!isSuperOwner && membership?.company_id && companyId !== membership.company_id) setCompanyId(membership.company_id);
   }, [isSuperOwner, membership?.company_id, companyId]);
-  const branchesQuery = useQuery({ queryKey: ["report-branches", tenantId, userId, companyId, membership?.company_id, membership?.branch_id, isSuperOwner],
+  const branchesQuery = useQuery<Array<{ id: string; name: string }>>({ queryKey: ["report-branches", tenantId, userId, companyId, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
       if (!isSuperOwner && !membership?.branch_id && !membership?.company_id) return [];
       let query = supabase.from("branches").select("id,name").eq("tenant_id", tenantId!).order("name");
