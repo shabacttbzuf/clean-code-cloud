@@ -74,7 +74,7 @@ function Dashboard() {
     "مستخدم";
 
   const campaignsQuery = useQuery({
-    queryKey: ["dashboard-marketing-campaigns", tenantId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
+    queryKey: ["dashboard-marketing-campaigns", tenantId, user?.id, role, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
       const now = new Date().toISOString();
       let query = supabase.from("marketing_campaigns")
@@ -216,7 +216,7 @@ function Dashboard() {
   });
 
   const superStats = useQuery({
-    queryKey: ["super-owner-stats"],
+    queryKey: ["super-owner-stats", user?.id],
     queryFn: async () => {
       const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
       const [tenants, branches, users, sales, refunds, expenses] = await Promise.all([
@@ -399,57 +399,71 @@ function Dashboard() {
 
 
   const latestOrders = useQuery({
-    queryKey: ["dashboard-latest-orders", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryKey: ["dashboard-latest-orders", tenantId, user?.id, role, membership?.company_id, membership?.branch_id, isSuperOwner, hasPermission("sales.view")],
     queryFn: async () => {
-      if (!tenantId) return [];
+      if (!tenantId || !user?.id) return [];
+      let scopedBranchIds: string[] | null = null;
+      if (!isSuperOwner) {
+        if (!membership) scopedBranchIds = [];
+        else if (membership.branch_id) {
+          const { data: assignedBranch, error } = await supabase.from("branches").select("id")
+            .eq("tenant_id", tenantId).eq("id", membership.branch_id).maybeSingle();
+          if (error) throw error;
+          scopedBranchIds = assignedBranch ? [assignedBranch.id] : [];
+        } else if (membership.company_id) {
+          const branches = await fetchAllRows((from, to) => supabase.from("branches").select("id")
+            .eq("tenant_id", tenantId).eq("company_id", membership.company_id).order("id").range(from, to));
+          scopedBranchIds = branches.map((branch) => branch.id);
+        } else if (!["owner", "manager", "accountant"].includes(role ?? "")) scopedBranchIds = [];
+      }
       let query = supabase.from("sales").select("id,invoice_no,total,status,created_at,order_type,customer_id")
         .eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(8);
-      if (!isSuperOwner && membership?.branch_id) {
-        query = query.eq("branch_id", membership.branch_id);
-      } else if (!isSuperOwner && membership?.company_id) {
-        const { data: branches, error: branchError } = await supabase.from("branches").select("id")
-          .eq("tenant_id", tenantId).eq("company_id", membership.company_id);
-        if (branchError) throw branchError;
-        query = query.in("branch_id", (branches ?? []).map((branch) => branch.id));
-      }
+      if (scopedBranchIds !== null) query = query.in("branch_id", scopedBranchIds);
       const { data, error } = await query;
       if (error) throw error;
       return data ?? [];
     },
-    enabled: !!tenantId && hasPermission("sales.view"),
+    enabled: !!tenantId && !!user?.id && hasPermission("sales.view"),
     refetchInterval: 15_000,
     staleTime: 5_000,
   });
+
   const kitchenOverview = useQuery({
-    queryKey: ["dashboard-kitchen-overview", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryKey: ["dashboard-kitchen-overview", tenantId, user?.id, role, membership?.company_id, membership?.branch_id, isSuperOwner, hasPermission("kitchen.view")],
     queryFn: async () => {
-      if (!tenantId) return [];
+      if (!tenantId || !user?.id) return [];
+      let scopedBranchIds: string[] | null = null;
+      if (!isSuperOwner) {
+        if (!membership) scopedBranchIds = [];
+        else if (membership.branch_id) {
+          const { data: assignedBranch, error } = await supabase.from("branches").select("id")
+            .eq("tenant_id", tenantId).eq("id", membership.branch_id).maybeSingle();
+          if (error) throw error;
+          scopedBranchIds = assignedBranch ? [assignedBranch.id] : [];
+        } else if (membership.company_id) {
+          const branches = await fetchAllRows((from, to) => supabase.from("branches").select("id")
+            .eq("tenant_id", tenantId).eq("company_id", membership.company_id).order("id").range(from, to));
+          scopedBranchIds = branches.map((branch) => branch.id);
+        } else if (!["owner", "manager", "accountant"].includes(role ?? "")) scopedBranchIds = [];
+      }
       let query = (supabase.from("kitchen_orders" as any) as any).select("id,branch_id,sale_id,status,created_at")
         .eq("tenant_id", tenantId).in("status", ["new", "preparing", "ready"])
         .order("created_at", { ascending: false }).limit(12);
-      if (!isSuperOwner && membership?.branch_id) {
-        query = query.eq("branch_id", membership.branch_id);
-      } else if (!isSuperOwner && membership?.company_id) {
-        const { data: branches, error: branchError } = await supabase.from("branches").select("id")
-          .eq("tenant_id", tenantId).eq("company_id", membership.company_id);
-        if (branchError) throw branchError;
-        query = query.in("branch_id", (branches ?? []).map((branch) => branch.id));
-      }
+      if (scopedBranchIds !== null) query = query.in("branch_id", scopedBranchIds);
       const { data, error } = await query;
       if (error) throw error;
       const orders = data ?? [];
       const saleIds: string[] = Array.from(new Set<string>((orders as Array<{ sale_id: string }>).map((order) => order.sale_id)));
       if (!saleIds.length) return [];
-      const { data: salesRows, error: salesError } = await supabase.from("sales")
-        .select("id,invoice_no").eq("tenant_id", tenantId).in("id", saleIds);
-      if (salesError) throw salesError;
-      const invoiceMap = new Map((salesRows ?? []).map((sale) => [sale.id, sale.invoice_no]));
+      const salesRows = await fetchAllRows((from, to) => supabase.from("sales")
+        .select("id,invoice_no").eq("tenant_id", tenantId).in("id", saleIds).order("id").range(from, to));
+      const invoiceMap = new Map(salesRows.map((sale) => [sale.id, sale.invoice_no]));
       return orders.map((order: { id: string; branch_id: string; sale_id: string; status: string; created_at: string }) => ({
         ...order,
         invoice_no: invoiceMap.get(order.sale_id) ?? null,
       }));
     },
-    enabled: !!tenantId && hasPermission("kitchen.view"),
+    enabled: !!tenantId && !!user?.id && hasPermission("kitchen.view"),
     refetchInterval: 15_000,
     staleTime: 5_000,
   });
