@@ -123,11 +123,14 @@
 117. `supabase/migrations/20261125020000_granular_marketing_rls_alignment.sql`
 118. `supabase/migrations/20261125030000_section_crud_permissions.sql`
 119. `supabase/migrations/20261125060000_audit_history_permission_reads.sql`
-120. `supabase/migrations/20261126190000_marketing_ad_spaces_and_branch_targeting.sql`
-121. `supabase/migrations/20261126200000_scope_marketing_analytics_to_branch.sql`
-122. `supabase/migrations/20261126210000_marketing_advertising_foreign_key_indexes.sql`
-123. `supabase/migrations/20261126220000_inventory_adjustment_permission_and_branch_guard.sql`
+120. `supabase/migrations/20261125070000_private_purchase_rpc_wrappers.sql`
+121. `supabase/migrations/20261125080000_permission_override_write_gates.sql`
+122. `supabase/migrations/20261125090000_sensitive_action_audit_triggers.sql`
+123. `supabase/migrations/20261126190000_marketing_ad_spaces_and_branch_targeting.sql`
+124. `supabase/migrations/20261126200000_scope_marketing_analytics_to_branch.sql`
+125. `supabase/migrations/20261126210000_marketing_advertising_foreign_key_indexes.sql`
+126. `supabase/migrations/20261126220000_inventory_adjustment_permission_and_branch_guard.sql`
 
 ملاحظة: أُضيفت هذه الترحيلات بعد ترحيل مزامنة المطبخ غير المتصلة رقم 115 على فرع التكامل. لا تُطبّق على قاعدة الإنتاج قبل مصالحة سجل الترحيلات البعيد ومراجعة خطة الإصدار.
 
-**الإجمالي: 123 ترحيلاً.**
+**الإجمالي: 126 ترحيلاً.**

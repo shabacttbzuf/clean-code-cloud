@@ -16072,6 +16072,538 @@ USING (
 COMMIT;
 -- END MIGRATION: 20261125060000_audit_history_permission_reads.sql
 
+-- SOURCE MIGRATION: 20261125070000_private_purchase_rpc_wrappers.sql
+-- Preserve the already-private privileged implementations created by the
+-- baseline hardening migration. Replace their bodies with the latest permission-
+-- checked implementations rather than ALTER ... SET SCHEMA (which collides when
+-- the private overload already exists).
+BEGIN;
+
+GRANT USAGE ON SCHEMA private TO authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION private.create_purchase_with_items(
+  _tenant_id uuid,
+  _branch_id uuid,
+  _user_id uuid,
+  _supplier_id uuid,
+  _reference text,
+  _notes text,
+  _items jsonb
+)
+RETURNS public.purchases
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $$
+DECLARE
+  v_item jsonb;
+  v_product_id uuid;
+  v_quantity numeric(14,3);
+  v_cost_price numeric(12,2);
+  v_line_total numeric(12,2);
+  v_total numeric(12,2) := 0;
+  v_purchase public.purchases%ROWTYPE;
+BEGIN
+  IF auth.uid() IS NULL OR auth.uid() <> _user_id THEN
+    RAISE EXCEPTION 'Authenticated purchaser identity mismatch'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF NOT (
+    (
+      public.has_permission(auth.uid(), _tenant_id, 'purchases.create')
+      OR public.has_permission(auth.uid(), _tenant_id, 'purchases.manage')
+    )
+    AND private.can_access_branch(auth.uid(), _tenant_id, _branch_id)
+  )
+  THEN
+    RAISE EXCEPTION 'You cannot receive purchases in this branch'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF _supplier_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM public.suppliers
+     WHERE id = _supplier_id AND tenant_id = _tenant_id AND is_active = true
+  ) THEN
+    RAISE EXCEPTION 'Supplier does not belong to the requested tenant or is inactive'
+      USING ERRCODE = '23503';
+  END IF;
+
+  IF _items IS NULL OR jsonb_typeof(_items) IS DISTINCT FROM 'array' THEN
+    RAISE EXCEPTION 'Purchase items must be a JSON array'
+      USING ERRCODE = '22023';
+  END IF;
+  IF jsonb_array_length(_items) = 0 OR jsonb_array_length(_items) > 300 THEN
+    RAISE EXCEPTION 'Purchase must contain between 1 and 300 items'
+      USING ERRCODE = '22023';
+  END IF;
+
+  -- Validate all products and calculate the total server-side.
+  FOR v_item IN
+    SELECT value FROM jsonb_array_elements(_items)
+     ORDER BY (value->>'product_id')::uuid
+  LOOP
+    v_product_id := (v_item->>'product_id')::uuid;
+    v_quantity := (v_item->>'quantity')::numeric;
+    v_cost_price := (v_item->>'cost_price')::numeric;
+
+    IF v_quantity IS NULL OR v_quantity <= 0 OR v_quantity > 999999.999
+       OR v_cost_price IS NULL OR v_cost_price = 'NaN'::numeric OR v_cost_price < 0
+    THEN
+      RAISE EXCEPTION 'Invalid purchase quantity or cost price'
+        USING ERRCODE = '22023';
+    END IF;
+
+    PERFORM 1
+      FROM public.products
+     WHERE id = v_product_id
+       AND tenant_id = _tenant_id
+       AND is_active = true
+     FOR UPDATE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Purchase product is unavailable or belongs to another tenant'
+        USING ERRCODE = '23503';
+    END IF;
+
+    v_line_total := round(v_quantity * v_cost_price, 2);
+    v_total := v_total + v_line_total;
+  END LOOP;
+
+  INSERT INTO public.purchases (
+    tenant_id, branch_id, supplier_id, user_id,
+    reference, notes, total, status
+  )
+  VALUES (
+    _tenant_id, _branch_id, _supplier_id, _user_id,
+    NULLIF(btrim(_reference), ''), NULLIF(btrim(_notes), ''),
+    round(v_total, 2), 'received'
+  )
+  RETURNING * INTO v_purchase;
+
+  -- Existing purchase-item trigger updates inventory and records the stock
+  -- transaction in this same database transaction.
+  FOR v_item IN
+    SELECT value FROM jsonb_array_elements(_items)
+     ORDER BY (value->>'product_id')::uuid
+  LOOP
+    v_product_id := (v_item->>'product_id')::uuid;
+    v_quantity := (v_item->>'quantity')::numeric;
+    v_cost_price := (v_item->>'cost_price')::numeric;
+
+    INSERT INTO public.purchase_items (
+      tenant_id, purchase_id, product_id, quantity, cost_price, line_total
+    )
+    VALUES (
+      _tenant_id, v_purchase.id, v_product_id, v_quantity, v_cost_price,
+      round(v_quantity * v_cost_price, 2)
+    );
+  END LOOP;
+
+  RETURN v_purchase;
+END;
+$$;
+
+ALTER FUNCTION private.create_purchase_with_items(uuid, uuid, uuid, uuid, text, text, jsonb)
+  SET search_path = pg_catalog, public, private, pg_temp;
+REVOKE ALL ON FUNCTION private.create_purchase_with_items(uuid, uuid, uuid, uuid, text, text, jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION private.create_purchase_with_items(uuid, uuid, uuid, uuid, text, text, jsonb) TO authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.create_purchase_with_items(
+  _tenant_id uuid, _branch_id uuid, _user_id uuid, _supplier_id uuid,
+  _reference text, _notes text, _items jsonb
+)
+RETURNS public.purchases
+LANGUAGE sql
+SECURITY INVOKER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $function$
+  SELECT private.create_purchase_with_items(
+    _tenant_id, _branch_id, _user_id, _supplier_id, _reference, _notes, _items
+  );
+$function$;
+REVOKE ALL ON FUNCTION public.create_purchase_with_items(uuid, uuid, uuid, uuid, text, text, jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.create_purchase_with_items(uuid, uuid, uuid, uuid, text, text, jsonb) TO authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION private.create_purchase_return(
+  _tenant_id uuid,
+  _purchase_id uuid,
+  _reason text,
+  _items jsonb
+)
+RETURNS public.purchase_returns
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $$
+DECLARE
+  v_purchase public.purchases%ROWTYPE;
+  v_line public.purchase_items%ROWTYPE;
+  v_item jsonb;
+  v_return public.purchase_returns%ROWTYPE;
+  v_item_id uuid;
+  v_qty numeric(14,3);
+  v_prior_qty numeric(14,3);
+  v_total numeric(12,2) := 0;
+  v_line_total numeric(12,2);
+  v_last_product_id uuid;
+BEGIN
+  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'Authentication required' USING ERRCODE = '42501'; END IF;
+  IF _tenant_id IS NULL OR _purchase_id IS NULL OR _reason IS NULL OR length(btrim(_reason)) NOT BETWEEN 2 AND 500 THEN
+    RAISE EXCEPTION 'Invalid supplier return details' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO v_purchase FROM public.purchases WHERE id = _purchase_id AND tenant_id = _tenant_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Purchase not found in this tenant' USING ERRCODE = 'P0002'; END IF;
+  IF v_purchase.status <> 'received' THEN RAISE EXCEPTION 'Only received purchases can be returned' USING ERRCODE = '55000'; END IF;
+  IF NOT (
+    (
+      public.has_permission(auth.uid(), _tenant_id, 'purchases.returns.create')
+      OR public.has_permission(auth.uid(), _tenant_id, 'purchases.manage')
+    )
+    AND private.can_access_branch(auth.uid(), _tenant_id, v_purchase.branch_id)
+  ) THEN RAISE EXCEPTION 'You cannot return purchases from this branch' USING ERRCODE = '42501'; END IF;
+  IF _items IS NULL OR jsonb_typeof(_items) <> 'array' OR jsonb_array_length(_items) = 0 OR jsonb_array_length(_items) > 300 THEN
+    RAISE EXCEPTION 'Return must contain between 1 and 300 items' USING ERRCODE = '22023';
+  END IF;
+  IF (SELECT count(*) FROM jsonb_array_elements(_items))
+     <> (SELECT count(DISTINCT value->>'purchase_item_id') FROM jsonb_array_elements(_items)) THEN
+    RAISE EXCEPTION 'A purchase item may appear only once in a return request' USING ERRCODE = '22023';
+  END IF;
+
+  FOR v_item IN SELECT value FROM jsonb_array_elements(_items) ORDER BY (value->>'purchase_item_id')::uuid LOOP
+    v_item_id := (v_item->>'purchase_item_id')::uuid;
+    v_qty := (v_item->>'quantity')::numeric;
+    IF v_item_id IS NULL OR v_qty IS NULL OR v_qty <= 0 OR v_qty > 999999.999 THEN
+      RAISE EXCEPTION 'Invalid purchase return item or quantity' USING ERRCODE = '22023';
+    END IF;
+    SELECT * INTO v_line FROM public.purchase_items
+    WHERE id = v_item_id AND purchase_id = _purchase_id AND tenant_id = _tenant_id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Return item does not belong to this purchase' USING ERRCODE = '23503'; END IF;
+    SELECT COALESCE(sum(ri.quantity),0) INTO v_prior_qty
+    FROM public.purchase_return_items ri
+    JOIN public.purchase_returns r ON r.id = ri.purchase_return_id
+    WHERE ri.purchase_item_id = v_item_id AND r.purchase_id = _purchase_id;
+    IF v_prior_qty + v_qty > v_line.quantity THEN
+      RAISE EXCEPTION 'Return quantity exceeds the remaining purchased quantity for %', v_line.id USING ERRCODE = '23514';
+    END IF;
+    v_total := v_total + round(v_line.cost_price * v_qty, 2);
+  END LOOP;
+
+  INSERT INTO public.purchase_returns (tenant_id, purchase_id, branch_id, processed_by, total, reason)
+  VALUES (_tenant_id, _purchase_id, v_purchase.branch_id, auth.uid(), round(v_total,2), btrim(_reason))
+  RETURNING * INTO v_return;
+
+  FOR v_item IN SELECT value FROM jsonb_array_elements(_items) ORDER BY (value->>'purchase_item_id')::uuid LOOP
+    v_item_id := (v_item->>'purchase_item_id')::uuid;
+    v_qty := (v_item->>'quantity')::numeric;
+    SELECT * INTO v_line FROM public.purchase_items WHERE id = v_item_id AND purchase_id = _purchase_id AND tenant_id = _tenant_id;
+    v_line_total := round(v_line.cost_price * v_qty, 2);
+
+    INSERT INTO public.purchase_return_items (
+      tenant_id, purchase_return_id, purchase_item_id, product_id,
+      product_name, quantity, cost_price, line_total
+    ) VALUES (
+      _tenant_id, v_return.id, v_line.id, v_line.product_id,
+      COALESCE((SELECT p.name FROM public.products p WHERE p.id=v_line.product_id), 'منتج محذوف'),
+      v_qty, v_line.cost_price, v_line_total
+    );
+
+    PERFORM public.apply_stock_change(_tenant_id, v_line.product_id, v_purchase.branch_id, -v_qty);
+    INSERT INTO public.inventory_transactions (
+      tenant_id, product_id, branch_id, user_id, txn_type, quantity,
+      reference_type, reference_id, reason
+    ) VALUES (
+      _tenant_id, v_line.product_id, v_purchase.branch_id, auth.uid(), 'out', -v_qty,
+      'purchase_return', v_return.id, 'إرجاع بضاعة إلى المورد'
+    );
+  END LOOP;
+  RETURN v_return;
+END;
+$$;
+
+ALTER FUNCTION private.create_purchase_return(uuid, uuid, text, jsonb)
+  SET search_path = pg_catalog, public, private, pg_temp;
+REVOKE ALL ON FUNCTION private.create_purchase_return(uuid, uuid, text, jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION private.create_purchase_return(uuid, uuid, text, jsonb) TO authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.create_purchase_return(
+  _tenant_id uuid, _purchase_id uuid, _reason text, _items jsonb
+)
+RETURNS public.purchase_returns
+LANGUAGE sql
+SECURITY INVOKER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $function$
+  SELECT private.create_purchase_return(_tenant_id, _purchase_id, _reason, _items);
+$function$;
+REVOKE ALL ON FUNCTION public.create_purchase_return(uuid, uuid, text, jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.create_purchase_return(uuid, uuid, text, jsonb) TO authenticated, service_role;
+
+COMMIT;
+-- END MIGRATION: 20261125070000_private_purchase_rpc_wrappers.sql
+
+-- SOURCE MIGRATION: 20261125080000_permission_override_write_gates.sql
+-- Direct Data API writes to permission overrides must enforce the same
+-- authority checks as the validated setUserPermission server action.
+-- These restrictive policies are ANDed with existing role/tenant policies.
+BEGIN;
+
+CREATE OR REPLACE FUNCTION private.can_manage_permission_override_target(
+  _tenant_id uuid,
+  _target_user_id uuid
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $function$
+  SELECT
+    (select auth.uid()) IS NOT NULL
+    AND _tenant_id IS NOT NULL
+    AND _target_user_id IS NOT NULL
+    AND _target_user_id <> (select auth.uid())
+    AND NOT private.is_super_owner_target((select auth.uid()), _target_user_id)
+    AND EXISTS (
+      SELECT 1
+      FROM public.user_roles target_role
+      WHERE target_role.user_id = _target_user_id
+        AND target_role.tenant_id = _tenant_id
+    )
+    AND (
+      public.is_super_owner((select auth.uid()))
+      OR (
+        -- A tenant-wide owner is the only tenant role that may manage
+        -- managers or users outside a specific company/branch.
+        EXISTS (
+          SELECT 1
+          FROM public.user_roles actor_role
+          WHERE actor_role.user_id = (select auth.uid())
+            AND actor_role.tenant_id = _tenant_id
+            AND actor_role.role = 'owner'
+            AND actor_role.company_id IS NULL
+            AND actor_role.branch_id IS NULL
+        )
+        OR (
+          NOT private.user_has_role_in_tenant(
+            _target_user_id, _tenant_id, ARRAY['owner','manager']
+          )
+          -- Every target membership must match one complete actor scope tuple.
+          AND NOT EXISTS (
+            SELECT 1
+            FROM public.user_roles target_role
+            WHERE target_role.user_id = _target_user_id
+              AND target_role.tenant_id = _tenant_id
+              AND NOT EXISTS (
+                SELECT 1
+                FROM public.user_roles actor_role
+                WHERE actor_role.user_id = (select auth.uid())
+                  AND actor_role.tenant_id = _tenant_id
+                  AND actor_role.role IN ('owner','manager')
+                  AND (
+                    (
+                      actor_role.company_id IS NOT NULL
+                      AND target_role.company_id = actor_role.company_id
+                      AND (
+                        actor_role.branch_id IS NULL
+                        OR target_role.branch_id = actor_role.branch_id
+                      )
+                    )
+                    OR (
+                      actor_role.company_id IS NULL
+                      AND actor_role.branch_id IS NOT NULL
+                      AND target_role.branch_id = actor_role.branch_id
+                    )
+                  )
+              )
+          )
+          -- Managers may manage only the employees they hired.
+          AND private.can_access_creator_company(_tenant_id, _target_user_id)
+          AND (
+            NOT EXISTS (
+              SELECT 1
+              FROM public.user_roles actor_role
+              WHERE actor_role.user_id = (select auth.uid())
+                AND actor_role.tenant_id = _tenant_id
+                AND actor_role.role = 'manager'
+            )
+            OR NOT EXISTS (
+              SELECT 1
+              FROM public.user_roles target_role
+              WHERE target_role.user_id = _target_user_id
+                AND target_role.tenant_id = _tenant_id
+                AND target_role.hired_by IS DISTINCT FROM (select auth.uid())
+            )
+          )
+        )
+      )
+    );
+$function$;
+
+REVOKE ALL ON FUNCTION private.can_manage_permission_override_target(uuid,uuid)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION private.can_manage_permission_override_target(uuid,uuid)
+  TO authenticated, service_role;
+
+-- Replace the earlier company-only UPO boundary with a complete
+-- company+branch membership-tuple check. This remains restrictive.
+DROP POLICY IF EXISTS company_scope_user_permission_overrides_insert
+  ON public.user_permission_overrides;
+CREATE POLICY company_scope_user_permission_overrides_insert
+ON public.user_permission_overrides
+AS RESTRICTIVE FOR INSERT TO authenticated
+WITH CHECK (
+  private.can_manage_permission_override_target(tenant_id, user_id)
+);
+
+DROP POLICY IF EXISTS company_scope_user_permission_overrides_update
+  ON public.user_permission_overrides;
+CREATE POLICY company_scope_user_permission_overrides_update
+ON public.user_permission_overrides
+AS RESTRICTIVE FOR UPDATE TO authenticated
+USING (
+  private.can_manage_permission_override_target(tenant_id, user_id)
+)
+WITH CHECK (
+  private.can_manage_permission_override_target(tenant_id, user_id)
+);
+
+DROP POLICY IF EXISTS company_scope_user_permission_overrides_delete
+  ON public.user_permission_overrides;
+CREATE POLICY company_scope_user_permission_overrides_delete
+ON public.user_permission_overrides
+AS RESTRICTIVE FOR DELETE TO authenticated
+USING (
+  private.can_manage_permission_override_target(tenant_id, user_id)
+);
+
+DROP POLICY IF EXISTS permission_gate_user_permission_overrides_insert
+  ON public.user_permission_overrides;
+CREATE POLICY permission_gate_user_permission_overrides_insert
+ON public.user_permission_overrides
+AS RESTRICTIVE FOR INSERT TO authenticated
+WITH CHECK (
+  granted_by = (select auth.uid())
+  AND (
+    public.is_super_owner((select auth.uid()))
+    OR (
+      public.has_permission((select auth.uid()), tenant_id, 'permissions.manage')
+      AND public.has_permission((select auth.uid()), tenant_id, permission_key)
+    )
+  )
+);
+
+DROP POLICY IF EXISTS permission_gate_user_permission_overrides_update
+  ON public.user_permission_overrides;
+CREATE POLICY permission_gate_user_permission_overrides_update
+ON public.user_permission_overrides
+AS RESTRICTIVE FOR UPDATE TO authenticated
+USING (
+  public.is_super_owner((select auth.uid()))
+  OR (
+    public.has_permission((select auth.uid()), tenant_id, 'permissions.manage')
+    AND public.has_permission((select auth.uid()), tenant_id, permission_key)
+  )
+)
+WITH CHECK (
+  granted_by = (select auth.uid())
+  AND (
+    public.is_super_owner((select auth.uid()))
+    OR (
+      public.has_permission((select auth.uid()), tenant_id, 'permissions.manage')
+      AND public.has_permission((select auth.uid()), tenant_id, permission_key)
+    )
+  )
+);
+
+DROP POLICY IF EXISTS permission_gate_user_permission_overrides_delete
+  ON public.user_permission_overrides;
+CREATE POLICY permission_gate_user_permission_overrides_delete
+ON public.user_permission_overrides
+AS RESTRICTIVE FOR DELETE TO authenticated
+USING (
+  public.is_super_owner((select auth.uid()))
+  OR (
+    public.has_permission((select auth.uid()), tenant_id, 'permissions.manage')
+    AND public.has_permission((select auth.uid()), tenant_id, permission_key)
+  )
+);
+
+COMMIT;
+-- END MIGRATION: 20261125080000_permission_override_write_gates.sql
+
+-- SOURCE MIGRATION: 20261125090000_sensitive_action_audit_triggers.sql
+-- Extend the existing audit trail to permission-default, refund/return,
+-- inventory, payment, HR and marketing mutations. Existing triggers are kept.
+BEGIN;
+
+DO $audit$
+DECLARE
+  v_table text;
+  v_relation regclass;
+BEGIN
+  FOREACH v_table IN ARRAY ARRAY[
+    'attendance',
+    'payroll_items',
+    'cash_sessions',
+    'payments',
+    'inventory_transactions',
+    'purchase_items',
+    'sale_items',
+    'sale_refunds',
+    'sale_refund_items',
+    'purchase_returns',
+    'purchase_return_items',
+    'marketing_campaigns',
+    'promotional_offers'
+  ]
+  LOOP
+    v_relation := to_regclass(format('public.%I', v_table));
+    IF v_relation IS NULL THEN
+      CONTINUE;
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_trigger
+      WHERE tgrelid = v_relation
+        AND tgfoid = to_regprocedure('public.log_audit_change()')
+        AND NOT tgisinternal
+    ) THEN
+      EXECUTE format(
+        'CREATE TRIGGER %I AFTER INSERT OR UPDATE OR DELETE ON public.%I
+         FOR EACH ROW EXECUTE FUNCTION public.log_audit_change()',
+        'trg_audit_' || v_table,
+        v_table
+      );
+    END IF;
+  END LOOP;
+END;
+$audit$;
+
+-- Keep the generic audit trigger safe for trigger-only execution and a pinned search path.
+ALTER FUNCTION public.log_audit_change() SET search_path = pg_catalog, public;
+REVOKE EXECUTE ON FUNCTION public.log_audit_change() FROM PUBLIC, anon, authenticated;
+
+-- Global built-in role defaults have tenant_id NULL and are platform-level.
+-- Audit only tenant-specific custom-role permission changes here.
+DROP TRIGGER IF EXISTS trg_audit_role_permissions_insert_update ON public.role_permissions;
+CREATE TRIGGER trg_audit_role_permissions_insert_update
+AFTER INSERT OR UPDATE ON public.role_permissions
+FOR EACH ROW
+WHEN (NEW.tenant_id IS NOT NULL)
+EXECUTE FUNCTION public.log_audit_change();
+
+DROP TRIGGER IF EXISTS trg_audit_role_permissions_delete ON public.role_permissions;
+CREATE TRIGGER trg_audit_role_permissions_delete
+AFTER DELETE ON public.role_permissions
+FOR EACH ROW
+WHEN (OLD.tenant_id IS NOT NULL)
+EXECUTE FUNCTION public.log_audit_change();
+
+COMMIT;
+-- END MIGRATION: 20261125090000_sensitive_action_audit_triggers.sql
+
 -- SOURCE MIGRATION: 20261126190000_marketing_ad_spaces_and_branch_targeting.sql
 -- Add branch-level targeting and a first-class catalog of advertising spaces.
 -- Existing campaign data and placement keys remain backward compatible.
@@ -16664,6 +17196,9 @@ COMMIT;
 BEGIN;
 
 DROP POLICY IF EXISTS "Warehouse and admins manage inventory" ON public.inventory;
+DROP POLICY IF EXISTS permission_scope_inventory_insert ON public.inventory;
+DROP POLICY IF EXISTS permission_scope_inventory_update ON public.inventory;
+DROP POLICY IF EXISTS permission_scope_inventory_delete ON public.inventory;
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE public.inventory FROM PUBLIC, anon, authenticated;
 GRANT ALL ON TABLE public.inventory TO service_role;
 
@@ -16772,4 +17307,5 @@ REVOKE ALL ON FUNCTION public.adjust_inventory_balance(uuid, uuid, uuid, numeric
 GRANT EXECUTE ON FUNCTION public.adjust_inventory_balance(uuid, uuid, uuid, numeric, text) TO authenticated, service_role;
 
 COMMIT;
+-- END MIGRATION: 20261126220000_inventory_adjustment_permission_and_branch_guard.sql
 
