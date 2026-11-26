@@ -267,10 +267,14 @@
 
 **الإجمالي: 114 ترحيلاً.**
 
-115. `supabase/migrations/20261126190000_marketing_ad_spaces_and_branch_targeting.sql`
+115. `supabase/migrations/20261126020000_marketing_advertising_foreign_key_indexes.sql`
 
 **الإجمالي: 115 ترحيلاً.**
 
-116. `supabase/migrations/20261126200000_scope_marketing_analytics_to_branch.sql`
+116. `supabase/migrations/20261126190000_marketing_ad_spaces_and_branch_targeting.sql`
 
 **الإجمالي: 116 ترحيلاً.**
+
+117. `supabase/migrations/20261126200000_scope_marketing_analytics_to_branch.sql`
+
+**الإجمالي: 117 ترحيلاً.**
