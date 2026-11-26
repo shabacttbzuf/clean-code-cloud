@@ -156,7 +156,10 @@ test("app launcher mirrors enterprise, system, and owner-only custom navigation 
   assert.match(appLauncher, /systemItems/);
   assert.match(appLauncher, /اختصارات مخصصة/);
   assert.match(appLauncher, /navOverrides\[basePath\]/);
-  assert.match(appLauncher, /permissions\.data\.has\(item\.permission\)/);
+  assert.match(appLauncher, /permissions\.has\(item\.permission\)/);
+  assert.match(appLauncher, /permissionsError/);
+  assert.match(appLauncher, /permissionsLoading/);
+  assert.match(appLauncher, /APP_LAUNCHER_ROUTE_PATHS\.has\(basePath\)/);
 });
 
 test("workspace tabs preserve pinned pages and enforce a stable maximum", () => {
