@@ -23,10 +23,12 @@ type Row = { id: string; employee_id: string; amount: number; reason: string | n
 type Employee = { id: string; full_name: string };
 
 function CompensationPage() {
-  const { tenantId, tenant, isAdmin } = useActiveTenant();
+  const { tenantId, tenant, isSuperOwner, hasPermission } = useActiveTenant();
   const qc = useQueryClient();
   const [tab, setTab] = useState<"bonuses" | "deductions">("bonuses");
   const [open, setOpen] = useState(false);
+  const canCreateCompensation = isSuperOwner || hasPermission("hr.compensation.create") || hasPermission("hr.compensation.manage");
+  const canDeleteCompensation = isSuperOwner || hasPermission("hr.compensation.delete") || hasPermission("hr.compensation.manage");
 
   const employees = useQuery({
     queryKey: ["employees-min", tenantId],
@@ -63,6 +65,7 @@ function CompensationPage() {
 
   const create = useMutation({
     mutationFn: async (v: { employee_id: string; amount: number; reason: string; type: string; date: string }) => {
+      if (!canCreateCompensation) throw new Error("لا تملك صلاحية إضافة المستحقات والاستقطاعات.");
       const payload: any = {
         tenant_id: tenantId!, employee_id: v.employee_id, amount: v.amount,
         reason: v.reason || null, applied_date: v.date,
@@ -77,6 +80,7 @@ function CompensationPage() {
 
   const del = useMutation({
     mutationFn: async (id: string) => {
+      if (!canDeleteCompensation) throw new Error("لا تملك صلاحية حذف المستحقات والاستقطاعات.");
       const { error } = await supabase.from(table).delete().eq("id", id);
       if (error) throw error;
     },
@@ -87,7 +91,7 @@ function CompensationPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="المكافآت والحسميات" subtitle="تُطبَّق تلقائياً على دورة الرواتب"
-        action={isAdmin && (
+        action={canCreateCompensation && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild><Button><Plus className="ml-2 h-4 w-4" />إضافة</Button></DialogTrigger>
             <CompDialog kind={tab} employees={employees.data ?? []} onSubmit={(v) => create.mutate(v)} pending={create.isPending} />
@@ -133,7 +137,7 @@ function CompensationPage() {
                           : <span className="rounded-full bg-chart-4/15 px-2 py-0.5 text-[10px] text-chart-4">معلّق</span>}
                       </td>
                       <td className="p-3">
-                        {isAdmin && !r.payroll_item_id && (
+                        {canDeleteCompensation && !r.payroll_item_id && (
                           <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => { if (confirm("حذف؟")) del.mutate(r.id); }}>
                             <Trash2 className="h-3 w-3" />
                           </Button>
