@@ -1,0 +1,59 @@
+name: Temporary migration filename generator
+
+on:
+  push:
+    branches: ["reconcile/security-notifications-into-integration"]
+    paths:
+      - ".github/workflows/_generate-migration-filenames.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          persist-credentials: true
+
+      - name: Install the repository Supabase CLI version
+        uses: supabase/setup-cli@v3
+        with:
+          version: v2.stable
+
+      - name: Generate unique migration filenames using Supabase CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase migration new --help >/tmp/supabase-migration-help.txt
+          names=(
+            granular_section_action_permissions
+            granular_marketing_rls_alignment
+            section_crud_permissions
+            purchase_rpc_action_permissions
+            purchase_return_rpc_action_permission
+            audit_history_permission_reads
+            private_purchase_rpc_wrappers
+            permission_override_write_gates
+            sensitive_action_audit_triggers
+            prevent_direct_expense_deletion
+            prevent_product_history_deletion
+            inventory_balance_rpc_only
+            notification_realtime_publication
+            low_stock_event_notifications
+            hr_leave_event_notifications
+            overdue_kitchen_order_notifications
+            customer_invoice_event_notifications
+            notification_scope_archive_and_missing_sources
+          )
+          for name in "${names[@]}"; do
+            supabase migration new "$name"
+            sleep 1
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add supabase/migrations
+          git commit -m "chore: generate unique migration filenames"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
