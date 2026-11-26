@@ -629,8 +629,8 @@ function Dashboard() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {hasPermission("cash.view") && <MiniStat label="ورديات مفتوحة" value={stats.data.openSessions} icon={<Wallet className="h-4 w-4" />} />}
-            {hasPermission("inventory.view") && <MiniStat label="نفاد مخزون" value={stats.data.lowStockCount} icon={<Package className="h-4 w-4" />} />}
+            {hasPermission("cash.view") && <MiniStat label="ورديات مفتوحة" value={stats.data.openSessions ?? 0} icon={<Wallet className="h-4 w-4" />} />}
+            {hasPermission("inventory.view") && <MiniStat label="نفاد مخزون" value={stats.data.lowStockCount ?? 0} icon={<Package className="h-4 w-4" />} />}
             {hasPermission("sales.view") && <MiniStat label="طلبات اليوم" value={stats.data.salesTodayCount} icon={<Receipt className="h-4 w-4" />} />}
             {hasPermission("customers.view") && stats.data.customersCount !== null && <MiniStat label="إجمالي العملاء" value={stats.data.customersCount} icon={<UsersIcon className="h-4 w-4" />} />}
 
