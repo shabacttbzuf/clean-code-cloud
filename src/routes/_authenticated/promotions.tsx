@@ -38,6 +38,16 @@ function PromotionsPage() {
   const canManage = isSuperOwner || isTenantOwner || hasPermission("promotions.manage");
   const [form, setForm] = useState({ ...emptyForm, branch_id: membership?.branch_id && !membership?.company_id ? membership.branch_id : "" });
   const [editing, setEditing] = useState<string | null>(null);
+  const [editingCompanyId, setEditingCompanyId] = useState<string | null>(null);
+  const [formTouched, setFormTouched] = useState(false);
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/promotions", dirty: formTouched },
+    }));
+    return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/promotions", dirty: false },
+    })); };
+  }, [formTouched]);
   useEffect(() => {
     if (membership?.branch_id && !membership.company_id && !editing) {
       setForm((current) => current.branch_id ? current : { ...current, branch_id: membership.branch_id! });
@@ -122,7 +132,7 @@ function PromotionsPage() {
       if (usageLimit !== null && (!Number.isInteger(usageLimit) || usageLimit < 1)) throw new Error("عدد مرات الاستخدام غير صحيح");
       const payload = {
         tenant_id: tenantId,
-        company_id: membership?.company_id ?? null,
+        company_id: editing ? editingCompanyId : (membership?.company_id ?? null),
         branch_id: form.branch_id || null,
         name, description: form.description.trim(), offer_type: form.offer_type,
         discount_value: form.offer_type === "buy_x_get_y" ? 0 : value,
@@ -135,10 +145,17 @@ function PromotionsPage() {
         usage_limit: usageLimit,
       };
       const table = supabase.from("promotional_offers" as any) as any;
+      let updateQuery = table.update(payload).eq("id", editing ?? "").eq("tenant_id", tenantId);
+      if (editing && !isSuperOwner && !isTenantOwner) {
+        if (membership?.company_id) updateQuery = updateQuery.eq("company_id", membership.company_id);
+        else if (membership?.branch_id) updateQuery = updateQuery.eq("branch_id", membership.branch_id);
+        else throw new Error("لا يوجد نطاق شركة أو فرع مصرح به لتعديل هذا العرض.");
+      }
       const result = editing
-        ? await table.update(payload).eq("id", editing).eq("tenant_id", tenantId)
-        : await table.insert({ ...payload, status: "draft" });
+        ? await updateQuery.select("id").maybeSingle()
+        : await table.insert({ ...payload, status: "draft" }).select("id").single();
       if (result.error) throw result.error;
+      if (!result.data?.id) throw new Error("لم يتم العثور على العرض ضمن نطاق الشركة والفرع الحاليين؛ لم يُنفّذ الحفظ.");
     },
     onSuccess: () => {
       toast.success(editing ? "تم تحديث العرض" : "تم حفظ العرض كمسودة");
@@ -150,18 +167,32 @@ function PromotionsPage() {
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: {id:string;status:string}) => {
-      const { error } = await (supabase.from("promotional_offers" as any) as any)
+      let query = (supabase.from("promotional_offers" as any) as any)
         .update({ status }).eq("id", id).eq("tenant_id", tenantId!);
+      if (!isSuperOwner && !isTenantOwner) {
+        if (membership?.company_id) query = query.eq("company_id", membership.company_id);
+        else if (membership?.branch_id) query = query.eq("branch_id", membership.branch_id);
+        else throw new Error("لا يوجد نطاق شركة أو فرع مصرح به لإدارة هذا العرض.");
+      }
+      const { data, error } = await query.select("id").maybeSingle();
       if (error) throw error;
+      if (!data?.id) throw new Error("لم يتم العثور على العرض ضمن نطاقك المصرح به.");
     },
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["promotional-offers", tenantId] }),
     onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر تحديث حالة العرض"),
   });
   const remove = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await (supabase.from("promotional_offers" as any) as any)
+      let query = (supabase.from("promotional_offers" as any) as any)
         .delete().eq("id", id).eq("tenant_id", tenantId!);
+      if (!isSuperOwner && !isTenantOwner) {
+        if (membership?.company_id) query = query.eq("company_id", membership.company_id);
+        else if (membership?.branch_id) query = query.eq("branch_id", membership.branch_id);
+        else throw new Error("لا يوجد نطاق شركة أو فرع مصرح به لحذف هذا العرض.");
+      }
+      const { data, error } = await query.select("id").maybeSingle();
       if (error) throw error;
+      if (!data?.id) throw new Error("لم يتم العثور على العرض أو لا تملك صلاحية حذفه.");
     },
     onSuccess: () => {
       toast.success("تم حذف العرض");
@@ -170,10 +201,12 @@ function PromotionsPage() {
     onError: (error) => toast.error(error instanceof Error ? error.message : "لا يمكن حذف عرض مستخدم؛ قم بأرشفته"),
   });
 
-  function resetForm() { setForm({ ...emptyForm, branch_id: membership?.branch_id && !membership?.company_id ? membership.branch_id : "" }); setEditing(null); }
+  function resetForm() { setFormTouched(false); setForm({ ...emptyForm, branch_id: membership?.branch_id && !membership?.company_id ? membership.branch_id : "" }); setEditing(null); setEditingCompanyId(null); }
   function editOffer(offer: Offer) {
+    setFormTouched(false);
     const local = (v: string | null) => v ? new Date(new Date(v).getTime() - new Date(v).getTimezoneOffset() * 60000).toISOString().slice(0,16) : "";
     setEditing(offer.id);
+    setEditingCompanyId(offer.company_id);
     setForm({
       name: offer.name, description: offer.description, offer_type: offer.offer_type,
       discount_value: String(offer.discount_value), minimum_subtotal: String(offer.minimum_subtotal),
@@ -194,7 +227,7 @@ function PromotionsPage() {
     <PageHeader title="العروض الترويجية" subtitle="إنشاء الخصومات وعروض اشترِ واحصل، وتحديد المنتجات والفروع والجدولة، ومتابعة الاستخدام من نقطة البيع." />
     <Card>
       <CardHeader><CardTitle className="flex items-center gap-2"><Gift className="h-5 w-5 text-primary" />{editing ? "تعديل عرض ترويجي" : "إنشاء عرض ترويجي"}</CardTitle><CardDescription>يحفظ العرض كمسودة أولاً، ولا يُطبق في نقطة البيع إلا بعد تفعيله واستيفاء شروطه.</CardDescription></CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4" onChangeCapture={() => setFormTouched(true)}>
         <div className="grid gap-3 md:grid-cols-2">
           <div className="space-y-2"><Label>اسم العرض</Label><Input value={form.name} maxLength={120} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="مثال: خصم نهاية الأسبوع" /></div>
           <div className="space-y-2"><Label>نوع العرض</Label><select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={form.offer_type} onChange={e=>setForm(p=>({...p,offer_type:e.target.value as Offer["offer_type"]}))}><option value="percentage">خصم نسبة مئوية</option><option value="fixed">خصم مبلغ ثابت</option><option value="buy_x_get_y">اشترِ واحصل</option></select></div>

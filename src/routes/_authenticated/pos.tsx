@@ -31,6 +31,7 @@ import { formatMoney } from "@/lib/format";
 import { printInvoiceHTML, type InvoiceData } from "@/lib/invoice-pdf";
 import { PageHeader } from "@/components/page-header";
 import { getMyPosAccessStatus, verifyMyPosPasscode } from "@/lib/pos-access.functions";
+import { offlineCacheKey, withOfflineFallback, OFFLINE_INVENTORY_CACHE_MAX_AGE_MS } from "@/lib/offline-reference-cache";
 
 export const Route = createFileRoute("/_authenticated/pos")({
   component: POSPage,
@@ -158,8 +159,35 @@ function saveDrafts(list: Draft[], storageKey: string) {
 }
 
 function POSWorkspace() {
-  const { tenantId, tenant, userId, membership, isAdmin, isSuperOwner } = useActiveTenant();
+  const { tenantId, tenant, userId, membership, role, isAdmin, isSuperOwner } = useActiveTenant();
   const qc = useQueryClient();
+  const [isOnline, setIsOnline] = useState(true);
+  useEffect(() => {
+    const updateConnection = () => {
+      const online = navigator.onLine;
+      setIsOnline(online);
+      if (online) {
+        void qc.invalidateQueries({ queryKey: ["products-pos", tenantId] });
+        void qc.invalidateQueries({ queryKey: ["categories-min", tenantId] });
+        void qc.invalidateQueries({ queryKey: ["branches-active", tenantId] });
+        void qc.invalidateQueries({ queryKey: ["pos-inventory", tenantId] });
+        void qc.invalidateQueries({ queryKey: ["open-session"] });
+      }
+    };
+    updateConnection();
+    window.addEventListener("online", updateConnection);
+    window.addEventListener("offline", updateConnection);
+    return () => {
+      window.removeEventListener("online", updateConnection);
+      window.removeEventListener("offline", updateConnection);
+    };
+  }, [qc, tenantId]);
+  const offlineScope = {
+    tenantId: tenantId ?? "no-tenant",
+    userId: userId ?? "no-user",
+    companyId: membership?.company_id,
+    branchId: membership?.branch_id,
+  };
   const getPosAccessStatus = useServerFn(getMyPosAccessStatus);
   const verifyPosPasscode = useServerFn(verifyMyPosPasscode);
   const [posPasscode, setPosPasscode] = useState("");
@@ -236,32 +264,43 @@ function POSWorkspace() {
     deliveryFeeInput, paidAmount, openingBalance, paperSize, reviewOpen, reviewMethod, draftsOpen]);
 
   const beginCheckout = (method: PaymentUI) => {
+    if (!isOnline || !navigator.onLine) {
+      toast.error("لا يمكن إتمام البيع دون اتصال. حُفظت السلة كمسودة محلية فقط.");
+      return;
+    }
+    if (inventory.isLoading || inventory.isError) {
+      toast.error("يلزم تحديث بيانات المخزون والاتصال بالخادم قبل البيع.");
+      return;
+    }
     if (cart.length === 0) return toast.info("الفاتورة فارغة");
     setReviewMethod(method);
     setReviewOpen(true);
   };
 
   const branches = useQuery({
-    queryKey: ["branches-active", tenantId],
-    queryFn: async (): Promise<Branch[]> => {
-      let query = supabase
-        .from("branches")
-        .select("id, name, tax_number, address, phone")
-        .eq("tenant_id", tenantId!)
-        .eq("is_active", true);
-      // Branch-scoped staff must never see or select another branch in POS.
-      if (membership?.branch_id && !isAdmin && !isSuperOwner) {
-        query = query.eq("id", membership.branch_id);
-      }
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data ?? []) as Branch[];
-    },
+    queryKey: ["branches-active", tenantId, userId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryFn: async (): Promise<Branch[]> =>
+      withOfflineFallback(offlineCacheKey(offlineScope, "pos-branches"), async () => {
+        let query = supabase
+          .from("branches")
+          .select("id, name, tax_number, address, phone")
+          .eq("tenant_id", tenantId!)
+          .eq("is_active", true);
+        // Every non-platform account is limited to its assigned branch or company.
+        if (!isSuperOwner && membership?.branch_id) {
+          query = query.eq("id", membership.branch_id);
+        } else if (!isSuperOwner && membership?.company_id) {
+          query = query.eq("company_id", membership.company_id);
+        }
+        const { data, error } = await query;
+        if (error) throw error;
+        return (data ?? []) as Branch[];
+      }),
     enabled: !!tenantId,
   });
 
   useEffect(() => {
-    if (membership?.branch_id && !isAdmin && !isSuperOwner && branchId !== membership.branch_id) {
+    if (membership?.branch_id && !isSuperOwner && branchId !== membership.branch_id) {
       setBranchId(membership.branch_id);
     }
   }, [membership?.branch_id, isAdmin, isSuperOwner, branchId]);
@@ -336,66 +375,97 @@ function POSWorkspace() {
   });
 
   const categories = useQuery({
-    queryKey: ["categories-min", tenantId],
-    queryFn: async (): Promise<Category[]> => {
-      const { data, error } = await supabase.from("categories").select("id, name").eq("tenant_id", tenantId!).order("sort_order");
-      if (error) throw error;
-      return (data ?? []) as Category[];
-    },
+    queryKey: ["categories-min", tenantId, userId, membership?.company_id, membership?.branch_id],
+    queryFn: async (): Promise<Category[]> =>
+      withOfflineFallback(offlineCacheKey(offlineScope, "pos-categories"), async () => {
+        const { data, error } = await supabase.from("categories").select("id, name").eq("tenant_id", tenantId!).order("sort_order");
+        if (error) throw error;
+        return (data ?? []) as Category[];
+      }),
     enabled: !!tenantId,
   });
 
   const products = useQuery({
-    queryKey: ["products-pos", tenantId],
-    queryFn: async (): Promise<Product[]> => {
-      return fetchAllRows<Product>(
-        supabase.from("products")
-          .select("id, name, sale_price, category_id, is_active, image_url")
-          .eq("tenant_id", tenantId!)
-          .eq("is_active", true)
-          .order("name")
-          .order("id"),
-      );
-    },
+    queryKey: ["products-pos", tenantId, userId, membership?.company_id, membership?.branch_id],
+    queryFn: async (): Promise<Product[]> =>
+      withOfflineFallback(offlineCacheKey(offlineScope, "pos-products"), () =>
+        fetchAllRows<Product>(
+          supabase.from("products")
+            .select("id, name, sale_price, category_id, is_active, image_url")
+            .eq("tenant_id", tenantId!)
+            .eq("is_active", true)
+            .order("name")
+            .order("id"),
+        ),
+      ),
     enabled: !!tenantId,
   });
 
   const posPromos = useQuery({
-    queryKey: ["pos-marketing-campaigns", tenantId, membership?.company_id ?? "tenant"],
+    queryKey: ["pos-marketing-campaigns", tenantId, membership?.company_id ?? "tenant", branchId],
     queryFn: async () => {
+      const now = new Date().toISOString();
       let query = supabase.from("marketing_campaigns")
         .select("id,title,description,image_url,target_url,starts_at,ends_at")
         .eq("tenant_id", tenantId!)
         .eq("status", "active")
         .eq("placement", "pos_promo")
+        .or(`starts_at.is.null,starts_at.lte.${now}`)
+        .or(`ends_at.is.null,ends_at.gt.${now}`)
         .order("sort_order")
         .limit(3);
       if (membership?.company_id) {
         query = query.or(`company_id.is.null,company_id.eq.${membership.company_id}`);
+      } else if (!isSuperOwner && !(role === "owner" && !membership?.company_id)) {
+        // Do not expose company-specific campaigns to branch-only or regular tenant members.
+        query = query.is("company_id", null);
+      }
+      if (branchId) {
+        query = query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
       }
       const { data, error } = await query;
       if (error) throw error;
-      const now = Date.now();
+      const nowMs = Date.now();
       return (data ?? []).filter((campaign) =>
-        (!campaign.starts_at || new Date(campaign.starts_at).getTime() <= now) &&
-        (!campaign.ends_at || new Date(campaign.ends_at).getTime() > now)
+        (!campaign.starts_at || new Date(campaign.starts_at).getTime() <= nowMs) &&
+        (!campaign.ends_at || new Date(campaign.ends_at).getTime() > nowMs)
       );
     },
     enabled: !!tenantId,
     staleTime: 60_000,
   });
+  useEffect(() => {
+    for (const promo of posPromos.data ?? []) {
+      void (async () => {
+        try {
+          const { error } = await (supabase.rpc as any)("record_marketing_campaign_event", {
+            _campaign_id: promo.id,
+            _event_type: "impression",
+          });
+          if (error) console.warn("POS campaign impression tracking failed", error);
+        } catch (error) {
+          console.warn("POS campaign impression tracking failed", error);
+        }
+      })();
+    }
+  }, [posPromos.data]);
+
 
   const inventory = useQuery({
-    queryKey: ["pos-inventory", tenantId, branchId],
-    queryFn: async () => {
-      return fetchAllRows<{ product_id: string; quantity: number }>(
-        supabase.from("inventory")
-          .select("product_id, quantity")
-          .eq("tenant_id", tenantId!)
-          .eq("branch_id", branchId!)
-          .order("product_id"),
-      );
-    },
+    queryKey: ["pos-inventory", tenantId, userId, membership?.company_id, branchId],
+    queryFn: async () =>
+      withOfflineFallback(
+        offlineCacheKey({ ...offlineScope, branchId }, "pos-inventory"),
+        () =>
+          fetchAllRows<{ product_id: string; quantity: number }>(
+            supabase.from("inventory")
+              .select("product_id, quantity")
+              .eq("tenant_id", tenantId!)
+              .eq("branch_id", branchId!)
+              .order("product_id"),
+          ),
+        OFFLINE_INVENTORY_CACHE_MAX_AGE_MS,
+      ),
     enabled: !!tenantId && !!branchId,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
@@ -432,20 +502,22 @@ function POSWorkspace() {
   }, [products.data, search, catFilter]);
 
   const addToCart = (p: Product) => {
-    if (inventory.isLoading || inventory.isError) {
+    const offline = !isOnline || !navigator.onLine;
+    if (!offline && (inventory.isLoading || inventory.isError)) {
       toast.error("لا يمكن إضافة المنتج قبل التحقق من المخزون");
       return;
     }
     const available = stockByProduct.get(p.id);
     const current = cart.find((item) => item.product_id === p.id)?.quantity ?? 0;
-    if (available === undefined) {
+    if (!offline && available === undefined) {
       toast.error("لا يوجد رصيد مخزون مسجل لهذا المنتج في الفرع");
       return;
     }
-    if (available <= current) {
+    if (!offline && available !== undefined && available <= current) {
       toast.error(available <= 0 ? "المنتج غير متوفر في المخزون" : "الكمية المطلوبة تتجاوز المخزون المتاح");
       return;
     }
+    if (offline) toast.info("أضيف المنتج إلى مسودة محلية؛ لم يتم التحقق من المخزون أو اعتماد البيع.");
     setCart((prev) => {
       const found = prev.find((item) => item.product_id === p.id);
       if (found) return prev.map((item) => (item.product_id === p.id ? { ...item, quantity: item.quantity + 1 } : item));
@@ -455,10 +527,12 @@ function POSWorkspace() {
   const inc = (id: string) => {
     const item = cart.find((entry) => entry.product_id === id);
     const available = stockByProduct.get(id);
-    if (inventory.isLoading || inventory.isError || !item || available === undefined || item.quantity >= available) {
+    const offline = !isOnline || !navigator.onLine;
+    if (!item || (!offline && (inventory.isLoading || inventory.isError || available === undefined || item.quantity >= available))) {
       toast.error("لا يمكن زيادة الكمية؛ تحقق من رصيد المخزون");
       return;
     }
+    if (offline) toast.info("تعديل محلي للمسودة فقط؛ الكمية غير مؤكدة حتى الاتصال بالخادم.");
     setCart((prev) => prev.map((entry) => (entry.product_id === id ? { ...entry, quantity: entry.quantity + 1 } : entry)));
   };
   const dec = (id: string) => setCart((p) => p.flatMap((i) => (i.product_id === id ? (i.quantity > 1 ? [{ ...i, quantity: i.quantity - 1 }] : []) : [i])));
@@ -608,6 +682,7 @@ function POSWorkspace() {
 
   const checkoutMut = useMutation({
     mutationFn: async (method: PaymentUI) => {
+      if (!navigator.onLine) throw new Error("لا يمكن إتمام البيع دون اتصال؛ لم يتم تسجيل أي عملية مالية.");
       if (!tenantId || !branchId || !userId) throw new Error("سياق ناقص");
       if (cart.length === 0) throw new Error("السلة فارغة");
       if (!openSession.data) throw new Error("يجب فتح وردية أولاً");
@@ -743,6 +818,10 @@ function POSWorkspace() {
   });
 
   const confirmCheckout = () => {
+    if (!navigator.onLine) {
+      toast.error("انقطع الاتصال؛ لم يتم إرسال البيع. احتفظ بالمسودة ثم أعد المحاولة عند عودة الإنترنت.");
+      return;
+    }
     if (checkoutMut.isPending || cart.length === 0) return;
     printWindowRef.current?.close();
     printWindowRef.current = window.open("", "_blank", "width=420,height=720");
@@ -843,7 +922,7 @@ function POSWorkspace() {
     );
   }
 
-  if (!openSession.data) {
+  if (!openSession.data && (isOnline || !unlocked)) {
     return (
       <div className="space-y-4">
         <PageHeader title="نقطة البيع" subtitle="افتح وردية للبدء بالبيع" />
@@ -904,6 +983,11 @@ function POSWorkspace() {
 
   return (
     <div className="flex h-[calc(100dvh-7rem)] min-h-[420px] flex-col gap-2 overflow-hidden p-1">
+      {!isOnline ? (
+        <div role="status" aria-live="polite" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950" dir="rtl">
+          وضع عدم الاتصال: يعرض النظام بيانات الأصناف والتصنيفات المحفوظة سابقاً، ويمكن إعداد مسودات محلية فقط. المخزون والأسعار والعروض غير مؤكدة، وإتمام البيع والمحاسبة متوقف حتى عودة الاتصال.
+        </div>
+      ) : null}
       <PageHeader
         title="نقطة البيع"
         subtitle={currentBranch?.name}
@@ -937,7 +1021,7 @@ function POSWorkspace() {
                 <div className="relative z-[1] min-w-0"><div className="truncate text-xs font-bold">{promo.title}</div>{promo.description && <div className="truncate text-[10px] text-muted-foreground">{promo.description}</div>}</div>
               </div>
             );
-            return promo.target_url ? <a key={promo.id} href={promo.target_url} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1">{card}</a> : <div key={promo.id} className="min-w-0 flex-1">{card}</div>;
+            return promo.target_url ? <a key={promo.id} href={promo.target_url} target="_blank" rel="noopener noreferrer" onClick={() => void (supabase.rpc as any)("record_marketing_campaign_event", { _campaign_id: promo.id, _event_type: "click" }).catch((error: unknown) => console.warn("POS campaign click tracking failed", error))} className="min-w-0 flex-1">{card}</a> : <div key={promo.id} className="min-w-0 flex-1">{card}</div>;
           })}
         </div>
       )}
@@ -982,18 +1066,20 @@ function POSWorkspace() {
               <div className="grid min-h-0 flex-1 content-start grid-cols-2 gap-2 overflow-y-auto p-1 sm:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4">
                 {filteredProducts.map((product) => {
                   const available = stockByProduct.get(product.id);
-                  const stockUnavailable = inventory.isLoading || inventory.isError || available === undefined || available <= 0;
-                  const stockLabel = inventory.isLoading
-                    ? "جاري التحقق"
-                    : inventory.isError
-                      ? "تعذر المخزون"
-                      : available === undefined
-                        ? "غير مسجل"
-                        : available < 0
-                          ? `رصيد سالب: ${available}`
-                          : available === 0
-                            ? "نفد المخزون"
-                            : `متاح: ${available}`;
+                  const stockUnavailable = isOnline && (inventory.isLoading || inventory.isError || available === undefined || available <= 0);
+                  const stockLabel = !isOnline
+                    ? "مسودة محلية — المخزون غير مؤكد"
+                    : inventory.isLoading
+                      ? "جاري التحقق"
+                      : inventory.isError
+                        ? "تعذر المخزون"
+                        : available === undefined
+                          ? "غير مسجل"
+                          : available < 0
+                            ? `رصيد سالب: ${available}`
+                            : available === 0
+                              ? "نفد المخزون"
+                              : `متاح: ${available}`;
                   return (
                     <button key={product.id} type="button" onClick={() => addToCart(product)}
                       disabled={stockUnavailable || checkoutMut.isPending}
@@ -1040,7 +1126,7 @@ function POSWorkspace() {
                       <td className="p-1.5 text-center"><div className="inline-flex items-center gap-0.5">
                         <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => dec(item.product_id)} disabled={checkoutMut.isPending}><Minus className="h-3 w-3" /></Button>
                         <span className="min-w-6 text-center font-semibold num">{item.quantity}</span>
-                        <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => inc(item.product_id)} disabled={checkoutMut.isPending || inventory.isLoading || inventory.isError || (stockByProduct.get(item.product_id) ?? 0) <= item.quantity}><Plus className="h-3 w-3" /></Button>
+                        <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => inc(item.product_id)} disabled={checkoutMut.isPending || (isOnline && (inventory.isLoading || inventory.isError || (stockByProduct.get(item.product_id) ?? 0) <= item.quantity))}><Plus className="h-3 w-3" /></Button>
                       </div></td>
                       <td className="p-1.5 text-center font-bold num">{formatMoney(item.unit_price * item.quantity)}</td>
                       <td className="p-1.5 text-center"><Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" aria-label="حذف الصنف" onClick={() => remove(item.product_id)} disabled={checkoutMut.isPending}><Trash2 className="h-3.5 w-3.5" /></Button></td>

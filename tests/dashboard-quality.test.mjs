@@ -78,14 +78,19 @@ const authLayout = readFileSync(new URL("../src/routes/_authenticated/route.tsx"
 const sonner = readFileSync(new URL("../src/components/ui/sonner.tsx", import.meta.url), "utf8");
 const userAdmin = readFileSync(new URL("../src/routes/_authenticated/users-admin.tsx", import.meta.url), "utf8");
 
-test("dashboard and account menu show profile names, including the platform owner's requested name", () => {
+test("dashboard and account menu use dynamic profile names without hardcoded account identities", () => {
   assert.match(dashboard, /أهلاً بك في نظام إدارة/);
   assert.match(dashboard, /إدارة أسهل/);
-  assert.match(dashboard, /shafiqalwatiry@gmail\.com/);
+  assert.ok(dashboard.includes("profileQuery.data?.full_name"));
+  assert.ok(dashboard.includes("profileQuery.data?.username"));
+  assert.ok(dashboard.includes("مرحباً {displayName}"));
+  assert.doesNotMatch(dashboard, /shafiqalwatiry@gmail\.com/);
   assert.match(authLayout, /topbar-profile-name/);
-  assert.match(authLayout, /شفيق الوتيري/);
+  assert.ok(authLayout.includes("currentProfile?.full_name"));
+  assert.ok(authLayout.includes("currentProfile?.username"));
+  assert.doesNotMatch(authLayout, /شفيق الوتيري/);
   assert.doesNotMatch(userAdmin, /u\.email \?\? u\.username/);
-});
+});;
 
 test("authenticated workspace removes the side drawer and keeps applications navigation in the top bar", () => {
   assert.doesNotMatch(authLayout, /SidebarProvider|SidebarTrigger|SidebarInset|AppSidebar|SidebarRouteSync/);
@@ -229,4 +234,15 @@ test("dashboard provides permission-scoped operations, notifications, and a trut
   assert.match(dashboard, /hasPermission\("sales.create"\)/);
   assert.match(dashboard, /hasPermission\("kitchen.view"\)/);
   assert.match(dashboard, /hasPermission\("reports.view"\)/);
+});
+
+
+test("dashboard and POS campaign delivery honor branch targeting and safe event tracking", () => {
+  assert.match(dashboard, /membership\?\.branch_id/);
+  assert.match(dashboard, /branch_id\.is\.null,branch_id\.eq\.\$\{membership\.branch_id\}/);
+  assert.match(pos, /branch_id\.is\.null,branch_id\.eq\.\$\{branchId\}/);
+  assert.match(pos, /\["pos-marketing-campaigns", tenantId, membership\?\.company_id \?\? "tenant", branchId\]/);
+  assert.match(pos, /void \(async \(\) =>/);
+  assert.ok(pos.includes('await (supabase.rpc as any)("record_marketing_campaign_event"'));
+  assert.ok(pos.includes('if (error) console.warn("POS campaign impression tracking failed"'));
 });

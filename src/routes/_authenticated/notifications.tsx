@@ -97,7 +97,12 @@ function NotificationsPage() {
       <PageHeader title="الإشعارات" subtitle="تنبيهات الشركة والفرع والحساب، مع حالة قراءة مستقلة لكل مستخدم."
         action={<Button variant="outline" onClick={() => markRead.mutate(unread.map((n: any) => n.id))} disabled={!unread.length || markRead.isPending}><CheckCheck className="ml-2 h-4 w-4" />قراءة الكل</Button>} />
       <Card><CardContent className="p-4">
-        {q.isLoading ? <Loader2 className="mx-auto my-8 h-5 w-5 animate-spin" /> : (q.data?.items ?? []).length === 0 ? (
+        {q.isError ? (
+          <div className="flex flex-col items-center gap-3 py-8 text-center">
+            <p role="alert" className="text-sm text-destructive">تعذر تحميل الإشعارات. لم يتم تغيير حالة القراءة.</p>
+            <Button variant="outline" onClick={() => void q.refetch()} disabled={q.isFetching}>إعادة المحاولة</Button>
+          </div>
+        ) : q.isLoading ? <Loader2 className="mx-auto my-8 h-5 w-5 animate-spin" /> : (q.data?.items ?? []).length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground"><Bell className="h-8 w-8 opacity-40" /><div>لا توجد إشعارات بعد.</div></div>
         ) : (
           <div className="space-y-2">

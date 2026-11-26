@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
@@ -20,7 +20,7 @@ export const Route = createFileRoute("/_authenticated/expenses")({ component: Pa
 type Expense = { id: string; amount: number; description: string | null; paid_at: string; category_id: string | null; branch_id: string | null };
 
 function Page() {
-  const { tenantId, userId, tenant, isAdmin } = useActiveTenant();
+  const { tenantId, userId, tenant, isAdmin, membership, isSuperOwner } = useActiveTenant();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
 
@@ -30,8 +30,15 @@ function Page() {
     enabled: !!tenantId,
   });
   const branches = useQuery({
-    queryKey: ["branches-exp", tenantId],
-    queryFn: async () => { const { data } = await supabase.from("branches").select("id, name").eq("tenant_id", tenantId!); return (data ?? []) as Array<{ id: string; name: string }>; },
+    queryKey: ["branches-exp", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryFn: async () => {
+      let query = supabase.from("branches").select("id, name").eq("tenant_id", tenantId!);
+      if (!isSuperOwner && membership?.branch_id) query = query.eq("id", membership.branch_id);
+      else if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []) as Array<{ id: string; name: string }>;
+    },
     enabled: !!tenantId,
   });
   const q = useQuery({
@@ -52,7 +59,22 @@ function Page() {
   const [categoryId, setCategoryId] = useState<string>("none");
   const [branchId, setBranchId] = useState<string>("none");
   const [description, setDescription] = useState("");
-  const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10));
+  const today = new Date();
+  const defaultPaidAt = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, "0"), String(today.getDate()).padStart(2, "0")].join("-");
+  const [paidAt, setPaidAt] = useState(defaultPaidAt);
+
+  useEffect(() => {
+    const dirty = open && (
+      amount.trim() !== "" || categoryId !== "none" || branchId !== "none" ||
+      description.trim() !== "" || paidAt !== defaultPaidAt
+    );
+    window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/expenses", dirty },
+    }));
+    return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/expenses", dirty: false },
+    })); };
+  }, [open, amount, categoryId, branchId, description, paidAt, defaultPaidAt]);
 
   const create = useMutation({
     mutationFn: async () => {

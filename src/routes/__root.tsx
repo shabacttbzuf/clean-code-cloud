@@ -14,6 +14,8 @@ import "../lib/fonts";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ThemeProvider } from "@/lib/theme";
 import { Toaster } from "@/components/ui/sonner";
+import { OfflineIndicator } from "@/components/offline-indicator";
+import { clearOfflineCache } from "@/lib/offline-reference-cache";
 import { supabase } from "@/integrations/supabase/client";
 
 function NotFoundComponent() {
@@ -52,6 +54,14 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
           حدث خطأ غير متوقع
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">حاول تحديث الصفحة أو العودة للرئيسية.</p>
+        {import.meta.env.DEV ? (
+          <details open className="mt-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-start" dir="ltr">
+            <summary className="cursor-pointer text-xs font-semibold">Development error details</summary>
+            <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words text-xs text-destructive">
+              {error instanceof Error ? `${error.name}: ${error.message}\n\n${error.stack ?? ""}` : String(error)}
+            </pre>
+          </details>
+        ) : null}
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
@@ -101,6 +111,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { name: "theme-color", content: "#102b4e" },
     ],
   }),
   shellComponent: RootShell,
@@ -127,12 +139,57 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
 
+  // Register same-origin offline support. Personalized HTML and backend data are never cached.
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    let cancelled = false;
+    const initializeOfflineSupport = async () => {
+      try {
+        await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+        await navigator.serviceWorker.ready;
+        if (cancelled || navigator.serviceWorker.controller) return;
+
+        // The first document was loaded before the worker controlled this tab.
+        // Wait for clients.claim(), then reload once so the app shell and its
+        // initial assets are fetched through the active worker and cached.
+        await new Promise<void>((resolve) => {
+          const timeout = window.setTimeout(resolve, 2500);
+          navigator.serviceWorker.addEventListener("controllerchange", () => {
+            window.clearTimeout(timeout);
+            resolve();
+          }, { once: true });
+        });
+        const reloadKey = "restaurant-pwa-first-control-reload-v1";
+        if (
+          !cancelled &&
+          navigator.serviceWorker.controller &&
+          sessionStorage.getItem(reloadKey) !== "1"
+        ) {
+          sessionStorage.setItem(reloadKey, "1");
+          window.location.reload();
+        }
+      } catch (error) {
+        console.warn("Offline support could not be initialized:", error);
+      }
+    };
+    void initializeOfflineSupport();
+    return () => { cancelled = true; };
+  }, []);
+
   // Global auth listener: refetch on session identity changes
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
-      router.invalidate();
-      if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
+      if (event === "SIGNED_OUT" || event === "SIGNED_IN") {
+        // Never retain one user's cached tenant data for another session.
+        if (event === "SIGNED_OUT") void clearOfflineCache();
+        queryClient.clear();
+        router.invalidate();
+        return;
+      }
+      if (event === "USER_UPDATED") {
+        router.invalidate();
+        void queryClient.invalidateQueries();
+      }
     });
     return () => sub.subscription.unsubscribe();
   }, [queryClient, router]);
@@ -140,6 +197,7 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
+        <OfflineIndicator />
         <Outlet />
         <Toaster position="top-center" richColors />
       </ThemeProvider>

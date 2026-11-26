@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
@@ -9,7 +10,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { Loader2, TrendingUp, TrendingDown, Receipt, Wallet, Package, Crown, Building2, Users as UsersIcon, Bell, Wifi, WifiOff, CircleHelp, ClipboardList, ChefHat } from "lucide-react";
 import { formatMoney } from "@/lib/format";
 import { Link } from "@tanstack/react-router";
-import { Sparkles, ShoppingBag, ArrowLeft } from "lucide-react";
+import { Sparkles, ShoppingBag, ArrowLeft, ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -25,8 +26,28 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
   }),
 });
 
+function localDayKey(date: Date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function safeCampaignTarget(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 function Dashboard() {
-  const { tenantId, tenant, user, membership, hasPermission } = useActiveTenant();
+  const [activeCampaignIndex, setActiveCampaignIndex] = useState(0);
+  const [campaignRotationPaused, setCampaignRotationPaused] = useState(false);
+  const { tenantId, tenant, user, membership, role, hasPermission } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
   const profileQuery = useQuery({
     queryKey: ["dashboard-profile-name", user?.id],
@@ -43,47 +64,101 @@ function Dashboard() {
     enabled: !!user?.id,
     staleTime: 60_000,
   });
-  const displayName = user?.email?.toLowerCase() === "shafiqalwatiry@gmail.com"
-    ? "شفيق الوتيري"
-    : profileQuery.data?.full_name?.trim() || user?.user_metadata?.full_name?.trim() || profileQuery.data?.username?.trim() || "مستخدم";
+  const displayName =
+    profileQuery.data?.full_name?.trim() ||
+    user?.user_metadata?.full_name?.trim() ||
+    profileQuery.data?.username?.trim() ||
+    user?.email?.split("@")[0]?.trim() ||
+    "مستخدم";
 
   const campaignsQuery = useQuery({
-    queryKey: ["dashboard-marketing-campaigns", tenantId, membership?.company_id ?? "tenant"],
+    queryKey: ["dashboard-marketing-campaigns", tenantId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
     queryFn: async () => {
+      const now = new Date().toISOString();
       let query = supabase.from("marketing_campaigns")
         .select("id,title,description,image_url,target_url,starts_at,ends_at,sort_order")
         .eq("tenant_id", tenantId!)
         .eq("status", "active")
         .in("placement", ["dashboard_banner", "dashboard_card"])
+        .or(`starts_at.is.null,starts_at.lte.${now}`)
+        .or(`ends_at.is.null,ends_at.gt.${now}`)
         .order("sort_order")
         .limit(6);
       if (membership?.company_id) {
         query = query.or(`company_id.is.null,company_id.eq.${membership.company_id}`);
+      } else if (!isSuperOwner && !(role === "owner" && !membership?.company_id)) {
+        // Branch-only and regular tenant members must never receive another company's campaigns.
+        query = query.is("company_id", null);
+      }
+      if (membership?.branch_id) {
+        query = query.or(`branch_id.is.null,branch_id.eq.${membership.branch_id}`);
       }
       const { data, error } = await query;
       if (error) throw error;
-      const now = Date.now();
+      const nowMs = Date.now();
       return (data ?? []).filter((campaign) =>
-        (!campaign.starts_at || new Date(campaign.starts_at).getTime() <= now) &&
-        (!campaign.ends_at || new Date(campaign.ends_at).getTime() > now)
+        (!campaign.starts_at || new Date(campaign.starts_at).getTime() <= nowMs) &&
+        (!campaign.ends_at || new Date(campaign.ends_at).getTime() > nowMs)
       );
     },
     enabled: !!tenantId,
     staleTime: 60_000,
   });
 
+  useEffect(() => {
+    setActiveCampaignIndex(0);
+  }, [tenantId, membership?.company_id]);
+
+  useEffect(() => {
+    const campaignCount = campaignsQuery.data?.length ?? 0;
+    if (campaignRotationPaused || campaignCount < 2 ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setInterval(() => {
+      setActiveCampaignIndex((current) => (current + 1) % campaignCount);
+    }, 7000);
+    return () => window.clearInterval(timer);
+  }, [campaignRotationPaused, campaignsQuery.data?.length]);
+
+  const activeCampaign = campaignsQuery.data?.[activeCampaignIndex] ?? campaignsQuery.data?.[0] ?? null;
+
+  useEffect(() => {
+    if (!activeCampaign?.id) return;
+    // Supabase RPC builders are thenable, but they do not expose Promise.catch().
+    // Await the RPC inside an async task so analytics failures never crash the dashboard.
+    void (async () => {
+      try {
+        const { error } = await (supabase.rpc as any)("record_marketing_campaign_event", {
+          _campaign_id: activeCampaign.id,
+          _event_type: "impression",
+        });
+        if (error) console.warn("Campaign impression tracking failed", error);
+      } catch (error) {
+        console.warn("Campaign impression tracking failed", error);
+      }
+    })();
+  }, [activeCampaign?.id]);
+
   const systemStatusQuery = useQuery({
     queryKey: ["dashboard-system-status", tenantId, user?.id],
     queryFn: async () => {
       if (!tenantId || !user?.id) throw new Error("لا يوجد نطاق شركة أو مستخدم نشط.");
       const checkedAt = new Date().toISOString();
-      const [tenantResult, branchesResult, profileResult, permissionsResult] = await Promise.all([
+      const [authResult, tenantResult, branchesResult, profileResult, permissionsResult] = await Promise.all([
+        supabase.auth.getUser(),
         supabase.from("tenants").select("id").eq("id", tenantId).maybeSingle(),
         supabase.from("branches").select("id").eq("tenant_id", tenantId).limit(1),
         supabase.from("profiles").select("id").eq("id", user.id).maybeSingle(),
         supabase.rpc("get_my_permissions", { _tenant_id: tenantId }),
       ]);
       const checks = [
+        {
+          key: "authentication",
+          label: "خدمة المصادقة وتحقق الجلسة",
+          status: authResult.error || authResult.data.user?.id !== user.id ? "failed" : "ok",
+          detail: authResult.error?.message ?? (authResult.data.user?.id === user.id
+            ? "تم التحقق من جلسة المستخدم عبر خدمة المصادقة."
+            : "جلسة المصادقة لا تطابق المستخدم النشط."),
+        },
         {
           key: "database",
           label: "اتصال قاعدة البيانات",
@@ -169,26 +244,53 @@ function Dashboard() {
   });
 
   const stats = useQuery({
-    queryKey: ["dashboard-stats", tenantId],
+    queryKey: ["dashboard-stats", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
       if (!tenantId) return null;
       const now = new Date();
       const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      const last30 = new Date(now.getTime() - 29 * 86400000);
-      const last30ISO = new Date(last30.getFullYear(), last30.getMonth(), last30.getDate()).toISOString();
+      const last30 = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
+      const last30ISO = last30.toISOString();
+
+      // Apply the active branch/company scope to every branch-owned dashboard metric.
+      // null means tenant-wide access; an empty list deliberately returns no branch-owned rows.
+      let scopedBranchIds: string[] | null = null;
+      if (!isSuperOwner && membership?.branch_id) {
+        scopedBranchIds = [membership.branch_id];
+      } else if (!isSuperOwner && membership?.company_id) {
+        const { data: companyBranches, error: branchScopeError } = await supabase.from("branches")
+          .select("id").eq("tenant_id", tenantId).eq("company_id", membership.company_id);
+        if (branchScopeError) throw branchScopeError;
+        scopedBranchIds = (companyBranches ?? []).map((row) => row.id);
+      }
+
+      let salesTodayQuery = supabase.from("sales").select("total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfDay);
+      let salesMonthQuery = supabase.from("sales").select("id, total, subtotal, discount").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfMonth);
+      let salesTrendQuery = supabase.from("sales").select("total, created_at").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", last30ISO);
+      let refundsTodayQuery = supabase.from("sale_refunds").select("total").eq("tenant_id", tenantId).gte("created_at", startOfDay);
+      let refundsMonthQuery = supabase.from("sale_refunds").select("id, total, subtotal, discount").eq("tenant_id", tenantId).gte("created_at", startOfMonth);
+      let refundsTrendQuery = supabase.from("sale_refunds").select("total, created_at").eq("tenant_id", tenantId).gte("created_at", last30ISO);
+      let expensesMonthQuery = supabase.from("expenses").select("amount").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10));
+      let expensesByCategoryQuery = supabase.from("expenses").select("amount, category_id").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10));
+      let lowStockQuery = supabase.from("inventory").select("quantity, product_id").eq("tenant_id", tenantId);
+      let sessionsQuery = supabase.from("cash_sessions").select("id").eq("tenant_id", tenantId).eq("status", "open");
+      if (scopedBranchIds !== null) {
+        salesTodayQuery = salesTodayQuery.in("branch_id", scopedBranchIds);
+        salesMonthQuery = salesMonthQuery.in("branch_id", scopedBranchIds);
+        salesTrendQuery = salesTrendQuery.in("branch_id", scopedBranchIds);
+        refundsTodayQuery = refundsTodayQuery.in("branch_id", scopedBranchIds);
+        refundsMonthQuery = refundsMonthQuery.in("branch_id", scopedBranchIds);
+        refundsTrendQuery = refundsTrendQuery.in("branch_id", scopedBranchIds);
+        expensesMonthQuery = expensesMonthQuery.in("branch_id", scopedBranchIds);
+        expensesByCategoryQuery = expensesByCategoryQuery.in("branch_id", scopedBranchIds);
+        lowStockQuery = lowStockQuery.in("branch_id", scopedBranchIds);
+        sessionsQuery = sessionsQuery.in("branch_id", scopedBranchIds);
+      }
 
       const [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount] = await Promise.all([
-        supabase.from("sales").select("total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfDay),
-        supabase.from("sales").select("id, total, subtotal, discount").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfMonth),
-        supabase.from("sales").select("total, created_at").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", last30ISO),
-        supabase.from("sale_refunds").select("total").eq("tenant_id", tenantId).gte("created_at", startOfDay),
-        supabase.from("sale_refunds").select("id, total, subtotal, discount").eq("tenant_id", tenantId).gte("created_at", startOfMonth),
-        supabase.from("sale_refunds").select("total, created_at").eq("tenant_id", tenantId).gte("created_at", last30ISO),
-        supabase.from("expenses").select("amount").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10)),
-        supabase.from("expenses").select("amount, category_id").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10)),
-        supabase.from("inventory").select("quantity, product_id").eq("tenant_id", tenantId),
-        supabase.from("cash_sessions").select("id").eq("tenant_id", tenantId).eq("status", "open"),
+        salesTodayQuery, salesMonthQuery, salesTrendQuery, refundsTodayQuery, refundsMonthQuery,
+        refundsTrendQuery, expensesMonthQuery, expensesByCategoryQuery, lowStockQuery, sessionsQuery,
         supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
       ]);
       for (const result of [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount]) {
@@ -236,16 +338,16 @@ function Dashboard() {
       // Trend: group by day
       const dayMap = new Map<string, number>();
       for (let i = 29; i >= 0; i--) {
-        const d = new Date(now.getTime() - i * 86400000);
-        const key = d.toISOString().slice(0, 10);
+        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+        const key = localDayKey(d);
         dayMap.set(key, 0);
       }
       for (const s of salesTrend.data ?? []) {
-        const key = new Date((s as { created_at: string }).created_at).toISOString().slice(0, 10);
+        const key = localDayKey(new Date((s as { created_at: string }).created_at));
         if (dayMap.has(key)) dayMap.set(key, (dayMap.get(key) ?? 0) + Number((s as { total: number }).total));
       }
       for (const refund of refundsTrend.data ?? []) {
-        const key = new Date((refund as { created_at: string }).created_at).toISOString().slice(0, 10);
+        const key = localDayKey(new Date((refund as { created_at: string }).created_at));
         if (dayMap.has(key)) dayMap.set(key, (dayMap.get(key) ?? 0) - Number((refund as { total: number }).total));
       }
       const trend = Array.from(dayMap.entries()).map(([day, total]) => ({ day: day.slice(5), total: +total.toFixed(2) }));
@@ -263,7 +365,18 @@ function Dashboard() {
         color: catMap.get(cid)?.color ?? colors[i % colors.length],
       }));
 
-      const lowStockCount = (lowStock.data ?? []).filter((r) => Number((r as { quantity: number }).quantity) <= 0).length;
+      const inventoryProductIds = [...new Set((lowStock.data ?? []).map((row) => row.product_id))];
+      const lowStockProducts = inventoryProductIds.length
+        ? await supabase.from("products").select("id, min_stock").eq("tenant_id", tenantId).in("id", inventoryProductIds)
+        : { data: [], error: null };
+      if (lowStockProducts.error) throw lowStockProducts.error;
+      const minimumStockByProduct = new Map((lowStockProducts.data ?? []).map((product) => [product.id, Number(product.min_stock)]));
+      if (minimumStockByProduct.size !== inventoryProductIds.length) {
+        throw new Error("تعذر التحقق من حدود إعادة الطلب لجميع منتجات المخزون.");
+      }
+      const lowStockCount = (lowStock.data ?? []).filter((row) =>
+        Number(row.quantity) <= (minimumStockByProduct.get(row.product_id) ?? 0),
+      ).length;
 
       return {
         totalToday, totalMonth, totalExpMonth,
@@ -280,12 +393,19 @@ function Dashboard() {
 
 
   const latestOrders = useQuery({
-    queryKey: ["dashboard-latest-orders", tenantId, membership?.branch_id],
+    queryKey: ["dashboard-latest-orders", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
       if (!tenantId) return [];
       let query = supabase.from("sales").select("id,invoice_no,total,status,created_at,order_type,customer_id")
         .eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(8);
-      if (membership?.branch_id) query = query.eq("branch_id", membership.branch_id);
+      if (!isSuperOwner && membership?.branch_id) {
+        query = query.eq("branch_id", membership.branch_id);
+      } else if (!isSuperOwner && membership?.company_id) {
+        const { data: branches, error: branchError } = await supabase.from("branches").select("id")
+          .eq("tenant_id", tenantId).eq("company_id", membership.company_id);
+        if (branchError) throw branchError;
+        query = query.in("branch_id", (branches ?? []).map((branch) => branch.id));
+      }
       const { data, error } = await query;
       if (error) throw error;
       return data ?? [];
@@ -295,13 +415,20 @@ function Dashboard() {
     staleTime: 5_000,
   });
   const kitchenOverview = useQuery({
-    queryKey: ["dashboard-kitchen-overview", tenantId, membership?.branch_id],
+    queryKey: ["dashboard-kitchen-overview", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
       if (!tenantId) return [];
       let query = (supabase.from("kitchen_orders" as any) as any).select("id,branch_id,sale_id,status,created_at")
         .eq("tenant_id", tenantId).in("status", ["new", "preparing", "ready"])
         .order("created_at", { ascending: false }).limit(12);
-      if (membership?.branch_id) query = query.eq("branch_id", membership.branch_id);
+      if (!isSuperOwner && membership?.branch_id) {
+        query = query.eq("branch_id", membership.branch_id);
+      } else if (!isSuperOwner && membership?.company_id) {
+        const { data: branches, error: branchError } = await supabase.from("branches").select("id")
+          .eq("tenant_id", tenantId).eq("company_id", membership.company_id);
+        if (branchError) throw branchError;
+        query = query.in("branch_id", (branches ?? []).map((branch) => branch.id));
+      }
       const { data, error } = await query;
       if (error) throw error;
       const orders = data ?? [];
@@ -315,6 +442,36 @@ function Dashboard() {
         ...order,
         invoice_no: invoiceMap.get(order.sale_id) ?? null,
       }));
+    },
+    enabled: !!tenantId && hasPermission("kitchen.view"),
+    refetchInterval: 15_000,
+    staleTime: 5_000,
+  });
+
+  const kitchenStatusCounts = useQuery({
+    queryKey: ["dashboard-kitchen-counts", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryFn: async () => {
+      if (!tenantId) return { new: 0, preparing: 0, ready: 0 };
+      let scopedBranchIds: string[] | null = null;
+      if (!isSuperOwner && membership?.branch_id) {
+        scopedBranchIds = [membership.branch_id];
+      } else if (!isSuperOwner && membership?.company_id) {
+        const { data: branches, error } = await supabase.from("branches").select("id")
+          .eq("tenant_id", tenantId).eq("company_id", membership.company_id);
+        if (error) throw error;
+        scopedBranchIds = (branches ?? []).map((branch) => branch.id);
+      }
+      const statuses = ["new", "preparing", "ready"] as const;
+      const entries = await Promise.all(statuses.map(async (status) => {
+        let query = (supabase.from("kitchen_orders" as any) as any)
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", tenantId).eq("status", status);
+        if (scopedBranchIds !== null) query = query.in("branch_id", scopedBranchIds);
+        const result = await query;
+        if (result.error) throw result.error;
+        return [status, result.count ?? 0] as const;
+      }));
+      return Object.fromEntries(entries) as Record<typeof statuses[number], number>;
     },
     enabled: !!tenantId && hasPermission("kitchen.view"),
     refetchInterval: 15_000,
@@ -345,22 +502,32 @@ function Dashboard() {
           تعذر تحميل العروض والإعلانات. <button type="button" className="underline" onClick={() => campaignsQuery.refetch()}>إعادة المحاولة</button>
         </div>
       )}
-      {campaignsQuery.data && campaignsQuery.data.length > 0 && (
-        <div className="grid gap-3">
-          {campaignsQuery.data.map((campaign) => {
-            const content = (
-              <div className="relative flex min-h-28 overflow-hidden rounded-xl border bg-card shadow-sm">
-                {campaign.image_url && <img src={campaign.image_url} alt="" className="absolute inset-0 h-full w-full object-cover opacity-20" />}
-                <div className="relative z-[1] flex w-full flex-col justify-center gap-1 bg-gradient-to-l from-background/95 via-background/85 to-background/40 p-4">
-                  <div className="text-base font-bold">{campaign.title}</div>
-                  {campaign.description && <p className="max-w-2xl text-sm text-muted-foreground">{campaign.description}</p>}
-                  {campaign.target_url && <span className="mt-1 text-xs font-semibold text-primary">عرض التفاصيل ←</span>}
-                </div>
+      {activeCampaign && (
+        <section aria-label="الإعلانات والعروض المنشورة" aria-roledescription="عرض شرائح" className="space-y-2">
+          <div className="relative overflow-hidden rounded-2xl border bg-card shadow-sm">
+            {activeCampaign.image_url && <img src={activeCampaign.image_url} alt="" className="absolute inset-0 h-full w-full object-cover opacity-25" />}
+            <div className="relative flex min-h-36 items-center bg-gradient-to-l from-background/95 via-background/85 to-background/45 p-4 sm:min-h-44 sm:p-6">
+              <div className="max-w-3xl space-y-2">
+                <div className="text-xs font-semibold text-primary">إعلان / مساحة ترويجية</div>
+                <h2 className="text-lg font-extrabold sm:text-2xl">{activeCampaign.title}</h2>
+                {activeCampaign.description && <p className="text-sm text-muted-foreground sm:text-base">{activeCampaign.description}</p>}
+                {safeCampaignTarget(activeCampaign.target_url) && <a href={safeCampaignTarget(activeCampaign.target_url)!} target="_blank" rel="noopener noreferrer" onClick={() => void (supabase.rpc as any)("record_marketing_campaign_event", { _campaign_id: activeCampaign.id, _event_type: "click" }).catch((error: unknown) => console.warn("Campaign click tracking failed", error))} className="inline-flex min-h-9 items-center rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90">عرض التفاصيل ←</a>}
               </div>
-            );
-            return campaign.target_url ? <a key={campaign.id} href={campaign.target_url} target="_blank" rel="noopener noreferrer" className="block">{content}</a> : <div key={campaign.id}>{content}</div>;
-          })}
-        </div>
+            </div>
+          </div>
+          {(campaignsQuery.data?.length ?? 0) > 1 && (
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5" aria-label={`الشريحة ${activeCampaignIndex + 1} من ${campaignsQuery.data?.length ?? 0}`}>
+                {campaignsQuery.data?.map((campaign, index) => <button key={campaign.id} type="button" aria-label={`عرض الإعلان ${index + 1}`} aria-current={index === activeCampaignIndex ? "true" : undefined} onClick={() => setActiveCampaignIndex(index)} className={`h-2.5 rounded-full transition-all ${index === activeCampaignIndex ? "w-7 bg-primary" : "w-2.5 bg-muted-foreground/35"}`} />)}
+              </div>
+              <div className="flex items-center gap-1">
+                <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="الإعلان السابق" onClick={() => setActiveCampaignIndex((current) => (current - 1 + (campaignsQuery.data?.length ?? 1)) % (campaignsQuery.data?.length ?? 1))}><ChevronRight className="h-4 w-4" /></Button>
+                <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label={campaignRotationPaused ? "استئناف عرض الإعلانات" : "إيقاف حركة الإعلانات"} onClick={() => setCampaignRotationPaused((paused) => !paused)}>{campaignRotationPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}</Button>
+                <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="الإعلان التالي" onClick={() => setActiveCampaignIndex((current) => (current + 1) % (campaignsQuery.data?.length ?? 1))}><ChevronLeft className="h-4 w-4" /></Button>
+              </div>
+            </div>
+          )}
+        </section>
       )}
 
       {isSuperOwner && superStats.data && (
@@ -456,7 +623,7 @@ function Dashboard() {
       {(hasPermission("sales.view") || hasPermission("kitchen.view")) && (
         <section className="grid gap-4 xl:grid-cols-2" aria-label="متابعة الطلبات والتشغيل">
           {hasPermission("sales.view") && <Card className="overflow-hidden border-[#dce5f3] shadow-sm"><CardContent className="p-0">
-            <div className="flex items-center justify-between border-b border-[#e7edf6] bg-gradient-to-l from-[#f4f7fc] to-white px-4 py-3"><div><h2 className="font-extrabold text-[#102f5c]">أحدث الفواتير والطلبات</h2><p className="mt-1 text-[11px] text-slate-500">آخر العمليات المسجلة في الفرع المصرح به</p></div><Link to="/sales" className="rounded-full border border-[#dce5f3] bg-white px-3 py-1.5 text-xs font-bold text-[#174b91] hover:bg-blue-50">عرض الكل</Link></div>
+            <div className="flex items-center justify-between border-b border-[#e7edf6] bg-gradient-to-l from-[#f4f7fc] to-white px-4 py-3"><div><h2 className="font-extrabold text-[#102f5c]">أحدث الفواتير والطلبات</h2><p className="mt-1 text-[11px] text-slate-500">آخر العمليات المسجلة ضمن نطاق الشركة والفرع المصرح به</p></div><Link to="/sales" className="rounded-full border border-[#dce5f3] bg-white px-3 py-1.5 text-xs font-bold text-[#174b91] hover:bg-blue-50">عرض الكل</Link></div>
             {latestOrders.isError ? <p role="alert" className="text-sm text-destructive">تعذر تحميل أحدث الطلبات. <button className="underline" onClick={() => void latestOrders.refetch()}>إعادة المحاولة</button></p>
               : latestOrders.isLoading ? <div className="py-6 text-center text-sm text-muted-foreground">جارٍ تحميل الطلبات...</div>
               : (latestOrders.data ?? []).length === 0 ? <div className="py-6 text-center text-sm text-muted-foreground">لا توجد طلبات مسجلة بعد.</div>
@@ -467,9 +634,9 @@ function Dashboard() {
           </CardContent></Card>}
           {hasPermission("kitchen.view") && <Card className="overflow-hidden border-[#dce5f3] shadow-sm"><CardContent className="p-0">
             <div className="flex items-center justify-between border-b border-[#e7edf6] bg-gradient-to-l from-[#f4f7fc] to-white px-4 py-3"><div><h2 className="font-extrabold text-[#102f5c]">حالة المطبخ</h2><p className="mt-1 text-[11px] text-slate-500">متابعة مراحل تجهيز الطلبات</p></div><Link to="/kitchen" className="rounded-full border border-[#dce5f3] bg-white px-3 py-1.5 text-xs font-bold text-[#174b91] hover:bg-blue-50">شاشة المطبخ</Link></div><div className="p-4">
-            {kitchenOverview.isError ? <p role="alert" className="text-sm text-destructive">تعذر تحميل حالة المطبخ. <button className="underline" onClick={() => void kitchenOverview.refetch()}>إعادة المحاولة</button></p>
-              : kitchenOverview.isLoading ? <div className="py-6 text-center text-sm text-muted-foreground">جارٍ تحميل حالة المطبخ...</div>
-              : <><div className="grid grid-cols-3 gap-2">{(["new", "preparing", "ready"] as const).map((status) => <div key={status} className={`rounded-xl border p-3 text-center ${status === "new" ? "border-sky-100 bg-sky-50" : status === "preparing" ? "border-amber-100 bg-amber-50" : "border-emerald-100 bg-emerald-50"}`}><div className="text-2xl font-extrabold text-[#102f5c] num">{(kitchenOverview.data ?? []).filter((order: { status: string }) => order.status === status).length}</div><div className="mt-1 text-xs font-bold text-slate-600">{status === "new" ? "جديد" : status === "preparing" ? "قيد التحضير" : "جاهز"}</div></div>)}</div><div className="mt-3 divide-y divide-[#edf1f7]">{(kitchenOverview.data ?? []).slice(0, 4).map((order: { id: string; status: string; created_at: string; invoice_no?: number | null }) => <div key={order.id} className="flex items-center justify-between gap-2 py-2 text-xs"><span className="font-bold text-slate-700">طلب #{order.invoice_no ?? "—"}</span><span className={`rounded-full px-2 py-1 font-bold ${order.status === "new" ? "bg-sky-50 text-sky-700" : order.status === "preparing" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>{order.status === "new" ? "جديد" : order.status === "preparing" ? "قيد التحضير" : "جاهز"}</span></div>)}</div></>}
+            {kitchenOverview.isError || kitchenStatusCounts.isError ? <p role="alert" className="text-sm text-destructive">تعذر تحميل حالة المطبخ. <button className="underline" onClick={() => { void kitchenOverview.refetch(); void kitchenStatusCounts.refetch(); }}>إعادة المحاولة</button></p>
+              : kitchenOverview.isLoading || kitchenStatusCounts.isLoading ? <div className="py-6 text-center text-sm text-muted-foreground">جارٍ تحميل حالة المطبخ...</div>
+              : <><div className="grid grid-cols-3 gap-2">{(["new", "preparing", "ready"] as const).map((status) => <div key={status} className={`rounded-xl border p-3 text-center ${status === "new" ? "border-sky-100 bg-sky-50" : status === "preparing" ? "border-amber-100 bg-amber-50" : "border-emerald-100 bg-emerald-50"}`}><div className="text-2xl font-extrabold text-[#102f5c] num">{kitchenStatusCounts.data?.[status] ?? 0}</div><div className="mt-1 text-xs font-bold text-slate-600">{status === "new" ? "جديد" : status === "preparing" ? "قيد التحضير" : "جاهز"}</div></div>)}</div><div className="mt-3 divide-y divide-[#edf1f7]">{(kitchenOverview.data ?? []).slice(0, 4).map((order: { id: string; status: string; created_at: string; invoice_no?: number | null }) => <div key={order.id} className="flex items-center justify-between gap-2 py-2 text-xs"><span className="font-bold text-slate-700">طلب #{order.invoice_no ?? "—"}</span><span className={`rounded-full px-2 py-1 font-bold ${order.status === "new" ? "bg-sky-50 text-sky-700" : order.status === "preparing" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>{order.status === "new" ? "جديد" : order.status === "preparing" ? "قيد التحضير" : "جاهز"}</span></div>)}</div></>}
             <p className="mt-3 text-[11px] text-slate-500">حالة التحضير مستقلة عن حالة الفاتورة والمدفوعات.</p></div>
           </CardContent></Card>}
         </section>

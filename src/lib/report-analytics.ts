@@ -61,3 +61,25 @@ export async function fetchAllRows<T>(
     if (page.length < pageSize) return rows;
   }
 }
+
+export type CsvValue = string | number | null | undefined;
+
+/**
+ * Build an Excel-compatible UTF-8 CSV while neutralizing formula-like text.
+ * Numeric values remain numeric; only untrusted string values are prefixed.
+ */
+export function buildCsv(rows: readonly Record<string, CsvValue>[]): string {
+  if (rows.length === 0) return "";
+  const headers = Object.keys(rows[0]);
+  const escapeCell = (value: CsvValue): string => {
+    let text = value == null ? "" : String(value);
+    if (typeof value === "string" && /^[\u0000-\u0020]*[=+\-@]/.test(value)) {
+      text = "'" + text;
+    }
+    return `"${text.replace(/"/g, '""')}"`;
+  };
+  return [
+    headers.map(escapeCell).join(","),
+    ...rows.map((row) => headers.map((header) => escapeCell(row[header])).join(",")),
+  ].join("\r\n");
+}

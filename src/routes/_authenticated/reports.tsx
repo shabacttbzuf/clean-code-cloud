@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
@@ -12,14 +12,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, FileText, Download, Calendar, TrendingUp, Wallet, Package, Users, Printer } from "lucide-react";
 import { formatMoney, formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
-import { calculatePercentChange, calculateProfitMetrics, fetchAllRows } from "@/lib/report-analytics";
+import { buildCsv, calculatePercentChange, calculateProfitMetrics, fetchAllRows } from "@/lib/report-analytics";
 
 export const Route = createFileRoute("/_authenticated/reports")({
   component: ReportsPage,
 });
 
+function localDateKey(date: Date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
 function ReportsPage() {
-  const { tenantId, tenant, userId } = useActiveTenant();
+  const { tenantId, tenant, userId, membership, isSuperOwner } = useActiveTenant();
   const permissionsQuery = useQuery({
     queryKey: ["reports-permissions", tenantId, userId],
     queryFn: async () => {
@@ -35,46 +43,82 @@ function ReportsPage() {
   const [from, setFrom] = useState(() => {
     const d = new Date();
     d.setMonth(d.getMonth() - 1);
-    return d.toISOString().slice(0, 10);
+    return localDateKey(d);
   });
-  const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [to, setTo] = useState(() => localDateKey(new Date()));
   const [groupBy, setGroupBy] = useState<"day" | "month" | "year">("day");
   const [branchId, setBranchId] = useState("all");
-  const branchesQuery = useQuery({ queryKey: ["report-branches", tenantId], queryFn: async () => { const { data, error } = await supabase.from("branches").select("id,name").eq("tenant_id", tenantId!).order("name"); if (error) throw error; return data ?? []; }, enabled: !!tenantId });
+  const branchesQuery = useQuery({ queryKey: ["report-branches", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryFn: async () => {
+      let query = supabase.from("branches").select("id,name").eq("tenant_id", tenantId!).order("name");
+      if (!isSuperOwner && membership?.branch_id) query = query.eq("id", membership.branch_id);
+      else if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
+      const { data, error } = await query;
+      if (error) throw error;
+      return data ?? [];
+    }, enabled: !!tenantId });
+
+  useEffect(() => {
+    if (branchId !== "all" && branchesQuery.data && !branchesQuery.data.some((branch) => branch.id === branchId)) {
+      setBranchId("all");
+    }
+  }, [branchId, branchesQuery.data]);
 
   const report = useQuery({
-    queryKey: ["reports", tenantId, from, to, branchId],
+    queryKey: ["reports", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner, from, to, branchId],
     queryFn: async () => {
       if (!tenantId) return null;
+      if (!from || !to) throw new Error("حدد تاريخ البداية والنهاية للتقرير.");
       if (from > to) throw new Error("تاريخ البداية يجب أن يسبق تاريخ النهاية أو يساويه.");
-      const fromDate = `${from}T00:00:00.000Z`;
-      const toDate = `${to}T23:59:59.999Z`;
+      // Interpret date inputs as local calendar days, then convert boundaries for timestamptz queries.
+      const localStart = new Date(`${from}T00:00:00`);
+      const localEnd = new Date(`${to}T23:59:59.999`);
+      if (Number.isNaN(localStart.getTime()) || Number.isNaN(localEnd.getTime())) {
+        throw new Error("صيغة التاريخ المحدد غير صحيحة.");
+      }
+      const fromDate = localStart.toISOString();
+      const toDate = localEnd.toISOString();
 
       const [sales, expenses, items, sessions, inventory, refunds] = await Promise.all([
-        fetchAllRows((pageFrom, pageTo) => supabase.from("sales")
-          .select("id, created_at, total, subtotal, discount, tax_amount, payment_method, cashier_id, branch_id, status")
-          .eq("tenant_id", tenantId).neq("status", "void")
-          .gte("created_at", fromDate).lte("created_at", toDate)
-          .order("created_at", { ascending: false }).range(pageFrom, pageTo)),
-        fetchAllRows((pageFrom, pageTo) => supabase.from("expenses")
-          .select("id, paid_at, amount, category_id, description, branch_id")
-          .eq("tenant_id", tenantId).gte("paid_at", from).lte("paid_at", to)
-          .order("paid_at", { ascending: false }).range(pageFrom, pageTo)),
+        fetchAllRows((pageFrom, pageTo) => {
+          let query = supabase.from("sales")
+            .select("id, created_at, total, subtotal, discount, tax_amount, payment_method, cashier_id, branch_id, status")
+            .eq("tenant_id", tenantId).neq("status", "void")
+            .gte("created_at", fromDate).lte("created_at", toDate);
+          if (branchId !== "all") query = query.eq("branch_id", branchId);
+          return query.order("created_at", { ascending: false }).range(pageFrom, pageTo);
+        }),
+        fetchAllRows((pageFrom, pageTo) => {
+          let query = supabase.from("expenses")
+            .select("id, paid_at, amount, category_id, description, branch_id")
+            .eq("tenant_id", tenantId).gte("paid_at", from).lte("paid_at", to);
+          if (branchId !== "all") query = query.eq("branch_id", branchId);
+          return query.order("paid_at", { ascending: false }).range(pageFrom, pageTo);
+        }),
         fetchAllRows((pageFrom, pageTo) => supabase.from("sale_items")
           .select("product_name, quantity, line_total, sale_id, created_at, cost_price_snapshot")
           .eq("tenant_id", tenantId).gte("created_at", fromDate).lte("created_at", toDate)
           .range(pageFrom, pageTo)),
-        fetchAllRows((pageFrom, pageTo) => supabase.from("cash_sessions")
-          .select("cashier_id, opening_balance, closing_balance, expected_cash, cash_difference, opened_at, closed_at, status, branch_id")
-          .eq("tenant_id", tenantId).gte("opened_at", fromDate).lte("opened_at", toDate)
-          .range(pageFrom, pageTo)),
-        fetchAllRows((pageFrom, pageTo) => supabase.from("inventory")
-          .select("quantity, product_id, branch_id").eq("tenant_id", tenantId)
-          .range(pageFrom, pageTo)),
-        fetchAllRows((pageFrom, pageTo) => supabase.from("sale_refunds")
-          .select("id, sale_id, subtotal, discount, tax_amount, total, refund_method, created_at, branch_id")
-          .eq("tenant_id", tenantId).gte("created_at", fromDate).lte("created_at", toDate)
-          .range(pageFrom, pageTo)),
+        fetchAllRows((pageFrom, pageTo) => {
+          let query = supabase.from("cash_sessions")
+            .select("cashier_id, opening_balance, closing_balance, expected_cash, cash_difference, opened_at, closed_at, status, branch_id")
+            .eq("tenant_id", tenantId).gte("opened_at", fromDate).lte("opened_at", toDate);
+          if (branchId !== "all") query = query.eq("branch_id", branchId);
+          return query.range(pageFrom, pageTo);
+        }),
+        fetchAllRows((pageFrom, pageTo) => {
+          let query = supabase.from("inventory")
+            .select("quantity, product_id, branch_id").eq("tenant_id", tenantId);
+          if (branchId !== "all") query = query.eq("branch_id", branchId);
+          return query.range(pageFrom, pageTo);
+        }),
+        fetchAllRows((pageFrom, pageTo) => {
+          let query = supabase.from("sale_refunds")
+            .select("id, sale_id, subtotal, discount, tax_amount, total, refund_method, created_at, branch_id")
+            .eq("tenant_id", tenantId).gte("created_at", fromDate).lte("created_at", toDate);
+          if (branchId !== "all") query = query.eq("branch_id", branchId);
+          return query.range(pageFrom, pageTo);
+        }),
       ]);
 
       const validSales = sales.filter((row) => row.status !== "void");
@@ -98,11 +142,20 @@ function ReportsPage() {
       );
       const inventoryProducts = productGroups.flat();
 
-      const periodStart = Date.parse(fromDate);
-      const periodEnd = Date.parse(toDate);
+      const periodStart = localStart.getTime();
+      const periodEnd = localEnd.getTime();
       const periodLength = periodEnd - periodStart + 1;
-      const previousFrom = new Date(periodStart - periodLength).toISOString();
-      const previousTo = new Date(periodStart - 1).toISOString();
+      const previousFromDate = new Date(periodStart - periodLength);
+      const previousToDate = new Date(periodStart - 1);
+      const previousFrom = previousFromDate.toISOString();
+      const previousTo = previousToDate.toISOString();
+      const asLocalDate = (date: Date) => [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, "0"),
+        String(date.getDate()).padStart(2, "0"),
+      ].join("-");
+      const previousFromDay = asLocalDate(previousFromDate);
+      const previousToDay = asLocalDate(previousToDate);
       const [previousSales, previousExpenses, previousRefunds] = await Promise.all([
         fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("sales").select("id,total")
@@ -114,7 +167,7 @@ function ReportsPage() {
         fetchAllRows((pageFrom, pageTo) => {
           let query = supabase.from("expenses").select("amount")
             .eq("tenant_id", tenantId)
-            .gte("paid_at", previousFrom.slice(0, 10)).lte("paid_at", previousTo.slice(0, 10));
+            .gte("paid_at", previousFromDay).lte("paid_at", previousToDay);
           if (branchId !== "all") query = query.eq("branch_id", branchId);
           return query.range(pageFrom, pageTo);
         }),
@@ -323,17 +376,17 @@ function ReportsPage() {
   }
 
   const exportCsv = (rows: Array<Record<string, string | number>>, filename: string) => {
-    if (rows.length === 0) return;
-    const headers = Object.keys(rows[0]);
-    const escapeCell = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
-    const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => escapeCell(r[h])).join(","))].join("\n");
-    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+    const csv = buildCsv(rows);
+    if (!csv) return;
+    const blob = new Blob(["\\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   return (

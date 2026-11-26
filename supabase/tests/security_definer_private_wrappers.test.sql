@@ -1,6 +1,6 @@
 -- SECURITY DEFINER implementations must not remain callable from exposed public schema.
 BEGIN;
-SELECT plan(5);
+SELECT plan(11);
 
 SELECT ok(
   NOT EXISTS (
@@ -32,6 +32,37 @@ SELECT ok(
 SELECT ok(
   (SELECT prosecdef FROM pg_proc WHERE oid = 'private.create_sale_with_items(uuid,uuid,uuid,uuid,numeric,payment_method,jsonb)'::regprocedure),
   'Privileged POS implementation remains private SECURITY DEFINER'
+);
+
+
+SELECT ok(
+  has_function_privilege('authenticated', 'public.record_marketing_campaign_event(uuid,text)'::regprocedure, 'EXECUTE'),
+  'Campaign event RPC remains callable through the public invoker wrapper'
+);
+
+SELECT ok(
+  NOT (SELECT prosecdef FROM pg_proc WHERE oid = 'public.record_marketing_campaign_event(uuid,text)'::regprocedure),
+  'Campaign event public wrapper executes as invoker'
+);
+
+SELECT ok(
+  (SELECT prosecdef FROM pg_proc WHERE oid = 'private.record_marketing_campaign_event(uuid,text)'::regprocedure),
+  'Campaign event privileged implementation remains in private schema'
+);
+
+SELECT ok(
+  has_function_privilege('authenticated', 'public.get_marketing_campaign_analytics(uuid)'::regprocedure, 'EXECUTE'),
+  'Campaign analytics RPC remains callable through the public invoker wrapper'
+);
+
+SELECT ok(
+  NOT (SELECT prosecdef FROM pg_proc WHERE oid = 'public.get_marketing_campaign_analytics(uuid)'::regprocedure),
+  'Campaign analytics public wrapper executes as invoker'
+);
+
+SELECT ok(
+  (SELECT prosecdef FROM pg_proc WHERE oid = 'private.get_marketing_campaign_analytics(uuid)'::regprocedure),
+  'Campaign analytics privileged implementation remains in private schema'
 );
 
 SELECT * FROM finish();

@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Moon, Sun, LogOut, User as UserIcon, Loader2, Bell, Maximize2, Minimize2, CalendarDays, Building2, Search, CircleHelp } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -23,10 +23,19 @@ import { toast } from "sonner";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { useSuperOwner } from "@/hooks/use-super-owner";
 import { safeInternalNotificationPath } from "@/lib/notification-links";
+import { resolveAvatarUrl } from "@/lib/storage";
+import { OFFLINE_AUTH_CACHE_MAX_AGE_MS, withOfflineFallback } from "@/lib/offline-reference-cache";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
+    // Supabase persists the session locally. Offline navigation may use that
+    // existing session only; online navigation still validates it with Auth.
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session?.user) throw redirect({ to: "/auth" });
+      return { userId: data.session.user.id, email: data.session.user.email };
+    }
     const { data } = await supabase.auth.getUser();
     if (!data.user) throw redirect({ to: "/auth" });
     return { userId: data.user.id, email: data.user.email };
@@ -66,12 +75,16 @@ function AuthLayout() {
 }
 
 function AuthShell() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+
   return (
     <div className="workspace-surface flex min-h-screen w-full flex-col">
       <TopBar />
       <WorkspaceTabs />
       <main className="min-w-0 flex-1 p-3 sm:p-4 md:p-6">
-        <PermissionRouteGuard />
+        <div key={pathname} className="workspace-page-transition">
+          <PermissionRouteGuard />
+        </div>
       </main>
     </div>
   );
@@ -137,10 +150,17 @@ function PermissionRouteGuard() {
   const permissionsQuery = useQuery({
     queryKey: ["route-effective-permissions", tenantId, userId],
     queryFn: async () => {
-      if (!tenantId) return new Set<string>();
-      const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId });
-      if (error) throw error;
-      return new Set<string>((data ?? []) as string[]);
+      if (!tenantId || !userId) return new Set<string>();
+      const permissions = await withOfflineFallback(
+        `auth-route-permissions:v1:${userId}:${tenantId}`,
+        async () => {
+          const { data, error } = await supabase.rpc("get_my_permissions", { _tenant_id: tenantId });
+          if (error) throw error;
+          return (data ?? []) as string[];
+        },
+        OFFLINE_AUTH_CACHE_MAX_AGE_MS,
+      );
+      return new Set<string>(permissions);
     },
     enabled: !!tenantId && !!userId && !isSuperOwner && !!requiredPermission && !ownerOnly,
     staleTime: 15_000,
@@ -171,6 +191,7 @@ function TopBar() {
   const { isSuperOwner } = useSuperOwner();
   const [globalSearch, setGlobalSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const searchPermissions = useQuery({
     queryKey: ["topbar-search-permissions", tenantId, user?.id],
     queryFn: async () => {
@@ -223,16 +244,29 @@ function TopBar() {
     queryKey: ["topbar-profile-name", user?.id],
     queryFn: async () => {
       if (!user?.id) return null;
-      const { data, error } = await supabase.from("profiles").select("full_name, username").eq("id", user.id).maybeSingle();
+      const { data, error } = await supabase.from("profiles").select("full_name, username, avatar_url, job_title").eq("id", user.id).maybeSingle();
       if (error) throw error;
       return data;
     },
     enabled: !!user?.id,
     staleTime: 60_000,
   });
-  const displayName = user?.email?.toLowerCase() === "shafiqalwatiry@gmail.com"
-    ? "شفيق الوتيري"
-    : currentProfile?.full_name?.trim() || user?.user_metadata?.full_name?.trim() || currentProfile?.username?.trim() || "مستخدم";
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void resolveAvatarUrl(currentProfile?.avatar_url ?? null).then((url) => {
+      if (!cancelled) setAvatarUrl(url);
+    }).catch(() => {
+      if (!cancelled) setAvatarUrl(null);
+    });
+    return () => { cancelled = true; };
+  }, [currentProfile?.avatar_url]);
+  const displayName =
+    currentProfile?.full_name?.trim() ||
+    user?.user_metadata?.full_name?.trim() ||
+    currentProfile?.username?.trim() ||
+    user?.email?.split("@")[0]?.trim() ||
+    "مستخدم";
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [signingOut, setSigningOut] = useState(false);
@@ -364,11 +398,32 @@ function TopBar() {
     }
   }
 
-  const searchItems = appNavigationGroups.flatMap((group) => group.items).filter((item) => {
-    const query = globalSearch.trim().toLocaleLowerCase("ar");
-    const permitted = isSuperOwner || (!!searchPermissions.data && (!item.permission || searchPermissions.data.has(item.permission)));
-    return permitted && query.length > 0 && item.title.toLocaleLowerCase("ar").includes(query);
-  }).slice(0, 8);
+  const globalSearchCatalog = [
+    ...appNavigationGroups.flatMap((group) => group.items),
+    { title: "إدارة المستخدمين", url: "/users-admin", permission: "users.manage" },
+    { title: "الشركات", url: "/companies", permission: "companies.view" },
+    { title: "الأقسام الإدارية", url: "/departments", permission: "departments.view" },
+    { title: "المسميات الوظيفية", url: "/job-titles", permission: "job_titles.view" },
+    { title: "أنواع التوظيف", url: "/employment-types", permission: "employment_types.view" },
+    { title: "إدارة الأدوار", url: "/roles", permission: "roles.view" },
+    { title: "سجل التدقيق", url: "/audit-logs", permission: "audit.view" },
+    { title: "سجل الدخول", url: "/login-history", permission: "login_history.view" },
+    { title: "الإشعارات", url: "/notifications", permission: "notifications.view" },
+    { title: "الإعدادات", url: "/settings", permission: "settings.view" },
+    { title: "ملفي الشخصي", url: "/profile", permission: undefined },
+    { title: "مركز المساعدة والدعم", url: "/support", permission: undefined },
+  ];
+  const searchQuery = globalSearch.trim().toLocaleLowerCase("ar");
+  const searchItems = globalSearchCatalog
+    .filter((item, index, all) => all.findIndex((candidate) => candidate.url === item.url) === index)
+    .filter((item) => {
+      const permitted = isSuperOwner || (item.permission
+        ? !!searchPermissions.data?.has(item.permission)
+        : item.url === "/profile" || item.url === "/support");
+      return permitted && searchQuery.length > 0 && item.title.toLocaleLowerCase("ar").includes(searchQuery);
+    }).slice(0, 10);
+
+  const activeBranchLabel = branchQuery.data?.name || (membership?.branch_id ? "الفرع المحدد" : membership?.company_id ? "فروع الشركة" : "جميع الفروع");
 
   const initial = displayName.charAt(0) || "?";
 
@@ -386,7 +441,7 @@ function TopBar() {
           <DropdownMenuTrigger asChild>
             <button type="button" className="min-w-0 rounded-lg px-1 text-right outline-none transition hover:bg-blue-50 focus-visible:ring-2 focus-visible:ring-[#174b91]" aria-label="اختيار الشركة">
               <span className="block truncate text-sm font-extrabold text-[#102f5c] sm:text-base">{tenant?.name || "نظام إدارة المطاعم"}</span>
-              <span className="block text-[10px] text-slate-500">{memberships.length > 1 ? "تبديل الشركة" : "نظام إدارة المطاعم المتكامل"}</span>
+              <span className="block max-w-44 truncate text-[10px] text-slate-500">{memberships.length > 1 ? `تبديل الشركة · ${activeBranchLabel}` : activeBranchLabel}</span>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-64">
@@ -406,10 +461,15 @@ function TopBar() {
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
-        <div className="hidden items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 text-xs font-bold text-[#174b91] shadow-sm lg:flex"><Building2 className="h-4 w-4" />{branchQuery.data?.name || (membership?.branch_id ? "الفرع المحدد" : "جميع الفروع")}</div>
+        <div className="hidden items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 text-xs font-bold text-[#174b91] shadow-sm lg:flex"><Building2 className="h-4 w-4" />{activeBranchLabel}</div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-        <div className="hidden items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 text-[11px] font-semibold text-[#425b7d] shadow-sm md:flex"><CalendarDays className="h-4 w-4 text-[#174b91]" />{clock.toLocaleDateString("ar-YE",{weekday:"long",day:"numeric",month:"long"})}</div>
+        <div className="hidden items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 text-[11px] font-semibold text-[#425b7d] shadow-sm md:flex" aria-label={clock.toLocaleString("ar-YE")}><CalendarDays className="h-4 w-4 text-[#174b91]" /><span>{clock.toLocaleDateString("ar-YE",{weekday:"long",day:"numeric",month:"long"})}</span><span aria-hidden="true" className="text-slate-300">•</span><time dateTime={clock.toISOString()}>{clock.toLocaleTimeString("ar-YE",{hour:"2-digit",minute:"2-digit"})}</time></div>
+        <Button type="button" variant="outline" size="icon" className="rounded-xl border-[#dce5f3] bg-white text-[#174b91] shadow-sm lg:hidden" aria-label="فتح البحث الشامل" aria-expanded={mobileSearchOpen} onClick={() => setMobileSearchOpen((value) => !value)}><Search className="h-4 w-4" /></Button>
+        {mobileSearchOpen && <div className="absolute right-2 left-2 top-full z-50 mt-2 rounded-2xl border bg-white p-3 text-slate-800 shadow-xl lg:hidden" dir="rtl">
+          <div className="flex items-center gap-2 rounded-xl border px-3 py-2"><Search className="h-4 w-4 shrink-0 text-primary" /><input autoFocus value={globalSearch} onChange={(event) => setGlobalSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { setMobileSearchOpen(false); setGlobalSearch(""); } if (event.key === "Enter" && searchItems[0]) { navigate({ to: searchItems[0].url as any }); setGlobalSearch(""); setMobileSearchOpen(false); } }} placeholder="ابحث عن صفحة أو قسم..." aria-label="البحث الشامل داخل النظام" className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></div>
+          {globalSearch.trim() && <div className="mt-2 max-h-60 overflow-y-auto">{searchPermissions.isError ? <p role="alert" className="p-3 text-xs text-destructive">تعذر التحقق من صلاحيات البحث.</p> : searchPermissions.isLoading && !isSuperOwner ? <p className="p-3 text-xs text-muted-foreground">جارٍ التحقق من الصلاحيات...</p> : searchItems.length ? searchItems.map((item) => <button key={item.url} type="button" onClick={() => { navigate({ to: item.url as any }); setGlobalSearch(""); setMobileSearchOpen(false); }} className="flex w-full items-center rounded-lg px-3 py-3 text-right text-sm hover:bg-blue-50">{item.title}</button>) : <p className="p-3 text-xs text-muted-foreground">لا توجد نتائج متاحة.</p>}</div>}
+        </div>}
         <div className="relative hidden w-[min(28vw,300px)] lg:block">
           <div className="flex items-center gap-2 rounded-full border border-[#dce5f3] bg-white px-3 py-2 shadow-sm focus-within:border-primary/50">
             <Search className="h-4 w-4 shrink-0 text-[#174b91]" />
@@ -429,7 +489,7 @@ function TopBar() {
             <DropdownMenuSeparator /><DropdownMenuItem onSelect={() => navigate({ to: "/notifications" })} className="justify-center text-primary">عرض كل الإشعارات</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" className="h-11 gap-2 rounded-full px-1.5 sm:px-2"><Avatar className="h-9 w-9 border-2 border-[#dce5f3]"><AvatarFallback className="bg-[#e8effb] font-bold text-[#174b91]">{initial}</AvatarFallback></Avatar><span className="hidden min-w-0 text-right sm:block"><span className="block max-w-28 truncate text-xs font-extrabold text-[#102f5c]">{displayName}</span><span className="block text-[10px] text-slate-500">حساب المستخدم</span></span></Button></DropdownMenuTrigger>
+        <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" className="h-11 gap-2 rounded-full px-1.5 sm:px-2"><Avatar className="h-9 w-9 border-2 border-[#dce5f3]"><AvatarImage src={avatarUrl ?? undefined} alt="" /><AvatarFallback className="bg-[#e8effb] font-bold text-[#174b91]">{initial}</AvatarFallback></Avatar><span className="hidden min-w-0 text-right sm:block"><span className="block max-w-28 truncate text-xs font-extrabold text-[#102f5c]">{displayName}</span><span className="block max-w-28 truncate text-[10px] text-slate-500">{currentProfile?.job_title?.trim() || "حساب المستخدم"}</span></span></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end"><DropdownMenuLabel className="text-sm font-semibold">{displayName}</DropdownMenuLabel><DropdownMenuSeparator /><DropdownMenuItem onClick={() => navigate({ to: "/profile" })}><UserIcon className="ml-2 h-4 w-4" />ملفي الشخصي</DropdownMenuItem><DropdownMenuItem onClick={() => navigate({ to: "/settings" })}><UserIcon className="ml-2 h-4 w-4" />الإعدادات</DropdownMenuItem><DropdownMenuItem onClick={handleSignOut} disabled={signingOut}><LogOut className="ml-2 h-4 w-4" />تسجيل الخروج</DropdownMenuItem></DropdownMenuContent>
         </DropdownMenu>
       </div>

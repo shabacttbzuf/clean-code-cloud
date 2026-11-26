@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { useSuperOwner } from "@/hooks/use-super-owner";
@@ -17,6 +17,8 @@ export const Route = createFileRoute("/_authenticated/ads")({ component: AdsPage
 type Campaign = {
   id: string;
   company_id: string | null;
+  branch_id: string | null;
+  advertising_space_id: string | null;
   title: string;
   description: string;
   image_url: string | null;
@@ -39,9 +41,24 @@ export function AdsPage() {
   const [imageUrl, setImageUrl] = useState("");
   const [targetUrl, setTargetUrl] = useState("");
   const [placement, setPlacement] = useState("dashboard_banner");
+  const [branchId, setBranchId] = useState("");
+  const [adSpaceId, setAdSpaceId] = useState("");
+  const [newSpaceName, setNewSpaceName] = useState("");
+  const [sortOrder, setSortOrder] = useState("0");
+  const [showPreview, setShowPreview] = useState(false);
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [formTouched, setFormTouched] = useState(false);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/ads", dirty: formTouched },
+    }));
+    return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", {
+      detail: { path: "/ads", dirty: false },
+    })); };
+  }, [formTouched]);
 
   const isTenantOwner = role === "owner" && !membership?.company_id;
   const permissions = useQuery({
@@ -59,11 +76,77 @@ export function AdsPage() {
     ((role === "owner" || role === "manager") && !!membership?.company_id &&
       permissions.data?.includes("ads.manage") === true);
 
+  useEffect(() => {
+    if (membership?.branch_id) setBranchId(membership.branch_id);
+  }, [membership?.branch_id]);
+
+  const branches = useQuery({
+    queryKey: ["marketing-branches", tenantId, membership?.company_id, membership?.branch_id],
+    queryFn: async () => {
+      let query = supabase.from("branches").select("id,name,company_id")
+        .eq("tenant_id", tenantId!).eq("is_active", true).order("name");
+      if (membership?.company_id) query = query.eq("company_id", membership.company_id);
+      if (membership?.branch_id && role !== "owner" && role !== "manager") {
+        query = query.eq("id", membership.branch_id);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!tenantId && canManage,
+  });
+
+  const adSpaces = useQuery({
+    queryKey: ["marketing-ad-spaces", tenantId, membership?.company_id, branchId],
+    queryFn: async () => {
+      let query = supabase.from("marketing_ad_spaces")
+        .select("id,tenant_id,company_id,branch_id,space_key,name,format,is_active,sort_order")
+        .eq("tenant_id", tenantId!).order("sort_order").order("name");
+      if (membership?.company_id) query = query.eq("company_id", membership.company_id);
+      const { data, error } = await query;
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!tenantId && canManage,
+  });
+
+  const availableAdSpaces = (adSpaces.data ?? []).filter((space) =>
+    space.is_active && (space.branch_id === null || space.branch_id === (branchId || null))
+  );
+
+  const createAdSpace = useMutation({
+    mutationFn: async () => {
+      const cleanName = newSpaceName.trim();
+      if (cleanName.length < 2 || cleanName.length > 120) throw new Error("اسم المساحة يجب أن يكون بين حرفين و120 حرفاً");
+      const selectedBranch = (branches.data ?? []).find((item) => item.id === branchId);
+      const companyId = selectedBranch?.company_id ?? membership?.company_id ?? null;
+      const format = placement === "dashboard_banner" ? "banner" : placement === "dashboard_card" ? "card" : "pos";
+      const { data, error } = await supabase.from("marketing_ad_spaces").insert({
+        tenant_id: tenantId!,
+        company_id: companyId,
+        branch_id: branchId || null,
+        space_key: placement,
+        name: cleanName,
+        format,
+        created_by: userId,
+      }).select("id").single();
+      if (error) throw error;
+      return data.id as string;
+    },
+    onSuccess: (id) => {
+      setAdSpaceId(id);
+      setNewSpaceName("");
+      void queryClient.invalidateQueries({ queryKey: ["marketing-ad-spaces", tenantId] });
+      toast.success("تم إنشاء المساحة الإعلانية وربطها بالنطاق المحدد");
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر إنشاء المساحة الإعلانية"),
+  });
+
   const campaigns = useQuery({
     queryKey: ["marketing-campaigns", tenantId, membership?.company_id ?? "tenant"],
     queryFn: async (): Promise<Campaign[]> => {
       let query = supabase.from("marketing_campaigns")
-        .select("id,company_id,title,description,image_url,target_url,placement,status,starts_at,ends_at,sort_order")
+        .select("id,company_id,branch_id,advertising_space_id,title,description,image_url,target_url,placement,status,starts_at,ends_at,sort_order")
         .eq("tenant_id", tenantId!)
         .order("sort_order")
         .order("created_at", { ascending: false });
@@ -78,6 +161,20 @@ export function AdsPage() {
     enabled: !!tenantId && canManage,
   });
 
+  const analytics = useQuery({
+    queryKey: ["marketing-campaign-analytics", tenantId, membership?.company_id ?? "tenant"],
+    queryFn: async (): Promise<Array<{ campaign_id: string; impressions: number; clicks: number }>> => {
+      const { data, error } = await (supabase.rpc as any)("get_marketing_campaign_analytics", { _tenant_id: tenantId! });
+      if (error) throw error;
+      return (data ?? []) as Array<{ campaign_id: string; impressions: number; clicks: number }>;
+    },
+    enabled: !!tenantId && canManage,
+    staleTime: 30_000,
+  });
+  const analyticsByCampaign = new Map(
+    (analytics.data ?? []).map((row) => [row.campaign_id, row]),
+  );
+
   const saveCampaign = useMutation({
     mutationFn: async () => {
       const cleanTitle = title.trim();
@@ -91,19 +188,34 @@ export function AdsPage() {
           throw new Error("رابط الوجهة يجب أن يكون صالحاً ويبدأ بـ https:// أو http://");
         }
       }
+      if (startsAt && Number.isNaN(new Date(startsAt).getTime())) throw new Error("تاريخ بداية الإعلان غير صالح");
+      if (endsAt && Number.isNaN(new Date(endsAt).getTime())) throw new Error("تاريخ نهاية الإعلان غير صالح");
       if (startsAt && endsAt && new Date(endsAt) <= new Date(startsAt)) throw new Error("تاريخ النهاية يجب أن يكون بعد البداية");
+      const normalizedSortOrder = Number(sortOrder);
+      if (!Number.isInteger(normalizedSortOrder) || normalizedSortOrder < 0 || normalizedSortOrder > 10000) throw new Error("ترتيب الإعلان يجب أن يكون رقماً صحيحاً بين 0 و10000");
+      const selectedBranch = (branches.data ?? []).find((item) => item.id === branchId);
       const payload = {
-        company_id: editingId ? editingCompanyId : (membership?.company_id ?? null),
+        company_id: selectedBranch?.company_id ?? (editingId ? editingCompanyId : (membership?.company_id ?? null)),
+        branch_id: branchId || null,
+        advertising_space_id: adSpaceId || null,
         title: cleanTitle,
         description: description.trim(),
         image_url: imageUrl || null,
         target_url: targetUrl.trim() || null,
         placement,
+        sort_order: normalizedSortOrder,
         starts_at: startsAt ? new Date(startsAt).toISOString() : null,
         ends_at: endsAt ? new Date(endsAt).toISOString() : null,
       };
+      let updateQuery = supabase.from("marketing_campaigns").update(payload)
+        .eq("id", editingId ?? "")
+        .eq("tenant_id", tenantId!);
+      if (editingId && !isSuperOwner && !isTenantOwner) {
+        if (!membership?.company_id) throw new Error("لا يوجد نطاق شركة مصرح به لتعديل هذه الحملة.");
+        updateQuery = updateQuery.eq("company_id", membership.company_id);
+      }
       const result = editingId
-        ? await supabase.from("marketing_campaigns").update(payload).eq("id", editingId).eq("tenant_id", tenantId!).select("id").maybeSingle()
+        ? await updateQuery.select("id").maybeSingle()
         : await supabase.from("marketing_campaigns").insert({ ...payload, tenant_id: tenantId!, created_by: userId, status: "draft" }).select("id").single();
       if (result.error) throw result.error;
       if (!result.data?.id) throw new Error("لم يتم العثور على الحملة ضمن نطاق الشركة الحالي؛ لم يُنفّذ الحفظ.");
@@ -117,7 +229,7 @@ export function AdsPage() {
       const dbError = error as { code?: string; message?: string; details?: string; hint?: string };
       const raw = [dbError.message, dbError.details, dbError.hint].filter(Boolean).join(" — ");
       if (dbError.code === "42501" || /row-level security|permission denied/i.test(raw)) {
-        toast.error("رفضت قاعدة البيانات حفظ الحملة بسبب الصلاحيات. يلزم تطبيق ترحيل صلاحية ads.manage على قاعدة البيانات، مع التأكد من أن حسابك يملكها ضمن شركته.");
+        toast.error("رفضت قاعدة البيانات حفظ الحملة بسبب الصلاحيات. تحقق من صلاحية إدارة الإعلانات ونطاق الشركة، ثم أعد المحاولة.");
         console.error("Marketing campaign RLS failure", { code: dbError.code, message: raw });
         return;
       }
@@ -128,8 +240,14 @@ export function AdsPage() {
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await supabase.from("marketing_campaigns").update({ status }).eq("id", id).eq("tenant_id", tenantId!);
+      let query = supabase.from("marketing_campaigns").update({ status }).eq("id", id).eq("tenant_id", tenantId!);
+      if (!isSuperOwner && !isTenantOwner) {
+        if (!membership?.company_id) throw new Error("لا يوجد نطاق شركة مصرح به لإدارة هذه الحملة.");
+        query = query.eq("company_id", membership.company_id);
+      }
+      const { data, error } = await query.select("id").maybeSingle();
       if (error) throw error;
+      if (!data?.id) throw new Error("لم يتم العثور على الحملة ضمن نطاق الشركة المصرح به.");
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["marketing-campaigns", tenantId] }),
     onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر تحديث حالة الحملة"),
@@ -137,8 +255,14 @@ export function AdsPage() {
 
   const deleteCampaign = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("marketing_campaigns").delete().eq("id", id).eq("tenant_id", tenantId!);
+      let query = supabase.from("marketing_campaigns").delete().eq("id", id).eq("tenant_id", tenantId!);
+      if (!isSuperOwner && !isTenantOwner) {
+        if (!membership?.company_id) throw new Error("لا يوجد نطاق شركة مصرح به لإدارة هذه الحملة.");
+        query = query.eq("company_id", membership.company_id);
+      }
+      const { data, error } = await query.select("id").maybeSingle();
       if (error) throw error;
+      if (!data?.id) throw new Error("لم يتم العثور على الحملة أو لا تملك صلاحية حذفها.");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["marketing-campaigns", tenantId] });
@@ -148,6 +272,7 @@ export function AdsPage() {
   });
 
   function resetForm() {
+    setFormTouched(false);
     setEditingId(null);
     setEditingCompanyId(null);
     setTitle("");
@@ -155,6 +280,10 @@ export function AdsPage() {
     setImageUrl("");
     setTargetUrl("");
     setPlacement("dashboard_banner");
+    setBranchId(membership?.branch_id ?? "");
+    setAdSpaceId("");
+    setSortOrder("0");
+    setShowPreview(false);
     setStartsAt("");
     setEndsAt("");
   }
@@ -177,6 +306,7 @@ export function AdsPage() {
       });
       if (error) throw error;
       setImageUrl(supabase.storage.from("restaurant-assets").getPublicUrl(path).data.publicUrl);
+      setFormTouched(true);
       toast.success("تم رفع صورة الإعلان");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "تعذر رفع الصورة");
@@ -186,6 +316,7 @@ export function AdsPage() {
   }
 
   function editCampaign(campaign: Campaign) {
+    setFormTouched(false);
     setEditingId(campaign.id);
     setEditingCompanyId(campaign.company_id);
     setTitle(campaign.title);
@@ -193,6 +324,10 @@ export function AdsPage() {
     setImageUrl(campaign.image_url ?? "");
     setTargetUrl(campaign.target_url ?? "");
     setPlacement(campaign.placement);
+    setBranchId(campaign.branch_id ?? "");
+    setAdSpaceId(campaign.advertising_space_id ?? "");
+    setSortOrder(String(campaign.sort_order ?? 0));
+    setShowPreview(false);
     const toLocalInput = (value: string | null) => {
       if (!value) return "";
       const date = new Date(value);
@@ -211,32 +346,74 @@ export function AdsPage() {
       <PageHeader title="الإعلانات والمساحات الإعلانية" subtitle="إدارة الحملات الإعلانية وصورها وروابطها ومواقع ظهورها وجدولتها بصورة مستقلة عن إعدادات النظام والعروض الترويجية." />
       <Card>
         <CardHeader>
+          <CardTitle>إدارة المساحات الإعلانية</CardTitle>
+          <CardDescription>أنشئ مساحات مستقلة على مستوى الشركة أو فرع محدد، ثم اربط الحملات بها.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+            <Input value={newSpaceName} onChange={(event) => setNewSpaceName(event.target.value)} maxLength={120} placeholder="اسم المساحة الجديدة" />
+            <Button type="button" variant="outline" disabled={!newSpaceName.trim() || createAdSpace.isPending} onClick={() => createAdSpace.mutate()}>
+              {createAdSpace.isPending ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : <Plus className="ml-2 h-4 w-4" />} إنشاء مساحة حسب نوع الإعلان والفرع المحدد
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(adSpaces.data ?? []).map((space) => <span key={space.id} className="rounded-full border px-3 py-1 text-xs">{space.name} · {space.branch_id ? "فرعي" : "عام"} · {space.is_active ? "نشط" : "متوقف"}</span>)}
+          </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
           <CardTitle className="flex items-center gap-2"><Megaphone className="h-5 w-5 text-primary" /> {editingId ? "تعديل حملة إعلانية" : "إنشاء حملة إعلانية"}</CardTitle>
           <CardDescription>تُحفظ الحملة كمسودة أولاً. راجع تفاصيلها ثم فعّلها من قائمة الحملات.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-2"><Label>عنوان الإعلان</Label><Input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} placeholder="مثال: عروض نهاية الأسبوع" /></div>
-            <div className="space-y-2"><Label>المساحة الإعلانية</Label>
-              <select value={placement} onChange={(event) => setPlacement(event.target.value)} className="h-10 w-full rounded-md border bg-background px-3 text-sm">
+            <div className="space-y-2"><Label>عنوان الإعلان</Label><Input value={title} onChange={(event) => { setTitle(event.target.value); setFormTouched(true); }} maxLength={120} placeholder="مثال: عروض نهاية الأسبوع" /></div>
+            <div className="space-y-2"><Label>نطاق الفرع</Label>
+              <select value={branchId} onChange={(event) => { setBranchId(event.target.value); setAdSpaceId(""); setFormTouched(true); }} className="h-10 w-full rounded-md border bg-background px-3 text-sm" disabled={!!membership?.branch_id && role !== "owner" && role !== "manager"}>
+                <option value="">جميع فروع النطاق</option>
+                {(branches.data ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+            </div>
+            <div className="space-y-2"><Label>المساحة الإعلانية المُدارة</Label>
+              <select value={adSpaceId} onChange={(event) => { setAdSpaceId(event.target.value); setFormTouched(true); }} className="h-10 w-full rounded-md border bg-background px-3 text-sm">
+                <option value="">استخدم نوع المساحة فقط (توافق قديم)</option>
+                {availableAdSpaces.filter((space) => space.space_key === placement).map((space) => <option key={space.id} value={space.id}>{space.name}{space.branch_id ? " · فرع محدد" : " · عامة"}</option>)}
+              </select>
+            </div>
+            <div className="space-y-2"><Label>نوع المساحة الإعلانية</Label>
+              <select value={placement} onChange={(event) => { setPlacement(event.target.value); setFormTouched(true); }} className="h-10 w-full rounded-md border bg-background px-3 text-sm">
                 <option value="dashboard_banner">الشريط الرئيسي في لوحة التحكم</option>
                 <option value="dashboard_card">بطاقة إعلانية في لوحة التحكم</option>
                 <option value="pos_promo">المساحة الترويجية في نقطة البيع</option>
               </select>
             </div>
-            <div className="space-y-2 md:col-span-2"><Label>وصف الإعلان</Label><Input value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} placeholder="اكتب تفاصيل الإعلان" /></div>
-            <div className="space-y-2"><Label>رابط الوجهة (اختياري)</Label><Input dir="ltr" value={targetUrl} onChange={(event) => setTargetUrl(event.target.value)} placeholder="https://example.com" /></div>
+            <div className="space-y-2"><Label>ترتيب الظهور (الأقل أولاً)</Label><Input type="number" min="0" max="10000" step="1" value={sortOrder} onChange={(event) => { setSortOrder(event.target.value); setFormTouched(true); }} /></div>
+            <div className="space-y-2 md:col-span-2"><Label>وصف الإعلان</Label><Input value={description} onChange={(event) => { setDescription(event.target.value); setFormTouched(true); }} maxLength={500} placeholder="اكتب تفاصيل الإعلان" /></div>
+            <div className="space-y-2"><Label>رابط الوجهة (اختياري)</Label><Input dir="ltr" value={targetUrl} onChange={(event) => { setTargetUrl(event.target.value); setFormTouched(true); }} placeholder="https://example.com" /></div>
             <div className="space-y-2"><Label>صورة الإعلان</Label><div className="flex items-center gap-3">
               <div className="grid h-14 w-20 shrink-0 place-items-center overflow-hidden rounded-md border bg-muted">{imageUrl ? <img src={imageUrl} alt="معاينة الإعلان" className="h-full w-full object-cover" /> : <Image className="h-5 w-5 text-muted-foreground" />}</div>
               <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-muted">{uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}{uploading ? "جارٍ الرفع..." : "اختيار صورة"}<input className="hidden" type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={uploading} onChange={(event) => { void uploadImage(event.target.files?.[0]); event.currentTarget.value = ""; }} /></label>
             </div></div>
-            <div className="space-y-2"><Label>تاريخ ووقت البداية</Label><Input type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} /></div>
-            <div className="space-y-2"><Label>تاريخ ووقت النهاية</Label><Input type="datetime-local" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} /></div>
+            <div className="space-y-2"><Label>تاريخ ووقت البداية</Label><Input type="datetime-local" value={startsAt} onChange={(event) => { setStartsAt(event.target.value); setFormTouched(true); }} /></div>
+            <div className="space-y-2"><Label>تاريخ ووقت النهاية</Label><Input type="datetime-local" value={endsAt} onChange={(event) => { setEndsAt(event.target.value); setFormTouched(true); }} /></div>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={() => setShowPreview((current) => !current)}>{showPreview ? "إخفاء المعاينة" : "معاينة الإعلان"}</Button>
             <Button type="button" onClick={() => saveCampaign.mutate()} disabled={saveCampaign.isPending || !title.trim()}>{saveCampaign.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}<Plus className="ml-1 h-4 w-4" />{editingId ? "حفظ التعديلات" : "حفظ كمسودة"}</Button>
             {editingId && <Button type="button" variant="outline" onClick={resetForm}>إلغاء التعديل</Button>}
           </div>
+          {showPreview && (
+            <div className="overflow-hidden rounded-xl border bg-card" aria-label="معاينة الإعلان">
+              {imageUrl ? <img src={imageUrl} alt="صورة معاينة الإعلان" className="h-44 w-full object-cover" /> : <div className="grid h-32 place-items-center bg-muted text-sm text-muted-foreground">لا توجد صورة مرفقة</div>}
+              <div className="space-y-2 p-4">
+                <div className="text-xs font-medium text-primary">{placement === "dashboard_banner" ? "معاينة الشريط الرئيسي" : placement === "dashboard_card" ? "معاينة بطاقة لوحة التحكم" : "معاينة مساحة نقطة البيع"}</div>
+                <h3 className="text-lg font-bold">{title.trim() || "عنوان الإعلان"}</h3>
+                <p className="text-sm text-muted-foreground">{description.trim() || "سيظهر وصف الإعلان هنا."}</p>
+                {targetUrl.trim() && <div dir="ltr" className="truncate text-xs text-muted-foreground">{targetUrl.trim()}</div>}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
       <Card>
@@ -248,7 +425,13 @@ export function AdsPage() {
               const canEdit = isSuperOwner || isTenantOwner || (!!membership?.company_id && campaign.company_id === membership.company_id && canManage);
               return <div key={campaign.id} className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
                 {campaign.image_url && <img src={campaign.image_url} alt="" className="h-14 w-20 rounded object-cover" />}
-                <div className="min-w-0 flex-1"><div className="font-medium">{campaign.title}</div><div className="text-xs text-muted-foreground">{campaign.placement === "dashboard_banner" ? "الشريط الرئيسي" : campaign.placement === "dashboard_card" ? "بطاقة لوحة التحكم" : "نقطة البيع"} · {campaign.status === "active" ? "نشط" : campaign.status === "paused" ? "متوقف" : campaign.status === "archived" ? "مؤرشف" : "مسودة"}{campaign.starts_at ? ` · يبدأ ${new Date(campaign.starts_at).toLocaleString("ar")}` : ""}{campaign.ends_at ? ` · ينتهي ${new Date(campaign.ends_at).toLocaleString("ar")}` : ""}</div></div>
+                <div className="min-w-0 flex-1"><div className="font-medium">{campaign.title}</div><div className="text-xs text-muted-foreground">{campaign.placement === "dashboard_banner" ? "الشريط الرئيسي" : campaign.placement === "dashboard_card" ? "بطاقة لوحة التحكم" : "نقطة البيع"}{campaign.branch_id ? " · حملة مخصصة لفرع" : " · جميع الفروع"} · {campaign.status === "active" ? "نشط" : campaign.status === "paused" ? "متوقف" : campaign.status === "archived" ? "مؤرشف" : "مسودة"}{campaign.starts_at ? ` · يبدأ ${new Date(campaign.starts_at).toLocaleString("ar")}` : ""}{campaign.ends_at ? ` · ينتهي ${new Date(campaign.ends_at).toLocaleString("ar")}` : ""}</div>
+                  <div className="mt-1 text-xs text-muted-foreground" aria-label="إحصاءات الحملة">
+                    {analytics.isLoading ? "جارٍ تحميل الإحصاءات..." : analytics.isError ? "تعذر تحميل الإحصاءات" : (() => {
+                      const stats = analyticsByCampaign.get(campaign.id);
+                      return `المشاهدات الفريدة يومياً: ${stats?.impressions ?? 0} · النقرات الفريدة يومياً: ${stats?.clicks ?? 0}`;
+                    })()}
+                  </div></div>
                 <Button type="button" size="sm" variant="ghost" disabled={!canEdit} onClick={() => editCampaign(campaign)}>تعديل</Button>
                 <Button type="button" size="sm" variant="outline" disabled={!canEdit || updateStatus.isPending} onClick={() => updateStatus.mutate({
                   id: campaign.id,

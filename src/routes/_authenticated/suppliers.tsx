@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
@@ -49,6 +49,15 @@ function SuppliersPage() {
   const [paymentReference, setPaymentReference] = useState("");
   const [paymentNotes, setPaymentNotes] = useState("");
 
+  useEffect(() => {
+    const dirty = !!paymentSupplier && (
+      paymentAmount.trim() !== "" || paymentMethod !== "cash" || !!cashSessionId ||
+      paymentBranchId !== (membership?.branch_id ?? "") || !!paymentReference.trim() || !!paymentNotes.trim()
+    );
+    window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/suppliers", dirty } }));
+    return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/suppliers", dirty: false } })); };
+  }, [paymentSupplier, paymentAmount, paymentMethod, cashSessionId, paymentBranchId, paymentReference, paymentNotes, membership?.branch_id]);
+
   const q = useQuery({
     queryKey: ["suppliers", tenantId],
     queryFn: async (): Promise<Supplier[]> => {
@@ -70,10 +79,13 @@ function SuppliersPage() {
   });
 
   const branches = useQuery({
-    queryKey: ["supplier-payment-branches", tenantId],
+    queryKey: ["supplier-payment-branches", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
     queryFn: async () => {
-      const { data, error } = await supabase.from("branches").select("id, name, is_active")
-        .eq("tenant_id", tenantId!).eq("is_active", true).order("name");
+      let query = supabase.from("branches").select("id, name, is_active")
+        .eq("tenant_id", tenantId!).eq("is_active", true);
+      if (!isSuperOwner && membership?.branch_id) query = query.eq("id", membership.branch_id);
+      else if (!isSuperOwner && membership?.company_id) query = query.eq("company_id", membership.company_id);
+      const { data, error } = await query.order("name");
       if (error) throw error;
       return data ?? [];
     },
@@ -81,12 +93,20 @@ function SuppliersPage() {
   });
 
   const cashSessions = useQuery({
-    queryKey: ["supplier-payment-open-cash-sessions", tenantId, userId],
+    queryKey: ["supplier-payment-open-cash-sessions", tenantId, userId, membership?.company_id, membership?.branch_id, paymentBranchId, isSuperOwner],
     queryFn: async () => {
-      const { data, error } = await supabase.from("cash_sessions")
+      let query = supabase.from("cash_sessions")
         .select("id, branch_id, opened_at, cashier_id")
-        .eq("tenant_id", tenantId!).eq("status", "open")
-        .order("opened_at", { ascending: false });
+        .eq("tenant_id", tenantId!).eq("status", "open");
+      if (!isSuperOwner && membership?.branch_id) query = query.eq("branch_id", membership.branch_id);
+      else if (!isSuperOwner && membership?.company_id) {
+        const { data: allowedBranches, error: branchError } = await supabase.from("branches").select("id")
+          .eq("tenant_id", tenantId!).eq("company_id", membership.company_id);
+        if (branchError) throw branchError;
+        query = query.in("branch_id", (allowedBranches ?? []).map((branch) => branch.id));
+      }
+      if (paymentBranchId) query = query.eq("branch_id", paymentBranchId);
+      const { data, error } = await query.order("opened_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
@@ -199,7 +219,7 @@ function SuppliersPage() {
         action={isAdmin && (
           <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditing(null); }}>
             <DialogTrigger asChild><Button><Plus className="ml-2 h-4 w-4" />مورد جديد</Button></DialogTrigger>
-            <SupplierDialog initial={editing} tenantId={tenantId!} onSubmit={(v) => upsert.mutate(v)} pending={upsert.isPending} />
+            <SupplierDialog key={`${open}-${editing?.id ?? "new"}`} open={open} initial={editing} tenantId={tenantId!} onSubmit={(v) => upsert.mutate(v)} pending={upsert.isPending} />
           </Dialog>
         )}
       />
@@ -308,8 +328,8 @@ function SuppliersPage() {
   );
 }
 
-function SupplierDialog({ initial, tenantId, onSubmit, pending }: {
-  initial: Supplier | null; tenantId: string; onSubmit: (v: z.infer<typeof schema>) => void; pending: boolean;
+function SupplierDialog({ open, initial, tenantId, onSubmit, pending }: {
+  open: boolean; initial: Supplier | null; tenantId: string; onSubmit: (v: z.infer<typeof schema>) => void; pending: boolean;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [phone, setPhone] = useState(initial?.phone ?? "");
@@ -317,6 +337,16 @@ function SupplierDialog({ initial, tenantId, onSubmit, pending }: {
   const [address, setAddress] = useState(initial?.address ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [logoUrl, setLogoUrl] = useState<string | null>(initial?.logo_url ?? null);
+
+  useEffect(() => {
+    const dirty = open && (
+      name !== (initial?.name ?? "") || phone !== (initial?.phone ?? "") ||
+      email !== (initial?.email ?? "") || address !== (initial?.address ?? "") ||
+      notes !== (initial?.notes ?? "") || logoUrl !== (initial?.logo_url ?? null)
+    );
+    window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/suppliers", dirty } }));
+    return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/suppliers", dirty: false } })); };
+  }, [open, initial, name, phone, email, address, notes, logoUrl]);
 
   return (
     <DialogContent className="max-h-[90vh] overflow-y-auto">

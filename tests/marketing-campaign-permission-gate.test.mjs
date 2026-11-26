@@ -16,7 +16,15 @@ test("company-scoped marketing controls require the dedicated ads.manage permiss
 test("tenant-wide and Super Owner management remain explicit while campaign actions stay company-scoped", () => {
   assert.match(source, /const isTenantOwner = role === "owner" && !membership\?\.company_id/);
   assert.match(source, /if \(!isSuperOwner && !isTenantOwner\)[\s\S]*query = query\.eq\("company_id", membership\.company_id\)/);
-  assert.match(source, /\.update\(payload\)\.eq\("id", editingId\)\.eq\("tenant_id", tenantId!\)/);
+  assert.match(source, /\.update\(payload\)\s*\.eq\("id", editingId \?\? ""\)\s*\.eq\("tenant_id", tenantId!\)/);
+});
+
+test("campaign ordering and draft preview are available without bypassing the save flow", () => {
+  assert.match(source, /sort_order: normalizedSortOrder/);
+  assert.ok(source.includes("Number.isInteger(normalizedSortOrder)"));
+  assert.ok(source.includes("setSortOrder(String(campaign.sort_order ?? 0))"));
+  assert.match(source, /معاينة الإعلان/);
+  assert.match(source, /aria-label="معاينة الإعلان"/);
 });
 
 test("database grants dedicated ads permission without changing company-scope boundaries", () => {
@@ -40,4 +48,16 @@ test("follow-up migration reconciles ads.manage writes without weakening company
   assert.match(source, /created_by: userId/);
   assert.match(source, /select\("id"\)\.single\(\)/);
   assert.match(source, /Marketing campaign RLS failure/);
+});
+
+
+test("campaigns are branch-targeted and linked to managed advertising spaces", () => {
+  assert.match(source, /branch_id: string \| null/);
+  assert.match(source, /advertising_space_id: string \| null/);
+  assert.match(source, /from\("marketing_ad_spaces"\)/);
+  assert.match(source, /from\("branches"\)/);
+  assert.match(source, /branch_id: branchId \|\| null/);
+  assert.match(source, /advertising_space_id: adSpaceId \|\| null/);
+  assert.match(source, /إدارة المساحات الإعلانية/);
+  assert.match(source, /إنشاء مساحة حسب نوع الإعلان والفرع المحدد/);
 });

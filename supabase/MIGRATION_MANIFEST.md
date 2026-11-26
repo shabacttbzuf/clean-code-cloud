@@ -202,3 +202,75 @@
 98. `supabase/migrations/20261120020000_leave_rejection_actor_integrity.sql`
 
 **الإجمالي: 98 ترحيلاً.**
+
+99. `supabase/migrations/20261120030000_enforce_company_scope_marketing_reads.sql`
+
+**الإجمالي: 99 ترحيلاً.**
+
+100. `supabase/migrations/20261120040000_kitchen_order_workflow.sql`
+
+**الإجمالي: 100 ترحيلاً.**
+
+101. `supabase/migrations/20261120050000_restaurant_tables_pos_order_types.sql`
+
+**الإجمالي: 101 ترحيلاً.**
+
+102. `supabase/migrations/20261120060000_sale_table_name_receipt_snapshot.sql`
+
+**الإجمالي: 102 ترحيلاً.**
+
+103. `supabase/migrations/20261121010000_separate_ads_management_permission.sql`
+
+**الإجمالي: 103 ترحيلاً.**
+
+104. `supabase/migrations/20261121020000_promotional_offers_and_pos_redemptions.sql`
+
+**الإجمالي: 104 ترحيلاً.**
+
+105. `supabase/migrations/20261121025000_promotions_read_permission_scope.sql`
+
+**الإجمالي: 105 ترحيلاً.**
+
+106. `supabase/migrations/20261121030000_notification_deep_links.sql`
+
+**الإجمالي: 106 ترحيلاً.**
+
+107. `supabase/migrations/20261121040000_reconcile_ads_campaign_write_permissions.sql`
+
+**الإجمالي: 107 ترحيلاً.**
+
+108. `supabase/migrations/20261122010000_stage15_fk_index_and_security_regression_guards.sql`
+
+**الإجمالي: 108 ترحيلاً.**
+
+109. `supabase/migrations/20261122030000_pos_cashier_access_credentials.sql`
+
+**الإجمالي: 109 ترحيلاً.**
+
+110. `supabase/migrations/20261122040000_grant_promotions_api_access_and_fk_indexes.sql`
+
+**الإجمالي: 110 ترحيلاً.**
+
+111. `supabase/migrations/20261124010000_marketing_campaign_analytics.sql`
+
+**الإجمالي: 111 ترحيلاً.**
+
+112. `supabase/migrations/20261124020000_restore_marketing_campaign_write_grants.sql`
+
+**الإجمالي: 112 ترحيلاً.**
+
+113. `supabase/migrations/20261124021000_marketing_campaign_events_fk_indexes.sql`
+
+**الإجمالي: 113 ترحيلاً.**
+
+114. `supabase/migrations/20261124151227_move_marketing_analytics_to_private_wrappers.sql`
+
+**الإجمالي: 114 ترحيلاً.**
+
+115. `supabase/migrations/20261126190000_marketing_ad_spaces_and_branch_targeting.sql`
+
+**الإجمالي: 115 ترحيلاً.**
+
+116. `supabase/migrations/20261126200000_scope_marketing_analytics_to_branch.sql`
+
+**الإجمالي: 116 ترحيلاً.**

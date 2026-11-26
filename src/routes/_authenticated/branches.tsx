@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
@@ -157,6 +157,8 @@ function BranchesPage() {
                 <Button><Plus className="ml-2 h-4 w-4" />إضافة فرع</Button>
               </DialogTrigger>
               <BranchDialog
+                key={`${open}-${editing?.id ?? "new"}`}
+                open={open}
                 initial={editing}
                 tenantId={tenantId!}
                 managers={managers.data ?? []}
@@ -261,6 +263,7 @@ function EmptyState({ onAdd }: { onAdd?: () => void }) {
 }
 
 function BranchDialog({
+  open,
   initial,
   tenantId,
   managers,
@@ -269,6 +272,7 @@ function BranchDialog({
   onSubmit,
   pending,
 }: {
+  open: boolean;
   initial: Branch | null;
   tenantId: string;
   managers: ProfileLite[];
@@ -289,6 +293,19 @@ function BranchDialog({
   const [managerId, setManagerId] = useState<string>(initial?.manager_id ?? "none");
   const [openTime, setOpenTime] = useState(initial?.working_hours?.open ?? "");
   const [closeTime, setCloseTime] = useState(initial?.working_hours?.close ?? "");
+
+  useEffect(() => {
+    const dirty = open && (
+      name !== (initial?.name ?? "") || companyId !== (initial?.company_id ?? defaultCompanyId) ||
+      address !== (initial?.address ?? "") || phone !== (initial?.phone ?? "") ||
+      tax !== (initial?.tax_number ?? "") || currency !== (initial?.currency ?? "SAR") ||
+      active !== (initial?.is_active ?? true) || description !== (initial?.description ?? "") ||
+      imageUrl !== (initial?.image_url ?? null) || managerId !== (initial?.manager_id ?? "none") ||
+      openTime !== (initial?.working_hours?.open ?? "") || closeTime !== (initial?.working_hours?.close ?? "")
+    );
+    window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/branches", dirty } }));
+    return () => { window.dispatchEvent(new CustomEvent("ras-workspace-dirty-change", { detail: { path: "/branches", dirty: false } })); };
+  }, [open, initial, defaultCompanyId, name, companyId, address, phone, tax, currency, active, description, imageUrl, managerId, openTime, closeTime]);
 
   return (
     <DialogContent className="max-h-[90vh] overflow-y-auto">
