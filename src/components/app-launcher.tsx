@@ -262,8 +262,8 @@ export function AppLauncher() {
               )}
             </div>
           )}
-          {permissions.isError ? <p role="alert" className="p-3 text-sm text-destructive">تعذر تحميل صلاحيات التطبيقات.</p> :
-            permissions.isLoading && !isSuperOwner ? <p className="p-3 text-sm text-muted-foreground">جارٍ التحقق من الصلاحيات...</p> :
+          {permissionsError ? <p role="alert" className="p-3 text-sm text-destructive">تعذر تحميل صلاحيات التطبيقات.</p> :
+            permissionsLoading && !isSuperOwner ? <p className="p-3 text-sm text-muted-foreground">جارٍ التحقق من الصلاحيات...</p> :
             groups.length ? groups.map((group) => (
               <section key={group.label} className="mb-3 last:mb-0">
                 <h3 className="mb-2 text-xs font-semibold text-muted-foreground">{group.label}</h3>
