@@ -103,7 +103,7 @@ export function useActiveTenant() {
   });
 
   const tenantMemberships = useMemo(() => (memQuery.data ?? []).filter((item) => item.tenant_id === activeId), [memQuery.data, activeId]);
-  const hasTenantWideMembership = tenantMemberships.some((item) => item.company_id === null);
+  const hasTenantWideMembership = tenantMemberships.some((item) => item.company_id === null && item.branch_id === null);
   const companyMembershipIds = useMemo(() => [...new Set(tenantMemberships.map((item) => item.company_id).filter((id): id is string => !!id))], [tenantMemberships]);
   const companyScopeStorageKey = user?.id && activeId ? "ras-active-company:" + user.id + ":" + activeId : null;
   const [companySelection, setCompanySelection] = useState<{ scope: string | null; companyId: string | null; ready: boolean }>({ scope: null, companyId: null, ready: false });
@@ -199,7 +199,7 @@ export function useActiveTenant() {
   const [branchSelection, setBranchSelection] = useState<{ scope: string | null; branchId: string | null; ready: boolean }>({ scope: null, branchId: null, ready: false });
   useEffect(() => {
     if (!branchScopeKey || !membership || branchOptionsQuery.isLoading || branchOptionsQuery.isError) return;
-    const canSelectAll = isSuperOwner || ["owner", "manager", "accountant"].includes(membership.role);
+    const canSelectAll = isSuperOwner || (!membership.branch_id && ["owner", "manager", "accountant"].includes(membership.role));
     const storageKey = "ras-active-branch:" + branchScopeKey;
     const stored = typeof window !== "undefined" ? window.localStorage.getItem(storageKey) : null;
     const allowedIds = new Set(branchOptions.map((item) => item.id));
@@ -223,7 +223,7 @@ export function useActiveTenant() {
     queryClient.clear();
   }
   function switchBranch(id: string | null) {
-    const canSelectAll = isSuperOwner || ["owner", "manager", "accountant"].includes(membership?.role ?? "");
+    const canSelectAll = isSuperOwner || (!membership?.branch_id && ["owner", "manager", "accountant"].includes(membership?.role ?? ""));
     if (id === null && !canSelectAll) return;
     if (id !== null && !branchOptions.some((item) => item.id === id)) return;
     if (!branchScopeKey) return;
