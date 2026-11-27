@@ -63,8 +63,7 @@ BEGIN
     jsonb_build_object(
       'sale_id', NEW.id,
       'invoice_no', NEW.invoice_no,
-      'customer_id', NEW.customer_id,
-      'branch_id', NEW.branch_id,
+      'branch_id', NEW.branch_id
     ),
     '/sales/' || NEW.id::text,
     'عرض الفاتورة',
@@ -78,8 +77,7 @@ BEGIN
     jsonb_build_object(
       'sale_id', NEW.id,
       'invoice_no', NEW.invoice_no,
-      'customer_id', NEW.customer_id,
-      'branch_id', NEW.branch_id,
+      'branch_id', NEW.branch_id
     ),
     '/sales/' || NEW.id::text,
     'عرض الفاتورة',
@@ -194,7 +192,7 @@ BEGIN
       'sale_id', v_sale.id,
       'invoice_no', v_sale.invoice_no,
       'customer_payment_id', NEW.id,
-      'branch_id', v_sale.branch_id,
+      'branch_id', v_sale.branch_id
     ),
     '/sales/' || v_sale.id::text,
     'عرض الفاتورة',
@@ -207,7 +205,7 @@ BEGIN
       'sale_id', v_sale.id,
       'invoice_no', v_sale.invoice_no,
       'customer_payment_id', NEW.id,
-      'branch_id', v_sale.branch_id,
+      'branch_id', v_sale.branch_id
     ),
     '/sales/' || v_sale.id::text,
     'عرض الفاتورة',
