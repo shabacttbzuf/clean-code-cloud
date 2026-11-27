@@ -23,7 +23,9 @@ SELECT ok(
 SELECT ok(
   (SELECT relrowsecurity FROM pg_class WHERE oid='public.notifications'::regclass)
   AND EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public'
-    AND tablename='notifications' AND policyname='notifications_read' AND cmd='SELECT')
+    AND tablename='notifications' AND policyname='notifications_select_scoped' AND cmd='SELECT')
+  AND EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public'
+    AND tablename='notification_reads' AND policyname='notification_reads_select_scoped' AND cmd='SELECT')
   AND (SELECT relrowsecurity FROM pg_class WHERE oid='public.notification_reads'::regclass),
   'Notification audience isolation and per-user read receipts remain protected by RLS'
 );
