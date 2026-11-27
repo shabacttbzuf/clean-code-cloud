@@ -45,7 +45,7 @@ export function AdPlacement({ placement, variant = "card" }: {
         .eq("space_key", placement)
         .eq("is_active", true)
         .order("sort_order");
-      if (membership?.company_id) spacesQuery = spacesQuery.eq("company_id", membership.company_id);
+      if (membership?.company_id) spacesQuery = spacesQuery.or(`company_id.is.null,company_id.eq.${membership.company_id}`);
       else if (!isSuperOwner && !isTenantOwner) spacesQuery = spacesQuery.is("company_id", null);
       if (branchId) spacesQuery = spacesQuery.or(`branch_id.is.null,branch_id.eq.${branchId}`);
       else spacesQuery = spacesQuery.is("branch_id", null);
@@ -64,7 +64,7 @@ export function AdPlacement({ placement, variant = "card" }: {
         .order("sort_order")
         .order("created_at", { ascending: false })
         .limit(12);
-      if (membership?.company_id) campaignsQuery = campaignsQuery.eq("company_id", membership.company_id);
+      if (membership?.company_id) campaignsQuery = campaignsQuery.or(`company_id.is.null,company_id.eq.${membership.company_id}`);
       else if (!isSuperOwner && !isTenantOwner) campaignsQuery = campaignsQuery.is("company_id", null);
       if (branchId) campaignsQuery = campaignsQuery.or(`branch_id.is.null,branch_id.eq.${branchId}`);
       else campaignsQuery = campaignsQuery.is("branch_id", null);
