@@ -30,7 +30,9 @@ test("notification delivery failures never roll back core kitchen, inventory, HR
 
 test("kitchen-ready deep links are internal and retain the authenticated actor", () => {
   assert.match(kitchenReady, /NEW\.status='ready'/);
-  assert.match(kitchenReady, /auth\.uid\(\)/);
+  assert.match(kitchenReady, /ur\.role IN \('owner', ?'manager'\)/);
+  assert.match(kitchenReady, /set_config\('request\.jwt\.claim\.sub', v_actor_id::text, true\)/);
+  assert.match(kitchenReady, /RAISE WARNING/);
   assert.match(kitchenReady, /'\/kitchen'/);
   assert.match(kitchenReady, /REVOKE ALL ON FUNCTION private\.notify_branch_when_kitchen_ready\(\)/);
 });
