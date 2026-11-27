@@ -90,7 +90,7 @@ ads_placements_company_fk_index
 
 طلب الدمج المقترح `PR #118` يضيف ترحيلين مستقلين لا يزالان قيد الاختبار ولم يندمجا في `main`:
 - `20261128000100_harden_expense_payroll_table_grants.sql`: يسحب DELETE/TRUNCATE/REFERENCES/TRIGGER من الأدوار غير الخادمية على الجداول المالية مع إبقاء SELECT/INSERT/UPDATE للمصادق.
-- `20261128000200_harden_public_api_role_grants.sql`: يسحب منح anon على علاقات public الحالية والتسلسلات، ويزيل TRUNCATE/REFERENCES/TRIGGER من authenticated، ويضبط default privileges لدور `supabase_admin`، ويمنع تنفيذ دالة trigger من anon.
+- `20261128000200_harden_public_api_role_grants.sql`: يسحب منح anon على علاقات public الحالية والتسلسلات، ويزيل TRUNCATE/REFERENCES/TRIGGER من authenticated، ويمنع تنفيذ دالة trigger من anon. أما default privileges الخاصة بدور `supabase_admin` فتتطلب صلاحية عضوية بهذا الدور؛ لذلك أُرفق في PR #118 ملف يدوي منفصل `supabase/manual/repair_supabase_admin_default_privileges.sql` لا يُنفذ تلقائياً، لأن دور `postgres` المستخدم في الفحص وCI ليس عضواً في `supabase_admin`.
 
 لم تُنفذ أي تغييرات على الإنتاج. لا تُطبق هذه الترحيلات قبل إكمال مصالحة migrations وبيئة Staging واختبار الاستعادة.
 
