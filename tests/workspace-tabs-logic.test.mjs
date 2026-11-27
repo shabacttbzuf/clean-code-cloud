@@ -103,3 +103,10 @@ test("workspace tab confirmations use accessible dialogs and never native alert 
   assert.match(source, /toast\.info\(/);
   assert.doesNotMatch(source, /window\.(?:alert|confirm|prompt)\(/);
 });
+
+
+test("dashboard no longer uses native browser alert dialogs", () => {
+  const source = readFileSync(new URL("../src/routes/_authenticated/dashboard.tsx", import.meta.url), "utf8");
+  assert.match(source, /toast\.error\(/);
+  assert.doesNotMatch(source, /window\.(?:alert|confirm|prompt)\(/);
+});
