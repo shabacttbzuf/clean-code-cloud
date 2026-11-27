@@ -45,3 +45,11 @@ test("dashboard and POS filter multi-branch campaigns to the active branch", () 
   assert.match(pos, /target_branch_ids/);
   assert.match(pos, /targets\.includes\(branchId\)/);
 });
+
+test("company members can render tenant-wide campaigns targeted to their authorized branches without broadening branch discovery", () => {
+  assert.match(ads, /from\("branches"\)[\s\S]*?\.eq\("company_id", membership\.company_id\)/);
+  assert.match(ads, /marketing-ad-spaces[\s\S]*?company_id\.is\.null,company_id\.eq\.\$\{membership\.company_id\}/);
+  assert.match(ads, /marketing-campaigns[\s\S]*?company_id\.is\.null,company_id\.eq\.\$\{membership\.company_id\}/);
+  assert.match(ads, /hasVisibleTargetBranch/);
+  assert.match(placement, /company_id\.is\.null,company_id\.eq\.\$\{membership\.company_id\}/);
+});
