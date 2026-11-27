@@ -245,7 +245,7 @@ function Dashboard() {
   });
 
   const stats = useQuery({
-    queryKey: ["dashboard-stats", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryKey: ["dashboard-stats", tenantId, user?.id, membership?.company_id, membership?.branch_id, role, isSuperOwner, hasPermission("reports.view"), hasPermission("sales.view"), hasPermission("expenses.view"), hasPermission("inventory.view"), hasPermission("cash.view"), hasPermission("customers.view")],
     queryFn: async () => {
       if (!tenantId) return null;
       const now = new Date();
@@ -264,6 +264,9 @@ function Dashboard() {
           .select("id").eq("tenant_id", tenantId).eq("company_id", membership.company_id);
         if (branchScopeError) throw branchScopeError;
         scopedBranchIds = (companyBranches ?? []).map((row) => row.id);
+      } else if (!isSuperOwner && role !== "owner") {
+        // Missing or incomplete membership must fail closed, never become tenant-wide access.
+        scopedBranchIds = [];
       }
 
       let salesTodayQuery = supabase.from("sales").select("total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfDay);
