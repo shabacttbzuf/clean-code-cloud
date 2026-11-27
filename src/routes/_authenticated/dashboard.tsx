@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { toast } from "sonner";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,6 +15,22 @@ import { DeferredDashboardCharts } from "@/components/deferred-dashboard-charts"
 import { AdPlacement } from "@/components/ads/ad-placement";
 import { Link } from "@tanstack/react-router";
 import { Sparkles, ShoppingBag, ArrowLeft, ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
+
+async function recordCampaignEvent(campaignId: string) {
+  try {
+    const rpc = supabase.rpc as unknown as (
+      functionName: string,
+      args: { _campaign_id: string; _event_type: "click" },
+    ) => PromiseLike<{ error: unknown | null }>;
+    const { error } = await rpc("record_marketing_campaign_event", {
+      _campaign_id: campaignId,
+      _event_type: "click",
+    });
+    if (error) throw error;
+  } catch (error) {
+    console.warn("Campaign click tracking failed", error);
+  }
+}
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -179,7 +196,7 @@ function Dashboard() {
     const candidate = heroImageDraft.trim();
     const safeImage = candidate ? safeHeroImageUrl(candidate) : null;
     if (candidate && !safeImage) {
-      window.alert("أدخل رابط صورة آمن يبدأ بـ https:// أو اترك الحقل فارغاً.");
+      toast.error("أدخل رابط صورة آمن يبدأ بـ https:// أو اترك الحقل فارغاً.");
       return;
     }
     const safeColor = /^#[0-9a-fA-F]{6}$/.test(heroBackgroundDraft) ? heroBackgroundDraft : "#102f5c";
@@ -192,7 +209,7 @@ function Dashboard() {
       setHeroBackgroundColor(safeColor);
       setHeroSettingsOpen(false);
     } catch {
-      window.alert("تعذر حفظ التخصيص في مساحة التخزين المحلية لهذا المتصفح.");
+      toast.error("تعذر حفظ التخصيص في مساحة التخزين المحلية لهذا المتصفح.");
     }
   };
 
@@ -689,7 +706,7 @@ function Dashboard() {
                 <div className="text-xs font-semibold text-primary">إعلان / مساحة ترويجية</div>
                 <h2 className="text-lg font-extrabold sm:text-2xl">{activeCampaign.title}</h2>
                 {activeCampaign.description && <p className="text-sm text-muted-foreground sm:text-base">{activeCampaign.description}</p>}
-                {safeCampaignTarget(activeCampaign.target_url) && <a href={safeCampaignTarget(activeCampaign.target_url)!} target="_blank" rel="noopener noreferrer" onClick={() => void (supabase.rpc as any)("record_marketing_campaign_event", { _campaign_id: activeCampaign.id, _event_type: "click" }).catch((error: unknown) => console.warn("Campaign click tracking failed", error))} className="inline-flex min-h-9 items-center rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90">عرض التفاصيل ←</a>}
+                {safeCampaignTarget(activeCampaign.target_url) && <a href={safeCampaignTarget(activeCampaign.target_url)!} target="_blank" rel="noopener noreferrer" onClick={() => void recordCampaignEvent(activeCampaign.id)} className="inline-flex min-h-9 items-center rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90">عرض التفاصيل ←</a>}
               </div>
             </div>
           </div>
