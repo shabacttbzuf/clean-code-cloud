@@ -9,7 +9,9 @@ test("leave decisions are tenant-scoped and only update pending requests", () =>
   assert.match(route, /\.eq\("tenant_id", tenantId\)\.eq\("status", "pending"\)/);
   assert.match(route, /approved_by: userId, approved_at: now/);
   assert.match(route, /rejected_by: userId, rejected_at: now/);
-  assert.match(route, /سبب الرفض \(إلزامي\)/);
+  assert.match(route, /setRejectTarget\(l\.id\)/);
+  assert.match(route, /سبب رفض طلب الإجازة/);
+  assert.match(route, /disabled={!rejectReason\.trim\(\) \|\| setStatus\.isPending}/);
 });
 
 test("leave creation validates date range and calculates inclusive UTC days", () => {
@@ -18,7 +20,9 @@ test("leave creation validates date range and calculates inclusive UTC days", ()
 });
 
 test("leave deletion requires confirmation and protects approved payroll records", () => {
-  assert.match(route, /window\.confirm\(/);
+  assert.match(route, /useConfirmDialog/);
+  assert.match(route, /title: "حذف طلب الإجازة؟"/);
+  assert.doesNotMatch(route, /window\.confirm\(/);
   assert.match(migration, /permission_gate_leave_requests_delete/);
   assert.match(migration, /prevent_deleting_payroll_linked_leave/);
   assert.match(migration, /pr\.status in \('approved', 'paid'\)/);
