@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 const ads = readFileSync(new URL("../src/routes/_authenticated/ads.tsx", import.meta.url), "utf8");
 const placement = readFileSync(new URL("../src/components/ads/ad-placement.tsx", import.meta.url), "utf8");
 const dashboard = readFileSync(new URL("../src/routes/_authenticated/dashboard.tsx", import.meta.url), "utf8");
+const pos = readFileSync(new URL("../src/routes/_authenticated/pos.tsx", import.meta.url), "utf8");
 
 test("advertising campaigns support the full approved placement catalog", () => {
   for (const key of ["dashboard_banner", "dashboard_card", "pos_promo", "welcome", "main", "sidebar", "offers", "in_page"]) {
@@ -37,4 +38,10 @@ test("dashboard mounts the welcome, main, sidebar and offers ad placements", () 
   for (const key of ["welcome", "main", "sidebar", "offers"]) {
     assert.ok(dashboard.includes(`placement="${key}"`), `dashboard does not mount ${key} placement`);
   }
+});
+test("dashboard and POS filter multi-branch campaigns to the active branch", () => {
+  assert.match(dashboard, /target_branch_ids/);
+  assert.match(dashboard, /targets\.includes\(membership\?\.branch_id\)/);
+  assert.match(pos, /target_branch_ids/);
+  assert.match(pos, /targets\.includes\(branchId\)/);
 });
