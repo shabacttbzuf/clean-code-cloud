@@ -9,7 +9,9 @@ test("leave decisions are tenant-scoped and only update pending requests", () =>
   assert.match(route, /\.eq\("tenant_id", tenantId\)\.eq\("status", "pending"\)/);
   assert.match(route, /approved_by: userId, approved_at: now/);
   assert.match(route, /rejected_by: userId, rejected_at: now/);
-  assert.match(route, /سبب الرفض \(إلزامي\)/);
+  assert.match(route, /setRejectTarget\(l\.id\)/);
+  assert.match(route, /سبب رفض طلب الإجازة/);
+  assert.match(route, /disabled={!rejectReason\.trim\(\) \|\| setStatus\.isPending}/);
 });
 
 test("leave creation validates date range and calculates inclusive UTC days", () => {
