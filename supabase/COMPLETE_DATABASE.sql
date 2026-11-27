@@ -17567,3 +17567,33 @@ GRANT EXECUTE ON FUNCTION private.create_pos_order_with_promotion(uuid,uuid,uuid
 
 COMMIT;
 -- END MIGRATION: 20261127010000_fix_promotion_gift_eligibility_and_same_sku.sql
+
+-- BEGIN MIGRATION: 20261127110000_notification_realtime_publication.sql
+-- Enable realtime delivery for the existing, RLS-protected notification tables.
+-- Do not recreate the publication or alter any existing publication membership.
+BEGIN;
+DO $migration$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime'
+        AND schemaname = 'public'
+        AND tablename = 'notifications'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications;
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime'
+        AND schemaname = 'public'
+        AND tablename = 'notification_reads'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.notification_reads;
+    END IF;
+  END IF;
+END
+$migration$;
+COMMIT;
+-- END MIGRATION: 20261127110000_notification_realtime_publication.sql
