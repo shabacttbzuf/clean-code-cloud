@@ -2,7 +2,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT plan(8);
+SELECT plan(9);
 
 SELECT ok(
   NOT EXISTS (
@@ -66,6 +66,8 @@ SELECT ok(
   ),
   'anon cannot execute public functions'
 );
+
+SELECT ok(to_regrole('supabase_admin') IS NOT NULL, 'supabase_admin role exists for hosted default ACL hardening');
 
 SELECT ok(
   NOT EXISTS (
