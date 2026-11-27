@@ -72,19 +72,29 @@ ads_placements_company_fk_index
 - جميع الجداول الـ56 لديها RLS مفعّل.
 - دوال `SECURITY DEFINER` في `public` المرصودة: 12؛ جميعها تضبط `search_path`، ولم يظهر منح EXECUTE إلى `anon` أو `authenticated` في الفحص.
 - جدولان عليهما RLS دون سياسات: `marketing_campaign_events` و`pos_access_credentials`. لم يظهر لهما منح مباشر لـ`anon` أو `authenticated`؛ لا تُضف سياسات عامة لمعالجة تنبيه Advisor.
+- لم توجد أي سياسة RLS في `public` موجهة إلى `anon` أو `PUBLIC` وقت الفحص.
 - Supabase Security Advisor: تحذير واحد بشأن تعطيل Leaked Password Protection، ومعلومتان بشأن الجدولين أعلاه.
 - Performance Advisor: 121 تنبيهاً عن تعدد سياسات permissive و62 فهرساً غير مستخدم. هذه تنبيهات للمراجعة وليست مبرراً لحذف السياسات أو الفهارس؛ السياسات restrictive الموجودة قد تفرض حدوداً إضافية بمنطق AND.
 
 ## نقطة P1: منح الكتابة والحذف على الجداول المالية
 
-أظهر فحص كتالوج PostgreSQL أن `anon` و`authenticated` يملكان منحاً مباشراً لـSELECT/INSERT/UPDATE/DELETE على:
-- `public.expenses`
-- `public.payroll_runs`
-- `public.payroll_items`
+أظهر فحص كتالوج PostgreSQL أن المشكلة أوسع من الجداول المالية:
 
-RLS مفعّل، وسياسات authenticated الحالية تتضمن حدود صلاحيات ونطاق شركة/فرع؛ لذلك لا يعني وجود GRANT وحده تجاوز RLS. لكنه يمنح سطح كتابة مباشر واسعاً، كما أن سياسة حذف المصروفات لا تزال موجودة في القاعدة الحية. ملف المصدر المحلي `20261125100000_prevent_direct_expense_deletion.sql` غير مطابق لسجل migrations البعيد. كما أن حذف مسيرات الرواتب وبنودها ما زال مسموحاً ضمن بعض سياسات الصلاحيات الحالية.
+- `anon` يملك امتيازات مباشرة على 39 علاقة عامة (جداول/عروض)، رغم عدم وجود سياسات RLS موجهة إلى `anon` أو `PUBLIC`.
+- `authenticated` يملك واحداً أو أكثر من امتيازات TRUNCATE/REFERENCES/TRIGGER على 39 علاقة عامة؛ هذه الامتيازات لا تضبطها سياسات RLS.
+- توجد ثلاث مجموعات default privileges مرتبطة بدور إنشاء الكائنات `supabase_admin` (الجداول والتسلسلات والدوال)، وكانت تمنح `anon` و`authenticated` و`service_role` امتيازات افتراضية. الترحيل المحلي `20261111000023_least_privilege_return_api_and_defaults.sql` يضبط defaults لدور `postgres` فقط ولا يعالج `supabase_admin`.
+- دالة trigger واحدة `public.prevent_tenant_owner_id_change()` كانت قابلة للتنفيذ من `anon`، رغم أنها ليست RPC مخصصة للواجهة.
+- لم تظهر سياسة RLS عامة تسمح بقراءة صفوف مجهولة؛ مع ذلك، المنح الزائدة سطح هجوم غير مطلوب، وTRUNCATE يتجاوز RLS.
 
-يلزم مراجعة مسارات الحذف في التطبيق، ثم إعداد ترحيل متوافق واختبارات سلبية في بيئة منفصلة قبل اعتماد سحب منح DELETE. لم تُنفذ أي تغييرات على الإنتاج.
+كما أن \`expenses\` و\`payroll_runs\` و\`payroll_items\` تسمح للمستخدم المصادق بحذف السجلات مباشرة ضمن بعض سياسات الصلاحيات الحالية، وهو ما لا يناسب حفظ الأثر المالي.
+
+يوجد خطر إضافي على سجل المخزون: في القاعدة الحية ما زال للمصادق منح DELETE على \`products\`، وتوجد سياسة permissive من نوع ALL وسياسة حذف permissive، بينما مفتاحا \`inventory.product_id\` و\`inventory_transactions.product_id\` ما زالا يستخدمان \`ON DELETE CASCADE\`. لذلك قد يؤدي حذف منتج إلى حذف تاريخ المخزون وحركاته. ملف المصدر المحلي \`20261125110000_prevent_product_history_deletion.sql\` يعالج ذلك بإزالة الحذف المباشر وتغيير المفتاحين إلى \`ON DELETE RESTRICT\`، لكنه لا يقابله سجل migration بعيد مطابق في قاعدة الإنتاج. أما \`sale_items.product_id\` فيستخدم \`ON DELETE SET NULL\`، ما قد يفقد الربط المباشر بالمنتج الأصلي.
+
+طلب الدمج المقترح `PR #118` يضيف ترحيلين مستقلين لا يزالان قيد الاختبار ولم يندمجا في `main`:
+- `20261128000100_harden_expense_payroll_table_grants.sql`: يسحب DELETE/TRUNCATE/REFERENCES/TRIGGER من الأدوار غير الخادمية على الجداول المالية مع إبقاء SELECT/INSERT/UPDATE للمصادق.
+- `20261128000200_harden_public_api_role_grants.sql`: يسحب منح anon على علاقات public الحالية والتسلسلات، ويزيل TRUNCATE/REFERENCES/TRIGGER من authenticated، ويمنع تنفيذ دالة trigger من anon. أما default privileges الخاصة بدور `supabase_admin` فتتطلب صلاحية عضوية بهذا الدور؛ لذلك أُرفق في PR #118 ملف يدوي منفصل `supabase/manual/repair_supabase_admin_default_privileges.sql` لا يُنفذ تلقائياً، لأن دور `postgres` المستخدم في الفحص وCI ليس عضواً في `supabase_admin`.
+
+لم تُنفذ أي تغييرات على الإنتاج. لا تُطبق هذه الترحيلات قبل إكمال مصالحة migrations وبيئة Staging واختبار الاستعادة.
 
 أما `payments` فظهر له SELECT فقط، و`marketing_campaign_events` و`pos_access_credentials` لا يملكان منحاً مباشراً لأدوار API في هذا الفحص.
 
