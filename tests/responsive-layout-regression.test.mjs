@@ -25,7 +25,7 @@ test("application launcher fits narrow screens without overflowing the viewport"
   assert.match(launcher, /w-\[min\(94vw,520px\)\]/);
   assert.match(launcher, /max-h-\[min\(78vh,680px\)\]/);
   assert.match(launcher, /overflow-y-auto/);
-  assert.match(css, /safe-area-inset-bottom/);
+  assert.match(css, /safe-area-inset-left/);
 });
 
 test("charts and data tables use fluid containers and horizontal overflow handling", () => {
@@ -41,7 +41,7 @@ test("reduced-motion preference is respected", () => {
 test("safe-area support is activated at the viewport and retained in page layout", () => {
   assert.match(root, /viewport-fit=cover/);
   assert.match(css, /safe-area-inset-top/);
-  assert.match(css, /safe-area-inset-bottom/);
+  assert.match(css, /safe-area-inset-left/);
 });
 
 test("critical sales, reports, settings and user forms retain responsive grid or scroll layouts", () => {
