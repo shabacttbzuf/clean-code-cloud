@@ -19433,6 +19433,8 @@ TO authenticated;
 -- and rejection RPCs continue to use their privileged execution path.
 DROP POLICY IF EXISTS payroll_runs_write ON public.payroll_runs;
 DROP POLICY IF EXISTS payroll_items_write ON public.payroll_items;
+DROP POLICY IF EXISTS permission_scope_payroll_runs_delete ON public.payroll_runs;
+DROP POLICY IF EXISTS permission_scope_payroll_items_delete ON public.payroll_items;
 
 CREATE POLICY payroll_runs_insert_access
 ON public.payroll_runs
