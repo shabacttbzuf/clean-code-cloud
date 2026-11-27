@@ -2,7 +2,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT plan(9);
+SELECT plan(7);
 
 SELECT ok(
   NOT EXISTS (
@@ -67,14 +67,12 @@ SELECT ok(
   'anon cannot execute public functions'
 );
 
-SELECT ok(to_regrole('supabase_admin') IS NOT NULL, 'supabase_admin role exists for hosted default ACL hardening');
-
 SELECT ok(
   NOT EXISTS (
     SELECT 1
     FROM pg_default_acl d
     CROSS JOIN LATERAL aclexplode(d.defaclacl) a
-    WHERE d.defaclrole = to_regrole('supabase_admin')::oid
+    WHERE d.defaclrole = 'postgres'::regrole
       AND d.defaclnamespace = 'public'::regnamespace
       AND a.grantee IN (
         to_regrole('anon')::oid,
@@ -82,20 +80,7 @@ SELECT ok(
         to_regrole('service_role')::oid
       )
   ),
-  'supabase_admin has no default API-role grants in public'
-);
-
-SELECT ok(
-  NOT EXISTS (
-    SELECT 1
-    FROM pg_default_acl d
-    CROSS JOIN LATERAL aclexplode(d.defaclacl) a
-    WHERE d.defaclrole = to_regrole('supabase_admin')::oid
-      AND d.defaclobjtype = 'f'
-      AND a.grantee = 0
-      AND a.privilege_type = 'EXECUTE'
-  ),
-  'supabase_admin does not grant function EXECUTE to PUBLIC by default'
+  'postgres default privileges remain least-privilege'
 );
 
 SELECT ok(
