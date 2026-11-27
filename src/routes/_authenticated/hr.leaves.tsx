@@ -134,7 +134,8 @@ function LeavesPage() {
   });
 
   return (
-    <div className="space-y-6">
+    <>
+      <div className="space-y-6">
       <PageHeader title="الإجازات" subtitle={`${filtered.length} طلب`}
         action={
           <Dialog open={open} onOpenChange={setOpen}>
@@ -248,7 +249,8 @@ function LeavesPage() {
         </DialogFooter>
       </DialogContent>
     </Dialog>
-    {confirmationDialog}
+      {confirmationDialog}
+    </>
   );
 }
 
