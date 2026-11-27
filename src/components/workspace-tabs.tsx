@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { toast } from "sonner";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { useAuthSession } from "@/hooks/use-auth-session";
 import { useBlocker, useNavigate, useRouterState } from "@tanstack/react-router";
@@ -309,7 +310,7 @@ export function WorkspaceTabs() {
     const target = tabs.find((tab) => tab.path === path);
     if (!target || path === "/dashboard") return;
     if (!target.pinned && tabs.filter((tab) => tab.pinned).length >= MAX_PINNED_TABS) {
-      window.alert("يمكن تثبيت ستة تبويبات كحد أقصى حتى تبقى مساحة كافية لصفحات العمل.");
+      toast.info("يمكن تثبيت ستة تبويبات كحد أقصى حتى تبقى مساحة كافية لصفحات العمل.");
       return;
     }
     persist(toggleWorkspaceTabPin(tabs, path));
