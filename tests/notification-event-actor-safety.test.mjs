@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const paths = [
-  "../supabase/migrations/20261121030000_notification_deep_links.sql",
   "../supabase/migrations/20261127030000_low_stock_event_notifications.sql",
   "../supabase/migrations/20261127030100_hr_leave_event_notifications.sql",
+  "../supabase/migrations/20261127030200_overdue_kitchen_order_notifications.sql",
   "../supabase/migrations/20261127030300_customer_invoice_event_notifications.sql",
 ];
 const migrations = paths.map((path) => readFileSync(new URL(path, import.meta.url), "utf8"));
@@ -24,12 +24,12 @@ test("notification delivery failures never roll back core kitchen, inventory, HR
   }
   assert.match(migrations[0], /Kitchen-ready notification was skipped/);
   assert.match(migrations[1], /Low-stock notification was skipped/);
-  assert.match(migrations[2], /Leave-request notification was skipped/);
+  assert.match(migrations[1], /Leave-request notification was skipped/);
   assert.match(migrations[3], /Customer invoice notification was skipped/);
 });
 
 test("HR decision notifications are only sent to users belonging to the same company", () => {
-  assert.match(migrations[2], /ur\.company_id = v_company_id/);
+  assert.match(migrations[1], /ur\.company_id = v_company_id/);
 });
 
 test("all notification event trigger functions retain pinned search paths and restricted execution", () => {
