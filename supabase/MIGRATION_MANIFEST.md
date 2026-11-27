@@ -142,4 +142,11 @@
 
 132. `supabase/migrations/20261127030000_notification_realtime_publication.sql`
 
-**الإجمالي: 132 ترحيلاً.**
+133. `supabase/migrations/20261127040000_low_stock_event_notifications.sql`
+134. `supabase/migrations/20261127040100_hr_leave_event_notifications.sql`
+135. `supabase/migrations/20261127040200_overdue_kitchen_order_notifications.sql`
+136. `supabase/migrations/20261127040300_customer_invoice_event_notifications.sql`
+137. `supabase/migrations/20261127040400_notification_scope_archive_and_missing_sources.sql`
+138. `supabase/migrations/20261127040500_notification_kitchen_ready_actor_safety.sql`
+
+**الإجمالي: 138 ترحيلاً.**
