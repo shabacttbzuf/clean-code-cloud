@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import { summarizeDashboardFinancialRows } from "../src/lib/dashboard-metrics.mjs";
+
 const dashboard = readFileSync(new URL("../src/routes/_authenticated/dashboard.tsx", import.meta.url), "utf8");
 const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
 const layout = readFileSync(new URL("../src/routes/_authenticated/route.tsx", import.meta.url), "utf8");
@@ -257,4 +259,56 @@ test("dashboard provides permission-scoped operations, notifications, and a trut
   assert.match(dashboard, /hasPermission\("sales.create"\)/);
   assert.match(dashboard, /hasPermission\("kitchen.view"\)/);
   assert.match(dashboard, /hasPermission\("reports.view"\)/);
+});
+
+
+test("dashboard fails closed when membership scope is incomplete and isolates cached KPIs by identity and permissions", () => {
+  assert.match(dashboard, /Fail closed: an incomplete or missing membership must never become tenant-wide access/);
+  assert.match(dashboard, /scopedBranchIds = \[\]/);
+  assert.match(dashboard, /queryKey: \["dashboard-stats", tenantId, user\?\.id, membership\?\.company_id, membership\?\.branch_id, role, isSuperOwner/);
+  for (const permission of ["reports.view", "sales.view", "expenses.view", "inventory.view", "cash.view", "customers.view"]) {
+    assert.ok(dashboard.includes('hasPermission("' + permission + '")'), "missing KPI permission cache scope: " + permission);
+  }
+});
+
+
+test("dashboard KPI reads are paginated, deterministic and permission-gated", () => {
+  assert.match(dashboard, /async function fetchAllRows<T>/);
+  assert.match(dashboard, /query\.range\(from, from \+ pageSize - 1\)/);
+  assert.match(dashboard, /fetchAllRowsResult<any>\(salesMonthQuery\)/);
+  assert.match(dashboard, /fetchRowsByIdBatchesResult<any>\(saleIdsMonth/);
+  assert.match(dashboard, /batchSize = 200/);
+  assert.match(dashboard, /enabled: !!tenantId && hasPermission\("reports\.view"\) && hasPermission\("sales\.view"\) && hasPermission\("expenses\.view"\)/);
+  assert.match(dashboard, /hasPermission\("inventory\.view"\) \? fetchAllRowsResult<any>\(lowStockQuery\)/);
+  assert.match(dashboard, /hasPermission\("cash\.view"\) \? fetchAllRowsResult<any>\(sessionsQuery\)/);
+  assert.match(dashboard, /hasPermission\("customers\.view"\)[\s\S]{0,150}from\("customers"\)/);
+  assert.match(dashboard, /stats\.data\.openSessions !== null/);
+  assert.match(dashboard, /stats\.data\.lowStockCount !== null/);
+  assert.match(dashboard, /stats\.data\.customersCount !== null/);
+});
+
+test("dashboard financial summary preserves unknown cost as unavailable instead of inventing profit", () => {
+  const result = summarizeDashboardFinancialRows({
+    salesToday: [{ total: 120 }],
+    refundsToday: [{ total: 20 }],
+    salesMonth: [{ total: 200, subtotal: 200, discount: 0 }],
+    refundsMonth: [],
+    expensesMonth: [{ amount: 30 }],
+    saleCostRows: [{ quantity: 2, cost_price_snapshot: null }],
+    refundCostRows: [],
+  });
+  assert.equal(result.totalToday, 100);
+  assert.equal(result.unknownCostItems, 1);
+  assert.equal(result.profit, null);
+});
+
+test("dashboard orders and kitchen summaries fail closed on missing membership scope and isolate user caches", () => {
+  assert.equal((dashboard.match(/role !== "owner" && !membership\?\.branch_id && !membership\?\.company_id/g) ?? []).length, 3);
+  assert.match(dashboard, /role !== "owner" && !membership\?\.branch_id && !membership\?\.company_id\) \{\s*return \{ new: 0, preparing: 0, ready: 0 \};/);
+  assert.match(dashboard, /if \(!branchIds\.length\) return \[\];/);
+  assert.match(dashboard, /if \(!scopedBranchIds\.length\) return \{ new: 0, preparing: 0, ready: 0 \};/);
+  assert.doesNotMatch(dashboard, /query\.in\("branch_id", \[\]\)/);
+  assert.match(dashboard, /queryKey: \["dashboard-latest-orders", tenantId, user\?\.id, role,/);
+  assert.match(dashboard, /queryKey: \["dashboard-kitchen-overview", tenantId, user\?\.id, role,/);
+  assert.match(dashboard, /queryKey: \["dashboard-kitchen-counts", tenantId, user\?\.id, role,/);
 });
