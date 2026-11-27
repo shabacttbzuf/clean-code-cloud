@@ -35,6 +35,22 @@ import { PageHeader } from "@/components/page-header";
 import { getMyPosAccessStatus, verifyMyPosPasscode } from "@/lib/pos-access.functions";
 import { offlineCacheKey, withOfflineFallback, OFFLINE_INVENTORY_CACHE_MAX_AGE_MS } from "@/lib/offline-reference-cache";
 
+async function recordCampaignEvent(campaignId: string, eventType: "impression" | "click") {
+  try {
+    const rpc = supabase.rpc as unknown as (
+      functionName: string,
+      args: { _campaign_id: string; _event_type: "impression" | "click" },
+    ) => PromiseLike<{ error: unknown | null }>;
+    const { error } = await rpc("record_marketing_campaign_event", {
+      _campaign_id: campaignId,
+      _event_type: eventType,
+    });
+    if (error) throw error;
+  } catch (error) {
+    console.warn(`POS campaign ${eventType} tracking failed`, error);
+  }
+}
+
 export const Route = createFileRoute("/_authenticated/pos")({
   component: POSPage,
 });
@@ -445,10 +461,7 @@ function POSWorkspace() {
   });
   useEffect(() => {
     for (const promo of posPromos.data ?? []) {
-      void (supabase.rpc as any)("record_marketing_campaign_event", {
-        _campaign_id: promo.id,
-        _event_type: "impression",
-      }).catch((error: unknown) => console.warn("POS campaign impression tracking failed", error));
+      void recordCampaignEvent(promo.id, "impression");
     }
   }, [posPromos.data]);
 
@@ -1014,7 +1027,7 @@ function POSWorkspace() {
                 <div className="relative z-[1] min-w-0"><div className="truncate text-xs font-bold">{promo.title}</div>{promo.description && <div className="truncate text-[10px] text-muted-foreground">{promo.description}</div>}</div>
               </div>
             );
-            return promo.target_url ? <a key={promo.id} href={promo.target_url} target="_blank" rel="noopener noreferrer" onClick={() => void (supabase.rpc as any)("record_marketing_campaign_event", { _campaign_id: promo.id, _event_type: "click" }).catch((error: unknown) => console.warn("POS campaign click tracking failed", error))} className="min-w-0 flex-1">{card}</a> : <div key={promo.id} className="min-w-0 flex-1">{card}</div>;
+            return promo.target_url ? <a key={promo.id} href={promo.target_url} target="_blank" rel="noopener noreferrer" onClick={() => void recordCampaignEvent(promo.id, "click")} className="min-w-0 flex-1">{card}</a> : <div key={promo.id} className="min-w-0 flex-1">{card}</div>;
           })}
         </div>
       )}
