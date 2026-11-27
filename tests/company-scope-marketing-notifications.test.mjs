@@ -46,8 +46,10 @@ test("marketing campaigns enforce company scope in RLS and on writes", () => {
 
 test("dedicated ads page creates campaigns for the active company and scopes company reads", () => {
   assert.match(ads, /membership\?\.company_id/);
-  assert.match(ads, /company_id: selectedBranch\?\.company_id \?\? \(editingId \? editingCompanyId/);
-  assert.match(ads, /branch_id: branchId \|\| null/);
+  assert.match(ads, /const campaignCompanyId = selectedBranch\?\.company_id/);
+  assert.match(ads, /company_id: campaignCompanyId/);
+  assert.match(ads, /branch_id: targetBranchIds\.length \? null : \(branchId \|\| null\)/);
+  assert.match(ads, /target_branch_ids: \[\.\.\.new Set\(targetBranchIds\)\]/);
   assert.match(ads, /advertising_space_id: adSpaceId \|\| null/);
   assert.match(ads, /query = query\.eq\("company_id", membership\.company_id\)/);
   assert.match(ads, /select\("id,company_id,branch_id,advertising_space_id,title/);
