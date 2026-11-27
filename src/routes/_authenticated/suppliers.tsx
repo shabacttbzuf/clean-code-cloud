@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Plus, Edit, Archive, RotateCcw, Truck, Loader2, AlertCircle, Wallet, History } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { safeHttpUrlSchema } from "@/lib/safe-url";
 import { PageHeader } from "@/components/page-header";
 import { ImageUploader } from "@/components/image-uploader";
 import { formatMoney, formatDateTime } from "@/lib/format";
@@ -32,7 +33,7 @@ const schema = z.object({
   email: z.string().trim().email("بريد غير صالح").max(120).optional().or(z.literal("")),
   address: z.string().trim().max(255).optional().or(z.literal("")),
   notes: z.string().trim().max(1000).optional().or(z.literal("")),
-  logo_url: z.string().url().nullable().optional(),
+  logo_url: safeHttpUrlSchema.nullable().optional(),
 });
 
 function SuppliersPage() {
