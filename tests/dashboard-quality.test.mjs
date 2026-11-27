@@ -263,7 +263,7 @@ test("dashboard provides permission-scoped operations, notifications, and a trut
 
 
 test("dashboard fails closed when membership scope is incomplete and isolates cached KPIs by identity and permissions", () => {
-  assert.match(dashboard, /Missing or incomplete membership must fail closed, never become tenant-wide access/);
+  assert.match(dashboard, /Fail closed: an incomplete or missing membership must never become tenant-wide access/);
   assert.match(dashboard, /scopedBranchIds = \[\]/);
   assert.match(dashboard, /queryKey: \["dashboard-stats", tenantId, user\?\.id, membership\?\.company_id, membership\?\.branch_id, role, isSuperOwner/);
   for (const permission of ["reports.view", "sales.view", "expenses.view", "inventory.view", "cash.view", "customers.view"]) {
