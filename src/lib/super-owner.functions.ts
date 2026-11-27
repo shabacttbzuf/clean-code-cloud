@@ -69,9 +69,16 @@ export const grantSuperOwner = createServerFn({ method: "POST" })
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     // Look up user by email via Admin API
-    const { data: usersPage, error: listErr } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 });
-    if (listErr) throw new Error(listErr.message);
-    const target = usersPage.users.find((u) => u.email?.toLowerCase() === data.email.toLowerCase());
+    let target: { id: string } | undefined;
+    for (let page = 1; !target; page += 1) {
+      const { data: usersPage, error: listErr } = await supabaseAdmin.auth.admin.listUsers({
+        page,
+        perPage: 200,
+      });
+      if (listErr) throw new Error(listErr.message);
+      target = usersPage.users.find((user) => user.email?.toLowerCase() === data.email.toLowerCase());
+      if (target || usersPage.users.length < 200) break;
+    }
     if (!target) throw new Error("لا يوجد مستخدم بهذا البريد.");
 
     const { error } = await supabaseAdmin.from("super_owners").insert({
