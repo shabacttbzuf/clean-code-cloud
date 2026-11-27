@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Plus, Edit, Archive, RotateCcw, Package, Loader2, Search, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { safeHttpUrlSchema } from "@/lib/safe-url";
 import { PageHeader } from "@/components/page-header";
 
 export const Route = createFileRoute("/_authenticated/products")({
@@ -44,7 +45,7 @@ const schema = z.object({
   unit: z.string().trim().min(1).max(20),
   min_stock: z.coerce.number().min(0),
   is_active: z.boolean(),
-  image_url: z.string().url().nullable().optional(),
+  image_url: safeHttpUrlSchema.nullable().optional(),
 });
 
 function ProductsPage() {
