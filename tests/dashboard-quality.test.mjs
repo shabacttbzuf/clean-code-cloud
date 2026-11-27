@@ -303,7 +303,7 @@ test("dashboard financial summary preserves unknown cost as unavailable instead 
 });
 
 test("dashboard orders and kitchen summaries fail closed on missing membership scope and isolate user caches", () => {
-  assert.equal((dashboard.match(/role !== "owner" && !membership\?\.branch_id && !membership\?\.company_id/g) ?? []).length, 2);
+  assert.equal((dashboard.match(/role !== "owner" && !membership\?\.branch_id && !membership\?\.company_id/g) ?? []).length, 3);
   assert.match(dashboard, /role !== "owner" && !membership\?\.branch_id && !membership\?\.company_id\) \{\s*return \{ new: 0, preparing: 0, ready: 0 \};/);
   assert.match(dashboard, /if \(!branchIds\.length\) return \[\];/);
   assert.match(dashboard, /if \(!scopedBranchIds\.length\) return \{ new: 0, preparing: 0, ready: 0 \};/);
