@@ -153,4 +153,6 @@
 
 140. `supabase/migrations/20261128000100_harden_expense_payroll_table_grants.sql`
 
-**الإجمالي: 140 ترحيلاً.**
+141. `supabase/migrations/20261128000200_harden_public_api_role_grants.sql`
+
+**الإجمالي: 141 ترحيلاً.**
