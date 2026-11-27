@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import { summarizeDashboardFinancialRows } from "../src/lib/dashboard-metrics.mjs";
+
 const dashboard = readFileSync(new URL("../src/routes/_authenticated/dashboard.tsx", import.meta.url), "utf8");
 const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
 const layout = readFileSync(new URL("../src/routes/_authenticated/route.tsx", import.meta.url), "utf8");
@@ -267,4 +269,35 @@ test("dashboard fails closed when membership scope is incomplete and isolates ca
   for (const permission of ["reports.view", "sales.view", "expenses.view", "inventory.view", "cash.view", "customers.view"]) {
     assert.ok(dashboard.includes(\`hasPermission("\${permission}")\`), \`missing KPI permission cache scope: \${permission}\`);
   }
+});
+
+
+test("dashboard KPI reads are paginated, deterministic and permission-gated", () => {
+  assert.match(dashboard, /async function fetchAllRows<T>/);
+  assert.match(dashboard, /query\.range\(from, from \+ pageSize - 1\)/);
+  assert.match(dashboard, /fetchAllRowsResult<any>\(salesMonthQuery\)/);
+  assert.match(dashboard, /fetchRowsByIdBatchesResult<any>\(saleIdsMonth/);
+  assert.match(dashboard, /batchSize = 200/);
+  assert.match(dashboard, /enabled: !!tenantId && hasPermission\("reports\.view"\) && hasPermission\("sales\.view"\) && hasPermission\("expenses\.view"\)/);
+  assert.match(dashboard, /hasPermission\("inventory\.view"\) \? fetchAllRowsResult<any>\(lowStockQuery\)/);
+  assert.match(dashboard, /hasPermission\("cash\.view"\) \? fetchAllRowsResult<any>\(sessionsQuery\)/);
+  assert.match(dashboard, /hasPermission\("customers\.view"\)[\s\S]{0,150}from\("customers"\)/);
+  assert.match(dashboard, /stats\.data\.openSessions !== null/);
+  assert.match(dashboard, /stats\.data\.lowStockCount !== null/);
+  assert.match(dashboard, /stats\.data\.customersCount !== null/);
+});
+
+test("dashboard financial summary preserves unknown cost as unavailable instead of inventing profit", () => {
+  const result = summarizeDashboardFinancialRows({
+    salesToday: [{ total: 120 }],
+    refundsToday: [{ total: 20 }],
+    salesMonth: [{ total: 200, subtotal: 200, discount: 0 }],
+    refundsMonth: [],
+    expensesMonth: [{ amount: 30 }],
+    saleCostRows: [{ quantity: 2, cost_price_snapshot: null }],
+    refundCostRows: [],
+  });
+  assert.equal(result.totalToday, 100);
+  assert.equal(result.unknownCostItems, 1);
+  assert.equal(result.profit, null);
 });
