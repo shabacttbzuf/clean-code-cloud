@@ -14,6 +14,7 @@ test("database visibility checks tenant, company, audience, permission and sourc
   assert.match(migration, /WHEN 'department' THEN EXISTS/);
   assert.match(migration, /private\.can_manage_notification_scope/);
   assert.match(migration, /notifications_insert_scoped/);
+  assert.match(migration, /DROP POLICY IF EXISTS "notifications_admin_write" ON public\.notifications/);
   assert.equal(snapshot.split("SOURCE MIGRATION: 20261127030400_notification_scope_archive_and_missing_sources.sql").length - 1, 1);
   assert.match(migration, /WHEN 'owner' THEN EXISTS/);
   assert.match(migration, /WHEN 'manager' THEN EXISTS/);
