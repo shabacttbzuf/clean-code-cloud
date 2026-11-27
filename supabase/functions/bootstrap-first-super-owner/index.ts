@@ -24,7 +24,9 @@ const allowedOrigins = readAllowedOrigins();
 
 function getCorsHeaders(req: Request): Record<string, string> | null {
   const origin = req.headers.get("Origin");
-  if (!origin || !allowedOrigins.has(origin)) return null;
+  // The TanStack server function calls this endpoint server-to-server without Origin.
+  // Browser-originated calls must match the exact allowlist.
+  if (origin && !allowedOrigins.has(origin)) return null;
 
   return {
     ...(origin ? { "Access-Control-Allow-Origin": origin } : {}),
