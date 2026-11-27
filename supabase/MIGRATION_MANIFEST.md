@@ -137,4 +137,6 @@
 
 129. `supabase/migrations/20261127010000_fix_promotion_gift_eligibility_and_same_sku.sql`
 
-**الإجمالي: 129 ترحيلاً.**
+130. `supabase/migrations/20261127110000_notification_realtime_publication.sql`
+
+**الإجمالي: 130 ترحيلاً.**
