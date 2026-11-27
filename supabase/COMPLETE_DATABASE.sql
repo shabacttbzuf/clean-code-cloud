@@ -19402,3 +19402,32 @@ REVOKE ALL ON FUNCTION private.notify_on_customer_invoice_collection() FROM PUBL
 COMMIT;
 
 -- END MIGRATION: 20261127050000_redact_customer_notification_payloads.sql
+
+
+-- SOURCE MIGRATION: 20261128000100_harden_expense_payroll_table_grants.sql
+-- Financial and payroll records must not be directly deleted or truncated by API roles.
+-- Preserve the existing authenticated read/insert/update workflows; destructive
+-- operations remain available only through explicitly authorized server RPCs.
+BEGIN;
+
+REVOKE ALL PRIVILEGES ON TABLE
+  public.expenses,
+  public.payroll_runs,
+  public.payroll_items
+FROM PUBLIC, anon;
+
+REVOKE DELETE, TRUNCATE, REFERENCES, TRIGGER ON TABLE
+  public.expenses,
+  public.payroll_runs,
+  public.payroll_items
+FROM PUBLIC, authenticated;
+
+GRANT SELECT, INSERT, UPDATE ON TABLE
+  public.expenses,
+  public.payroll_runs,
+  public.payroll_items
+TO authenticated;
+
+COMMIT;
+
+-- END MIGRATION: 20261128000100_harden_expense_payroll_table_grants.sql
