@@ -14,6 +14,7 @@ import { Plus, Check, X, Trash2, Loader2, CalendarDays, Printer } from "lucide-r
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { formatDate } from "@/lib/format";
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog";
 
 export const Route = createFileRoute("/_authenticated/hr/leaves")({
   component: LeavesPage,
@@ -42,6 +43,9 @@ function LeavesPage() {
   const canPrintLeaves = hasPermission("hr.leaves.print");
   const canDeleteLeaves = isSuperOwner || hasPermission("hr.leaves.delete") || hasPermission("hr.manage");
   const qc = useQueryClient();
+  const { confirm, dialog: confirmationDialog } = useConfirmDialog();
+  const [rejectTarget, setRejectTarget] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("all");
 
@@ -180,18 +184,22 @@ function LeavesPage() {
                       <Check className="ml-1 h-3 w-3" />اعتماد
                     </Button>}
                     {canRejectLeaves && <Button size="sm" variant="outline" className="text-destructive" disabled={setStatus.isPending} onClick={() => {
-                      const r = prompt("سبب الرفض (إلزامي):");
-                      if (r === null) return;
-                      if (!r.trim()) { toast.error("يجب كتابة سبب الرفض"); return; }
-                      setStatus.mutate({ id: l.id, status: "rejected", reason: r.trim() });
+                      setRejectReason("");
+                      setRejectTarget(l.id);
                     }}>
                       <X className="ml-1 h-3 w-3" />رفض
                     </Button>}
                   </div>
                 )}
                 {canDeleteLeaves && (
-                  <Button size="sm" variant="ghost" className="text-destructive" disabled={remove.isPending} onClick={() => {
-                    if (window.confirm("هل تريد حذف طلب الإجازة؟ سيتم منع الحذف إذا احتُسب ضمن مسير رواتب معتمد أو مدفوع.")) remove.mutate(l.id);
+                  <Button size="sm" variant="ghost" className="text-destructive" disabled={remove.isPending} onClick={async () => {
+                    const confirmed = await confirm({
+                      title: "حذف طلب الإجازة؟",
+                      description: "سيتم منع الحذف إذا احتُسب الطلب ضمن مسير رواتب معتمد أو مدفوع.",
+                      confirmLabel: "حذف الطلب",
+                      destructive: true,
+                    });
+                    if (confirmed) remove.mutate(l.id);
                   }}>
                     <Trash2 className="ml-1 h-3 w-3" />حذف
                   </Button>
@@ -202,6 +210,45 @@ function LeavesPage() {
         </div>
       )}
     </div>
+    <Dialog open={Boolean(rejectTarget)} onOpenChange={(nextOpen) => {
+      if (!nextOpen) {
+        setRejectTarget(null);
+        setRejectReason("");
+      }
+    }}>
+      <DialogContent dir="rtl">
+        <DialogHeader>
+          <DialogTitle>سبب رفض طلب الإجازة</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-2">
+          <Label htmlFor="leave-rejection-reason">سبب الرفض *</Label>
+          <Textarea
+            id="leave-rejection-reason"
+            value={rejectReason}
+            onChange={(event) => setRejectReason(event.target.value)}
+            maxLength={500}
+            rows={4}
+            autoFocus
+          />
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setRejectTarget(null)}>إلغاء</Button>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={!rejectReason.trim() || setStatus.isPending}
+            onClick={() => {
+              if (!rejectTarget || !rejectReason.trim()) return;
+              setStatus.mutate({ id: rejectTarget, status: "rejected", reason: rejectReason.trim() });
+              setRejectTarget(null);
+            }}
+          >
+            تأكيد الرفض
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    {confirmationDialog}
   );
 }
 
