@@ -86,7 +86,9 @@ ads_placements_company_fk_index
 - دالة trigger واحدة `public.prevent_tenant_owner_id_change()` كانت قابلة للتنفيذ من `anon`، رغم أنها ليست RPC مخصصة للواجهة.
 - لم تظهر سياسة RLS عامة تسمح بقراءة صفوف مجهولة؛ مع ذلك، المنح الزائدة سطح هجوم غير مطلوب، وTRUNCATE يتجاوز RLS.
 
-كما أن `expenses` و`payroll_runs` و`payroll_items` تسمح للمستخدم المصادق بحذف السجلات مباشرة ضمن بعض سياسات الصلاحيات الحالية، وهو ما لا يناسب حفظ الأثر المالي.
+كما أن \`expenses\` و\`payroll_runs\` و\`payroll_items\` تسمح للمستخدم المصادق بحذف السجلات مباشرة ضمن بعض سياسات الصلاحيات الحالية، وهو ما لا يناسب حفظ الأثر المالي.
+
+يوجد خطر إضافي على سجل المخزون: في القاعدة الحية ما زال للمصادق منح DELETE على \`products\`، وتوجد سياسة permissive من نوع ALL وسياسة حذف permissive، بينما مفتاحا \`inventory.product_id\` و\`inventory_transactions.product_id\` ما زالا يستخدمان \`ON DELETE CASCADE\`. لذلك قد يؤدي حذف منتج إلى حذف تاريخ المخزون وحركاته. ملف المصدر المحلي \`20261125110000_prevent_product_history_deletion.sql\` يعالج ذلك بإزالة الحذف المباشر وتغيير المفتاحين إلى \`ON DELETE RESTRICT\`، لكنه لا يقابله سجل migration بعيد مطابق في قاعدة الإنتاج. أما \`sale_items.product_id\` فيستخدم \`ON DELETE SET NULL\`، ما قد يفقد الربط المباشر بالمنتج الأصلي.
 
 طلب الدمج المقترح `PR #118` يضيف ترحيلين مستقلين لا يزالان قيد الاختبار ولم يندمجا في `main`:
 - `20261128000100_harden_expense_payroll_table_grants.sql`: يسحب DELETE/TRUNCATE/REFERENCES/TRIGGER من الأدوار غير الخادمية على الجداول المالية مع إبقاء SELECT/INSERT/UPDATE للمصادق.
