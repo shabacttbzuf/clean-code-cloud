@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
@@ -179,7 +180,7 @@ function Dashboard() {
     const candidate = heroImageDraft.trim();
     const safeImage = candidate ? safeHeroImageUrl(candidate) : null;
     if (candidate && !safeImage) {
-      window.alert("أدخل رابط صورة آمن يبدأ بـ https:// أو اترك الحقل فارغاً.");
+      toast.error("أدخل رابط صورة آمن يبدأ بـ https:// أو اترك الحقل فارغاً.");
       return;
     }
     const safeColor = /^#[0-9a-fA-F]{6}$/.test(heroBackgroundDraft) ? heroBackgroundDraft : "#102f5c";
