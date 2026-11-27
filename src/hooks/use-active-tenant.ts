@@ -102,10 +102,40 @@ export function useActiveTenant() {
     enabled: !!activeId,
   });
 
-  const membership = useMemo(
-    () => memQuery.data?.find((m) => m.tenant_id === activeId) ?? null,
-    [memQuery.data, activeId],
-  );
+  const tenantMemberships = useMemo(() => (memQuery.data ?? []).filter((item) => item.tenant_id === activeId), [memQuery.data, activeId]);
+  const hasTenantWideMembership = tenantMemberships.some((item) => item.company_id === null && item.branch_id === null);
+  const companyMembershipIds = useMemo(() => [...new Set(tenantMemberships.map((item) => item.company_id).filter((id): id is string => !!id))], [tenantMemberships]);
+  const companyScopeStorageKey = user?.id && activeId ? "ras-active-company:" + user.id + ":" + activeId : null;
+  const [companySelection, setCompanySelection] = useState<{ scope: string | null; companyId: string | null; ready: boolean }>({ scope: null, companyId: null, ready: false });
+  const companyOptionsQuery = useQuery({
+    queryKey: ["authorized-companies", user?.id, activeId, hasTenantWideMembership ? "tenant-wide" : companyMembershipIds.slice().sort().join(":")],
+    queryFn: async () => {
+      if (!activeId) return [];
+      let query = supabase.from("companies").select("id,name").eq("tenant_id", activeId).eq("is_active", true).order("name");
+      if (!hasTenantWideMembership && companyMembershipIds.length) query = query.in("id", companyMembershipIds);
+      else if (!hasTenantWideMembership) return [];
+      const { data, error } = await query;
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!user?.id && !!activeId && (hasTenantWideMembership || companyMembershipIds.length > 0),
+    staleTime: 30_000,
+  });
+  const companyOptions = useMemo(() => companyOptionsQuery.data ?? [], [companyOptionsQuery.data]);
+  useEffect(() => {
+    if (!companyScopeStorageKey || !tenantMemberships.length || companyOptionsQuery.isLoading || companyOptionsQuery.isError) return;
+    const stored = typeof window !== "undefined" ? window.localStorage.getItem(companyScopeStorageKey) : null;
+    const allowedIds = new Set(companyOptions.map((item) => item.id));
+    const nextCompanyId = stored === "__all__" && hasTenantWideMembership ? null : stored && allowedIds.has(stored) ? stored : hasTenantWideMembership ? null : companyMembershipIds.find((id) => allowedIds.has(id)) ?? null;
+    setCompanySelection({ scope: companyScopeStorageKey, companyId: nextCompanyId, ready: true });
+    if (typeof window !== "undefined") {
+      if (nextCompanyId) window.localStorage.setItem(companyScopeStorageKey, nextCompanyId);
+      else if (hasTenantWideMembership) window.localStorage.setItem(companyScopeStorageKey, "__all__");
+      else window.localStorage.removeItem(companyScopeStorageKey);
+    }
+  }, [companyScopeStorageKey, tenantMemberships, companyMembershipIds, companyOptions, companyOptionsQuery.isLoading, companyOptionsQuery.isError, hasTenantWideMembership]);
+  const activeCompanyId = companySelection.scope === companyScopeStorageKey && companySelection.ready ? companySelection.companyId : hasTenantWideMembership ? null : companyMembershipIds[0] ?? tenantMemberships[0]?.company_id ?? null;
+  const membership = useMemo(() => (activeCompanyId ? tenantMemberships.find((item) => item.company_id === activeCompanyId) : null) ?? tenantMemberships.find((item) => item.company_id === null && item.branch_id === null) ?? tenantMemberships.find((item) => item.company_id === null) ?? tenantMemberships[0] ?? null, [tenantMemberships, activeCompanyId]);
 
   const role = membership?.role ?? null;
   const isAdmin = role === "owner" || role === "manager";
@@ -151,6 +181,80 @@ export function useActiveTenant() {
     [permissionsQuery.data, permissionsQuery.isError],
   );
   const hasPermission = (permission: string) => isSuperOwner || permissions.has(permission);
+  const branchOptionsQuery = useQuery({
+    queryKey: ["authorized-branches", user?.id, activeId, activeCompanyId, membership?.branch_id],
+    queryFn: async () => {
+      if (!activeId) return [];
+      let query = supabase.from("branches").select("id,name,company_id").eq("tenant_id", activeId).eq("is_active", true);
+      if (membership.branch_id) {
+        // A branch-bound membership must never enumerate or switch to sibling branches,
+        // even if the RLS policy permits reading other branches in the same company.
+        query = query.eq("id", membership.branch_id);
+      } else if (activeCompanyId) {
+        query = query.eq("company_id", activeCompanyId);
+      }
+      const { data, error } = await query.order("name");
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!user?.id && !!activeId && !!membership && (!!membership.branch_id || ["owner", "manager", "accountant"].includes(membership.role) || hasPermission("branches.view") || isSuperOwner),
+    staleTime: 30_000,
+  });
+  const branchOptions = useMemo(() => branchOptionsQuery.data ?? [], [branchOptionsQuery.data]);
+  const branchScopeKey = user?.id && activeId ? user.id + ":" + activeId + ":" + (activeCompanyId ?? "all-companies") : null;
+  const [branchSelection, setBranchSelection] = useState<{ scope: string | null; branchId: string | null; ready: boolean }>({ scope: null, branchId: null, ready: false });
+  useEffect(() => {
+    if (!branchScopeKey || !membership || branchOptionsQuery.isLoading || branchOptionsQuery.isError) return;
+    const canSelectAll = !membership.branch_id && (isSuperOwner || ["owner", "manager", "accountant"].includes(membership.role));
+    const storageKey = "ras-active-branch:" + branchScopeKey;
+    const stored = typeof window !== "undefined" ? window.localStorage.getItem(storageKey) : null;
+    const allowedIds = new Set(branchOptions.map((item) => item.id));
+    const nextBranchId = membership.branch_id
+      ? membership.branch_id
+      : stored === "__all__" && canSelectAll
+        ? null
+        : stored && allowedIds.has(stored)
+          ? stored
+          : canSelectAll
+            ? null
+            : branchOptions[0]?.id ?? null;
+    setBranchSelection({ scope: branchScopeKey, branchId: nextBranchId, ready: true });
+    if (typeof window !== "undefined") {
+      if (nextBranchId) window.localStorage.setItem(storageKey, nextBranchId);
+      else if (canSelectAll) window.localStorage.setItem(storageKey, "__all__");
+      else window.localStorage.removeItem(storageKey);
+    }
+  }, [branchScopeKey, membership, branchOptions, branchOptionsQuery.isLoading, branchOptionsQuery.isError, isSuperOwner]);
+  const activeBranchId = branchSelection.scope === branchScopeKey && branchSelection.ready ? branchSelection.branchId : membership?.branch_id ?? null;
+  const effectiveMembership = useMemo(() => membership ? { ...membership, company_id: activeCompanyId, branch_id: activeBranchId } : null, [membership, activeCompanyId, activeBranchId]);
+  function switchCompany(companyId: string | null) {
+    if (companyId === null && !hasTenantWideMembership) return;
+    if (companyId !== null && !companyOptions.some((item) => item.id === companyId)) return;
+    if (!companyScopeStorageKey) return;
+    setCompanySelection({ scope: companyScopeStorageKey, companyId, ready: true });
+    if (typeof window !== "undefined") window.localStorage.setItem(companyScopeStorageKey, companyId ?? "__all__");
+    setBranchSelection({ scope: null, branchId: null, ready: false });
+    queryClient.clear();
+  }
+  function switchBranch(id: string | null) {
+    const canSelectAll = !membership?.branch_id && (isSuperOwner || ["owner", "manager", "accountant"].includes(membership?.role ?? ""));
+    if (id === null && !canSelectAll) return;
+    if (membership?.branch_id && id !== membership.branch_id) return;
+    if (id !== null && !branchOptions.some((item) => item.id === id)) return;
+    if (!branchScopeKey) return;
+    const storageKey = "ras-active-branch:" + branchScopeKey;
+    setBranchSelection({ scope: branchScopeKey, branchId: id, ready: true });
+    if (typeof window !== "undefined") window.localStorage.setItem(storageKey, id ?? "__all__");
+    queryClient.clear();
+  }
+  function switchTenant(id: string) {
+    if (!memQuery.data?.some((item) => item.tenant_id === id) || id === activeId) return;
+    setActiveId(id);
+    setCompanySelection({ scope: null, companyId: null, ready: false });
+    setBranchSelection({ scope: null, branchId: null, ready: false });
+    if (typeof window !== "undefined") window.localStorage.setItem(ACTIVE_TENANT_KEY, id);
+    queryClient.clear();
+  }
 
   return {
     user,
@@ -159,7 +263,17 @@ export function useActiveTenant() {
     tenantId: activeId,
     tenant: tenantQuery.data ?? null,
     memberships: memQuery.data ?? [],
-    membership,
+    membership: effectiveMembership,
+    companyOptions,
+    companyLoading: companyOptionsQuery.isLoading,
+    companyError: companyOptionsQuery.error,
+    activeCompanyId,
+    switchCompany,
+    branchOptions,
+    branchLoading: branchOptionsQuery.isLoading,
+    branchError: branchOptionsQuery.error,
+    activeBranchId,
+    switchBranch,
     role,
     isAdmin,
     isSuperOwner,
@@ -167,9 +281,6 @@ export function useActiveTenant() {
     hasPermission,
     permissionsLoading: permissionsQuery.isLoading,
     permissionsError: permissionsQuery.error,
-    switchTenant: (id: string) => {
-      setActiveId(id);
-      if (typeof window !== "undefined") window.localStorage.setItem(ACTIVE_TENANT_KEY, id);
-    },
+    switchTenant,
   };
 }
