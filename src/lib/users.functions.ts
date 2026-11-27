@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { isSafeHttpUrl } from "@/lib/safe-url";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const ROLE_ENUM = z.enum([
@@ -290,7 +291,7 @@ export const createUser = createServerFn({ method: "POST" })
         role: ROLE_ENUM,
         custom_role_id: z.string().uuid().optional().nullable(),
         branch_id: z.string().uuid().optional().nullable(),
-        avatar_url: z.string().max(2048).refine((value) => value.startsWith("private://") || z.string().url().safeParse(value).success, "رابط الصورة غير صالح").optional().nullable(),
+        avatar_url: z.string().max(2048).refine((value) => value.startsWith("private://") || isSafeHttpUrl(value), "رابط الصورة غير صالح").optional().nullable(),
       })
       .parse(data),
   )
