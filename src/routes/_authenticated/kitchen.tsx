@@ -105,11 +105,36 @@ function KitchenPage() {
     refetchInterval: 30_000,
   });
 
+  const kitchenDailyMetrics = useQuery({
+    queryKey: ["kitchen-daily-metrics", tenantId, userId, branchId],
+    queryFn: async () => {
+      if (!tenantId || !branchId) return { new: 0, preparing: 0, ready: 0, delivered: 0 };
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      const statuses = ["new", "preparing", "ready", "delivered"] as const;
+      const entries = await Promise.all(statuses.map(async (status) => {
+        const { count, error } = await (supabase.from("kitchen_orders" as any) as any)
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", tenantId)
+          .eq("branch_id", branchId)
+          .eq("status", status)
+          .gte("created_at", startOfDay.toISOString());
+        if (error) throw error;
+        return [status, count ?? 0] as const;
+      }));
+      return Object.fromEntries(entries) as Record<typeof statuses[number], number>;
+    },
+    enabled: !!tenantId && !!branchId,
+    refetchInterval: 30_000,
+    staleTime: 10_000,
+  });
+
   useEffect(() => {
     if (!tenantId) return;
     const channel = supabase.channel(`kitchen-orders-${tenantId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "kitchen_orders", filter: `tenant_id=eq.${tenantId}` }, () => {
         void qc.invalidateQueries({ queryKey: ["kitchen-queue", tenantId] });
+        void qc.invalidateQueries({ queryKey: ["kitchen-daily-metrics", tenantId] });
       })
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
@@ -118,6 +143,7 @@ function KitchenPage() {
   useEffect(() => {
     const refreshAfterSync = () => {
       void qc.invalidateQueries({ queryKey: ["kitchen-queue", tenantId, branchId] });
+      void qc.invalidateQueries({ queryKey: ["kitchen-daily-metrics", tenantId, userId, branchId] });
     };
     window.addEventListener("offline-sync:changed", refreshAfterSync);
     return () => window.removeEventListener("offline-sync:changed", refreshAfterSync);
@@ -165,6 +191,21 @@ function KitchenPage() {
     onError: (error) => toast.error(error instanceof Error ? error.message : "تعذر تحديث الطلب"),
   });
 
+  const kitchenMetrics = useMemo(() => {
+    const orders = queue.data ?? [];
+    const newCount = orders.filter((order) => order.status === "new").length;
+    const preparingCount = orders.filter((order) => order.status === "preparing").length;
+    const readyCount = orders.filter((order) => order.status === "ready").length;
+    const lateOrders = orders.filter((order) =>
+      (order.status === "new" || order.status === "preparing") &&
+      Date.now() - new Date(order.created_at).getTime() >= 20 * 60 * 1000
+    );
+    const daily = kitchenDailyMetrics.data ?? { new: 0, preparing: 0, ready: 0, delivered: 0 };
+    const dailyTotal = daily.new + daily.preparing + daily.ready + daily.delivered;
+    const completionRate = dailyTotal ? Math.round((daily.delivered / dailyTotal) * 100) : 0;
+    return { newCount, preparingCount, readyCount, lateOrders, completionRate, deliveredToday: daily.delivered, dailyTotal };
+  }, [queue.data, kitchenDailyMetrics.data]);
+
   const columns = useMemo(() => ([
     { status: "new" as const, title: "طلبات جديدة", next: "preparing" as const, action: "بدء التحضير" },
     { status: "preparing" as const, title: "قيد التحضير", next: "ready" as const, action: "تحديد كجاهز" },
@@ -184,6 +225,16 @@ function KitchenPage() {
           <Button type="button" size="icon" variant="outline" aria-label="تحديث الطلبات" onClick={() => queue.refetch()}><RefreshCw className="h-4 w-4" /></Button>
         </div>
       } />
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="ملخص أداء المطبخ اليوم">
+        {[
+          { label: "طلبات جديدة", value: kitchenMetrics.newCount, tone: "border-sky-200 bg-sky-50 text-sky-800" },
+          { label: "قيد التحضير", value: kitchenMetrics.preparingCount, tone: "border-amber-200 bg-amber-50 text-amber-800" },
+          { label: "جاهزة للتسليم", value: kitchenMetrics.readyCount, tone: "border-emerald-200 bg-emerald-50 text-emerald-800" },
+          { label: "نسبة الإنجاز اليوم", value: `${kitchenMetrics.completionRate}%`, tone: "border-primary/20 bg-primary/5 text-primary" },
+        ].map((metric) => <Card key={metric.label} className={metric.tone}><CardContent className="p-4"><div className="text-xs font-semibold">{metric.label}</div><div className="mt-1 text-2xl font-extrabold num">{metric.value}</div>{metric.label === "نسبة الإنجاز اليوم" && <div className="mt-1 text-[11px] opacity-75">{kitchenMetrics.deliveredToday} من {kitchenMetrics.dailyTotal} طلب</div>}</CardContent></Card>)}
+      </section>
+      {kitchenDailyMetrics.isError && <div role="alert" className="rounded-lg border border-destructive/30 p-3 text-sm text-destructive">تعذر تحميل إحصائيات المطبخ اليومية. <Button variant="link" onClick={() => kitchenDailyMetrics.refetch()}>إعادة المحاولة</Button></div>}
+      {kitchenMetrics.lateOrders.length > 0 && <div role="status" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800"><strong>تنبيه تأخير:</strong> يوجد {kitchenMetrics.lateOrders.length} طلباً جديداً أو قيد التحضير تجاوز 20 دقيقة.</div>}
       {branches.isError && <div role="alert" className="rounded-lg border border-destructive/30 p-3 text-sm text-destructive">تعذر تحميل الفروع. أعد تحميل الصفحة أو تحقق من صلاحياتك.</div>}
       {queue.isError && <div role="alert" className="rounded-lg border border-destructive/30 p-3 text-sm text-destructive">تعذر تحميل طلبات المطبخ. <Button variant="link" onClick={() => queue.refetch()}>إعادة المحاولة</Button></div>}
       {queue.isLoading ? <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" /></div> : (
