@@ -628,7 +628,7 @@ function Dashboard() {
         <section id="dashboard-hero-settings" className="rounded-xl border bg-card p-4 shadow-sm" aria-label="إعدادات مساحة الترحيب">
           <div className="mb-3">
             <h2 className="font-bold">تخصيص مساحة الترحيب</h2>
-            <p className="mt-1 text-xs text-muted-foreground">غيّر صورة الخلفية أو لونها. تُحفظ هذه التفضيلات على هذا المتصفح لهذا المستخدم والشركة فقط.</p>
+            <p className="mt-1 text-xs text-muted-foreground">غيّر صورة الخلفية أو لونها. تُحفظ التفضيلات لهذا المستخدم والشركة والفرع فقط. الصور المرفوعة إلى مكتبة النظام عامة عبر رابطها؛ لا ترفع صوراً خاصة.</p>
           </div>
           <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
             <label className="space-y-2 text-sm font-medium">
