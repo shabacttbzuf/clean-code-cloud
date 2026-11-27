@@ -20,7 +20,9 @@ test("leave creation validates date range and calculates inclusive UTC days", ()
 });
 
 test("leave deletion requires confirmation and protects approved payroll records", () => {
-  assert.match(route, /window\.confirm\(/);
+  assert.match(route, /useConfirmDialog/);
+  assert.match(route, /title: "حذف طلب الإجازة؟"/);
+  assert.doesNotMatch(route, /window\.confirm\(/);
   assert.match(migration, /permission_gate_leave_requests_delete/);
   assert.match(migration, /prevent_deleting_payroll_linked_leave/);
   assert.match(migration, /pr\.status in \('approved', 'paid'\)/);
