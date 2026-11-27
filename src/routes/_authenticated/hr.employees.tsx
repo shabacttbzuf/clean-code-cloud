@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Plus, Edit, Trash2, Loader2, Search, UserRound, Briefcase, Building2, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { safeHttpUrlSchema } from "@/lib/safe-url";
 import { PageHeader } from "@/components/page-header";
 import { ImageUploader } from "@/components/image-uploader";
 import { formatMoney, formatDate } from "@/lib/format";
@@ -52,7 +53,7 @@ const schema = z.object({
   bank_account: z.string().trim().max(60).optional().or(z.literal("")),
   emergency_contact: z.string().trim().max(60).optional().or(z.literal("")),
   notes: z.string().trim().max(1000).optional().or(z.literal("")),
-  avatar_url: z.string().url().nullable().optional(),
+  avatar_url: safeHttpUrlSchema.nullable().optional(),
   status: z.enum(["active","suspended","terminated"]),
   salary_type: z.enum(["monthly","daily","hourly"]).default("monthly"),
   working_hours_per_day: z.number().min(1).max(24).default(8),
