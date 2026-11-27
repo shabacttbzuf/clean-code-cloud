@@ -47,3 +47,14 @@ test("Super Owner user lookup paginates instead of stopping at the first 200 use
   assert.match(source, /perPage: 200/);
   assert.match(source, /usersPage\.users\.length < 200/);
 });
+
+
+test("Super Owner listing verifies the caller before reading the platform owner list", () => {
+  const source = read("../src/lib/super-owner.functions.ts");
+  const listFunction = source.slice(
+    source.indexOf("export const listSuperOwners"),
+    source.indexOf("export const bootstrapSuperOwner"),
+  );
+  assert.match(listFunction, /rpc\("is_super_owner"/);
+  assert.match(listFunction, /if \(!isSO\)/);
+});
