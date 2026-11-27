@@ -17790,3 +17790,1391 @@ END
 $migration$;
 COMMIT;
 -- END MIGRATION: 20261127030000_notification_realtime_publication.sql
+
+-- =====================================================================
+-- SOURCE MIGRATION: 20261127040000_low_stock_event_notifications.sql
+-- =====================================================================
+
+-- Create low-stock alerts from real inventory threshold crossings.
+-- The trigger is transaction-bound to inventory writes and does not mutate stock.
+BEGIN;
+
+CREATE OR REPLACE FUNCTION private.notify_on_low_stock()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $function$
+DECLARE
+  v_product public.products%ROWTYPE;
+  v_company_id uuid;
+  v_actor_id uuid;
+  v_previous_sub text := current_setting('request.jwt.claim.sub', true);
+  v_crossed_threshold boolean := false;
+BEGIN
+  IF NEW.quantity IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT * INTO v_product
+  FROM public.products
+  WHERE id = NEW.product_id
+    AND tenant_id = NEW.tenant_id;
+
+  IF NOT FOUND OR v_product.min_stock IS NULL OR v_product.min_stock <= 0 THEN
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    v_crossed_threshold := NEW.quantity <= v_product.min_stock;
+  ELSE
+    v_crossed_threshold := NEW.quantity <= v_product.min_stock
+      AND OLD.quantity > v_product.min_stock;
+  END IF;
+
+  IF NOT v_crossed_threshold THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT b.company_id INTO v_company_id
+  FROM public.branches b
+  WHERE b.id = NEW.branch_id
+    AND b.tenant_id = NEW.tenant_id;
+
+  IF NOT FOUND THEN
+    RETURN NEW;
+  END IF;
+
+  -- Notifications are ancillary: use a company manager/owner as the audited actor,
+  -- and never let an alert failure roll back a valid inventory/POS transaction.
+  SELECT ur.user_id
+    INTO v_actor_id
+  FROM public.user_roles ur
+  WHERE ur.tenant_id = NEW.tenant_id
+    AND ur.role IN ('owner', 'manager')
+    AND (
+      ur.company_id = v_company_id
+      OR (ur.role = 'owner' AND ur.company_id IS NULL)
+    )
+  ORDER BY CASE WHEN ur.company_id = v_company_id THEN 0 ELSE 1 END,
+           ur.created_at
+  LIMIT 1;
+
+  IF v_actor_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  BEGIN
+    PERFORM set_config('request.jwt.claim.sub', v_actor_id::text, true);
+
+    INSERT INTO public.notifications (
+      tenant_id, company_id, audience_type, audience_id,
+      kind, urgency, title, body, payload, action_path, action_label, created_by
+    )
+    VALUES (
+      NEW.tenant_id,
+      v_company_id,
+      'branch',
+      NEW.branch_id,
+      'low_stock',
+      CASE WHEN NEW.quantity <= 0 THEN 'critical' ELSE 'urgent' END,
+      'تنبيه انخفاض المخزون',
+      'المنتج ' || v_product.name || ' وصل إلى ' ||
+        trim(to_char(NEW.quantity, 'FM999999999990D999')) ||
+        '، والحد الأدنى المحدد ' ||
+        trim(to_char(v_product.min_stock, 'FM999999999990D999')) || '.',
+      jsonb_build_object(
+        'product_id', NEW.product_id,
+        'branch_id', NEW.branch_id,
+        'quantity', NEW.quantity,
+        'min_stock', v_product.min_stock
+      ),
+      '/inventory',
+      'فتح المخزون',
+      v_actor_id
+    );
+
+    PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+    RAISE WARNING 'Low-stock notification was skipped for inventory row %: %', NEW.id, SQLERRM;
+  END;
+
+  RETURN NEW;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION private.notify_on_low_stock() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS trg_notify_on_low_stock ON public.inventory;
+CREATE TRIGGER trg_notify_on_low_stock
+AFTER INSERT OR UPDATE OF quantity ON public.inventory
+FOR EACH ROW
+EXECUTE FUNCTION private.notify_on_low_stock();
+
+COMMIT;
+
+-- END MIGRATION: 20261127040000_low_stock_event_notifications.sql
+
+-- =====================================================================
+-- SOURCE MIGRATION: 20261127040100_hr_leave_event_notifications.sql
+-- =====================================================================
+
+-- Notify HR recipients from real leave-request creation and decision events.
+-- Notification delivery is best-effort and never blocks the underlying HR workflow.
+BEGIN;
+
+CREATE OR REPLACE FUNCTION private.notify_leave_request_events()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $function$
+DECLARE
+  v_employee public.employees%ROWTYPE;
+  v_company_id uuid;
+  v_employee_user_id uuid;
+  v_actor_id uuid;
+  v_previous_sub text := current_setting('request.jwt.claim.sub', true);
+BEGIN
+  SELECT * INTO v_employee
+  FROM public.employees
+  WHERE id = NEW.employee_id
+    AND tenant_id = NEW.tenant_id;
+
+  IF NOT FOUND THEN
+    RETURN NEW;
+  END IF;
+
+  v_employee_user_id := v_employee.user_id;
+  IF v_employee.branch_id IS NOT NULL THEN
+    SELECT company_id INTO v_company_id
+    FROM public.branches
+    WHERE id = v_employee.branch_id
+      AND tenant_id = NEW.tenant_id;
+  END IF;
+
+  -- A company-scoped notification must have a real company and a trusted
+  -- owner/manager actor; otherwise skip the alert, not the leave transaction.
+  IF v_company_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT ur.user_id
+    INTO v_actor_id
+  FROM public.user_roles ur
+  WHERE ur.tenant_id = NEW.tenant_id
+    AND ur.role IN ('owner', 'manager')
+    AND (
+      ur.company_id = v_company_id
+      OR (ur.role = 'owner' AND ur.company_id IS NULL)
+    )
+  ORDER BY CASE WHEN ur.company_id = v_company_id THEN 0 ELSE 1 END,
+           ur.created_at
+  LIMIT 1;
+
+  IF v_actor_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'INSERT' AND NEW.status = 'pending' THEN
+    BEGIN
+      PERFORM set_config('request.jwt.claim.sub', v_actor_id::text, true);
+
+      INSERT INTO public.notifications (
+        tenant_id, company_id, audience_type, kind, urgency,
+        title, body, payload, action_path, action_label, created_by
+      )
+      VALUES
+      (
+        NEW.tenant_id, v_company_id, 'owner', 'hr_leave_requested', 'normal',
+        'طلب إجازة جديد',
+        'تم تقديم طلب إجازة جديد يحتاج إلى المراجعة.',
+        jsonb_build_object('leave_request_id', NEW.id, 'employee_id', NEW.employee_id),
+        '/hr/leaves', 'مراجعة الطلب', v_actor_id
+      ),
+      (
+        NEW.tenant_id, v_company_id, 'manager', 'hr_leave_requested', 'normal',
+        'طلب إجازة جديد',
+        'تم تقديم طلب إجازة جديد يحتاج إلى المراجعة.',
+        jsonb_build_object('leave_request_id', NEW.id, 'employee_id', NEW.employee_id),
+        '/hr/leaves', 'مراجعة الطلب', v_actor_id
+      );
+
+      PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+    EXCEPTION WHEN OTHERS THEN
+      PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+      RAISE WARNING 'Leave-request notification was skipped for request %: %', NEW.id, SQLERRM;
+    END;
+  ELSIF TG_OP = 'UPDATE'
+    AND OLD.status = 'pending'
+    AND NEW.status IN ('approved', 'rejected')
+    AND v_employee_user_id IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM public.user_roles ur
+      WHERE ur.user_id = v_employee_user_id
+        AND ur.tenant_id = NEW.tenant_id
+        AND ur.company_id = v_company_id
+    )
+  THEN
+    BEGIN
+      PERFORM set_config('request.jwt.claim.sub', v_actor_id::text, true);
+
+      INSERT INTO public.notifications (
+        tenant_id, company_id, audience_type, audience_id, kind, urgency,
+        title, body, payload, action_path, action_label, created_by
+      )
+      VALUES (
+        NEW.tenant_id,
+        v_company_id,
+        'user',
+        v_employee_user_id,
+        CASE WHEN NEW.status = 'approved' THEN 'hr_leave_approved' ELSE 'hr_leave_rejected' END,
+        'normal',
+        CASE WHEN NEW.status = 'approved' THEN 'تمت الموافقة على طلب الإجازة' ELSE 'تم رفض طلب الإجازة' END,
+        CASE WHEN NEW.status = 'approved'
+          THEN 'تمت الموافقة على طلب الإجازة المقدم منك.'
+          ELSE 'تم رفض طلب الإجازة المقدم منك. يرجى مراجعة التفاصيل مع الإدارة.'
+        END,
+        jsonb_build_object(
+          'leave_request_id', NEW.id,
+          'status', NEW.status,
+          'start_date', NEW.start_date,
+          'end_date', NEW.end_date
+        ),
+        '/hr/leaves',
+        'عرض طلباتي',
+        v_actor_id
+      );
+
+      PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+    EXCEPTION WHEN OTHERS THEN
+      PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+      RAISE WARNING 'Leave-decision notification was skipped for request %: %', NEW.id, SQLERRM;
+    END;
+  END IF;
+
+  RETURN NEW;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION private.notify_leave_request_events() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS trg_notify_leave_request_events ON public.leave_requests;
+CREATE TRIGGER trg_notify_leave_request_events
+AFTER INSERT OR UPDATE OF status ON public.leave_requests
+FOR EACH ROW
+EXECUTE FUNCTION private.notify_leave_request_events();
+
+COMMIT;
+
+-- END MIGRATION: 20261127040100_hr_leave_event_notifications.sql
+
+-- =====================================================================
+-- SOURCE MIGRATION: 20261127040200_overdue_kitchen_order_notifications.sql
+-- =====================================================================
+
+-- Emit one actionable alert when a kitchen order is still not ready 30 minutes after creation.
+-- Uses the existing kitchen_orders workflow and notification/RLS pipeline; never mutates orders or sales.
+BEGIN;
+
+-- Supabase PostgreSQL ships pg_cron; enable it idempotently so the SLA scanner is actually scheduled.
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+CREATE OR REPLACE FUNCTION private.emit_overdue_kitchen_order_notifications()
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $function$
+DECLARE
+  v_order record;
+  v_actor_id uuid;
+  v_previous_sub text := current_setting('request.jwt.claim.sub', true);
+  v_created integer := 0;
+BEGIN
+  FOR v_order IN
+    SELECT ko.id, ko.tenant_id, ko.branch_id, ko.sale_id, ko.status,
+           ko.created_at, b.company_id, s.invoice_no
+    FROM public.kitchen_orders ko
+    JOIN public.branches b
+      ON b.id = ko.branch_id
+     AND b.tenant_id = ko.tenant_id
+    LEFT JOIN public.sales s
+      ON s.id = ko.sale_id
+     AND s.tenant_id = ko.tenant_id
+    WHERE ko.created_at <= now() - interval '30 minutes'
+      AND b.company_id IS NOT NULL
+      -- Use the event timeline, not only the current status: an order that became
+      -- ready after minute 30 is still delayed and must not lose its alert.
+      -- Cancellation before the deadline ends the preparation SLA without an alert.
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.kitchen_order_events e
+        WHERE e.kitchen_order_id = ko.id
+          AND e.new_status IN ('ready', 'cancelled')
+          AND e.created_at <= ko.created_at + interval '30 minutes'
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.notifications n
+        WHERE n.tenant_id = ko.tenant_id
+          AND n.kind = 'kitchen_order_delayed'
+          AND n.payload ->> 'kitchen_order_id' = ko.id::text
+      )
+    ORDER BY ko.created_at
+    LIMIT 500
+  LOOP
+    -- The existing notification company-scope trigger requires a real actor.
+    -- Attribute the system-created alert to an authorized owner/manager in that same company.
+    SELECT ur.user_id
+      INTO v_actor_id
+    FROM public.user_roles ur
+    WHERE ur.tenant_id = v_order.tenant_id
+      AND ur.role IN ('owner', 'manager')
+      AND (
+        ur.company_id = v_order.company_id
+        OR (ur.role = 'owner' AND ur.company_id IS NULL)
+      )
+    ORDER BY CASE WHEN ur.company_id = v_order.company_id THEN 0 ELSE 1 END,
+             ur.created_at
+    LIMIT 1;
+
+    IF v_actor_id IS NULL THEN
+      CONTINUE;
+    END IF;
+
+    PERFORM set_config('request.jwt.claim.sub', v_actor_id::text, true);
+
+    INSERT INTO public.notifications (
+      tenant_id, company_id, audience_type, audience_id,
+      kind, urgency, title, body, payload, action_path, action_label
+    )
+    VALUES (
+      v_order.tenant_id,
+      v_order.company_id,
+      'branch',
+      v_order.branch_id,
+      'kitchen_order_delayed',
+      'urgent',
+      'تنبيه تأخر تجهيز الطلب',
+      'الطلب رقم ' || COALESCE(v_order.invoice_no::text, '—') ||
+        ' لم يصبح جاهزاً خلال 30 دقيقة من إنشائه.',
+      jsonb_build_object(
+        'kitchen_order_id', v_order.id,
+        'sale_id', v_order.sale_id,
+        'branch_id', v_order.branch_id,
+        'status', v_order.status,
+        'created_at', v_order.created_at,
+        'delay_minutes', 30
+      ),
+      '/kitchen',
+      'فتح شاشة المطبخ'
+    );
+
+    v_created := v_created + 1;
+  END LOOP;
+
+  PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+  RETURN v_created;
+EXCEPTION WHEN OTHERS THEN
+  PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+  RAISE;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION private.emit_overdue_kitchen_order_notifications()
+  FROM PUBLIC, anon, authenticated;
+
+-- Supabase installations with pg_cron run the idempotent scanner every minute.
+-- If pg_cron is not installed, the migration remains safe and reports that scheduling
+-- must be enabled before delayed notifications can run.
+DO $schedule$
+DECLARE
+  v_job_id bigint;
+BEGIN
+  IF to_regclass('cron.job') IS NOT NULL
+     AND to_regprocedure('cron.schedule(text,text,text)') IS NOT NULL
+     AND to_regprocedure('cron.unschedule(bigint)') IS NOT NULL THEN
+    EXECUTE
+      'SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = $1'
+      USING 'notify-overdue-kitchen-orders';
+
+    EXECUTE
+      'SELECT cron.schedule($1, $2, $3)'
+      INTO v_job_id
+      USING 'notify-overdue-kitchen-orders',
+            '* * * * *',
+            'SELECT private.emit_overdue_kitchen_order_notifications();';
+  ELSE
+    RAISE NOTICE 'pg_cron is not installed; overdue kitchen-order notifications are not scheduled.';
+  END IF;
+END
+$schedule$;
+
+COMMIT;
+
+-- END MIGRATION: 20261127040200_overdue_kitchen_order_notifications.sql
+
+-- =====================================================================
+-- SOURCE MIGRATION: 20261127040300_customer_invoice_event_notifications.sql
+-- =====================================================================
+
+-- Notify company management about actual customer-credit invoice and collection events.
+-- This uses the existing sales/customer_payments ledger and notifications table.
+-- It does not invent invoice due dates or modify financial records.
+BEGIN;
+
+CREATE OR REPLACE FUNCTION private.notify_on_customer_credit_invoice()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $function$
+DECLARE
+  v_company_id uuid;
+  v_actor_id uuid;
+  v_previous_sub text := current_setting('request.jwt.claim.sub', true);
+BEGIN
+  IF NEW.status <> 'completed'
+     OR NEW.customer_id IS NULL
+     OR NEW.payment_method NOT IN ('credit', 'mixed') THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT b.company_id
+    INTO v_company_id
+  FROM public.branches b
+  WHERE b.id = NEW.branch_id
+    AND b.tenant_id = NEW.tenant_id;
+
+  IF v_company_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT ur.user_id
+    INTO v_actor_id
+  FROM public.user_roles ur
+  WHERE ur.tenant_id = NEW.tenant_id
+    AND ur.role IN ('owner', 'manager')
+    AND (
+      ur.company_id = v_company_id
+      OR (ur.role = 'owner' AND ur.company_id IS NULL)
+    )
+  ORDER BY CASE WHEN ur.company_id = v_company_id THEN 0 ELSE 1 END,
+           ur.created_at
+  LIMIT 1;
+
+  IF v_actor_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  -- The existing notification company-scope trigger requires an owner/manager actor.
+  PERFORM set_config('request.jwt.claim.sub', v_actor_id::text, true);
+
+  INSERT INTO public.notifications (
+    tenant_id, company_id, audience_type, kind, urgency,
+    title, body, payload, action_path, action_label, created_by
+  )
+  VALUES
+  (
+    NEW.tenant_id, v_company_id, 'owner', 'customer_credit_invoice_issued', 'urgent',
+    'فاتورة عميل آجلة أو جزئية',
+    'تم إصدار الفاتورة رقم ' || NEW.invoice_no::text ||
+      ' للعميل مع وجود رصيد مستحق.',
+    jsonb_build_object(
+      'sale_id', NEW.id,
+      'invoice_no', NEW.invoice_no,
+      'customer_id', NEW.customer_id,
+      'branch_id', NEW.branch_id,
+      'total', NEW.total,
+      'payment_method', NEW.payment_method
+    ),
+    '/sales/' || NEW.id::text,
+    'عرض الفاتورة',
+    v_actor_id
+  ),
+  (
+    NEW.tenant_id, v_company_id, 'manager', 'customer_credit_invoice_issued', 'urgent',
+    'فاتورة عميل آجلة أو جزئية',
+    'تم إصدار الفاتورة رقم ' || NEW.invoice_no::text ||
+      ' للعميل مع وجود رصيد مستحق.',
+    jsonb_build_object(
+      'sale_id', NEW.id,
+      'invoice_no', NEW.invoice_no,
+      'customer_id', NEW.customer_id,
+      'branch_id', NEW.branch_id,
+      'total', NEW.total,
+      'payment_method', NEW.payment_method
+    ),
+    '/sales/' || NEW.id::text,
+    'عرض الفاتورة',
+    v_actor_id
+  );
+
+  PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+  RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+  PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+  RAISE WARNING 'Customer invoice notification was skipped for sale/payment event: %', SQLERRM;
+  RETURN NEW;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION private.notify_on_customer_credit_invoice()
+  FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS trg_notify_customer_credit_invoice ON public.sales;
+CREATE TRIGGER trg_notify_customer_credit_invoice
+AFTER INSERT ON public.sales
+FOR EACH ROW
+EXECUTE FUNCTION private.notify_on_customer_credit_invoice();
+
+
+CREATE OR REPLACE FUNCTION private.notify_on_customer_invoice_collection()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $function$
+DECLARE
+  v_sale record;
+  v_actor_id uuid;
+  v_paid numeric(14,2);
+  v_refunded numeric(14,2);
+  v_remaining numeric(14,2);
+  v_previous_sub text := current_setting('request.jwt.claim.sub', true);
+  v_kind text;
+  v_title text;
+  v_body text;
+BEGIN
+  SELECT s.id, s.tenant_id, s.branch_id, s.invoice_no, s.total,
+         b.company_id
+    INTO v_sale
+  FROM public.sales s
+  JOIN public.branches b
+    ON b.id = s.branch_id
+   AND b.tenant_id = s.tenant_id
+  WHERE s.id = NEW.sale_id
+    AND s.tenant_id = NEW.tenant_id
+    AND s.customer_id = NEW.customer_id
+    AND s.status = 'completed';
+
+  IF NOT FOUND OR v_sale.company_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT
+    COALESCE((SELECT sum(p.amount) FROM public.payments p
+              WHERE p.sale_id = v_sale.id AND p.tenant_id = v_sale.tenant_id), 0)
+    + COALESCE((SELECT sum(cp.amount) FROM public.customer_payments cp
+                WHERE cp.sale_id = v_sale.id AND cp.tenant_id = v_sale.tenant_id), 0)
+    INTO v_paid;
+
+  SELECT COALESCE(sum(r.total), 0)
+    INTO v_refunded
+  FROM public.sale_refunds r
+  WHERE r.sale_id = v_sale.id
+    AND r.tenant_id = v_sale.tenant_id;
+
+  v_remaining := greatest(round(v_sale.total - v_paid - v_refunded, 2), 0);
+
+  SELECT ur.user_id
+    INTO v_actor_id
+  FROM public.user_roles ur
+  WHERE ur.tenant_id = v_sale.tenant_id
+    AND ur.role IN ('owner', 'manager')
+    AND (
+      ur.company_id = v_sale.company_id
+      OR (ur.role = 'owner' AND ur.company_id IS NULL)
+    )
+  ORDER BY CASE WHEN ur.company_id = v_sale.company_id THEN 0 ELSE 1 END,
+           ur.created_at
+  LIMIT 1;
+
+  IF v_actor_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  IF v_remaining <= 0 THEN
+    v_kind := 'customer_invoice_balance_cleared';
+    v_title := 'تم إغلاق رصيد الفاتورة';
+    v_body := 'اكتمل تسوية رصيد الفاتورة رقم ' || v_sale.invoice_no::text || '.';
+  ELSE
+    v_kind := 'customer_invoice_payment_received';
+    v_title := 'تم استلام دفعة على فاتورة';
+    v_body := 'تم استلام دفعة بقيمة ' ||
+      trim(to_char(NEW.amount, 'FM999999999990D00')) ||
+      ' على الفاتورة رقم ' || v_sale.invoice_no::text ||
+      '، والمتبقي ' || trim(to_char(v_remaining, 'FM999999999990D00')) || '.';
+  END IF;
+
+  PERFORM set_config('request.jwt.claim.sub', v_actor_id::text, true);
+
+  INSERT INTO public.notifications (
+    tenant_id, company_id, audience_type, kind, urgency,
+    title, body, payload, action_path, action_label, created_by
+  )
+  VALUES
+  (
+    v_sale.tenant_id, v_sale.company_id, 'owner', v_kind, 'normal',
+    v_title, v_body,
+    jsonb_build_object(
+      'sale_id', v_sale.id,
+      'invoice_no', v_sale.invoice_no,
+      'customer_payment_id', NEW.id,
+      'branch_id', v_sale.branch_id,
+      'payment_amount', NEW.amount,
+      'remaining_balance', v_remaining
+    ),
+    '/sales/' || v_sale.id::text,
+    'عرض الفاتورة',
+    v_actor_id
+  ),
+  (
+    v_sale.tenant_id, v_sale.company_id, 'manager', v_kind, 'normal',
+    v_title, v_body,
+    jsonb_build_object(
+      'sale_id', v_sale.id,
+      'invoice_no', v_sale.invoice_no,
+      'customer_payment_id', NEW.id,
+      'branch_id', v_sale.branch_id,
+      'payment_amount', NEW.amount,
+      'remaining_balance', v_remaining
+    ),
+    '/sales/' || v_sale.id::text,
+    'عرض الفاتورة',
+    v_actor_id
+  );
+
+  PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+  RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+  PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+  RAISE WARNING 'Customer invoice notification was skipped for sale/payment event: %', SQLERRM;
+  RETURN NEW;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION private.notify_on_customer_invoice_collection()
+  FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS trg_notify_customer_invoice_collection ON public.customer_payments;
+CREATE TRIGGER trg_notify_customer_invoice_collection
+AFTER INSERT ON public.customer_payments
+FOR EACH ROW
+EXECUTE FUNCTION private.notify_on_customer_invoice_collection();
+
+COMMIT;
+
+-- END MIGRATION: 20261127040300_customer_invoice_event_notifications.sql
+
+-- =====================================================================
+-- SOURCE MIGRATION: 20261127040400_notification_scope_archive_and_missing_sources.sql
+-- =====================================================================
+
+-- Stage 10 hardening: enforce recipient visibility at the database boundary,
+-- add per-user archive state, and connect the remaining real event sources.
+-- No financial, stock, or production data is changed by this migration.
+BEGIN;
+
+-- Per-user archive state lives beside the existing read receipt. Existing rows
+-- remain valid and unarchived by default.
+ALTER TABLE public.notification_reads
+  ADD COLUMN IF NOT EXISTS archived_at timestamptz;
+
+CREATE INDEX IF NOT EXISTS notification_reads_user_archived_idx
+  ON public.notification_reads (user_id, archived_at, notification_id);
+
+-- One canonical visibility predicate is shared by notification reads and receipts.
+-- SECURITY DEFINER is required to inspect the parent notification without RLS
+-- recursion; auth.uid() is always taken from the caller, never from an argument.
+CREATE OR REPLACE FUNCTION private.can_read_notification(_notification_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $function$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.notifications n
+    WHERE n.id = _notification_id
+      AND auth.uid() IS NOT NULL
+      AND (
+        private.is_super_owner(auth.uid())
+        OR (
+          private.is_tenant_member(auth.uid(), n.tenant_id)
+          AND private.has_permission(auth.uid(), n.tenant_id, 'notifications.view')
+          AND (
+            n.company_id IS NULL
+            OR EXISTS (
+              SELECT 1 FROM public.user_roles ur
+              WHERE ur.user_id = auth.uid()
+                AND ur.tenant_id = n.tenant_id
+                AND ur.role = 'owner'
+                AND ur.company_id IS NULL
+            )
+            OR EXISTS (
+              SELECT 1 FROM public.user_roles ur
+              WHERE ur.user_id = auth.uid()
+                AND ur.tenant_id = n.tenant_id
+                AND ur.company_id = n.company_id
+            )
+          )
+          AND CASE n.audience_type
+            WHEN 'all' THEN true
+            WHEN 'owner' THEN EXISTS (
+              SELECT 1 FROM public.user_roles ur
+              WHERE ur.user_id = auth.uid()
+                AND ur.tenant_id = n.tenant_id
+                AND ur.role = 'owner'
+                AND (ur.company_id = n.company_id OR ur.company_id IS NULL)
+            )
+            WHEN 'manager' THEN EXISTS (
+              SELECT 1 FROM public.user_roles ur
+              WHERE ur.user_id = auth.uid()
+                AND ur.tenant_id = n.tenant_id
+                AND (ur.role = 'manager' OR (ur.role = 'owner' AND ur.company_id IS NULL))
+                AND (ur.company_id = n.company_id OR ur.company_id IS NULL)
+            )
+            WHEN 'user' THEN n.audience_id = auth.uid()
+            WHEN 'branch' THEN private.can_access_branch(auth.uid(), n.tenant_id, n.audience_id)
+            WHEN 'department' THEN EXISTS (
+              SELECT 1
+              FROM public.departments d
+              WHERE d.id = n.audience_id
+                AND d.tenant_id = n.tenant_id
+                AND (
+                  EXISTS (
+                    SELECT 1 FROM public.user_roles ur
+                    WHERE ur.user_id = auth.uid()
+                      AND ur.tenant_id = n.tenant_id
+                      AND ur.department_id = d.id
+                      AND (ur.company_id IS NULL OR ur.company_id = d.company_id)
+                  )
+                  OR EXISTS (
+                    SELECT 1 FROM public.user_roles ur
+                    WHERE ur.user_id = auth.uid()
+                      AND ur.tenant_id = n.tenant_id
+                      AND ur.role IN ('owner','manager')
+                      AND (ur.company_id = d.company_id OR (ur.role = 'owner' AND ur.company_id IS NULL))
+                  )
+                )
+            )
+            ELSE false
+          END
+          AND CASE n.kind
+            WHEN 'sale_recorded' THEN private.has_permission(auth.uid(), n.tenant_id, 'sales.view')
+            WHEN 'sale_status_changed' THEN private.has_permission(auth.uid(), n.tenant_id, 'sales.view')
+            WHEN 'kitchen_order_ready' THEN private.has_permission(auth.uid(), n.tenant_id, 'kitchen.view')
+            WHEN 'kitchen_order_delayed' THEN private.has_permission(auth.uid(), n.tenant_id, 'kitchen.view')
+            WHEN 'low_stock' THEN private.has_permission(auth.uid(), n.tenant_id, 'inventory.view')
+            WHEN 'customer_credit_invoice_issued' THEN private.has_permission(auth.uid(), n.tenant_id, 'sales.view')
+            WHEN 'customer_invoice_payment_received' THEN private.has_permission(auth.uid(), n.tenant_id, 'sales.view')
+            WHEN 'customer_invoice_balance_cleared' THEN private.has_permission(auth.uid(), n.tenant_id, 'sales.view')
+            WHEN 'hr_leave_requested' THEN private.has_permission(auth.uid(), n.tenant_id, 'hr.leaves.view')
+            WHEN 'campaign_activated' THEN private.has_permission(auth.uid(), n.tenant_id, 'ads.manage')
+            WHEN 'promotion_activated' THEN private.has_permission(auth.uid(), n.tenant_id, 'promotions.manage')
+            WHEN 'admin_account_status_changed' THEN private.has_permission(auth.uid(), n.tenant_id, 'users.view')
+            ELSE true
+          END
+        )
+      )
+  );
+$function$;
+
+REVOKE ALL ON FUNCTION private.can_read_notification(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION private.can_read_notification(uuid) TO authenticated, service_role;
+
+-- Administrative writes are also consolidated into a single company-scoped
+-- predicate. PostgreSQL combines permissive policies with OR, so retaining
+-- legacy admin/permission policies here would re-open cross-company writes.
+CREATE OR REPLACE FUNCTION private.can_manage_notification_scope(
+  _tenant_id uuid,
+  _company_id uuid
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $function$
+  SELECT auth.uid() IS NOT NULL
+    AND (
+      private.is_super_owner(auth.uid())
+      OR EXISTS (
+        SELECT 1 FROM public.user_roles ur
+        WHERE ur.user_id = auth.uid()
+          AND ur.tenant_id = _tenant_id
+          AND ur.role = 'owner'
+          AND ur.company_id IS NULL
+      )
+      OR (
+        _company_id IS NOT NULL
+        AND private.has_permission(auth.uid(), _tenant_id, 'notifications.manage')
+        AND EXISTS (
+          SELECT 1 FROM public.user_roles ur
+          WHERE ur.user_id = auth.uid()
+            AND ur.tenant_id = _tenant_id
+            AND ur.company_id = _company_id
+            AND ur.role IN ('owner','manager')
+        )
+      )
+    );
+$function$;
+
+REVOKE ALL ON FUNCTION private.can_manage_notification_scope(uuid, uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION private.can_manage_notification_scope(uuid, uuid) TO authenticated, service_role;
+
+DROP POLICY IF EXISTS company_scope_notifications_insert ON public.notifications;
+DROP POLICY IF EXISTS company_scope_notifications_update ON public.notifications;
+DROP POLICY IF EXISTS company_scope_notifications_delete ON public.notifications;
+DROP POLICY IF EXISTS "notifications_admin_write" ON public.notifications;
+DROP POLICY IF EXISTS notifications_admin_insert ON public.notifications;
+DROP POLICY IF EXISTS notifications_admin_update ON public.notifications;
+DROP POLICY IF EXISTS notifications_admin_delete ON public.notifications;
+DROP POLICY IF EXISTS permission_gate_notifications_insert ON public.notifications;
+DROP POLICY IF EXISTS permission_gate_notifications_update ON public.notifications;
+DROP POLICY IF EXISTS permission_gate_notifications_delete ON public.notifications;
+
+CREATE POLICY notifications_insert_scoped
+  ON public.notifications FOR INSERT TO authenticated
+  WITH CHECK (private.can_manage_notification_scope(tenant_id, company_id));
+
+CREATE POLICY notifications_update_scoped
+  ON public.notifications FOR UPDATE TO authenticated
+  USING (private.can_manage_notification_scope(tenant_id, company_id))
+  WITH CHECK (private.can_manage_notification_scope(tenant_id, company_id));
+
+CREATE POLICY notifications_delete_scoped
+  ON public.notifications FOR DELETE TO authenticated
+  USING (private.can_manage_notification_scope(tenant_id, company_id));
+
+
+-- Remove permissive SELECT policies whose OR-combination previously allowed
+-- same-company users to bypass audience and notification permission checks.
+DROP POLICY IF EXISTS company_scope_notifications_select ON public.notifications;
+DROP POLICY IF EXISTS notifications_read ON public.notifications;
+DROP POLICY IF EXISTS permission_gate_notifications_select ON public.notifications;
+CREATE POLICY notifications_select_scoped
+  ON public.notifications FOR SELECT TO authenticated
+  USING (private.can_read_notification(id));
+
+-- Receipt ownership alone is not enough: a user must be an authorized recipient
+-- of the parent notification before reading, creating, updating, or deleting a receipt.
+DROP POLICY IF EXISTS "Users read own notification receipts" ON public.notification_reads;
+DROP POLICY IF EXISTS permission_gate_notification_reads_select ON public.notification_reads;
+DROP POLICY IF EXISTS "Users create own notification receipts" ON public.notification_reads;
+DROP POLICY IF EXISTS permission_gate_notification_reads_insert ON public.notification_reads;
+DROP POLICY IF EXISTS "Users update own notification receipts" ON public.notification_reads;
+DROP POLICY IF EXISTS permission_gate_notification_reads_update ON public.notification_reads;
+DROP POLICY IF EXISTS "users delete own notification receipts" ON public.notification_reads;
+DROP POLICY IF EXISTS permission_gate_notification_reads_delete ON public.notification_reads;
+
+CREATE POLICY notification_reads_select_scoped
+  ON public.notification_reads FOR SELECT TO authenticated
+  USING (user_id = auth.uid() AND private.can_read_notification(notification_id));
+
+CREATE POLICY notification_reads_insert_scoped
+  ON public.notification_reads FOR INSERT TO authenticated
+  WITH CHECK (user_id = auth.uid() AND private.can_read_notification(notification_id));
+
+CREATE POLICY notification_reads_update_scoped
+  ON public.notification_reads FOR UPDATE TO authenticated
+  USING (user_id = auth.uid() AND private.can_read_notification(notification_id))
+  WITH CHECK (user_id = auth.uid() AND private.can_read_notification(notification_id));
+
+CREATE POLICY notification_reads_delete_scoped
+  ON public.notification_reads FOR DELETE TO authenticated
+  USING (user_id = auth.uid() AND private.can_read_notification(notification_id));
+
+-- Event-level idempotency keys prevent duplicate notifications under concurrent
+-- trigger execution/retries. The source row remains the authoritative event.
+CREATE UNIQUE INDEX IF NOT EXISTS notifications_sale_event_dedupe_idx
+  ON public.notifications (tenant_id, kind, (payload ->> 'sale_id'), (payload ->> 'status'))
+  WHERE kind IN ('sale_recorded','sale_status_changed');
+
+CREATE UNIQUE INDEX IF NOT EXISTS notifications_campaign_event_dedupe_idx
+  ON public.notifications (tenant_id, kind, (payload ->> 'campaign_id'))
+  WHERE kind = 'campaign_activated';
+
+CREATE UNIQUE INDEX IF NOT EXISTS notifications_offer_event_dedupe_idx
+  ON public.notifications (tenant_id, kind, (payload ->> 'offer_id'))
+  WHERE kind = 'promotion_activated';
+
+CREATE UNIQUE INDEX IF NOT EXISTS notifications_profile_event_dedupe_idx
+  ON public.notifications (tenant_id, kind, (payload ->> 'profile_id'), (payload ->> 'status'), (payload ->> 'event_at'))
+  WHERE kind = 'admin_account_status_changed';
+
+-- Completed sales and terminal sale-state transitions create non-financial
+-- operational alerts. No totals, payment details, customer PII, or ledger rows
+-- are copied into the notification payload.
+CREATE OR REPLACE FUNCTION private.notify_sale_operational_events()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $function$
+DECLARE
+  v_company_id uuid;
+  v_actor_id uuid;
+  v_kind text;
+  v_audience text;
+  v_title text;
+  v_body text;
+  v_previous_sub text := current_setting('request.jwt.claim.sub', true);
+BEGIN
+  IF TG_OP = 'INSERT' AND NEW.status::text = 'completed' THEN
+    v_kind := 'sale_recorded';
+    v_audience := 'branch';
+    v_title := 'تم تسجيل عملية بيع جديدة';
+    v_body := 'تم تسجيل الطلب رقم ' || NEW.invoice_no::text || ' في الفرع.';
+  ELSIF TG_OP = 'UPDATE'
+    AND OLD.status IS DISTINCT FROM NEW.status
+    AND NEW.status::text IN ('refunded','void') THEN
+    v_kind := 'sale_status_changed';
+    v_audience := 'manager';
+    v_title := CASE WHEN NEW.status::text = 'refunded' THEN 'تم تسجيل مرتجع بيع' ELSE 'تم إلغاء عملية بيع' END;
+    v_body := 'تغيرت حالة الطلب رقم ' || NEW.invoice_no::text || '.';
+  ELSE
+    RETURN NEW;
+  END IF;
+
+  SELECT b.company_id INTO v_company_id
+  FROM public.branches b
+  WHERE b.id = NEW.branch_id AND b.tenant_id = NEW.tenant_id;
+  IF v_company_id IS NULL THEN RETURN NEW; END IF;
+
+  SELECT ur.user_id INTO v_actor_id
+  FROM public.user_roles ur
+  WHERE ur.tenant_id = NEW.tenant_id
+    AND ur.role IN ('owner','manager')
+    AND (ur.company_id = v_company_id OR (ur.role = 'owner' AND ur.company_id IS NULL))
+  ORDER BY CASE WHEN ur.role = 'owner' THEN 0 ELSE 1 END, ur.created_at
+  LIMIT 1;
+  IF v_actor_id IS NULL THEN RETURN NEW; END IF;
+
+  BEGIN
+    PERFORM set_config('request.jwt.claim.sub', v_actor_id::text, true);
+    INSERT INTO public.notifications (
+      tenant_id, company_id, audience_type, audience_id, kind, urgency,
+      title, body, payload, action_path, action_label, created_by
+    )
+    VALUES (
+      NEW.tenant_id, v_company_id, v_audience,
+      CASE WHEN v_audience = 'branch' THEN NEW.branch_id ELSE NULL END,
+      v_kind, 'normal', v_title, v_body,
+      jsonb_build_object('sale_id', NEW.id, 'invoice_no', NEW.invoice_no,
+                         'branch_id', NEW.branch_id, 'status', NEW.status::text),
+      '/sales/' || NEW.id::text, 'عرض العملية', v_actor_id
+    )
+    ON CONFLICT DO NOTHING;
+    PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+    RAISE WARNING 'Sale notification skipped for sale %: %', NEW.id, SQLERRM;
+  END;
+  RETURN NEW;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION private.notify_sale_operational_events() FROM PUBLIC, anon, authenticated;
+DROP TRIGGER IF EXISTS trg_notify_sale_operational_events ON public.sales;
+CREATE TRIGGER trg_notify_sale_operational_events
+AFTER INSERT OR UPDATE OF status ON public.sales
+FOR EACH ROW EXECUTE FUNCTION private.notify_sale_operational_events();
+
+-- Notify company managers only when a campaign actually becomes active.
+CREATE OR REPLACE FUNCTION private.notify_campaign_activation()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $function$
+DECLARE
+  v_actor_id uuid;
+  v_previous_sub text := current_setting('request.jwt.claim.sub', true);
+BEGIN
+  IF NEW.status <> 'active' OR (TG_OP = 'UPDATE' AND OLD.status IS NOT DISTINCT FROM NEW.status) THEN
+    RETURN NEW;
+  END IF;
+  IF NEW.company_id IS NULL THEN RETURN NEW; END IF;
+
+  SELECT ur.user_id INTO v_actor_id
+  FROM public.user_roles ur
+  WHERE ur.tenant_id = NEW.tenant_id
+    AND ur.role IN ('owner','manager')
+    AND (ur.company_id = NEW.company_id OR (ur.role = 'owner' AND ur.company_id IS NULL))
+  ORDER BY CASE WHEN ur.role = 'owner' THEN 0 ELSE 1 END, ur.created_at
+  LIMIT 1;
+  IF v_actor_id IS NULL THEN RETURN NEW; END IF;
+
+  BEGIN
+    PERFORM set_config('request.jwt.claim.sub', v_actor_id::text, true);
+    INSERT INTO public.notifications (
+      tenant_id, company_id, audience_type, kind, urgency,
+      title, body, payload, action_path, action_label, created_by
+    )
+    VALUES (
+      NEW.tenant_id, NEW.company_id, 'manager', 'campaign_activated', 'normal',
+      'تم تفعيل حملة تسويقية',
+      'أصبحت الحملة «' || NEW.title || '» نشطة.',
+      jsonb_build_object('campaign_id', NEW.id, 'starts_at', NEW.starts_at, 'ends_at', NEW.ends_at),
+      '/ads', 'إدارة الحملات', v_actor_id
+    )
+    ON CONFLICT DO NOTHING;
+    PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+    RAISE WARNING 'Campaign notification skipped for campaign %: %', NEW.id, SQLERRM;
+  END;
+  RETURN NEW;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION private.notify_campaign_activation() FROM PUBLIC, anon, authenticated;
+DROP TRIGGER IF EXISTS trg_notify_campaign_activation ON public.marketing_campaigns;
+CREATE TRIGGER trg_notify_campaign_activation
+AFTER INSERT OR UPDATE OF status ON public.marketing_campaigns
+FOR EACH ROW EXECUTE FUNCTION private.notify_campaign_activation();
+
+-- Promotional offers use the real active transition and their existing company/
+-- branch scope. Branch-targeted offers are only visible to members of that branch.
+CREATE OR REPLACE FUNCTION private.notify_promotion_activation()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $function$
+DECLARE
+  v_company_id uuid;
+  v_actor_id uuid;
+  v_audience text;
+  v_previous_sub text := current_setting('request.jwt.claim.sub', true);
+BEGIN
+  IF NEW.status <> 'active' OR (TG_OP = 'UPDATE' AND OLD.status IS NOT DISTINCT FROM NEW.status) THEN
+    RETURN NEW;
+  END IF;
+
+  v_company_id := NEW.company_id;
+  IF v_company_id IS NULL AND NEW.branch_id IS NOT NULL THEN
+    SELECT b.company_id INTO v_company_id
+    FROM public.branches b
+    WHERE b.id = NEW.branch_id AND b.tenant_id = NEW.tenant_id;
+  END IF;
+  IF v_company_id IS NULL THEN RETURN NEW; END IF;
+
+  SELECT ur.user_id INTO v_actor_id
+  FROM public.user_roles ur
+  WHERE ur.tenant_id = NEW.tenant_id AND ur.company_id = v_company_id
+    AND ur.role IN ('owner','manager')
+  ORDER BY CASE WHEN ur.role = 'owner' THEN 0 ELSE 1 END, ur.created_at
+  LIMIT 1;
+  IF v_actor_id IS NULL THEN RETURN NEW; END IF;
+
+  v_audience := CASE WHEN NEW.branch_id IS NULL THEN 'manager' ELSE 'branch' END;
+  BEGIN
+    PERFORM set_config('request.jwt.claim.sub', v_actor_id::text, true);
+    INSERT INTO public.notifications (
+      tenant_id, company_id, audience_type, audience_id, kind, urgency,
+      title, body, payload, action_path, action_label, created_by
+    )
+    VALUES (
+      NEW.tenant_id, v_company_id, v_audience, NEW.branch_id,
+      'promotion_activated', 'normal',
+      'تم تفعيل عرض ترويجي',
+      'أصبح العرض «' || NEW.name || '» نشطاً.',
+      jsonb_build_object('offer_id', NEW.id, 'branch_id', NEW.branch_id),
+      '/promotions', 'إدارة العروض', v_actor_id
+    )
+    ON CONFLICT DO NOTHING;
+    PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+    RAISE WARNING 'Promotion notification skipped for offer %: %', NEW.id, SQLERRM;
+  END;
+  RETURN NEW;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION private.notify_promotion_activation() FROM PUBLIC, anon, authenticated;
+DROP TRIGGER IF EXISTS trg_notify_promotion_activation ON public.promotional_offers;
+CREATE TRIGGER trg_notify_promotion_activation
+AFTER INSERT OR UPDATE OF status ON public.promotional_offers
+FOR EACH ROW EXECUTE FUNCTION private.notify_promotion_activation();
+
+-- Account lifecycle alerts are administrative metadata only; never include email,
+-- phone, national ID, or device/IP details in notification content or payload.
+CREATE OR REPLACE FUNCTION private.notify_admin_account_status_events()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $function$
+DECLARE
+  v_actor_id uuid;
+  v_audience text;
+  v_previous_sub text := current_setting('request.jwt.claim.sub', true);
+BEGIN
+  IF NEW.tenant_id IS NULL OR NEW.company_id IS NULL THEN RETURN NEW; END IF;
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.status::text <> 'pending_approval' THEN RETURN NEW; END IF;
+  ELSIF OLD.status IS NOT DISTINCT FROM NEW.status
+    AND OLD.company_id IS NOT DISTINCT FROM NEW.company_id
+    AND OLD.tenant_id IS NOT DISTINCT FROM NEW.tenant_id THEN
+    RETURN NEW;
+  ELSIF NEW.status::text NOT IN ('pending_approval','suspended','frozen','archived') THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT ur.user_id INTO v_actor_id
+  FROM public.user_roles ur
+  WHERE ur.tenant_id = NEW.tenant_id
+    AND ur.role IN ('owner','manager')
+    AND (ur.company_id = NEW.company_id OR (ur.role = 'owner' AND ur.company_id IS NULL))
+  ORDER BY CASE WHEN ur.role = 'owner' THEN 0 ELSE 1 END, ur.created_at
+  LIMIT 1;
+  IF v_actor_id IS NULL THEN RETURN NEW; END IF;
+
+  v_audience := 'manager';
+  BEGIN
+    PERFORM set_config('request.jwt.claim.sub', v_actor_id::text, true);
+    INSERT INTO public.notifications (
+      tenant_id, company_id, audience_type, kind, urgency,
+      title, body, payload, action_path, action_label, created_by
+    )
+    VALUES (
+      NEW.tenant_id, NEW.company_id, v_audience, 'admin_account_status_changed', 'urgent',
+      'تغيرت حالة حساب مستخدم',
+      'تغيرت حالة حساب أحد المستخدمين إلى ' || NEW.status::text || '.',
+      jsonb_build_object('profile_id', NEW.id, 'status', NEW.status::text,
+                         'event_at', NEW.updated_at),
+      '/users', 'إدارة المستخدمين', v_actor_id
+    )
+    ON CONFLICT DO NOTHING;
+    PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+    RAISE WARNING 'Account status notification skipped for profile %: %', NEW.id, SQLERRM;
+  END;
+  RETURN NEW;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION private.notify_admin_account_status_events() FROM PUBLIC, anon, authenticated;
+DROP TRIGGER IF EXISTS trg_notify_admin_account_status_events ON public.profiles;
+CREATE TRIGGER trg_notify_admin_account_status_events
+AFTER INSERT OR UPDATE OF status, company_id, tenant_id ON public.profiles
+FOR EACH ROW EXECUTE FUNCTION private.notify_admin_account_status_events();
+
+
+-- Serialize delayed-order scans per order and re-check after acquiring the
+-- transaction lock. This prevents duplicate alerts from overlapping cron runs
+-- without adding a queue/table or changing the kitchen workflow.
+CREATE OR REPLACE FUNCTION private.emit_overdue_kitchen_order_notifications()
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $function$
+DECLARE
+  v_order record;
+  v_actor_id uuid;
+  v_previous_sub text := current_setting('request.jwt.claim.sub', true);
+  v_created integer := 0;
+BEGIN
+  FOR v_order IN
+    SELECT ko.id, ko.tenant_id, ko.branch_id, ko.sale_id, ko.status,
+           ko.created_at, b.company_id, s.invoice_no
+    FROM public.kitchen_orders ko
+    JOIN public.branches b
+      ON b.id = ko.branch_id
+     AND b.tenant_id = ko.tenant_id
+    LEFT JOIN public.sales s
+      ON s.id = ko.sale_id
+     AND s.tenant_id = ko.tenant_id
+    WHERE ko.created_at <= now() - interval '30 minutes'
+      AND b.company_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.kitchen_order_events e
+        WHERE e.kitchen_order_id = ko.id
+          AND e.new_status IN ('ready', 'cancelled')
+          AND e.created_at <= ko.created_at + interval '30 minutes'
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.notifications n
+        WHERE n.tenant_id = ko.tenant_id
+          AND n.kind = 'kitchen_order_delayed'
+          AND n.payload ->> 'kitchen_order_id' = ko.id::text
+      )
+    ORDER BY ko.created_at
+    LIMIT 500
+    FOR UPDATE OF ko SKIP LOCKED
+  LOOP
+    -- Transaction-scoped lock also protects against concurrent scheduler
+    -- invocations that selected the same candidate before either insert.
+    PERFORM pg_advisory_xact_lock(hashtextextended(v_order.id::text, 0));
+
+    IF EXISTS (
+      SELECT 1 FROM public.notifications n
+      WHERE n.tenant_id = v_order.tenant_id
+        AND n.kind = 'kitchen_order_delayed'
+        AND n.payload ->> 'kitchen_order_id' = v_order.id::text
+    ) THEN
+      CONTINUE;
+    END IF;
+
+    SELECT ur.user_id INTO v_actor_id
+    FROM public.user_roles ur
+    WHERE ur.tenant_id = v_order.tenant_id
+      AND ur.role IN ('owner','manager')
+      AND (ur.company_id = v_order.company_id OR (ur.role = 'owner' AND ur.company_id IS NULL))
+    ORDER BY CASE WHEN ur.company_id = v_order.company_id THEN 0 ELSE 1 END,
+             ur.created_at
+    LIMIT 1;
+
+    IF v_actor_id IS NULL THEN
+      CONTINUE;
+    END IF;
+
+    BEGIN
+      PERFORM set_config('request.jwt.claim.sub', v_actor_id::text, true);
+      INSERT INTO public.notifications (
+        tenant_id, company_id, audience_type, audience_id,
+        kind, urgency, title, body, payload, action_path, action_label, created_by
+      )
+      VALUES (
+        v_order.tenant_id, v_order.company_id, 'branch', v_order.branch_id,
+        'kitchen_order_delayed', 'urgent',
+        'تنبيه تأخر تجهيز الطلب',
+        'الطلب رقم ' || COALESCE(v_order.invoice_no::text, '—') ||
+          ' لم يصبح جاهزاً خلال 30 دقيقة من إنشائه.',
+        jsonb_build_object(
+          'kitchen_order_id', v_order.id,
+          'sale_id', v_order.sale_id,
+          'branch_id', v_order.branch_id,
+          'status', v_order.status,
+          'created_at', v_order.created_at,
+          'delay_minutes', 30
+        ),
+        '/kitchen', 'فتح شاشة المطبخ', v_actor_id
+      );
+      IF FOUND THEN
+        v_created := v_created + 1;
+      END IF;
+      PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+    EXCEPTION WHEN OTHERS THEN
+      PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+      RAISE WARNING 'Delayed kitchen notification skipped for order %: %', v_order.id, SQLERRM;
+      -- Leave the order eligible; the next scheduled scan retries it.
+    END;
+  END LOOP;
+
+  PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+  RETURN v_created;
+EXCEPTION WHEN OTHERS THEN
+  PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+  RAISE;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION private.emit_overdue_kitchen_order_notifications()
+  FROM PUBLIC, anon, authenticated;
+
+COMMIT;
+
+-- END MIGRATION: 20261127040400_notification_scope_archive_and_missing_sources.sql
+
+-- =====================================================================
+-- SOURCE MIGRATION: 20261127040500_notification_kitchen_ready_actor_safety.sql
+-- =====================================================================
+
+-- Reconcile the pre-existing kitchen-ready notification trigger with the
+-- company-scoped notification actor guard. Delivery is best-effort and never
+-- rolls back a successful kitchen status transition.
+BEGIN;
+
+CREATE OR REPLACE FUNCTION private.notify_branch_when_kitchen_ready()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $function$
+DECLARE
+  v_company_id uuid;
+  v_invoice_no integer;
+  v_actor_id uuid;
+  v_previous_sub text := current_setting('request.jwt.claim.sub', true);
+BEGIN
+  IF NEW.status = 'ready' AND OLD.status IS DISTINCT FROM NEW.status THEN
+    SELECT company_id INTO v_company_id
+    FROM public.branches
+    WHERE id = NEW.branch_id
+      AND tenant_id = NEW.tenant_id;
+
+    IF v_company_id IS NULL THEN
+      RETURN NEW;
+    END IF;
+
+    SELECT ur.user_id
+      INTO v_actor_id
+    FROM public.user_roles ur
+    WHERE ur.tenant_id = NEW.tenant_id
+      AND ur.role IN ('owner', 'manager')
+      AND (
+        ur.company_id = v_company_id
+        OR (ur.role = 'owner' AND ur.company_id IS NULL)
+      )
+    ORDER BY CASE WHEN ur.company_id = v_company_id THEN 0 ELSE 1 END,
+             ur.created_at
+    LIMIT 1;
+
+    IF v_actor_id IS NULL THEN
+      RETURN NEW;
+    END IF;
+
+    SELECT invoice_no INTO v_invoice_no
+    FROM public.sales
+    WHERE id = NEW.sale_id
+      AND tenant_id = NEW.tenant_id;
+
+    BEGIN
+      PERFORM set_config('request.jwt.claim.sub', v_actor_id::text, true);
+
+      INSERT INTO public.notifications (
+        tenant_id, company_id, audience_type, audience_id, kind, urgency,
+        title, body, payload, action_path, action_label, created_by
+      )
+      VALUES (
+        NEW.tenant_id, v_company_id, 'branch', NEW.branch_id,
+        'kitchen_order_ready', 'normal',
+        'الطلب جاهز للاستلام',
+        'الطلب رقم ' || COALESCE(v_invoice_no::text, '—') || ' أصبح جاهزاً.',
+        jsonb_build_object(
+          'sale_id', NEW.sale_id,
+          'kitchen_order_id', NEW.id,
+          'invoice_no', v_invoice_no
+        ),
+        '/kitchen', 'فتح شاشة المطبخ', v_actor_id
+      );
+
+      PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+    EXCEPTION WHEN OTHERS THEN
+      PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_sub, ''), true);
+      RAISE WARNING 'Kitchen-ready notification was skipped for order %: %', NEW.id, SQLERRM;
+    END;
+  END IF;
+
+  RETURN NEW;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION private.notify_branch_when_kitchen_ready()
+  FROM PUBLIC, anon, authenticated;
+
+COMMIT;
+
+-- END MIGRATION: 20261127040500_notification_kitchen_ready_actor_safety.sql
