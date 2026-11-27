@@ -88,6 +88,10 @@ function Dashboard() {
       setHeroBackgroundColor(savedColor);
       setHeroBackgroundDraft(savedColor);
     } catch (error) {
+      setHeroImageUrl(DEFAULT_DASHBOARD_HERO_IMAGE_URL);
+      setHeroImageDraft(DEFAULT_DASHBOARD_HERO_IMAGE_URL);
+      setHeroBackgroundColor("#102f5c");
+      setHeroBackgroundDraft("#102f5c");
       console.warn("Dashboard hero preferences could not be loaded", error);
     }
   }, [heroCustomizationKey]);
