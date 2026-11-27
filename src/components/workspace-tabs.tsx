@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { toast } from "sonner";
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { useAuthSession } from "@/hooks/use-auth-session";
 import { useBlocker, useNavigate, useRouterState } from "@tanstack/react-router";
@@ -138,6 +140,7 @@ export function WorkspaceTabs() {
   const navigate = useNavigate();
   const { tenantId, membership, permissions, permissionsLoading, permissionsError, isSuperOwner } = useActiveTenant();
   const { user } = useAuthSession();
+  const { confirm, dialog: confirmationDialog } = useConfirmDialog();
   const sessionScope = createWorkspaceTabScope(user?.id, tenantId, membership?.company_id, membership?.branch_id);
   const storageKey = sessionScope ? `${STORAGE_KEY}:${sessionScope}` : null;
   const [tabState, setTabState] = useState<{ scope: string | null; tabs: WorkspaceTab[] }>({
@@ -210,12 +213,19 @@ export function WorkspaceTabs() {
 
   const currentDirty = isPathDirty(dirtyPaths, activePath) || isPathDirty(dirtyPaths, pathname);
   useBlocker({
-    shouldBlockFn: () => {
+    shouldBlockFn: async () => {
       if (bypassNextBlocker.current) {
         bypassNextBlocker.current = false;
         return false;
       }
-      return currentDirty && !window.confirm("توجد تغييرات غير محفوظة في هذه الصفحة. هل تريد مغادرتها دون حفظ؟");
+      if (!currentDirty) return false;
+      const confirmed = await confirm({
+        title: "تغييرات غير محفوظة",
+        description: "توجد تغييرات غير محفوظة في هذه الصفحة. هل تريد مغادرتها دون حفظ؟",
+        confirmLabel: "مغادرة الصفحة",
+        destructive: true,
+      });
+      return !confirmed;
     },
     enableBeforeUnload: currentDirty,
   });
@@ -275,11 +285,19 @@ export function WorkspaceTabs() {
     });
   }
 
-  function closeTab(path: string) {
+  async function closeTab(path: string) {
     const target = tabs.find((tab) => tab.path === path);
     if (!target || target.pinned) return;
     const dirty = isPathDirty(dirtyPaths, path);
-    if (dirty && !window.confirm("توجد تغييرات غير محفوظة في هذا التبويب. هل تريد إغلاقه وفقدان هذه التغييرات؟")) return;
+    if (dirty) {
+      const confirmed = await confirm({
+        title: "إغلاق تبويب مع تغييرات غير محفوظة؟",
+        description: "سيؤدي الإغلاق إلى فقدان التغييرات غير المحفوظة في هذا التبويب.",
+        confirmLabel: "إغلاق التبويب",
+        destructive: true,
+      });
+      if (!confirmed) return;
+    }
     const next = closeWorkspaceTab(tabs.map(tab => ({
       ...tab, dirty: isPathDirty(dirtyPaths, tab.path),
     })), path, { allowDirty: true });
@@ -293,10 +311,18 @@ export function WorkspaceTabs() {
     }
   }
 
-  function closeOtherTabs() {
+  async function closeOtherTabs() {
     const removableDirty = tabs.filter(tab => tab.path !== activePath && !tab.pinned &&
       isPathDirty(dirtyPaths, tab.path));
-    if (removableDirty.length && !window.confirm("توجد تغييرات غير محفوظة في تبويبات أخرى. هل تريد إغلاق هذه التبويبات وفقدان تغييراتها؟")) return;
+    if (removableDirty.length) {
+      const confirmed = await confirm({
+        title: "إغلاق التبويبات الأخرى؟",
+        description: "توجد تغييرات غير محفوظة في تبويبات أخرى. سيؤدي الإغلاق إلى فقدان هذه التغييرات.",
+        confirmLabel: "إغلاق التبويبات",
+        destructive: true,
+      });
+      if (!confirmed) return;
+    }
     const next = closeOtherWorkspaceTabs(tabs.map(tab => ({
       ...tab, dirty: isPathDirty(dirtyPaths, tab.path),
     })), activePath, { allowDirty: true });
@@ -309,7 +335,7 @@ export function WorkspaceTabs() {
     const target = tabs.find((tab) => tab.path === path);
     if (!target || path === "/dashboard") return;
     if (!target.pinned && tabs.filter((tab) => tab.pinned).length >= MAX_PINNED_TABS) {
-      window.alert("يمكن تثبيت ستة تبويبات كحد أقصى حتى تبقى مساحة كافية لصفحات العمل.");
+      toast.info("يمكن تثبيت ستة تبويبات كحد أقصى حتى تبقى مساحة كافية لصفحات العمل.");
       return;
     }
     persist(toggleWorkspaceTabPin(tabs, path));
@@ -332,6 +358,7 @@ export function WorkspaceTabs() {
   }
 
   return (
+    <>
     <div className="flex min-w-0 items-center gap-2 border-b border-[#dce5f3] bg-[#f7faff]/95 px-2 py-2 sm:px-3" dir="rtl">
       <nav
         aria-label="تبويبات الصفحات المفتوحة"
@@ -386,5 +413,7 @@ export function WorkspaceTabs() {
         </button>
       )}
     </div>
+    {confirmationDialog}
+    </>
   );
 }
