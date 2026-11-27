@@ -267,7 +267,7 @@ test("dashboard fails closed when membership scope is incomplete and isolates ca
   assert.match(dashboard, /scopedBranchIds = \[\]/);
   assert.match(dashboard, /queryKey: \["dashboard-stats", tenantId, user\?\.id, membership\?\.company_id, membership\?\.branch_id, role, isSuperOwner/);
   for (const permission of ["reports.view", "sales.view", "expenses.view", "inventory.view", "cash.view", "customers.view"]) {
-    assert.ok(dashboard.includes(\`hasPermission("\${permission}")\`), \`missing KPI permission cache scope: \${permission}\`);
+    assert.ok(dashboard.includes('hasPermission("' + permission + '")'), "missing KPI permission cache scope: " + permission);
   }
 });
 
