@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const migration = readFileSync(new URL("../supabase/migrations/20261127030400_notification_scope_archive_and_missing_sources.sql", import.meta.url), "utf8");
+const migration = readFileSync(new URL("../supabase/migrations/20261127040400_notification_scope_archive_and_missing_sources.sql", import.meta.url), "utf8");
 const page = readFileSync(new URL("../src/routes/_authenticated/notifications.tsx", import.meta.url), "utf8");
 const topbar = readFileSync(new URL("../src/routes/_authenticated/route.tsx", import.meta.url), "utf8");
 const sync = readFileSync(new URL("../src/hooks/use-notification-sync.ts", import.meta.url), "utf8");
@@ -16,7 +16,7 @@ test("database visibility checks tenant, company, audience, permission and sourc
   assert.match(migration, /private\.can_manage_notification_scope/);
   assert.match(migration, /notifications_insert_scoped/);
   assert.match(migration, /DROP POLICY IF EXISTS "notifications_admin_write" ON public\.notifications/);
-  assert.equal(snapshot.split("SOURCE MIGRATION: 20261127030400_notification_scope_archive_and_missing_sources.sql").length - 1, 1);
+  assert.equal(snapshot.split("SOURCE MIGRATION: 20261127040400_notification_scope_archive_and_missing_sources.sql").length - 1, 1);
   assert.match(migration, /WHEN 'owner' THEN EXISTS/);
   assert.match(migration, /WHEN 'manager' THEN EXISTS/);
   assert.match(migration, /WHEN 'customer_credit_invoice_issued' THEN private\.has_permission/);
