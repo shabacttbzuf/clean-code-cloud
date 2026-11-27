@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Plus, Edit, Trash2, Tags, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { safeHttpUrlSchema } from "@/lib/safe-url";
 import { PageHeader } from "@/components/page-header";
 import { ImageUploader } from "@/components/image-uploader";
 
@@ -35,7 +36,7 @@ const schema = z.object({
   name: z.string().trim().min(2, "الاسم قصير").max(50),
   icon: z.string().trim().max(20).optional().or(z.literal("")),
   sort_order: z.coerce.number().int().min(0).max(999),
-  image_url: z.string().url().nullable().optional(),
+  image_url: safeHttpUrlSchema.nullable().optional(),
   description: z.string().trim().max(300).optional().or(z.literal("")),
   is_active: z.boolean(),
 });
