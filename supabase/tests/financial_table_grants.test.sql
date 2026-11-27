@@ -2,7 +2,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT plan(47);
+SELECT plan(49);
 
 SELECT ok(NOT has_table_privilege('anon', 'public.expenses', 'SELECT'), 'anon cannot select expenses');
 SELECT ok(NOT has_table_privilege('anon', 'public.expenses', 'INSERT'), 'anon cannot insert expenses');
@@ -51,6 +51,36 @@ SELECT ok(NOT has_table_privilege('authenticated', 'public.payroll_items', 'DELE
 SELECT ok(NOT has_table_privilege('authenticated', 'public.payroll_items', 'TRUNCATE'), 'authenticated cannot truncate payroll items');
 SELECT ok(NOT has_table_privilege('authenticated', 'public.payroll_items', 'REFERENCES'), 'authenticated cannot reference payroll items');
 SELECT ok(NOT has_table_privilege('authenticated', 'public.payroll_items', 'TRIGGER'), 'authenticated cannot create triggers on payroll items');
+
+SELECT ok(
+  NOT has_table_privilege('authenticated', 'public.products', 'DELETE')
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'products'
+      AND roles @> ARRAY['authenticated']::name[]
+      AND permissive = 'PERMISSIVE'
+      AND cmd IN ('ALL', 'DELETE')
+  ),
+  'products cannot be physically deleted by authenticated API users'
+);
+
+SELECT ok(
+  EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.inventory'::regclass
+      AND conname = 'inventory_product_id_fkey'
+      AND pg_get_constraintdef(oid) ILIKE '%ON DELETE RESTRICT%'
+  )
+  AND EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.inventory_transactions'::regclass
+      AND conname = 'inventory_transactions_product_id_fkey'
+      AND pg_get_constraintdef(oid) ILIKE '%ON DELETE RESTRICT%'
+  ),
+  'inventory product history is protected by RESTRICT foreign keys'
+);
 
 SELECT ok(
   NOT EXISTS (
