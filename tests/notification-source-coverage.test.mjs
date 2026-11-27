@@ -7,6 +7,7 @@ const page = readFileSync(new URL("../src/routes/_authenticated/notifications.ts
 const topbar = readFileSync(new URL("../src/routes/_authenticated/route.tsx", import.meta.url), "utf8");
 const sync = readFileSync(new URL("../src/hooks/use-notification-sync.ts", import.meta.url), "utf8");
 const snapshot = readFileSync(new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url), "utf8");
+const types = readFileSync(new URL("../src/integrations/supabase/types.ts", import.meta.url), "utf8");
 
 test("database visibility checks tenant, company, audience, permission and source-specific access", () => {
   assert.match(migration, /private\.has_permission\(auth\.uid\(\), n\.tenant_id, 'notifications\.view'\)/);
@@ -38,6 +39,7 @@ test("all implemented event sources are database triggers with idempotency keys"
 });
 
 test("archive UI separates inbox and archive and allows restore", () => {
+  assert.match(types, /archived_at: string \| null/);
   assert.match(page, /showArchived/);
   assert.match(page, /archived_at/);
   assert.match(page, /أرشفة/);
