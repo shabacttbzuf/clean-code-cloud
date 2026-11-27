@@ -3,12 +3,18 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 /**
- * List all super owners (with basic profile info).
- * Available to any authenticated user (SELECT policy is public).
+ * List platform Super Owners. This is restricted both here and by the
+ * database SELECT policy to an already-authorized Super Owner.
  */
 export const listSuperOwners = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const { data: isSO, error: ownerCheckError } = await context.supabase.rpc("is_super_owner", {
+      _user_id: context.userId,
+    });
+    if (ownerCheckError) throw new Error(ownerCheckError.message);
+    if (!isSO) throw new Error("غير مصرح: عرض قائمة المالكين الرئيسيين متاح للمالك الرئيسي فقط.");
+
     const { data: owners, error } = await context.supabase
       .from("super_owners")
       .select("user_id, granted_at, granted_by, notes")
@@ -69,9 +75,16 @@ export const grantSuperOwner = createServerFn({ method: "POST" })
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     // Look up user by email via Admin API
-    const { data: usersPage, error: listErr } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 });
-    if (listErr) throw new Error(listErr.message);
-    const target = usersPage.users.find((u) => u.email?.toLowerCase() === data.email.toLowerCase());
+    let target: { id: string } | undefined;
+    for (let page = 1; !target; page += 1) {
+      const { data: usersPage, error: listErr } = await supabaseAdmin.auth.admin.listUsers({
+        page,
+        perPage: 200,
+      });
+      if (listErr) throw new Error(listErr.message);
+      target = usersPage.users.find((user) => user.email?.toLowerCase() === data.email.toLowerCase());
+      if (target || usersPage.users.length < 200) break;
+    }
     if (!target) throw new Error("لا يوجد مستخدم بهذا البريد.");
 
     const { error } = await supabaseAdmin.from("super_owners").insert({

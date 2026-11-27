@@ -88,7 +88,7 @@ function AuthPage() {
       const email = emailSchema.parse(signupEmail);
       const password = passwordSchema.parse(signupPassword);
       const full_name = nameSchema.parse(signupName);
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -97,6 +97,10 @@ function AuthPage() {
         },
       });
       if (error) throw error;
+      if (!data.session) {
+        toast.success("تم إنشاء الحساب. تحقق من بريدك الإلكتروني لتأكيد الحساب، ثم سجّل الدخول للمتابعة.");
+        return;
+      }
       toast.success("تم إنشاء الحساب بنجاح");
       navigate({ to: "/onboarding" });
     } catch (err) {

@@ -60,6 +60,17 @@ const statusColors: Record<string, string> = {
   half_day: "bg-chart-4/15 text-chart-4",
 };
 
+function escapeHtml(value: unknown): string {
+  const entities: Record<string, string> = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  };
+  return String(value ?? "").replace(/[&<>"']/g, (character) => entities[character] ?? character);
+}
+
 function AttendancePage() {
   const { tenantId, tenant, hasPermission } = useActiveTenant();
   const canCreateAttendance = hasPermission("hr.attendance.create") || hasPermission("hr.attendance.manage");
@@ -119,10 +130,10 @@ function AttendancePage() {
   const printAttendance = () => {
     if (!canPrintAttendance) { toast.error("لا تملك صلاحية طباعة كشف الحضور."); return; }
     const list = rows.data ?? [];
-    const body = list.map((r, index) => "<tr><td>" + (index + 1) + "</td><td>" + empName(r.employee_id) + "</td><td>" + (statusLabels[r.status] ?? r.status) + "</td><td>" + (r.check_in ? new Date(r.check_in).toLocaleTimeString("ar-YE") : "—") + "</td><td>" + (r.check_out ? new Date(r.check_out).toLocaleTimeString("ar-YE") : "—") + "</td><td>" + Number(r.hours_worked).toFixed(2) + "</td><td>" + (r.notes ?? "") + "</td></tr>").join("");
+    const body = list.map((r, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(empName(r.employee_id))}</td><td>${escapeHtml(statusLabels[r.status] ?? r.status)}</td><td>${escapeHtml(r.check_in ? new Date(r.check_in).toLocaleTimeString("ar-YE") : "—")}</td><td>${escapeHtml(r.check_out ? new Date(r.check_out).toLocaleTimeString("ar-YE") : "—")}</td><td>${Number(r.hours_worked).toFixed(2)}</td><td>${escapeHtml(r.notes ?? "")}</td></tr>`).join("");
     const w = window.open("", "_blank", "width=1000,height=800");
     if (!w) { toast.error("اسمح بفتح النوافذ المنبثقة للطباعة"); return; }
-    w.document.write('<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>كشف الحضور</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#172033}header{border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:18px}h1{margin:0 0 6px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #bbb;padding:8px;text-align:right}th{background:#eee}.foot{margin-top:24px;text-align:center;color:#666;font-size:11px}</style></head><body><header><h1>' + (tenant?.name ?? "النشاط التجاري") + '</h1><b>كشف الحضور والانصراف</b><div>التاريخ: ' + date + '</div></header><table><thead><tr><th>#</th><th>الموظف</th><th>الحالة</th><th>الدخول</th><th>الخروج</th><th>الساعات</th><th>ملاحظات</th></tr></thead><tbody>' + (body || '<tr><td colspan="7">لا توجد سجلات</td></tr>') + '</tbody></table><div class="foot">تم إنشاء الكشف من نظام إدارة الأعمال</div><script>window.onload=()=>window.print()</script></body></html>');
+    w.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>كشف الحضور</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#172033}header{border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:18px}h1{margin:0 0 6px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #bbb;padding:8px;text-align:right}th{background:#eee}.foot{margin-top:24px;text-align:center;color:#666;font-size:11px}</style></head><body><header><h1>${escapeHtml(tenant?.name ?? "النشاط التجاري")}</h1><b>كشف الحضور والانصراف</b><div>التاريخ: ${escapeHtml(date)}</div></header><table><thead><tr><th>#</th><th>الموظف</th><th>الحالة</th><th>الدخول</th><th>الخروج</th><th>الساعات</th><th>ملاحظات</th></tr></thead><tbody>${body || '<tr><td colspan="7">لا توجد سجلات</td></tr>'}</tbody></table><div class="foot">تم إنشاء الكشف من نظام إدارة الأعمال</div><script>window.onload=()=>window.print()</script></body></html>`);
     w.document.close();
   };
 
