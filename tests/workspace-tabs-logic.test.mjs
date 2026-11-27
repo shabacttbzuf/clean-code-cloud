@@ -101,5 +101,5 @@ test("workspace tab confirmations use accessible dialogs and never native alert 
   assert.match(source, /title: "تغييرات غير محفوظة"/);
   assert.match(source, /title: "إغلاق التبويبات الأخرى؟"/);
   assert.match(source, /toast\.info\(/);
-  assert.doesNotMatch(source, /window\\.(?:alert|confirm|prompt)\\(/);
+  assert.doesNotMatch(source, /window\.(?:alert|confirm|prompt)\(/);
 });
