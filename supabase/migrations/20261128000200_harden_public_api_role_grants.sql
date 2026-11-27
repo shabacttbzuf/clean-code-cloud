@@ -18,18 +18,9 @@ FROM authenticated;
 REVOKE EXECUTE ON FUNCTION public.prevent_tenant_owner_id_change()
 FROM PUBLIC, anon;
 
--- Hosted migrations may create objects as supabase_admin rather than postgres.
--- Apply the same least-privilege defaults to that creator role so future objects
--- are not automatically exposed to anon/authenticated/service_role.
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'supabase_admin') THEN
-    EXECUTE 'ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated, service_role';
-    EXECUTE 'ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon, authenticated, service_role';
-    EXECUTE 'ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM anon, authenticated, service_role';
-    EXECUTE 'ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC';
-  END IF;
-END;
-$$;
+-- The hosted migration role `supabase_admin` has separate default ACLs.
+-- The current migration role is not a member of supabase_admin, so PostgreSQL
+-- correctly rejects changing another role's defaults here. A privileged,
+-- operator-run script is provided under supabase/manual/ and is NOT auto-applied.
 
 COMMIT;
