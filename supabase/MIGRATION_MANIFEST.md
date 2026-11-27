@@ -140,4 +140,6 @@
 130. `supabase/migrations/20261127020000_ads_multi_branch_targeting_and_placements.sql`
 131. `supabase/migrations/20261127020001_ads_storage_permission_scope.sql`
 
-**الإجمالي: 131 ترحيلاً.**
+132. `supabase/migrations/20261127030000_notification_realtime_publication.sql`
+
+**الإجمالي: 132 ترحيلاً.**
