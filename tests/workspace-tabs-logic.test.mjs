@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   MAX_WORKSPACE_TABS,
   MAX_PINNED_WORKSPACE_TABS,
@@ -90,4 +91,15 @@ test("tab capacity normalization preserves dirty state until explicit confirmati
   assert.equal(tabs.find((tab) => tab.path === "/sales").dirty, true);
   assert.equal(closeWorkspaceTab(tabs, "/sales").length, 2);
   assert.equal(closeWorkspaceTab(tabs, "/sales", { allowDirty: true }).length, 1);
+});
+
+
+test("workspace tab confirmations use accessible dialogs and never native alert or confirm", () => {
+  const source = readFileSync(new URL("../src/components/workspace-tabs.tsx", import.meta.url), "utf8");
+  assert.match(source, /useConfirmDialog/);
+  assert.match(source, /shouldBlockFn: async/);
+  assert.match(source, /title: "تغييرات غير محفوظة"/);
+  assert.match(source, /title: "إغلاق التبويبات الأخرى؟"/);
+  assert.match(source, /toast\.info\(/);
+  assert.doesNotMatch(source, /window\\.(?:alert|confirm|prompt)\\(/);
 });
