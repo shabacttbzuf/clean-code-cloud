@@ -314,11 +314,11 @@ function TopBar() {
       const recentIds = (itemsResult.data ?? []).map((row) => row.id);
       const recentReads = recentIds.length
         ? await (supabase.from("notification_reads" as any) as any)
-            .select("notification_id").eq("user_id", user.id).in("notification_id", recentIds)
+            .select("notification_id,archived_at").eq("user_id", user.id).in("notification_id", recentIds)
         : { data: [], error: null };
       if (recentReads.error) throw recentReads.error;
       return {
-        items: itemsResult.data ?? [],
+        items: (itemsResult.data ?? []).filter((row) => !(recentReads.data ?? []).some((receipt: { notification_id: string; archived_at: string | null }) => receipt.notification_id === row.id && receipt.archived_at)),
         readIds: new Set<string>((recentReads.data ?? []).map((row: { notification_id: string }) => row.notification_id)),
         unreadCount: Math.max(0, (totalResult.count ?? 0) - (readCountResult.count ?? 0)),
       };
