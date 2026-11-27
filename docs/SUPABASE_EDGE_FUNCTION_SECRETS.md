@@ -28,6 +28,6 @@ Add a local development origin only when intentionally testing the bootstrap flo
 4. The function checks the authenticated user ID and checks that no Super Owner exists before invoking the atomic service-role RPC.
 5. After the first Super Owner is created, the function returns HTTP 409 for subsequent calls. Remove `INITIAL_SUPER_OWNER_USER_ID` from Edge Function secrets to disable the bootstrap path entirely.
 
-The function fails closed if the initial-owner secret is missing/invalid or if a browser origin is not allowlisted. The function must be redeployed after code changes; secrets are configured separately in Supabase and are not part of Vercel's browser environment.
+The function fails closed if the initial-owner secret is missing/invalid or if a browser request supplies an origin that is not allowlisted. The TanStack server function invokes this Edge Function server-to-server without an `Origin` header; such requests are still required to pass Bearer-token validation and the exact initial-owner UUID check. A missing Origin is not an authentication bypass. The function must be redeployed after code changes; secrets are configured separately in Supabase and are not part of Vercel's browser environment.
 
 No production Edge Function deployment or secret change is performed by this repository change.
