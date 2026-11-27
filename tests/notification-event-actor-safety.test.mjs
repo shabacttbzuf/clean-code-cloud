@@ -3,12 +3,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const paths = [
-  "../supabase/migrations/20261121030000_notification_deep_links.sql",
+  "../supabase/migrations/20261127030001_notification_scope_archive_and_missing_sources.sql",
   "../supabase/migrations/20261127030002_low_stock_event_notifications.sql",
   "../supabase/migrations/20261127030003_hr_leave_event_notifications.sql",
   "../supabase/migrations/20261127030004_customer_invoice_event_notifications.sql",
 ];
 const migrations = paths.map((path) => readFileSync(new URL(path, import.meta.url), "utf8"));
+const kitchenReady = readFileSync(new URL("../supabase/migrations/20261121030000_notification_deep_links.sql", import.meta.url), "utf8");
 
 test("all event-triggered notification writers use an authorized company owner or manager actor", () => {
   for (const sql of migrations) {
@@ -22,10 +23,16 @@ test("notification delivery failures never roll back core kitchen, inventory, HR
   for (const sql of migrations) {
     assert.match(sql, /RAISE WARNING/);
   }
-  assert.match(migrations[0], /Kitchen-ready notification was skipped/);
   assert.match(migrations[1], /Low-stock notification was skipped/);
   assert.match(migrations[2], /Leave-request notification was skipped/);
   assert.match(migrations[3], /Customer invoice notification was skipped/);
+});
+
+test("kitchen-ready deep links are internal and retain the authenticated actor", () => {
+  assert.match(kitchenReady, /NEW\.status='ready'/);
+  assert.match(kitchenReady, /auth\.uid\(\)/);
+  assert.match(kitchenReady, /'\/kitchen'/);
+  assert.match(kitchenReady, /REVOKE ALL ON FUNCTION private\.notify_branch_when_kitchen_ready\(\)/);
 });
 
 test("HR decision notifications are only sent to users belonging to the same company", () => {
