@@ -1427,18 +1427,21 @@ export type Database = {
       }
       notification_reads: {
         Row: {
+          archived_at: string | null
           id: string
           notification_id: string
           read_at: string
           user_id: string
         }
         Insert: {
+          archived_at?: string | null
           id?: string
           notification_id: string
           read_at?: string
           user_id: string
         }
         Update: {
+          archived_at?: string | null
           id?: string
           notification_id?: string
           read_at?: string
