@@ -140,4 +140,11 @@
 130. `supabase/migrations/20261127020000_ads_multi_branch_targeting_and_placements.sql`
 131. `supabase/migrations/20261127020001_ads_storage_permission_scope.sql`
 
-**الإجمالي: 131 ترحيلاً.**
+132. `supabase/migrations/20261127030000_low_stock_event_notifications.sql`
+133. `supabase/migrations/20261127030100_hr_leave_event_notifications.sql`
+134. `supabase/migrations/20261127030200_overdue_kitchen_order_notifications.sql`
+135. `supabase/migrations/20261127030300_customer_invoice_event_notifications.sql`
+136. `supabase/migrations/20261127030400_notification_scope_archive_and_missing_sources.sql`
+137. `supabase/migrations/20261127030500_notification_realtime_publication.sql`
+
+**الإجمالي: 137 ترحيلاً.**
