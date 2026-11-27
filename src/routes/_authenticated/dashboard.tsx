@@ -108,7 +108,7 @@ function Dashboard() {
     queryFn: async () => {
       const now = new Date().toISOString();
       let query = supabase.from("marketing_campaigns")
-        .select("id,title,description,image_url,target_url,starts_at,ends_at,sort_order")
+        .select("id,title,description,image_url,target_url,starts_at,ends_at,sort_order,target_branch_ids")
         .eq("tenant_id", tenantId!)
         .eq("status", "active")
         .in("placement", ["dashboard_banner", "dashboard_card"])
@@ -128,10 +128,12 @@ function Dashboard() {
       const { data, error } = await query;
       if (error) throw error;
       const nowMs = Date.now();
-      return (data ?? []).filter((campaign) =>
-        (!campaign.starts_at || new Date(campaign.starts_at).getTime() <= nowMs) &&
-        (!campaign.ends_at || new Date(campaign.ends_at).getTime() > nowMs)
-      );
+      return (data ?? []).filter((campaign) => {
+        const targets = campaign.target_branch_ids ?? [];
+        return (!campaign.starts_at || new Date(campaign.starts_at).getTime() <= nowMs) &&
+          (!campaign.ends_at || new Date(campaign.ends_at).getTime() > nowMs) &&
+          (targets.length === 0 || (!!membership?.branch_id && targets.includes(membership.branch_id)));
+      });
     },
     enabled: !!tenantId,
     staleTime: 60_000,
