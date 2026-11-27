@@ -103,7 +103,7 @@ export function AdsPage() {
     queryFn: async () => {
       let query = supabase.from("branches").select("id,name,company_id")
         .eq("tenant_id", tenantId!).eq("is_active", true).order("name");
-      if (membership?.company_id) query = query.eq("company_id", membership.company_id);
+      if (membership?.company_id) query = query.or(`company_id.is.null,company_id.eq.${membership.company_id}`);
       if (membership?.branch_id && role !== "owner" && role !== "manager") {
         query = query.eq("id", membership.branch_id);
       }
@@ -195,7 +195,7 @@ export function AdsPage() {
         .order("created_at", { ascending: false });
       if (!isSuperOwner && !isTenantOwner) {
         if (!membership?.company_id) return [];
-        query = query.eq("company_id", membership.company_id);
+        query = query.or(`company_id.is.null,company_id.eq.${membership.company_id}`);
       }
       const { data, error } = await query;
       if (error) throw error;
@@ -505,7 +505,8 @@ export function AdsPage() {
           {campaigns.isLoading ? <div className="flex justify-center p-6"><Loader2 className="h-5 w-5 animate-spin" /></div> :
             campaigns.isError ? <div className="text-sm text-destructive">تعذر تحميل الحملات. <Button type="button" variant="link" onClick={() => void campaigns.refetch()}>إعادة المحاولة</Button></div> :
             campaigns.data?.length ? campaigns.data.map((campaign) => {
-              const inCampaignScope = isSuperOwner || isTenantOwner || (!!membership?.company_id && campaign.company_id === membership.company_id);
+              const hasVisibleTargetBranch = (campaign.target_branch_ids ?? []).some((id) => (branches.data ?? []).some((branch) => branch.id === id));
+              const inCampaignScope = isSuperOwner || isTenantOwner || (!!membership?.company_id && campaign.company_id === membership.company_id) || (campaign.company_id === null && (hasVisibleTargetBranch || (!!membership?.branch_id && campaign.branch_id === membership.branch_id)));
               const canEditCampaign = canEditAds && inCampaignScope;
               const canApproveCampaign = canApproveAds && inCampaignScope;
               const canDeleteCampaign = canDeleteAds && inCampaignScope;
