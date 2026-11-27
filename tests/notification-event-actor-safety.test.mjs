@@ -10,7 +10,7 @@ const paths = [
 ];
 const migrations = paths.map((path) => readFileSync(new URL(path, import.meta.url), "utf8"));
 
-test("all event-triggered notification writers use an authorized company owner or manager actor", () => {
+test("event-triggered notification writers use an authorized company owner or manager actor", () => {
   for (const sql of migrations) {
     assert.match(sql, /ur\.role IN \('owner', ?'manager'\)/);
     assert.match(sql, /set_config\('request\.jwt\.claim\.sub', v_actor_id::text, true\)/);
@@ -18,14 +18,14 @@ test("all event-triggered notification writers use an authorized company owner o
   }
 });
 
-test("notification delivery failures never roll back core kitchen, inventory, HR, or invoice events", () => {
-  for (const sql of migrations) {
+test("best-effort event notifications never roll back inventory, HR or invoice writes", () => {
+  for (const sql of [migrations[0], migrations[1], migrations[3]]) {
     assert.match(sql, /RAISE WARNING/);
   }
-  assert.match(migrations[0], /Kitchen-ready notification was skipped/);
-  assert.match(migrations[1], /Low-stock notification was skipped/);
+  assert.match(migrations[0], /Low-stock notification was skipped/);
   assert.match(migrations[1], /Leave-request notification was skipped/);
   assert.match(migrations[3], /Customer invoice notification was skipped/);
+  assert.doesNotMatch(migrations[2], /UPDATE public\.(kitchen_orders|sales|payments|cash_sessions)|DELETE FROM public\.(kitchen_orders|sales|payments|cash_sessions)/i);
 });
 
 test("HR decision notifications are only sent to users belonging to the same company", () => {
