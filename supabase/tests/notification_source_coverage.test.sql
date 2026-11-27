@@ -44,7 +44,7 @@ SELECT ok(
     SELECT 1 FROM pg_policies
     WHERE schemaname='public' AND tablename='notifications'
       AND policyname IN ('company_scope_notifications_insert','company_scope_notifications_update','company_scope_notifications_delete',
-                         "notifications_admin_write",'notifications_admin_insert','notifications_admin_update','notifications_admin_delete',
+                         'notifications_admin_write','notifications_admin_insert','notifications_admin_update','notifications_admin_delete',
                          'permission_gate_notifications_insert','permission_gate_notifications_update','permission_gate_notifications_delete')
   ),
   'Notification writes use a single company-scoped policy per operation without permissive OR bypasses'
