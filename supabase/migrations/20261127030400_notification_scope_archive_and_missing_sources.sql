@@ -155,6 +155,7 @@ GRANT EXECUTE ON FUNCTION private.can_manage_notification_scope(uuid, uuid) TO a
 DROP POLICY IF EXISTS company_scope_notifications_insert ON public.notifications;
 DROP POLICY IF EXISTS company_scope_notifications_update ON public.notifications;
 DROP POLICY IF EXISTS company_scope_notifications_delete ON public.notifications;
+DROP POLICY IF EXISTS "notifications_admin_write" ON public.notifications;
 DROP POLICY IF EXISTS notifications_admin_insert ON public.notifications;
 DROP POLICY IF EXISTS notifications_admin_update ON public.notifications;
 DROP POLICY IF EXISTS notifications_admin_delete ON public.notifications;
