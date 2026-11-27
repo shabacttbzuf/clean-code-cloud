@@ -147,4 +147,6 @@
 136. `supabase/migrations/20261127030400_notification_scope_archive_and_missing_sources.sql`
 137. `supabase/migrations/20261127030500_notification_realtime_publication.sql`
 
-**الإجمالي: 137 ترحيلاً.**
+138. `supabase/migrations/20261127030600_notification_kitchen_ready_actor_safety.sql`
+
+**الإجمالي: 138 ترحيلاً.**
