@@ -18,12 +18,12 @@ test("mobile header retains accessible help, brand and company controls", () => 
   assert.match(route, /aria-label="مركز المساعدة والدعم"/);
   assert.match(route, /aria-label="شعار النظام"/);
   assert.match(route, /aria-label="اختيار الشركة"/);
-  assert.match(route, /min-h-\\[64px\\].*px-2.*sm:px-4/);
+  assert.match(route, /min-h-\[64px\].*px-2.*sm:px-4/);
 });
 
 test("application launcher fits narrow screens without overflowing the viewport", () => {
-  assert.match(launcher, /w-\\[min\\(94vw,520px\\)\\]/);
-  assert.match(launcher, /max-h-\\[min\\(78vh,680px\\)\\]/);
+  assert.match(launcher, /w-\[min\(94vw,520px\)\]/);
+  assert.match(launcher, /max-h-\[min\(78vh,680px\)\]/);
   assert.match(launcher, /overflow-y-auto/);
   assert.match(css, /safe-area-inset-bottom/);
 });
@@ -35,7 +35,7 @@ test("charts and data tables use fluid containers and horizontal overflow handli
 });
 
 test("reduced-motion preference is respected", () => {
-  assert.match(css, /prefers-reduced-motion:\\s*reduce/);
+  assert.match(css, /prefers-reduced-motion:\s*reduce/);
 });
 
 test("safe-area support is activated at the viewport and retained in page layout", () => {
