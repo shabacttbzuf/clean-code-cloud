@@ -553,6 +553,7 @@ function Dashboard() {
         <AdPlacement placement="sidebar" variant="card" />
       </div>
       <AdPlacement placement="offers" variant="card" />
+      <AdPlacement placement="in_page" variant="card" />
 
       {campaignsQuery.isError && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive" role="alert">
