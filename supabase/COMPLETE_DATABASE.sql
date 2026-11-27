@@ -17792,7 +17792,7 @@ COMMIT;
 -- END MIGRATION: 20261127030000_notification_realtime_publication.sql
 
 -- =====================================================================
--- SOURCE MIGRATION: 20261127030000_low_stock_event_notifications.sql
+-- SOURCE MIGRATION: 20261127040000_low_stock_event_notifications.sql
 -- =====================================================================
 
 -- Create low-stock alerts from real inventory threshold crossings.
@@ -17914,10 +17914,10 @@ EXECUTE FUNCTION private.notify_on_low_stock();
 
 COMMIT;
 
--- END MIGRATION: 20261127030000_low_stock_event_notifications.sql
+-- END MIGRATION: 20261127040000_low_stock_event_notifications.sql
 
 -- =====================================================================
--- SOURCE MIGRATION: 20261127030100_hr_leave_event_notifications.sql
+-- SOURCE MIGRATION: 20261127040100_hr_leave_event_notifications.sql
 -- =====================================================================
 
 -- Notify HR recipients from real leave-request creation and decision events.
@@ -18068,10 +18068,10 @@ EXECUTE FUNCTION private.notify_leave_request_events();
 
 COMMIT;
 
--- END MIGRATION: 20261127030100_hr_leave_event_notifications.sql
+-- END MIGRATION: 20261127040100_hr_leave_event_notifications.sql
 
 -- =====================================================================
--- SOURCE MIGRATION: 20261127030200_overdue_kitchen_order_notifications.sql
+-- SOURCE MIGRATION: 20261127040200_overdue_kitchen_order_notifications.sql
 -- =====================================================================
 
 -- Emit one actionable alert when a kitchen order is still not ready 30 minutes after creation.
@@ -18214,10 +18214,10 @@ $schedule$;
 
 COMMIT;
 
--- END MIGRATION: 20261127030200_overdue_kitchen_order_notifications.sql
+-- END MIGRATION: 20261127040200_overdue_kitchen_order_notifications.sql
 
 -- =====================================================================
--- SOURCE MIGRATION: 20261127030300_customer_invoice_event_notifications.sql
+-- SOURCE MIGRATION: 20261127040300_customer_invoice_event_notifications.sql
 -- =====================================================================
 
 -- Notify company management about actual customer-credit invoice and collection events.
@@ -18467,10 +18467,10 @@ EXECUTE FUNCTION private.notify_on_customer_invoice_collection();
 
 COMMIT;
 
--- END MIGRATION: 20261127030300_customer_invoice_event_notifications.sql
+-- END MIGRATION: 20261127040300_customer_invoice_event_notifications.sql
 
 -- =====================================================================
--- SOURCE MIGRATION: 20261127030400_notification_scope_archive_and_missing_sources.sql
+-- SOURCE MIGRATION: 20261127040400_notification_scope_archive_and_missing_sources.sql
 -- =====================================================================
 
 -- Stage 10 hardening: enforce recipient visibility at the database boundary,
@@ -19086,10 +19086,10 @@ REVOKE ALL ON FUNCTION private.emit_overdue_kitchen_order_notifications()
 
 COMMIT;
 
--- END MIGRATION: 20261127030400_notification_scope_archive_and_missing_sources.sql
+-- END MIGRATION: 20261127040400_notification_scope_archive_and_missing_sources.sql
 
 -- =====================================================================
--- SOURCE MIGRATION: 20261127030600_notification_kitchen_ready_actor_safety.sql
+-- SOURCE MIGRATION: 20261127040500_notification_kitchen_ready_actor_safety.sql
 -- =====================================================================
 
 -- Reconcile the pre-existing kitchen-ready notification trigger with the
@@ -19177,4 +19177,4 @@ REVOKE ALL ON FUNCTION private.notify_branch_when_kitchen_ready()
 
 COMMIT;
 
--- END MIGRATION: 20261127030600_notification_kitchen_ready_actor_safety.sql
+-- END MIGRATION: 20261127040500_notification_kitchen_ready_actor_safety.sql
