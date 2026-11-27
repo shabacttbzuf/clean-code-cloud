@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const migration = readFileSync(new URL("../supabase/migrations/20261127030300_customer_invoice_event_notifications.sql", import.meta.url), "utf8");
+const migration = readFileSync(new URL("../supabase/migrations/20261127040300_customer_invoice_event_notifications.sql", import.meta.url), "utf8");
 const snapshot = readFileSync(new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url), "utf8");
 
 test("customer credit and mixed invoices create management alerts from real sales rows", () => {
@@ -34,6 +34,6 @@ test("invoice notifications remain company-scoped and use protected definer trig
 });
 
 test("complete database snapshot contains the invoice event notification migration", () => {
-  assert.ok(snapshot.includes("-- SOURCE MIGRATION: 20261127030300_customer_invoice_event_notifications.sql"));
-  assert.ok(snapshot.includes("-- END MIGRATION: 20261127030300_customer_invoice_event_notifications.sql"));
+  assert.ok(snapshot.includes("-- SOURCE MIGRATION: 20261127040300_customer_invoice_event_notifications.sql"));
+  assert.ok(snapshot.includes("-- END MIGRATION: 20261127040300_customer_invoice_event_notifications.sql"));
 });
