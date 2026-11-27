@@ -75,9 +75,13 @@ test("first super-owner bootstrap validates the caller in the protected Edge Fun
     "utf8",
   );
   assert.match(source, /bootstrap-first-super-owner/);
-  assert.match(edgeFunction, /ALLOWED_INITIAL_OWNER_ID/);
+  assert.match(edgeFunction, /Deno\.env\.get\("INITIAL_SUPER_OWNER_USER_ID"\)/);
+  assert.doesNotMatch(edgeFunction, /ALLOWED_INITIAL_OWNER_ID\s*=/);
   assert.match(edgeFunction, /auth\.getUser\(token\)/);
-  assert.match(edgeFunction, /userData\.user\.id !== ALLOWED_INITIAL_OWNER_ID/);
+  assert.match(edgeFunction, /userData\.user\.id !== initialOwnerId/);
+  assert.match(edgeFunction, /Deno\.env\.get\("APP_ALLOWED_ORIGINS"\)/);
+  assert.doesNotMatch(edgeFunction, /Access-Control-Allow-Origin": "\*"/);
+  assert.match(edgeFunction, /Initial super owner has already been configured/);
   assert.match(edgeFunction, /admin\.rpc\("bootstrap_first_super_owner"/);
 });
 
