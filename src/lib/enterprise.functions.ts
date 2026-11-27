@@ -5,6 +5,7 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { safeHttpUrlSchema } from "@/lib/safe-url";
 import { getRequestHeader, getRequestIP } from "@tanstack/react-start/server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
@@ -277,7 +278,7 @@ const companyInput = z.object({
   name: z.string().min(1).max(200),
   legal_name: z.string().max(200).optional().nullable(),
   tax_number: z.string().max(50).optional().nullable(),
-  logo_url: z.string().url().optional().nullable(),
+  logo_url: safeHttpUrlSchema.optional().nullable(),
   description: z.string().max(1000).optional().nullable(),
   is_active: z.boolean().optional(),
 });
@@ -314,7 +315,7 @@ const departmentInput = z.object({
   company_id: uuid.nullable().optional(),
   name: z.string().min(1).max(200),
   description: z.string().max(1000).optional().nullable(),
-  photo_url: z.string().url().optional().nullable(),
+  photo_url: safeHttpUrlSchema.optional().nullable(),
   manager_id: uuid.nullable().optional(),
   is_active: z.boolean().optional(),
 });
