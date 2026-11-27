@@ -11,6 +11,7 @@ import { Loader2, TrendingUp, TrendingDown, Receipt, Wallet, Package, Crown, Bui
 import { formatMoney } from "@/lib/format";
 import { summarizeDashboardFinancialRows } from "@/lib/dashboard-metrics.mjs";
 import { DeferredDashboardCharts } from "@/components/deferred-dashboard-charts";
+import { AdPlacement } from "@/components/ads/ad-placement";
 import { Link } from "@tanstack/react-router";
 import { Sparkles, ShoppingBag, ArrowLeft, ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 
@@ -543,6 +544,13 @@ function Dashboard() {
           <Link to="/pos" className="mt-4 inline-flex min-h-10 w-fit items-center gap-2 rounded-full bg-[#f2b632] px-5 py-2 text-sm font-extrabold text-[#102f5c] shadow-md transition hover:bg-[#ffd16b]"><ShoppingBag className="h-4 w-4" /> فتح نقطة البيع <ArrowLeft className="h-4 w-4" /></Link>
         </div>
       </section>
+
+      <AdPlacement placement="welcome" variant="banner" />
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(220px,1fr)]">
+        <AdPlacement placement="main" variant="banner" />
+        <AdPlacement placement="sidebar" variant="card" />
+      </div>
+      <AdPlacement placement="offers" variant="card" />
 
       {campaignsQuery.isError && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive" role="alert">
