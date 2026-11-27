@@ -41,7 +41,7 @@ test("dashboard mounts the welcome, main, sidebar and offers ad placements", () 
 });
 test("dashboard and POS filter multi-branch campaigns to the active branch", () => {
   assert.match(dashboard, /target_branch_ids/);
-  assert.match(dashboard, /targets\.includes\(membership\?\.branch_id\)/);
+  assert.match(dashboard, /targets\.includes\(membership\.branch_id\)/);
   assert.match(pos, /target_branch_ids/);
   assert.match(pos, /targets\.includes\(branchId\)/);
 });
