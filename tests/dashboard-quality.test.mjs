@@ -302,6 +302,9 @@ test("dashboard hero preferences are isolated per user and active company/branch
   assert.match(dashboard, /membership\?\.branch_id/);
   assert.match(dashboard, /user\?\.id/);
   assert.match(dashboard, /url\.protocol === "https:"/);
+  assert.match(dashboard, /!url\.username && !url\.password/);
+  assert.match(dashboard, /الصور المرفوعة إلى مكتبة النظام عامة/);
+  assert.match(dashboard, /setHeroBackgroundDraft\("#102f5c"\);[\s\S]*Dashboard hero preferences could not be loaded/);
   assert.match(dashboard, /file\.size > 5 \* 1024 \* 1024/);
   assert.match(dashboard, /async function uploadHeroImage/);
   assert.match(dashboard, /hasPermission\("sales\.create"\) && <Link to="\/pos"/);
