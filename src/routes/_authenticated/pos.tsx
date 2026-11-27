@@ -409,7 +409,7 @@ function POSWorkspace() {
     queryFn: async () => {
       const now = new Date().toISOString();
       let query = supabase.from("marketing_campaigns")
-        .select("id,title,description,image_url,target_url,starts_at,ends_at")
+        .select("id,title,description,image_url,target_url,starts_at,ends_at,target_branch_ids")
         .eq("tenant_id", tenantId!)
         .eq("status", "active")
         .eq("placement", "pos_promo")
@@ -433,10 +433,12 @@ function POSWorkspace() {
       const { data, error } = await query;
       if (error) throw error;
       const nowMs = Date.now();
-      return (data ?? []).filter((campaign) =>
-        (!campaign.starts_at || new Date(campaign.starts_at).getTime() <= nowMs) &&
-        (!campaign.ends_at || new Date(campaign.ends_at).getTime() > nowMs)
-      );
+      return (data ?? []).filter((campaign) => {
+        const targets = campaign.target_branch_ids ?? [];
+        return (!campaign.starts_at || new Date(campaign.starts_at).getTime() <= nowMs) &&
+          (!campaign.ends_at || new Date(campaign.ends_at).getTime() > nowMs) &&
+          (targets.length === 0 || (!!branchId && targets.includes(branchId)));
+      });
     },
     enabled: !!tenantId,
     staleTime: 60_000,
