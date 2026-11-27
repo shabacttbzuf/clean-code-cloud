@@ -430,7 +430,7 @@ function Dashboard() {
 
 
   const latestOrders = useQuery({
-    queryKey: ["dashboard-latest-orders", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryKey: ["dashboard-latest-orders", tenantId, user?.id, role, membership?.company_id, membership?.branch_id, isSuperOwner, hasPermission("sales.view")],
     queryFn: async () => {
       if (!tenantId) return [];
       let query = supabase.from("sales").select("id,invoice_no,total,status,created_at,order_type,customer_id")
@@ -442,6 +442,9 @@ function Dashboard() {
           .eq("tenant_id", tenantId).eq("company_id", membership.company_id);
         if (branchError) throw branchError;
         query = query.in("branch_id", (branches ?? []).map((branch) => branch.id));
+      } else if (!isSuperOwner && role !== "owner") {
+        // Missing membership scope must never expose tenant-wide order data.
+        query = query.in("branch_id", []);
       }
       const { data, error } = await query;
       if (error) throw error;
@@ -452,7 +455,7 @@ function Dashboard() {
     staleTime: 5_000,
   });
   const kitchenOverview = useQuery({
-    queryKey: ["dashboard-kitchen-overview", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryKey: ["dashboard-kitchen-overview", tenantId, user?.id, role, membership?.company_id, membership?.branch_id, isSuperOwner, hasPermission("kitchen.view")],
     queryFn: async () => {
       if (!tenantId) return [];
       let query = (supabase.from("kitchen_orders" as any) as any).select("id,branch_id,sale_id,status,created_at")
@@ -465,6 +468,9 @@ function Dashboard() {
           .eq("tenant_id", tenantId).eq("company_id", membership.company_id);
         if (branchError) throw branchError;
         query = query.in("branch_id", (branches ?? []).map((branch) => branch.id));
+      } else if (!isSuperOwner && role !== "owner") {
+        // Missing membership scope must never expose tenant-wide order data.
+        query = query.in("branch_id", []);
       }
       const { data, error } = await query;
       if (error) throw error;
@@ -486,7 +492,7 @@ function Dashboard() {
   });
 
   const kitchenStatusCounts = useQuery({
-    queryKey: ["dashboard-kitchen-counts", tenantId, membership?.company_id, membership?.branch_id, isSuperOwner],
+    queryKey: ["dashboard-kitchen-counts", tenantId, user?.id, role, membership?.company_id, membership?.branch_id, isSuperOwner, hasPermission("kitchen.view")],
     queryFn: async () => {
       if (!tenantId) return { new: 0, preparing: 0, ready: 0 };
       let scopedBranchIds: string[] | null = null;
@@ -497,6 +503,9 @@ function Dashboard() {
           .eq("tenant_id", tenantId).eq("company_id", membership.company_id);
         if (error) throw error;
         scopedBranchIds = (branches ?? []).map((branch) => branch.id);
+      } else if (!isSuperOwner && role !== "owner") {
+        // An incomplete membership must produce zero visible kitchen counts.
+        scopedBranchIds = [];
       }
       const statuses = ["new", "preparing", "ready"] as const;
       const entries = await Promise.all(statuses.map(async (status) => {
