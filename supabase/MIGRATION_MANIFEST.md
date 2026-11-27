@@ -148,4 +148,6 @@
 136. `supabase/migrations/20261127030004_customer_invoice_event_notifications.sql`
 137. `supabase/migrations/20261127030005_overdue_kitchen_cron_schedule.sql`
 
-**الإجمالي: 137 ترحيلاً.**
+138. `supabase/migrations/20261127030006_kitchen_ready_notification_actor_hardening.sql`
+
+**الإجمالي: 138 ترحيلاً.**
