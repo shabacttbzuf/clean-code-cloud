@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const migration = readFileSync(new URL("../supabase/migrations/20261127030200_overdue_kitchen_order_notifications.sql", import.meta.url), "utf8");
-const hardeningMigration = readFileSync(new URL("../supabase/migrations/20261127030400_notification_scope_archive_and_missing_sources.sql", import.meta.url), "utf8");
+const migration = readFileSync(new URL("../supabase/migrations/20261127040200_overdue_kitchen_order_notifications.sql", import.meta.url), "utf8");
+const hardeningMigration = readFileSync(new URL("../supabase/migrations/20261127040400_notification_scope_archive_and_missing_sources.sql", import.meta.url), "utf8");
 const snapshot = readFileSync(new URL("../supabase/COMPLETE_DATABASE.sql", import.meta.url), "utf8");
 
 test("delayed kitchen alerts use the approved 30-minute SLA and actual kitchen workflow states", () => {
@@ -40,7 +40,7 @@ test("concurrent delayed-order scans are serialized and failures remain retryabl
 });
 
 test("complete database snapshot contains the delayed-order notification migration", () => {
-  assert.ok(snapshot.includes("-- SOURCE MIGRATION: 20261127030200_overdue_kitchen_order_notifications.sql"));
-  assert.ok(snapshot.includes("-- END MIGRATION: 20261127030200_overdue_kitchen_order_notifications.sql"));
-  assert.equal(snapshot.split("SOURCE MIGRATION: 20261127030400_notification_scope_archive_and_missing_sources.sql").length - 1, 1);
+  assert.ok(snapshot.includes("-- SOURCE MIGRATION: 20261127040200_overdue_kitchen_order_notifications.sql"));
+  assert.ok(snapshot.includes("-- END MIGRATION: 20261127040200_overdue_kitchen_order_notifications.sql"));
+  assert.equal(snapshot.split("SOURCE MIGRATION: 20261127040400_notification_scope_archive_and_missing_sources.sql").length - 1, 1);
 });
