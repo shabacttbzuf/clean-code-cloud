@@ -29,6 +29,16 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
   }),
 });
 
+function safeHeroImageUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 function localDayKey(date: Date) {
   return [
     date.getFullYear(),
@@ -79,6 +89,11 @@ const DEFAULT_DASHBOARD_HERO_IMAGE_URL = "https://images.unsplash.com/photo-1555
 function Dashboard() {
   const [activeCampaignIndex, setActiveCampaignIndex] = useState(0);
   const [campaignRotationPaused, setCampaignRotationPaused] = useState(false);
+  const [heroImageUrl, setHeroImageUrl] = useState(DEFAULT_DASHBOARD_HERO_IMAGE_URL);
+  const [heroBackgroundColor, setHeroBackgroundColor] = useState("#102f5c");
+  const [heroImageDraft, setHeroImageDraft] = useState(DEFAULT_DASHBOARD_HERO_IMAGE_URL);
+  const [heroBackgroundDraft, setHeroBackgroundDraft] = useState("#102f5c");
+  const [heroSettingsOpen, setHeroSettingsOpen] = useState(false);
   const { tenantId, tenant, user, membership, role, hasPermission } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
   const profileQuery = useQuery({
@@ -102,6 +117,84 @@ function Dashboard() {
     profileQuery.data?.username?.trim() ||
     user?.email?.split("@")[0]?.trim() ||
     "مستخدم";
+
+  const heroCustomizationKey = `restaurant-dashboard-hero:${tenantId ?? "none"}:${membership?.company_id ?? "tenant"}:${membership?.branch_id ?? "all-branches"}:${user?.id ?? "anonymous"}`;
+
+  const branchNameQuery = useQuery({
+    queryKey: ["dashboard-active-branch-name", tenantId, user?.id, membership?.branch_id],
+    queryFn: async () => {
+      if (!tenantId || !membership?.branch_id) return null;
+      const { data, error } = await supabase.from("branches").select("name")
+        .eq("tenant_id", tenantId).eq("id", membership.branch_id).maybeSingle();
+      if (error) throw error;
+      return data?.name ?? null;
+    },
+    enabled: !!tenantId && !!membership?.branch_id,
+    staleTime: 60_000,
+  });
+
+  const companyNameQuery = useQuery({
+    queryKey: ["dashboard-active-company-name", tenantId, user?.id, membership?.company_id],
+    queryFn: async () => {
+      if (!tenantId || !membership?.company_id) return null;
+      const { data, error } = await supabase.from("companies").select("name")
+        .eq("tenant_id", tenantId).eq("id", membership.company_id).maybeSingle();
+      if (error) throw error;
+      return data?.name ?? null;
+    },
+    enabled: !!tenantId && !!membership?.company_id,
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(heroCustomizationKey);
+      if (!saved) {
+        setHeroImageUrl(DEFAULT_DASHBOARD_HERO_IMAGE_URL);
+        setHeroImageDraft(DEFAULT_DASHBOARD_HERO_IMAGE_URL);
+        setHeroBackgroundColor("#102f5c");
+        setHeroBackgroundDraft("#102f5c");
+        return;
+      }
+      const parsed: unknown = JSON.parse(saved);
+      const preferences = parsed && typeof parsed === "object" ? parsed as { imageUrl?: unknown; backgroundColor?: unknown } : {};
+      const candidate = typeof preferences.imageUrl === "string" ? preferences.imageUrl : "";
+      const safeImage = candidate ? safeHeroImageUrl(candidate) : null;
+      const safeColor = typeof preferences.backgroundColor === "string" && /^#[0-9a-fA-F]{6}$/.test(preferences.backgroundColor)
+        ? preferences.backgroundColor : "#102f5c";
+      setHeroImageUrl(safeImage ?? "");
+      setHeroImageDraft(safeImage ?? "");
+      setHeroBackgroundColor(safeColor);
+      setHeroBackgroundDraft(safeColor);
+    } catch {
+      setHeroImageUrl(DEFAULT_DASHBOARD_HERO_IMAGE_URL);
+      setHeroImageDraft(DEFAULT_DASHBOARD_HERO_IMAGE_URL);
+      setHeroBackgroundColor("#102f5c");
+      setHeroBackgroundDraft("#102f5c");
+    }
+  }, [heroCustomizationKey]);
+
+  const saveHeroCustomization = () => {
+    if (!tenantId || !user?.id) return;
+    const candidate = heroImageDraft.trim();
+    const safeImage = candidate ? safeHeroImageUrl(candidate) : null;
+    if (candidate && !safeImage) {
+      window.alert("أدخل رابط صورة آمن يبدأ بـ https:// أو اترك الحقل فارغاً.");
+      return;
+    }
+    const safeColor = /^#[0-9a-fA-F]{6}$/.test(heroBackgroundDraft) ? heroBackgroundDraft : "#102f5c";
+    try {
+      window.localStorage.setItem(heroCustomizationKey, JSON.stringify({
+        imageUrl: safeImage ?? "",
+        backgroundColor: safeColor,
+      }));
+      setHeroImageUrl(safeImage ?? "");
+      setHeroBackgroundColor(safeColor);
+      setHeroSettingsOpen(false);
+    } catch {
+      window.alert("تعذر حفظ التخصيص في مساحة التخزين المحلية لهذا المتصفح.");
+    }
+  };
 
   const campaignsQuery = useQuery({
     queryKey: ["dashboard-marketing-campaigns", tenantId, membership?.company_id ?? "tenant", membership?.branch_id ?? "all"],
@@ -532,13 +625,14 @@ function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <section className="relative isolate min-h-[205px] overflow-hidden rounded-2xl border border-[#d7e2f6] bg-[#102f5c] text-white shadow-[0_8px_24px_rgba(16,47,92,.16)] sm:min-h-[220px]" aria-labelledby="dashboard-welcome-title">
-        <img src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1800&q=85" alt="" className="absolute inset-0 h-full w-full object-cover opacity-75" />
+      <section className="relative isolate min-h-[205px] overflow-hidden rounded-2xl border border-[#d7e2f6] text-white shadow-[0_8px_24px_rgba(16,47,92,.16)] sm:min-h-[220px]" style={{ backgroundColor: heroBackgroundColor }} aria-labelledby="dashboard-welcome-title">
+        {heroImageUrl && <img src={heroImageUrl} alt="" width="1200" height="420" loading="eager" fetchPriority="high" decoding="async" onError={(event) => { event.currentTarget.style.display = "none"; }} className="absolute inset-0 h-full w-full object-cover opacity-75" />}
+        <button type="button" onClick={() => { setHeroImageDraft(heroImageUrl); setHeroBackgroundDraft(heroBackgroundColor); setHeroSettingsOpen((open) => !open); }} aria-expanded={heroSettingsOpen} aria-controls="dashboard-hero-settings" className="absolute left-4 top-4 z-10 rounded-full border border-white/30 bg-[#102f5c]/75 px-3 py-2 text-xs font-semibold text-white backdrop-blur hover:bg-[#102f5c]">تخصيص الخلفية</button>
         <div className="absolute inset-0 bg-gradient-to-l from-[#061c3d]/95 via-[#0c2d59]/80 to-[#102f5c]/5" />
         <div className="absolute inset-x-0 bottom-0 h-2 bg-gradient-to-l from-[#f0b52f] via-[#d9a441] to-transparent" />
         <div className="relative z-[1] flex min-h-[205px] flex-col justify-center px-6 py-7 sm:min-h-[220px] sm:px-10">
           <div className="max-w-2xl">
-            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white/90"><Sparkles className="h-4 w-4 text-[#f4c24f]" /> {tenant?.name ?? "مساحة إدارة المطعم"}</div>
+            <div className="mb-2 inline-flex flex-wrap items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white/90"><Sparkles className="h-4 w-4 text-[#f4c24f]" /> {tenant?.name ?? "مساحة إدارة المطعم"}{companyNameQuery.data && <span className="text-white/70"> · {companyNameQuery.data}</span>}{branchNameQuery.data && <span className="text-white/70"> · {branchNameQuery.data}</span>}{companyNameQuery.isError && <span className="text-amber-200"> · تعذر التحقق من الشركة</span>}{branchNameQuery.isError && <span className="text-amber-200"> · تعذر التحقق من الفرع</span>}</div>
             <h1 id="dashboard-welcome-title" className="text-2xl font-extrabold tracking-tight sm:text-4xl">أهلاً بك في نظام إدارة <span className="text-[#f5bd36]">المطاعم</span></h1>
             <p className="mt-3 text-base font-medium text-white/90 sm:text-xl">إدارة أسهل.. عمل أكثر كفاءة</p>
             <p className="mt-1 text-xs text-white/70">مرحباً {displayName}</p>
@@ -546,6 +640,32 @@ function Dashboard() {
           <Link to="/pos" className="mt-4 inline-flex min-h-10 w-fit items-center gap-2 rounded-full bg-[#f2b632] px-5 py-2 text-sm font-extrabold text-[#102f5c] shadow-md transition hover:bg-[#ffd16b]"><ShoppingBag className="h-4 w-4" /> فتح نقطة البيع <ArrowLeft className="h-4 w-4" /></Link>
         </div>
       </section>
+
+      {heroSettingsOpen && (
+        <section id="dashboard-hero-settings" className="rounded-xl border bg-card p-4 shadow-sm" aria-label="إعدادات مساحة الترحيب">
+          <div className="mb-3">
+            <h2 className="font-bold">تخصيص مساحة الترحيب</h2>
+            <p className="mt-1 text-xs text-muted-foreground">غيّر صورة الخلفية أو لونها. تُحفظ التفضيلات محلياً لهذا المستخدم والشركة والفرع على هذا الجهاز فقط.</p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+            <label className="space-y-2 text-sm font-medium">
+              رابط صورة الخلفية الآمن
+              <input type="url" dir="ltr" value={heroImageDraft} onChange={(event) => setHeroImageDraft(event.target.value)} placeholder="https://example.com/restaurant.webp" className="h-10 w-full rounded-md border bg-background px-3 text-left text-sm font-normal" />
+              <span className="block text-xs font-normal text-muted-foreground">يجب أن يبدأ الرابط بـ HTTPS. اتركه فارغاً لاستخدام لون الخلفية فقط.</span>
+              {heroImageDraft && <button type="button" className="text-xs text-destructive underline" onClick={() => setHeroImageDraft("")}>إزالة الصورة</button>}
+            </label>
+            <label className="flex items-center gap-3 text-sm font-medium">
+              لون الخلفية
+              <input type="color" aria-label="اختيار لون الخلفية" value={heroBackgroundDraft} onChange={(event) => setHeroBackgroundDraft(event.target.value)} className="h-10 w-14 cursor-pointer rounded-md border bg-background p-1" />
+            </label>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button type="button" onClick={saveHeroCustomization}>حفظ التخصيص</Button>
+            <Button type="button" variant="outline" onClick={() => { setHeroImageDraft(DEFAULT_DASHBOARD_HERO_IMAGE_URL); setHeroBackgroundDraft("#102f5c"); }}>استعادة الافتراضي</Button>
+            <Button type="button" variant="ghost" onClick={() => setHeroSettingsOpen(false)}>إغلاق</Button>
+          </div>
+        </section>
+      )}
 
       <AdPlacement placement="welcome" variant="banner" />
       <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(220px,1fr)]">
