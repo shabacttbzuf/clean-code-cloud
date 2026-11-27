@@ -301,3 +301,11 @@ test("dashboard financial summary preserves unknown cost as unavailable instead 
   assert.equal(result.unknownCostItems, 1);
   assert.equal(result.profit, null);
 });
+
+test("dashboard orders and kitchen summaries fail closed on missing membership scope and isolate user caches", () => {
+  assert.equal((dashboard.match(/Missing membership scope must never expose tenant-wide order data/g) ?? []).length, 2);
+  assert.match(dashboard, /An incomplete membership must produce zero visible kitchen counts/);
+  assert.match(dashboard, /queryKey: \["dashboard-latest-orders", tenantId, user\?\.id, role,/);
+  assert.match(dashboard, /queryKey: \["dashboard-kitchen-overview", tenantId, user\?\.id, role,/);
+  assert.match(dashboard, /queryKey: \["dashboard-kitchen-counts", tenantId, user\?\.id, role,/);
+});
