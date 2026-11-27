@@ -1,4 +1,3 @@
-import { jsPDF } from "jspdf";
 import { formatMoney, formatDateTime } from "./format";
 
 export type InvoiceData = {
@@ -45,7 +44,8 @@ const paymentLabels: Record<string, string> = {
  * a 500KB TTF, we render the invoice in English with numeric values. The
  * on-screen invoice view is fully Arabic; PDF is a receipt-style summary.
  */
-export function generateInvoicePDF(data: InvoiceData): Blob {
+export async function generateInvoicePDF(data: InvoiceData): Promise<Blob> {
+  const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "mm", format: [80, 200] });
 
   const pageWidth = 80;
@@ -130,8 +130,8 @@ export function generateInvoicePDF(data: InvoiceData): Blob {
   return doc.output("blob");
 }
 
-export function printInvoicePDF(data: InvoiceData) {
-  const blob = generateInvoicePDF(data);
+export async function printInvoicePDF(data: InvoiceData) {
+  const blob = await generateInvoicePDF(data);
   const url = URL.createObjectURL(blob);
   const w = window.open(url);
   if (w) {
@@ -143,8 +143,8 @@ export function printInvoicePDF(data: InvoiceData) {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
-export function downloadInvoicePDF(data: InvoiceData) {
-  const blob = generateInvoicePDF(data);
+export async function downloadInvoicePDF(data: InvoiceData) {
+  const blob = await generateInvoicePDF(data);
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
