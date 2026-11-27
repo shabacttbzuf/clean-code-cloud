@@ -31,6 +31,8 @@ dist-ssr
 *.sln
 *.sw?
 
-# Local environment overrides and secrets
-.env.local
-.env.*.local
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
