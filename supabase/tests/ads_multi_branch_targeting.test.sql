@@ -1,6 +1,6 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(8);
+SELECT plan(10);
 
 SELECT has_column(
   'public', 'marketing_campaigns', 'target_branch_ids',
@@ -48,6 +48,23 @@ SELECT ok(
   position('ads.manage' in pg_get_functiondef('private.can_manage_company_assets(uuid,uuid,uuid,text)'::regprocedure)) > 0
   AND position('settings.manage' in pg_get_functiondef('private.can_manage_company_assets(uuid,uuid,uuid,text)'::regprocedure)) > 0,
   'Marketing asset uploads accept ads.manage without removing settings.manage'
+);
+
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+    WHERE schemaname='public' AND tablename='marketing_campaigns'
+      AND policyname='company_scope_marketing_campaigns_branch_update'
+      AND qual ILIKE '%target_branch_ids%'
+      AND with_check ILIKE '%target_branch_ids%'),
+  'Campaign updates enforce both existing and new branch target scope'
+);
+
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+    WHERE schemaname='public' AND tablename='marketing_campaigns'
+      AND policyname='company_scope_marketing_campaigns_branch_delete'
+      AND qual ILIKE '%target_branch_ids%'),
+  'Campaign deletion remains limited to an authorized target branch'
 );
 
 SELECT ok(
