@@ -9,7 +9,7 @@ const paths = [
   "../supabase/migrations/20261127030004_customer_invoice_event_notifications.sql",
 ];
 const migrations = paths.map((path) => readFileSync(new URL(path, import.meta.url), "utf8"));
-const kitchenReady = readFileSync(new URL("../supabase/migrations/20261121030000_notification_deep_links.sql", import.meta.url), "utf8");
+const kitchenReady = readFileSync(new URL("../supabase/migrations/20261127030006_kitchen_ready_notification_actor_hardening.sql", import.meta.url), "utf8");
 
 test("all event-triggered notification writers use an authorized company owner or manager actor", () => {
   for (const sql of migrations) {
