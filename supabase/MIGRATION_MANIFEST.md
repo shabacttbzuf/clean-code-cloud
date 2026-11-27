@@ -151,4 +151,6 @@
 
 139. `supabase/migrations/20261127050000_redact_customer_notification_payloads.sql`
 
-**الإجمالي: 139 ترحيلاً.**
+140. `supabase/migrations/20261128000100_harden_expense_payroll_table_grants.sql`
+
+**الإجمالي: 140 ترحيلاً.**
