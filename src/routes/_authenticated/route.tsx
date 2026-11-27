@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { useSuperOwner } from "@/hooks/use-super-owner";
 import { safeInternalNotificationPath } from "@/lib/notification-links";
+import { useNotificationSync } from "@/hooks/use-notification-sync";
 import { resolveAvatarUrl } from "@/lib/storage";
 import { OFFLINE_AUTH_CACHE_MAX_AGE_MS, withOfflineFallback } from "@/lib/offline-reference-cache";
 import { OfflineSyncCenter } from "@/components/offline-sync-center";
@@ -216,6 +217,7 @@ function TopBar() {
   const { theme, toggle } = useTheme();
   const { tenantId, tenant, membership, memberships, switchTenant, companyOptions, activeCompanyId, switchCompany, companyLoading, companyError, permissions, permissionsLoading, permissionsError, branchOptions, activeBranchId, switchBranch, branchLoading } = useActiveTenant();
   const { user } = useAuthSession();
+  useNotificationSync(tenantId, user?.id);
   const { isSuperOwner } = useSuperOwner();
   const [globalSearch, setGlobalSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
