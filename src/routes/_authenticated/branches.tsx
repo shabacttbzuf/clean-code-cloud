@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Plus, Edit, Building2, Loader2, Clock, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { safeHttpUrlSchema } from "@/lib/safe-url";
 import { PageHeader } from "@/components/page-header";
 import { ImageUploader } from "@/components/image-uploader";
 
@@ -49,7 +50,7 @@ const schema = z.object({
   currency: z.string().trim().min(1).max(5),
   is_active: z.boolean(),
   description: z.string().trim().max(500).optional().or(z.literal("")),
-  image_url: z.string().url().nullable().optional(),
+  image_url: safeHttpUrlSchema.nullable().optional(),
   manager_id: z.string().uuid().nullable(),
   open_time: z.string().max(10).optional().or(z.literal("")),
   close_time: z.string().max(10).optional().or(z.literal("")),
