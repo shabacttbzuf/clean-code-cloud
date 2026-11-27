@@ -35,7 +35,9 @@ test("marketing campaign reads no longer have a permissive tenant-wide SELECT po
 
 test("company-scoped administrators only query their own campaigns in the management UI", () => {
   assert.match(adsPage, /queryKey: \["marketing-campaigns", tenantId, userId, membership\?\.company_id \?\? "tenant", membership\?\.branch_id \?\? "all"\]/);
-  assert.match(adsPage, /if \(!isSuperOwner && !isTenantOwner\)\s*\{\s*if \(!membership\?\.company_id\) return \[\];\s*query = query\.or\(`company_id\.is\.null,company_id\.eq\.\$\{membership\.company_id\}`\);/);\n  assert.match(adsPage, /hasVisibleTargetBranch/);\n  assert.match(adsPage, /from\("branches"\)[\s\S]*?\.eq\("company_id", membership\.company_id\)/);
+  assert.match(adsPage, /if \(!isSuperOwner && !isTenantOwner\)\s*\{\s*if \(!membership\?\.company_id\) return \[\];\s*query = query\.or\(`company_id\.is\.null,company_id\.eq\.\$\{membership\.company_id\}`\);/);
+  assert.match(adsPage, /hasVisibleTargetBranch/);
+  assert.match(adsPage, /from\("branches"\)[\s\S]*?\.eq\("company_id", membership\.company_id\)/);
 });
 
 test("dashboard and POS promotions are filtered to the active company and expose retry on query failure", () => {
