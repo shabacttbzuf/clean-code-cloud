@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Loader2, Upload, ImagePlus } from "lucide-react";
 import { z } from "zod";
+import { safeHttpUrlSchema } from "@/lib/safe-url";
 import { PageHeader } from "@/components/page-header";
 import { useTheme, DEFAULT_DESIGN, type DesignSettings } from "@/lib/theme";
 import { useSuperOwner } from "@/hooks/use-super-owner";
@@ -72,7 +73,7 @@ const schema = z.object({
   name: z.string().trim().min(2, "الاسم قصير").max(100),
   currency: z.string().trim().min(1).max(5),
   tax_rate: z.coerce.number().min(0).max(100),
-  logo_url: z.string().url().nullable().optional(),
+  logo_url: safeHttpUrlSchema.nullable().optional(),
 });
 
 function SettingsPage() {
