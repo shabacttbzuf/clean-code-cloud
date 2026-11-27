@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const hook = readFileSync(new URL("../src/hooks/use-notification-sync.ts", import.meta.url), "utf8");
-const migration = readFileSync(new URL("../supabase/migrations/20261127030500_notification_realtime_publication.sql", import.meta.url), "utf8");
+const migration = readFileSync(new URL("../supabase/migrations/20261127030000_notification_realtime_publication.sql", import.meta.url), "utf8");
 const topbar = readFileSync(new URL("../src/routes/_authenticated/route.tsx", import.meta.url), "utf8");
 const page = readFileSync(new URL("../src/routes/_authenticated/notifications.tsx", import.meta.url), "utf8");
 const lowStockMigration = readFileSync(new URL("../supabase/migrations/20261127040000_low_stock_event_notifications.sql", import.meta.url), "utf8");
