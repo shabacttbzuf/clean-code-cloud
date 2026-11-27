@@ -103,7 +103,7 @@ export function AdsPage() {
     queryFn: async () => {
       let query = supabase.from("branches").select("id,name,company_id")
         .eq("tenant_id", tenantId!).eq("is_active", true).order("name");
-      if (membership?.company_id) query = query.or(`company_id.is.null,company_id.eq.${membership.company_id}`);
+      if (membership?.company_id) query = query.eq("company_id", membership.company_id);
       if (membership?.branch_id && role !== "owner" && role !== "manager") {
         query = query.eq("id", membership.branch_id);
       }
@@ -120,7 +120,7 @@ export function AdsPage() {
       let query = supabase.from("marketing_ad_spaces")
         .select("id,tenant_id,company_id,branch_id,space_key,name,format,is_active,sort_order")
         .eq("tenant_id", tenantId!).order("sort_order").order("name");
-      if (membership?.company_id) query = query.eq("company_id", membership.company_id);
+      if (membership?.company_id) query = query.or(`company_id.is.null,company_id.eq.${membership.company_id}`);
       const { data, error } = await query;
       if (error) throw error;
       return data ?? [];
