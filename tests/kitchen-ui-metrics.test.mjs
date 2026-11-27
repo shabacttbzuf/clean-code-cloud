@@ -9,7 +9,8 @@ test("kitchen daily metrics are counted from the active tenant and branch only",
   assert.match(kitchen, /select\("id", \{ count: "exact", head: true \}\)/);
   assert.match(kitchen, /\.eq\("tenant_id", tenantId\)/);
   assert.match(kitchen, /\.eq\("branch_id", branchId\)/);
-  assert.match(kitchen, /\.in\("status", \["new", "preparing", "ready", "delivered"\]\)/);
+  assert.match(kitchen, /const statuses = \["new", "preparing", "ready", "delivered"\] as const/);
+  assert.match(kitchen, /\.eq\("status", status\)/);
   assert.match(kitchen, /\.gte\("created_at", startOfDay\.toISOString\(\)\)/);
 });
 
