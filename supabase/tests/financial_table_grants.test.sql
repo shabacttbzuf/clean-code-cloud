@@ -2,7 +2,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT plan(45);
+SELECT plan(47);
 
 SELECT ok(NOT has_table_privilege('anon', 'public.expenses', 'SELECT'), 'anon cannot select expenses');
 SELECT ok(NOT has_table_privilege('anon', 'public.expenses', 'INSERT'), 'anon cannot insert expenses');
@@ -51,6 +51,32 @@ SELECT ok(NOT has_table_privilege('authenticated', 'public.payroll_items', 'DELE
 SELECT ok(NOT has_table_privilege('authenticated', 'public.payroll_items', 'TRUNCATE'), 'authenticated cannot truncate payroll items');
 SELECT ok(NOT has_table_privilege('authenticated', 'public.payroll_items', 'REFERENCES'), 'authenticated cannot reference payroll items');
 SELECT ok(NOT has_table_privilege('authenticated', 'public.payroll_items', 'TRIGGER'), 'authenticated cannot create triggers on payroll items');
+
+SELECT ok(
+  NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename IN ('payroll_runs', 'payroll_items')
+      AND roles @> ARRAY['authenticated']::name[]
+      AND permissive = 'PERMISSIVE'
+      AND cmd IN ('ALL', 'DELETE')
+  ),
+  'authenticated has no permissive payroll DELETE policy'
+);
+
+SELECT ok(
+  (SELECT count(*) = 4
+   FROM pg_policies
+   WHERE schemaname = 'public'
+     AND policyname IN (
+       'payroll_runs_insert_access',
+       'payroll_runs_update_access',
+       'payroll_items_insert_access',
+       'payroll_items_update_access'
+     )),
+  'explicit payroll INSERT and UPDATE policies remain available'
+);
 
 SELECT ok(has_table_privilege('service_role', 'public.expenses', 'DELETE'), 'service_role retains expense cleanup access');
 SELECT ok(has_table_privilege('service_role', 'public.payroll_runs', 'DELETE'), 'service_role retains payroll rollback access');
