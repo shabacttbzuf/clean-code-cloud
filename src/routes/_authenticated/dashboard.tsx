@@ -193,7 +193,7 @@ function Dashboard() {
       setHeroBackgroundColor(safeColor);
       setHeroSettingsOpen(false);
     } catch {
-      window.alert("تعذر حفظ التخصيص في مساحة التخزين المحلية لهذا المتصفح.");
+      toast.error("تعذر حفظ التخصيص في مساحة التخزين المحلية لهذا المتصفح.");
     }
   };
 
