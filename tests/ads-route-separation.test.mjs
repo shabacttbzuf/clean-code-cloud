@@ -47,5 +47,5 @@ test("campaign archive and deletion use accessible confirmation dialogs instead 
   assert.match(ads, /useConfirmDialog/);
   assert.match(ads, /title: "أرشفة الحملة الإعلانية؟"/);
   assert.match(ads, /title: "حذف الحملة الإعلانية؟"/);
-  assert.doesNotMatch(ads, /window\\.confirm\\(/);
+  assert.doesNotMatch(ads, /window\.confirm\(/);
 });
