@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 
 import { Loader2, TrendingUp, TrendingDown, Receipt, Wallet, Package, Crown, Building2, Users as UsersIcon, Bell, Wifi, WifiOff, CircleHelp, ClipboardList, ChefHat } from "lucide-react";
 import { formatMoney } from "@/lib/format";
+import { summarizeDashboardFinancialRows } from "@/lib/dashboard-metrics.mjs";
 import { DeferredDashboardCharts } from "@/components/deferred-dashboard-charts";
 import { Link } from "@tanstack/react-router";
 import { Sparkles, ShoppingBag, ArrowLeft, ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
@@ -44,6 +45,35 @@ function safeCampaignTarget(value: string | null): string | null {
     return null;
   }
 }
+
+async function fetchAllRows<T>(query: any, pageSize = 500): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await query.range(from, from + pageSize - 1);
+    if (error) throw error;
+    const page = (data ?? []) as T[];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+}
+
+async function fetchAllRowsResult<T>(query: any): Promise<{ data: T[]; error: null }> {
+  return { data: await fetchAllRows<T>(query), error: null };
+}
+
+async function fetchRowsByIdBatchesResult<T>(
+  ids: string[],
+  buildQuery: (batch: string[]) => any,
+  batchSize = 200,
+): Promise<{ data: T[]; error: null }> {
+  const rows: T[] = [];
+  for (let index = 0; index < ids.length; index += batchSize) {
+    rows.push(...await fetchAllRows<T>(buildQuery(ids.slice(index, index + batchSize))));
+  }
+  return { data: rows, error: null };
+}
+
+const DEFAULT_DASHBOARD_HERO_IMAGE_URL = "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=75";
 
 function Dashboard() {
   const [activeCampaignIndex, setActiveCampaignIndex] = useState(0);
@@ -258,27 +288,29 @@ function Dashboard() {
       // null means tenant-wide access; an empty list deliberately returns no branch-owned rows.
       let scopedBranchIds: string[] | null = null;
       if (!isSuperOwner && membership?.branch_id) {
-        scopedBranchIds = [membership.branch_id];
+        const { data: assignedBranch, error: assignedBranchError } = await supabase.from("branches")
+          .select("id").eq("tenant_id", tenantId).eq("id", membership.branch_id).maybeSingle();
+        if (assignedBranchError) throw assignedBranchError;
+        scopedBranchIds = assignedBranch ? [assignedBranch.id] : [];
       } else if (!isSuperOwner && membership?.company_id) {
-        const { data: companyBranches, error: branchScopeError } = await supabase.from("branches")
-          .select("id").eq("tenant_id", tenantId).eq("company_id", membership.company_id);
-        if (branchScopeError) throw branchScopeError;
-        scopedBranchIds = (companyBranches ?? []).map((row) => row.id);
+        const companyBranches = await fetchAllRows<any>(supabase.from("branches")
+          .select("id").eq("tenant_id", tenantId).eq("company_id", membership.company_id).order("id"));
+        scopedBranchIds = companyBranches.map((row) => row.id);
       } else if (!isSuperOwner && role !== "owner") {
-        // Missing or incomplete membership must fail closed, never become tenant-wide access.
+        // Fail closed: an incomplete or missing membership must never become tenant-wide access.
         scopedBranchIds = [];
       }
 
-      let salesTodayQuery = supabase.from("sales").select("total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfDay);
-      let salesMonthQuery = supabase.from("sales").select("id, total, subtotal, discount").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfMonth);
-      let salesTrendQuery = supabase.from("sales").select("total, created_at").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", last30ISO);
-      let refundsTodayQuery = supabase.from("sale_refunds").select("total").eq("tenant_id", tenantId).gte("created_at", startOfDay);
-      let refundsMonthQuery = supabase.from("sale_refunds").select("id, total, subtotal, discount").eq("tenant_id", tenantId).gte("created_at", startOfMonth);
-      let refundsTrendQuery = supabase.from("sale_refunds").select("total, created_at").eq("tenant_id", tenantId).gte("created_at", last30ISO);
-      let expensesMonthQuery = supabase.from("expenses").select("amount").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10));
-      let expensesByCategoryQuery = supabase.from("expenses").select("amount, category_id").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10));
-      let lowStockQuery = supabase.from("inventory").select("quantity, product_id").eq("tenant_id", tenantId);
-      let sessionsQuery = supabase.from("cash_sessions").select("id").eq("tenant_id", tenantId).eq("status", "open");
+      let salesTodayQuery = supabase.from("sales").select("total").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfDay).order("id");
+      let salesMonthQuery = supabase.from("sales").select("id, total, subtotal, discount").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", startOfMonth).order("id");
+      let salesTrendQuery = supabase.from("sales").select("total, created_at").eq("tenant_id", tenantId).neq("status", "void").gte("created_at", last30ISO).order("created_at").order("id");
+      let refundsTodayQuery = supabase.from("sale_refunds").select("total").eq("tenant_id", tenantId).gte("created_at", startOfDay).order("id");
+      let refundsMonthQuery = supabase.from("sale_refunds").select("id, total, subtotal, discount").eq("tenant_id", tenantId).gte("created_at", startOfMonth).order("id");
+      let refundsTrendQuery = supabase.from("sale_refunds").select("total, created_at").eq("tenant_id", tenantId).gte("created_at", last30ISO).order("created_at").order("id");
+      let expensesMonthQuery = supabase.from("expenses").select("amount").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10)).order("id");
+      let expensesByCategoryQuery = supabase.from("expenses").select("amount, category_id").eq("tenant_id", tenantId).gte("paid_at", startOfMonth.slice(0, 10)).order("id");
+      let lowStockQuery = supabase.from("inventory").select("quantity, product_id").eq("tenant_id", tenantId).order("product_id").order("branch_id");
+      let sessionsQuery = supabase.from("cash_sessions").select("id").eq("tenant_id", tenantId).eq("status", "open").order("id");
       if (scopedBranchIds !== null) {
         salesTodayQuery = salesTodayQuery.in("branch_id", scopedBranchIds);
         salesMonthQuery = salesMonthQuery.in("branch_id", scopedBranchIds);
@@ -293,9 +325,14 @@ function Dashboard() {
       }
 
       const [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount] = await Promise.all([
-        salesTodayQuery, salesMonthQuery, salesTrendQuery, refundsTodayQuery, refundsMonthQuery,
-        refundsTrendQuery, expensesMonthQuery, expensesByCategoryQuery, lowStockQuery, sessionsQuery,
-        supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
+        fetchAllRowsResult<any>(salesTodayQuery), fetchAllRowsResult<any>(salesMonthQuery), fetchAllRowsResult<any>(salesTrendQuery),
+        fetchAllRowsResult<any>(refundsTodayQuery), fetchAllRowsResult<any>(refundsMonthQuery),
+        fetchAllRowsResult<any>(refundsTrendQuery), fetchAllRowsResult<any>(expensesMonthQuery), fetchAllRowsResult<any>(expensesByCategoryQuery),
+        hasPermission("inventory.view") ? fetchAllRowsResult<any>(lowStockQuery) : Promise.resolve({ data: [], error: null }),
+        hasPermission("cash.view") ? fetchAllRowsResult<any>(sessionsQuery) : Promise.resolve({ data: [], error: null }),
+        hasPermission("customers.view")
+          ? supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId)
+          : Promise.resolve({ count: null, error: null }),
       ]);
       for (const result of [salesToday, salesMonth, salesTrend, refundsToday, refundsMonth, refundsTrend, expensesMonth, expByCat, lowStock, sessions, customersCount]) {
         if (result.error) throw result.error;
@@ -305,39 +342,33 @@ function Dashboard() {
       const refundIdsMonth = (refundsMonth.data ?? []).map((refund) => refund.id);
       const [saleCostRows, refundCostRows] = await Promise.all([
         saleIdsMonth.length
-          ? supabase.from("sale_items").select("quantity, cost_price_snapshot").in("sale_id", saleIdsMonth)
+          ? fetchRowsByIdBatchesResult<any>(saleIdsMonth, (batch) => supabase.from("sale_items").select("quantity, cost_price_snapshot").in("sale_id", batch).order("id"))
           : Promise.resolve({ data: [], error: null }),
         refundIdsMonth.length
-          ? supabase.from("sale_refund_items").select("quantity, cost_price_snapshot, restocked").in("refund_id", refundIdsMonth)
+          ? fetchRowsByIdBatchesResult<any>(refundIdsMonth, (batch) => supabase.from("sale_refund_items").select("quantity, cost_price_snapshot, restocked").in("refund_id", batch).order("id"))
           : Promise.resolve({ data: [], error: null }),
       ]);
       if (saleCostRows.error) throw saleCostRows.error;
       if (refundCostRows.error) throw refundCostRows.error;
-      const catsRes = await supabase.from("expense_categories").select("id, name, color").eq("tenant_id", tenantId);
+      const catsRes = await fetchAllRowsResult<any>(supabase.from("expense_categories").select("id, name, color").eq("tenant_id", tenantId).order("id"));
       if (catsRes.error) throw catsRes.error;
       const catMap = new Map((catsRes.data ?? []).map((c) => [(c as { id: string }).id, c as { name: string; color: string | null }]));
 
-      const totalToday = (salesToday.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0)
-        - (refundsToday.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
-      const totalMonth = (salesMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0)
-        - (refundsMonth.data ?? []).reduce((s, r) => s + Number((r as { total: number }).total), 0);
-      const totalExpMonth = (expensesMonth.data ?? []).reduce((s, r) => s + Number((r as { amount: number }).amount), 0);
-      const unknownSaleCosts = (saleCostRows.data ?? []).filter((row) => row.cost_price_snapshot == null).length;
-      const unknownReturnedCosts = (refundCostRows.data ?? []).filter((row) => row.restocked && row.cost_price_snapshot == null).length;
-      const unknownCostItems = unknownSaleCosts + unknownReturnedCosts;
-      const cogsSales = (saleCostRows.data ?? []).reduce(
-        (sum, row) => sum + Number(row.cost_price_snapshot ?? 0) * Number(row.quantity), 0,
-      );
-      const cogsRestockedReturns = (refundCostRows.data ?? []).reduce(
-        (sum, row) => sum + (row.restocked ? Number(row.cost_price_snapshot ?? 0) * Number(row.quantity) : 0), 0,
-      );
-      const revenueBeforeTax = (salesMonth.data ?? []).reduce(
-        (sum, row) => sum + Number(row.subtotal) - Number(row.discount), 0,
-      ) - (refundsMonth.data ?? []).reduce(
-        (sum, row) => sum + Number(row.subtotal) - Number(row.discount), 0,
-      );
-      const grossProfit = unknownCostItems > 0 ? null : revenueBeforeTax - cogsSales + cogsRestockedReturns;
-      const profit = grossProfit === null ? null : grossProfit - totalExpMonth;
+      const {
+        totalToday,
+        totalMonth,
+        totalExpMonth,
+        unknownCostItems,
+        profit,
+      } = summarizeDashboardFinancialRows({
+        salesToday: salesToday.data ?? [],
+        refundsToday: refundsToday.data ?? [],
+        salesMonth: salesMonth.data ?? [],
+        refundsMonth: refundsMonth.data ?? [],
+        expensesMonth: expensesMonth.data ?? [],
+        saleCostRows: saleCostRows.data ?? [],
+        refundCostRows: refundCostRows.data ?? [],
+      });
 
       // Trend: group by day
       const dayMap = new Map<string, number>();
@@ -370,8 +401,8 @@ function Dashboard() {
       }));
 
       const inventoryProductIds = [...new Set((lowStock.data ?? []).map((row) => row.product_id))];
-      const lowStockProducts = inventoryProductIds.length
-        ? await supabase.from("products").select("id, min_stock").eq("tenant_id", tenantId).in("id", inventoryProductIds)
+      const lowStockProducts = hasPermission("inventory.view") && inventoryProductIds.length
+        ? await fetchRowsByIdBatchesResult<any>(inventoryProductIds, (batch) => supabase.from("products").select("id, min_stock").eq("tenant_id", tenantId).in("id", batch).order("id"))
         : { data: [], error: null };
       if (lowStockProducts.error) throw lowStockProducts.error;
       const minimumStockByProduct = new Map((lowStockProducts.data ?? []).map((product) => [product.id, Number(product.min_stock)]));
@@ -386,13 +417,15 @@ function Dashboard() {
         totalToday, totalMonth, totalExpMonth,
         profit, unknownCostItems,
         salesTodayCount: (salesToday.data ?? []).length,
-        customersCount: customersCount.count ?? 0,
-        openSessions: (sessions.data ?? []).length,
-        lowStockCount,
+        customersCount: hasPermission("customers.view") ? customersCount.count ?? 0 : null,
+        openSessions: hasPermission("cash.view") ? (sessions.data ?? []).length : null,
+        lowStockCount: hasPermission("inventory.view") ? lowStockCount : null,
         trend, byCat,
       };
     },
-    enabled: !!tenantId,
+    enabled: !!tenantId && hasPermission("reports.view") && hasPermission("sales.view") && hasPermission("expenses.view"),
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
 
 
