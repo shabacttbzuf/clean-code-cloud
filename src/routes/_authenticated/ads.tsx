@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useActiveTenant } from "@/hooks/use-active-tenant";
 import { useSuperOwner } from "@/hooks/use-super-owner";
 import { PageHeader } from "@/components/page-header";
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,6 +58,7 @@ export function AdsPage() {
   const { tenantId, userId, role, membership, hasPermission } = useActiveTenant();
   const { isSuperOwner } = useSuperOwner();
   const queryClient = useQueryClient();
+  const { confirm, dialog: confirmationDialog } = useConfirmDialog();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingCompanyId, setEditingCompanyId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -412,6 +414,7 @@ export function AdsPage() {
   }
 
   return (
+    <>
     <div className="space-y-5">
       <PageHeader title="الإعلانات والمساحات الإعلانية" subtitle="إدارة الحملات الإعلانية وصورها وروابطها ومواقع ظهورها وجدولتها بصورة مستقلة عن إعدادات النظام والعروض الترويجية." />
       <Card>
@@ -528,19 +531,32 @@ export function AdsPage() {
                 </Button>
                 {campaign.status !== "archived" && (
                   <Button type="button" size="sm" variant="ghost" disabled={!canApproveCampaign || updateStatus.isPending}
-                    onClick={() => {
-                      if (window.confirm("ستُوقف هذه الحملة وتُنقل إلى الأرشيف. هل تريد المتابعة؟")) {
-                        updateStatus.mutate({ id: campaign.id, status: "archived" });
-                      }
+                    onClick={async () => {
+                      const confirmed = await confirm({
+                        title: "أرشفة الحملة الإعلانية؟",
+                        description: "ستُوقف هذه الحملة وتُنقل إلى الأرشيف. هل تريد المتابعة؟",
+                        confirmLabel: "أرشفة الحملة",
+                      });
+                      if (confirmed) updateStatus.mutate({ id: campaign.id, status: "archived" });
                     }}>
                     أرشفة
                   </Button>
                 )}
-                <Button type="button" size="icon" variant="ghost" aria-label={"حذف " + campaign.title} disabled={!canDeleteCampaign || deleteCampaign.isPending} onClick={() => { if (window.confirm("هل تريد حذف هذه الحملة نهائياً؟")) deleteCampaign.mutate(campaign.id); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                <Button type="button" size="icon" variant="ghost" aria-label={"حذف " + campaign.title} disabled={!canDeleteCampaign || deleteCampaign.isPending} onClick={async () => {
+                  const confirmed = await confirm({
+                    title: "حذف الحملة الإعلانية؟",
+                    description: "سيتم حذف الحملة نهائياً. لا يمكن التراجع عن هذه العملية.",
+                    confirmLabel: "حذف نهائياً",
+                    destructive: true,
+                  });
+                  if (confirmed) deleteCampaign.mutate(campaign.id);
+                }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
               </div>;
             }) : <p className="text-sm text-muted-foreground">لا توجد حملات إعلانية حتى الآن.</p>}
         </CardContent>
       </Card>
     </div>
+    {confirmationDialog}
+    </>
   );
 }
