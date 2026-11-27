@@ -29,6 +29,7 @@ export type Database = {
           sort_order: number
           starts_at: string | null
           status: string
+          target_branch_ids: string[]
           target_url: string | null
           tenant_id: string
           title: string
@@ -48,6 +49,7 @@ export type Database = {
           sort_order?: number
           starts_at?: string | null
           status?: string
+          target_branch_ids?: string[]
           target_url?: string | null
           tenant_id: string
           title: string
@@ -67,6 +69,7 @@ export type Database = {
           sort_order?: number
           starts_at?: string | null
           status?: string
+          target_branch_ids?: string[]
           target_url?: string | null
           tenant_id?: string
           title?: string
